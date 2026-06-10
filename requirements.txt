@@ -1,0 +1,12 @@
+# ── Phase 1: CLI core ────────────────────────────────────────────────────────
+google-auth>=2.20.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.90.0
+python-dateutil>=2.8.2
+
+# ── Phase 2: GUI ─────────────────────────────────────────────────────────────
+customtkinter>=5.2.0
+tkinterdnd2>=0.3.0
+
+# ── Phase 3: PortableApps packaging (dev/build only, not needed at runtime) ──
+# pyinstaller>=6.0.0
