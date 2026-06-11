@@ -12,6 +12,9 @@ data/.settings.json
 # Claude Code local settings
 .claude/
 
+# Debug logs and issue artifacts
+Issues/
+
 # Python bytecode
 __pycache__/
 *.pyc
