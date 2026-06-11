@@ -1,0 +1,24 @@
+# OAuth credentials and tokens — never commit these
+auth/
+
+# Runtime data
+data/sync_state.db
+data/inbox/
+data/processed/
+data/.tz_notice_shown
+data/.theme
+data/.settings.json
+
+# Claude Code local settings
+.claude/
+
+# Debug logs and issue artifacts
+Issues/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Build artifacts
+dist/
+build/
