@@ -49,6 +49,16 @@ $LauncherDir   = Join-Path $PortableDir "Other\Source"
 # ---------------------------------------------------------------------------
 
 if (-not $SkipBuild) {
+    Write-Host "`n==> Installing pinned dependencies from requirements-lock.txt..." -ForegroundColor Cyan
+    $LockFile = Join-Path $ProjectRoot "requirements-lock.txt"
+    if (-not (Test-Path $LockFile)) {
+        Write-Error "requirements-lock.txt not found at '$LockFile'. Regenerate it with pip-compile --generate-hashes."
+    }
+    & python -m pip install --require-hashes -r $LockFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Installing from requirements-lock.txt failed (exit $LASTEXITCODE). Aborting."
+    }
+
     Write-Host "`n==> Running PyInstaller..." -ForegroundColor Cyan
     # Resolve pyinstaller exe (handles cases where Scripts\ is not on PATH)
     $PyInstallerCmd = Get-Command pyinstaller -ErrorAction SilentlyContinue

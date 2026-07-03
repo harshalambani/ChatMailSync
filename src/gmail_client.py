@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import socket
+import subprocess
 import sys
 import time
 import uuid
@@ -68,6 +69,33 @@ _GmailService = object  # googleapiclient Resource — typed loosely to avoid im
 # ---------------------------------------------------------------------------
 
 
+def _restrict_auth_dir_acl(auth_dir: Path) -> None:
+    """Restrict the auth directory's NTFS ACL to the current user only (Windows).
+
+    Strips inherited permissions and grants full control solely to the
+    logged-in user, so token.json / credentials.json (live client_secret)
+    aren't readable by other local accounts. Best-effort: failures are
+    logged, never raised, since this must not block authentication.
+    """
+    username = os.environ.get("USERNAME")
+    if not username:
+        log.warning(
+            "Could not determine current username; skipping ACL restriction on %s",
+            auth_dir,
+        )
+        return
+    try:
+        subprocess.run(
+            ["icacls", str(auth_dir), "/inheritance:r", "/grant:r", f"{username}:(OI)(CI)F"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        log.debug("Restricted ACL on %s to user %s", auth_dir, username)
+    except (subprocess.CalledProcessError, OSError) as _acl_err:
+        log.warning("Could not restrict ACL on %s: %s", auth_dir, _acl_err)
+
+
 def get_credentials(
     credentials_file: Path = CREDENTIALS_FILE,
     token_file: Path = TOKEN_FILE,
@@ -104,12 +132,15 @@ def get_credentials(
 
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(creds.to_json())
-        # Restrict token file to owner read/write only (skip on Windows — use NTFS ACLs there).
+        # Restrict the auth directory to the current user only, so token.json
+        # and credentials.json aren't readable by other local accounts.
         if os.name != "nt":
             try:
                 os.chmod(token_file, 0o600)
             except OSError as _chmod_err:
                 log.warning("Could not set permissions on token file: %s", _chmod_err)
+        else:
+            _restrict_auth_dir_acl(token_file.parent)
         log.debug("Token saved to %s", token_file)
 
     return creds
