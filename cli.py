@@ -21,11 +21,10 @@ from src.config import (
     STATE_DB_PATH,
 )
 from src.state import (
-    get_chat,
     get_sync_summary,
     init_db,
-    list_chats,
     reset_chat,
+    resolve_chat,
 )
 
 
@@ -155,16 +154,7 @@ def cmd_reset(args: argparse.Namespace) -> int:
 
     # Accept either chat_id or display_name.
     target = args.chat_id
-
-    # Try direct chat_id lookup first.
-    chat = get_chat(target, STATE_DB_PATH)
-
-    # If not found, try matching display_name (case-insensitive).
-    if chat is None:
-        for row in list_chats(STATE_DB_PATH):
-            if row["display_name"].lower() == target.lower():
-                chat = row
-                break
+    chat = resolve_chat(target, STATE_DB_PATH)
 
     if chat is None:
         print(f"No chat found matching {target!r}.", file=sys.stderr)
