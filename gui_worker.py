@@ -23,7 +23,8 @@ from google.oauth2.credentials import Credentials
 
 from src.config import CREDENTIALS_FILE, GMAIL_SCOPES, TOKEN_FILE
 from src.gmail_client import ChunkSize, build_service
-from src.sync_manager import SyncManager, SyncStats, _scrub_paths
+from src.sync_manager import ProgressSyncManager as _ProgressSyncManager
+from src.sync_manager import SyncStats, _scrub_paths
 
 
 # ---------------------------------------------------------------------------
@@ -40,51 +41,6 @@ class _QueueHandler(logging.Handler):
             self.q.put({"type": "log", "msg": self.format(record)})
         except Exception:
             pass
-
-
-# ---------------------------------------------------------------------------
-# SyncManager subclass — adds per-file progress events
-# ---------------------------------------------------------------------------
-
-class _ProgressSyncManager(SyncManager):
-    def __init__(
-        self,
-        *args,
-        progress_queue: queue.Queue,
-        stop_event: threading.Event,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self._pq = progress_queue
-        self._stop_event = stop_event
-        self._files_total = 0
-        self._files_done = 0
-
-    def run(self, chat_filter: Optional[str] = None) -> SyncStats:
-        try:
-            files = [
-                f for f in self.inbox_dir.iterdir()
-                if f.is_file() and f.suffix in (".txt", ".zip", "")
-            ]
-            self._files_total = len(files)
-        except Exception:
-            self._files_total = 0
-        self._pq.put({"type": "files_total", "n": self._files_total})
-        return super().run(chat_filter=chat_filter)
-
-    def _sync_file(self, filepath, chat_id, display_name, stats) -> None:
-        # Honour a stop request between files — current file is never started,
-        # so no partial state is written to the DB.
-        if self._stop_event.is_set():
-            return
-        self._pq.put({"type": "syncing", "name": display_name})
-        super()._sync_file(filepath, chat_id, display_name, stats)
-        self._files_done += 1
-        self._pq.put({
-            "type": "file_done",
-            "done": self._files_done,
-            "total": self._files_total,
-        })
 
 
 # ---------------------------------------------------------------------------

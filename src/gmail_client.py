@@ -31,7 +31,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 from pathlib import Path
-from typing import Iterator, Optional, Union
+from typing import Iterator, Optional, Protocol, Union, runtime_checkable
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -163,6 +163,135 @@ def build_service(creds: Optional[Credentials] = None) -> _GmailService:
 
 
 # ---------------------------------------------------------------------------
+# Transport interface
+#
+# Centralizes the 3 Gmail operations this app actually uses (labels.list,
+# labels.create, messages.insert) behind a small structural interface, so a
+# future Android build can swap in a direct-REST implementation (no
+# google-api-python-client dependency) without changing get_or_create_label /
+# push_chunks / _insert_with_backoff at all.
+#
+# threads.get and messages.list are not modeled here — nothing calls them
+# today; add them if/when a caller needs them (e.g. future multi-device
+# conflict detection).
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class GmailTransport(Protocol):
+    def labels_list(self) -> dict: ...
+
+    def labels_create(self, body: dict) -> dict: ...
+
+    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict: ...
+
+
+class GmailTransportError(Exception):
+    """Normalized transport error, raised by every GmailTransport implementation.
+
+    _insert_with_backoff() and other retry logic key off `.status` (HTTP
+    status code, when known) rather than catching library-specific exceptions
+    (HttpError vs. requests.HTTPError), so the retry policy stays shared
+    across transports.
+    """
+
+    def __init__(self, message: str, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class DiscoveryTransport:
+    """Wraps a googleapiclient `service` object (today's only Windows path)."""
+
+    def __init__(self, service: _GmailService) -> None:
+        self.service = service
+
+    def labels_list(self) -> dict:
+        try:
+            return self.service.users().labels().list(userId="me").execute()
+        except HttpError as exc:
+            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+
+    def labels_create(self, body: dict) -> dict:
+        try:
+            return self.service.users().labels().create(userId="me", body=body).execute()
+        except HttpError as exc:
+            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+
+    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
+        if thread_id:
+            body = {**body, "threadId": thread_id}
+        try:
+            return (
+                self.service.users()
+                .messages()
+                .insert(userId="me", body=body, internalDateSource="dateHeader")
+                .execute()
+            )
+        except HttpError as exc:
+            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+
+
+def build_transport(creds: Optional[Credentials] = None) -> GmailTransport:
+    """Build the default (googleapiclient-based) transport. Windows-only path."""
+    return DiscoveryTransport(build_service(creds))
+
+
+_GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
+
+
+class RestTransport:
+    """Direct-REST transport over a plain bearer token.
+
+    No get_credentials(), no token file I/O, no InstalledAppFlow — an Android
+    caller does its own OAuth in Kotlin (AppAuth) and hands Python a bearer
+    token via set_token(). Has no callers on Windows today; it exists here,
+    fully unit-tested, so a later Android phase can wire it up with a
+    one-line integration instead of a redesign.
+    """
+
+    def __init__(self, access_token: str) -> None:
+        self._access_token = access_token
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self._access_token}"}
+
+    def _request(self, method: str, url: str, **kwargs) -> dict:
+        import requests
+
+        try:
+            resp = requests.request(method, url, headers=self._headers(), **kwargs)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            raise GmailTransportError(str(exc), status=status) from exc
+        except requests.RequestException as exc:
+            raise GmailTransportError(str(exc)) from exc
+
+    def labels_list(self) -> dict:
+        return self._request("GET", f"{_GMAIL_API_BASE}/labels")
+
+    def labels_create(self, body: dict) -> dict:
+        return self._request("POST", f"{_GMAIL_API_BASE}/labels", json=body)
+
+    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
+        if thread_id:
+            body = {**body, "threadId": thread_id}
+        return self._request(
+            "POST",
+            f"{_GMAIL_API_BASE}/messages",
+            params={"internalDateSource": "dateHeader"},
+            json=body,
+        )
+
+
+def set_token(access_token: str) -> GmailTransport:
+    """Build a transport from a plain OAuth2 bearer token (Android entry point)."""
+    return RestTransport(access_token)
+
+
+# ---------------------------------------------------------------------------
 # Label management
 # ---------------------------------------------------------------------------
 
@@ -187,7 +316,7 @@ def _full_label_name(display_name: str) -> str:
     return f"{LABEL_PARENT}/{_sanitise_label_name(display_name)}"
 
 
-def get_or_create_label(service: _GmailService, display_name: str) -> str:
+def get_or_create_label(transport: GmailTransport, display_name: str) -> str:
     """Return the Gmail label ID for 'WhatsApp/<display_name>', creating if absent.
 
     Also ensures the parent 'WhatsApp' label exists.
@@ -198,7 +327,7 @@ def get_or_create_label(service: _GmailService, display_name: str) -> str:
     target = _full_label_name(display_name)
 
     # Fetch all existing labels in one call.
-    result = service.users().labels().list(userId="me").execute()
+    result = transport.labels_list()
     existing: dict[str, str] = {
         lbl["name"]: lbl["id"] for lbl in result.get("labels", [])
     }
@@ -206,10 +335,10 @@ def get_or_create_label(service: _GmailService, display_name: str) -> str:
     # Ensure parent label exists.
     if LABEL_PARENT not in existing:
         log.info("Creating parent label '%s'", LABEL_PARENT)
-        resp = service.users().labels().create(
-            userId="me", body={"name": LABEL_PARENT, "labelListVisibility": "labelShow",
-                               "messageListVisibility": "show"}
-        ).execute()
+        resp = transport.labels_create(
+            {"name": LABEL_PARENT, "labelListVisibility": "labelShow",
+             "messageListVisibility": "show"}
+        )
         existing[LABEL_PARENT] = resp["id"]
 
     # Return or create child label.
@@ -217,14 +346,13 @@ def get_or_create_label(service: _GmailService, display_name: str) -> str:
         return existing[target]
 
     log.info("Creating label '%s'", target)
-    resp = service.users().labels().create(
-        userId="me",
-        body={
+    resp = transport.labels_create(
+        {
             "name": target,
             "labelListVisibility": "labelShow",
             "messageListVisibility": "show",
         },
-    ).execute()
+    )
     return resp["id"]
 
 
@@ -545,11 +673,11 @@ def _print_progress(
 
 
 def _insert_with_backoff(
-    service: _GmailService,
+    transport: GmailTransport,
     body: dict,
     thread_id: Optional[str] = None,
 ) -> dict:
-    """Call users.messages.insert() with exponential backoff on 429 / 5xx.
+    """Call messages.insert() with exponential backoff on 429 / 5xx.
 
     Args:
         body:      The message body dict (raw + labelIds).
@@ -560,11 +688,8 @@ def _insert_with_backoff(
         The API response dict (contains 'id' and 'threadId').
 
     Raises:
-        HttpError: after BACKOFF_MAX_ATTEMPTS failures.
+        GmailTransportError: after BACKOFF_MAX_ATTEMPTS failures.
     """
-    if thread_id:
-        body = {**body, "threadId": thread_id}
-
     # Exceptions that warrant a retry (network/timeout errors in addition to
     # HTTP 429 / 5xx).  socket.timeout is an alias for TimeoutError on Py3.3+.
     _RETRYABLE_NETWORK = (socket.timeout, TimeoutError, ConnectionError, OSError)
@@ -572,20 +697,14 @@ def _insert_with_backoff(
     delay = BACKOFF_BASE_DELAY
     for attempt in range(1, BACKOFF_MAX_ATTEMPTS + 1):
         try:
-            response = (
-                service.users()
-                .messages()
-                .insert(userId="me", body=body, internalDateSource="dateHeader")
-                .execute()
-            )
+            response = transport.messages_insert(body, thread_id=thread_id)
             time.sleep(API_CALL_DELAY_SECONDS)
             return response
-        except HttpError as exc:
-            status = exc.resp.status
-            if status in (429, 500, 502, 503, 504) and attempt < BACKOFF_MAX_ATTEMPTS:
+        except GmailTransportError as exc:
+            if exc.status in (429, 500, 502, 503, 504) and attempt < BACKOFF_MAX_ATTEMPTS:
                 log.warning(
-                    "Gmail API %d on attempt %d/%d - retrying in %.1fs",
-                    status, attempt, BACKOFF_MAX_ATTEMPTS, delay,
+                    "Gmail API %s on attempt %d/%d - retrying in %.1fs",
+                    exc.status, attempt, BACKOFF_MAX_ATTEMPTS, delay,
                 )
                 time.sleep(delay)
                 delay *= 2
@@ -619,7 +738,7 @@ class PushResult:
 
 
 def push_chunks(
-    service: _GmailService,
+    transport: GmailTransport,
     display_name: str,
     chunks: list[list[ParsedMessage]],
     label_id: str,
@@ -698,7 +817,7 @@ def push_chunks(
             references     = current_anchor_mid,
         )
 
-        response     = _insert_with_backoff(service, body, thread_id=current_thread_id)
+        response     = _insert_with_backoff(transport, body, thread_id=current_thread_id)
         thread_id_r: str = response["threadId"]
         gmail_msg_id: str = response["id"]
 
@@ -728,7 +847,7 @@ def push_chunks(
 
 
 def push_chat(
-    service: _GmailService,
+    transport: GmailTransport,
     display_name: str,
     messages: list[ParsedMessage],
     chunk_size: ChunkSize = "day",
@@ -750,7 +869,7 @@ def push_chat(
         return [], label_id or "", gmail_thread_id or ""
 
     if label_id is None and not dry_run:
-        label_id = get_or_create_label(service, display_name)
+        label_id = get_or_create_label(transport, display_name)
 
     label_id = label_id or "dry-run-label"
 
@@ -764,7 +883,7 @@ def push_chat(
     )
 
     results = push_chunks(
-        service=service,
+        transport=transport,
         display_name=display_name,
         chunks=chunks,
         label_id=label_id,

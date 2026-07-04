@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
 
-from src.config import STATE_DB_PATH
+from src import config
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +66,8 @@ CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
 # ---------------------------------------------------------------------------
 
 @contextmanager
-def _connect(db_path: Path = STATE_DB_PATH) -> Iterator[sqlite3.Connection]:
+def _connect(db_path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
+    db_path = db_path or config.STATE_DB_PATH
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -83,8 +84,9 @@ def _connect(db_path: Path = STATE_DB_PATH) -> Iterator[sqlite3.Connection]:
 # Initialisation
 # ---------------------------------------------------------------------------
 
-def init_db(db_path: Path = STATE_DB_PATH) -> None:
+def init_db(db_path: Optional[Path] = None) -> None:
     """Create the database and all tables/indexes if they don't exist yet."""
+    db_path = db_path or config.STATE_DB_PATH
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with _connect(db_path) as conn:
         conn.executescript(_DDL)
@@ -104,7 +106,7 @@ def compute_message_hash(chat_id: str, timestamp_iso: str, sender: str, body: st
 # Chat helpers
 # ---------------------------------------------------------------------------
 
-def get_chat(chat_id: str, db_path: Path = STATE_DB_PATH) -> Optional[sqlite3.Row]:
+def get_chat(chat_id: str, db_path: Optional[Path] = None) -> Optional[sqlite3.Row]:
     with _connect(db_path) as conn:
         return conn.execute(
             "SELECT * FROM chats WHERE chat_id = ?", (chat_id,)
@@ -118,7 +120,7 @@ def upsert_chat(
     gmail_thread_id: Optional[str] = None,
     gmail_label_id: Optional[str] = None,
     anchor_message_id: Optional[str] = None,
-    db_path: Path = STATE_DB_PATH,
+    db_path: Optional[Path] = None,
 ) -> None:
     """Insert a new chat row or update gmail IDs and updated_at on conflict."""
     now = _now()
@@ -144,7 +146,7 @@ def update_chat_gmail_ids(
     gmail_thread_id: Optional[str] = None,
     gmail_label_id: Optional[str] = None,
     anchor_message_id: Optional[str] = None,
-    db_path: Path = STATE_DB_PATH,
+    db_path: Optional[Path] = None,
 ) -> None:
     """Persist Gmail thread ID, label ID, and anchor Message-ID after a successful push."""
     now = _now()
@@ -162,16 +164,29 @@ def update_chat_gmail_ids(
         )
 
 
-def list_chats(db_path: Path = STATE_DB_PATH) -> list[sqlite3.Row]:
+def list_chats(db_path: Optional[Path] = None) -> list[sqlite3.Row]:
     with _connect(db_path) as conn:
         return conn.execute("SELECT * FROM chats ORDER BY display_name").fetchall()
+
+
+def resolve_chat(target: str, db_path: Optional[Path] = None) -> Optional[sqlite3.Row]:
+    """Look up a chat by chat_id first, falling back to a case-insensitive
+    display_name match. Shared by cli.py's `reset` command and android_api.py
+    so the two entry points can't drift on lookup behavior."""
+    chat = get_chat(target, db_path)
+    if chat is not None:
+        return chat
+    for row in list_chats(db_path):
+        if row["display_name"].lower() == target.lower():
+            return row
+    return None
 
 
 # ---------------------------------------------------------------------------
 # Sync run helpers
 # ---------------------------------------------------------------------------
 
-def start_sync_run(chat_id: str, db_path: Path = STATE_DB_PATH) -> int:
+def start_sync_run(chat_id: str, db_path: Optional[Path] = None) -> int:
     """Open a new sync run in 'pending' status; return the new run_id."""
     with _connect(db_path) as conn:
         cur = conn.execute(
@@ -191,7 +206,7 @@ def complete_sync_run(
     messages_parsed: int,
     messages_synced: int,
     messages_skipped: int,
-    db_path: Path = STATE_DB_PATH,
+    db_path: Optional[Path] = None,
 ) -> None:
     with _connect(db_path) as conn:
         conn.execute(
@@ -212,7 +227,7 @@ def complete_sync_run(
         )
 
 
-def fail_sync_run(run_id: int, error_message: str, db_path: Path = STATE_DB_PATH) -> None:
+def fail_sync_run(run_id: int, error_message: str, db_path: Optional[Path] = None) -> None:
     with _connect(db_path) as conn:
         conn.execute(
             """
@@ -226,7 +241,7 @@ def fail_sync_run(run_id: int, error_message: str, db_path: Path = STATE_DB_PATH
         )
 
 
-def get_last_successful_run(chat_id: str, db_path: Path = STATE_DB_PATH) -> Optional[sqlite3.Row]:
+def get_last_successful_run(chat_id: str, db_path: Optional[Path] = None) -> Optional[sqlite3.Row]:
     """Return the most recent completed sync run for a chat, or None."""
     with _connect(db_path) as conn:
         return conn.execute(
@@ -240,7 +255,7 @@ def get_last_successful_run(chat_id: str, db_path: Path = STATE_DB_PATH) -> Opti
         ).fetchone()
 
 
-def get_pending_runs(db_path: Path = STATE_DB_PATH) -> list[sqlite3.Row]:
+def get_pending_runs(db_path: Optional[Path] = None) -> list[sqlite3.Row]:
     """Return all sync runs that were interrupted before completion."""
     with _connect(db_path) as conn:
         return conn.execute(
@@ -248,7 +263,7 @@ def get_pending_runs(db_path: Path = STATE_DB_PATH) -> list[sqlite3.Row]:
         ).fetchall()
 
 
-def get_run(run_id: int, db_path: Path = STATE_DB_PATH) -> Optional[sqlite3.Row]:
+def get_run(run_id: int, db_path: Optional[Path] = None) -> Optional[sqlite3.Row]:
     with _connect(db_path) as conn:
         return conn.execute(
             "SELECT * FROM sync_runs WHERE run_id = ?", (run_id,)
@@ -259,7 +274,7 @@ def get_run(run_id: int, db_path: Path = STATE_DB_PATH) -> Optional[sqlite3.Row]
 # Message hash helpers
 # ---------------------------------------------------------------------------
 
-def hash_exists(msg_hash: str, db_path: Path = STATE_DB_PATH) -> bool:
+def hash_exists(msg_hash: str, db_path: Optional[Path] = None) -> bool:
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT 1 FROM message_hashes WHERE hash = ?", (msg_hash,)
@@ -269,7 +284,7 @@ def hash_exists(msg_hash: str, db_path: Path = STATE_DB_PATH) -> bool:
 
 def insert_message_hashes(
     entries: list[tuple[str, str, str, int]],
-    db_path: Path = STATE_DB_PATH,
+    db_path: Optional[Path] = None,
 ) -> None:
     """Bulk-insert (hash, chat_id, message_ts, run_id) tuples."""
     with _connect(db_path) as conn:
@@ -279,7 +294,7 @@ def insert_message_hashes(
         )
 
 
-def get_hashes_for_run(run_id: int, db_path: Path = STATE_DB_PATH) -> set[str]:
+def get_hashes_for_run(run_id: int, db_path: Optional[Path] = None) -> set[str]:
     """Return the set of message hashes already committed under a given run.
 
     Used during partial-sync recovery to skip messages that were pushed before
@@ -296,7 +311,7 @@ def get_hashes_for_run(run_id: int, db_path: Path = STATE_DB_PATH) -> set[str]:
 # Status / reporting helpers
 # ---------------------------------------------------------------------------
 
-def get_sync_summary(db_path: Path = STATE_DB_PATH) -> list[dict]:
+def get_sync_summary(db_path: Optional[Path] = None) -> list[dict]:
     """Return a per-chat summary for the `status` CLI command."""
     with _connect(db_path) as conn:
         rows = conn.execute(
@@ -327,7 +342,7 @@ def get_sync_summary(db_path: Path = STATE_DB_PATH) -> list[dict]:
 # Reset helper
 # ---------------------------------------------------------------------------
 
-def reset_chat(chat_id: str, db_path: Path = STATE_DB_PATH) -> None:
+def reset_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
     """Delete all sync history for a chat so it will be re-synced from scratch.
 
     The chats row itself is kept (preserving display_name and source_filename)
@@ -355,7 +370,7 @@ def reset_chat(chat_id: str, db_path: Path = STATE_DB_PATH) -> None:
 # Delete helper
 # ---------------------------------------------------------------------------
 
-def delete_chat(chat_id: str, db_path: Path = STATE_DB_PATH) -> None:
+def delete_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
     """Fully remove a chat and all its sync history from the database.
 
     Unlike reset_chat(), this deletes the chats row itself so the entry

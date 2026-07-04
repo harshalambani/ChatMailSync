@@ -12,17 +12,55 @@ from pathlib import Path
 # When running as a PyInstaller bundle, __file__ points inside the frozen
 # binary and relative paths break.  The PortableApps launcher sets
 # WAGMAIL_ROOT to the App/WAGmailSync/ directory before starting the exe.
-_env_root = os.environ.get("WAGMAIL_ROOT")
-PROJECT_ROOT = Path(_env_root) if _env_root else Path(__file__).parent.parent
+#
+# An Android/Chaquopy caller has no env var to set and no __file__-relative
+# layout to fall back to (app-private storage lives under
+# Context.getFilesDir()), so it calls set_root() explicitly instead.
+_explicit_root: Path | None = None
 
-AUTH_DIR = PROJECT_ROOT / "auth"
-DATA_DIR = PROJECT_ROOT / "data"
-INBOX_DIR = DATA_DIR / "inbox"
-PROCESSED_DIR = DATA_DIR / "processed"
-STATE_DB_PATH = DATA_DIR / "sync_state.db"
 
-CREDENTIALS_FILE = AUTH_DIR / "credentials.json"
-TOKEN_FILE = AUTH_DIR / "token.json"
+def _compute_root() -> Path:
+    if _explicit_root is not None:
+        return _explicit_root
+    env_root = os.environ.get("WAGMAIL_ROOT")
+    return Path(env_root) if env_root else Path(__file__).parent.parent
+
+
+def _apply_root(root: Path) -> None:
+    """Rewrite every root-derived path constant on this module in place.
+
+    Needed because `from src.config import DATA_DIR` binds a value at import
+    time; reassigning module attributes after the fact is only visible to
+    callers that read them via attribute access (`config.DATA_DIR`) on or
+    after that point, not to names already bound by an earlier `from`-import.
+    set_root() must therefore run before any other src.* module imports
+    config's derived constants.
+    """
+    g = globals()
+    g["PROJECT_ROOT"] = root
+    g["AUTH_DIR"] = root / "auth"
+    g["DATA_DIR"] = root / "data"
+    g["INBOX_DIR"] = g["DATA_DIR"] / "inbox"
+    g["PROCESSED_DIR"] = g["DATA_DIR"] / "processed"
+    g["STATE_DB_PATH"] = g["DATA_DIR"] / "sync_state.db"
+    g["CREDENTIALS_FILE"] = g["AUTH_DIR"] / "credentials.json"
+    g["TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
+
+
+def set_root(path: str | Path) -> None:
+    """Explicitly set the storage root (for embedding contexts like Android).
+
+    Must be called before any other src.* module imports config's derived
+    path constants (AUTH_DIR, DATA_DIR, INBOX_DIR, ...) — see _apply_root()'s
+    docstring. Windows never calls this; it keeps using the WAGMAIL_ROOT env
+    var / __file__-relative fallback below.
+    """
+    global _explicit_root
+    _explicit_root = Path(path)
+    _apply_root(_compute_root())
+
+
+_apply_root(_compute_root())
 
 # ---------------------------------------------------------------------------
 # Gmail OAuth2 scopes

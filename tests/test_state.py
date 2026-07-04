@@ -1,0 +1,99 @@
+from src import state
+
+
+def test_init_db_is_idempotent(db_path):
+    state.init_db(db_path)  # second call, same db_path — must not raise
+    assert db_path.exists()
+
+
+def test_upsert_chat_round_trip_and_update(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    row = state.get_chat("chat1", db_path)
+    assert row["display_name"] == "Chat One"
+    assert row["gmail_thread_id"] is None
+
+    # Second upsert for the same chat_id updates rather than duplicates.
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", gmail_thread_id="thread-1", db_path=db_path)
+    rows = state.list_chats(db_path)
+    assert len(rows) == 1
+    assert rows[0]["gmail_thread_id"] == "thread-1"
+
+
+def test_compute_message_hash_deterministic_and_sensitive():
+    h1 = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+    h2 = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+    assert h1 == h2
+
+    for changed in [
+        ("chat2", "2025-03-14T09:41:00", "Alice", "Hello"),
+        ("chat1", "2025-03-14T09:41:01", "Alice", "Hello"),
+        ("chat1", "2025-03-14T09:41:00", "Bob", "Hello"),
+        ("chat1", "2025-03-14T09:41:00", "Alice", "Hello!"),
+    ]:
+        assert state.compute_message_hash(*changed) != h1
+
+
+def test_hash_exists_and_insert_round_trip(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path)
+    h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+
+    assert not state.hash_exists(h, db_path)
+    state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
+    assert state.hash_exists(h, db_path)
+
+
+def test_sync_run_lifecycle_complete(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path)
+    state.complete_sync_run(
+        run_id,
+        last_synced_ts="2025-03-14T09:41:00",
+        last_synced_hash="deadbeef",
+        messages_parsed=3,
+        messages_synced=3,
+        messages_skipped=0,
+        db_path=db_path,
+    )
+    last_run = state.get_last_successful_run("chat1", db_path)
+    assert last_run is not None
+    assert last_run["run_id"] == run_id
+    assert last_run["status"] == "complete"
+
+
+def test_sync_run_lifecycle_failed_is_not_pending(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path)
+    state.fail_sync_run(run_id, "network error", db_path)
+
+    assert state.get_last_successful_run("chat1", db_path) is None
+    assert run_id not in [r["run_id"] for r in state.get_pending_runs(db_path)]
+
+
+def test_get_pending_runs_finds_crashed_run(db_path):
+    """Simulates a crash: a run left in 'pending' status (never completed or
+    failed) must be surfaced so SyncManager's recovery path can find it."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path)
+
+    pending = state.get_pending_runs(db_path)
+    assert run_id in [r["run_id"] for r in pending]
+
+
+def test_reset_chat_isolates_other_chats(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    state.upsert_chat("chat2", "Chat Two", "chat2.txt", db_path=db_path)
+    state.update_chat_gmail_ids("chat1", gmail_thread_id="t1", gmail_label_id="l1", db_path=db_path)
+    state.update_chat_gmail_ids("chat2", gmail_thread_id="t2", gmail_label_id="l2", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path)
+    h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+    state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
+
+    state.reset_chat("chat1", db_path)
+
+    chat1 = state.get_chat("chat1", db_path)
+    assert chat1["gmail_thread_id"] is None
+    assert not state.hash_exists(h, db_path)
+
+    chat2 = state.get_chat("chat2", db_path)
+    assert chat2["gmail_thread_id"] == "t2"

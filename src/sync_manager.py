@@ -25,14 +25,11 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from src.config import (
-    DEFAULT_CHUNK_SIZE,
-    INBOX_DIR,
-    PROCESSED_DIR,
-)
-from src.gmail_client import ChunkSize, push_chat
+from src import config
+from src.config import DEFAULT_CHUNK_SIZE
+from src.gmail_client import ChunkSize, DiscoveryTransport, GmailTransport, push_chat
 from src.parser import ParsedMessage, extract_chat_info, parse_file
 from src.state import (
     complete_sync_run,
@@ -109,20 +106,30 @@ class SyncStats:
 class SyncManager:
     def __init__(
         self,
-        service,                          # authenticated Gmail API service (or None for dry-run)
+        service=None,                     # authenticated googleapiclient Gmail service (or None for dry-run)
         chunk_size: ChunkSize = DEFAULT_CHUNK_SIZE,
         dry_run: bool = False,
-        db_path: Path = None,
-        inbox_dir: Path = INBOX_DIR,
-        processed_dir: Path = PROCESSED_DIR,
+        db_path: Optional[Path] = None,
+        inbox_dir: Optional[Path] = None,
+        processed_dir: Optional[Path] = None,
+        transport: Optional[GmailTransport] = None,
     ) -> None:
-        from src.config import STATE_DB_PATH
-        self.service = service
+        """`service` (existing googleapiclient Resource) and `transport` (an
+        already-built GmailTransport, e.g. from gmail_client.set_token() on
+        Android) are mutually exclusive — pass at most one. `service` is
+        wrapped in a DiscoveryTransport internally so callers below this
+        class never touch a raw service object.
+        """
+        if service is not None and transport is not None:
+            raise ValueError("Pass at most one of service= or transport=, not both")
+        self.transport = transport if transport is not None else (
+            DiscoveryTransport(service) if service is not None else None
+        )
         self.chunk_size = chunk_size
         self.dry_run = dry_run
-        self.db_path = db_path or STATE_DB_PATH
-        self.inbox_dir = inbox_dir
-        self.processed_dir = processed_dir
+        self.db_path = db_path or config.STATE_DB_PATH
+        self.inbox_dir = inbox_dir or config.INBOX_DIR
+        self.processed_dir = processed_dir or config.PROCESSED_DIR
 
         # Ensure DB and directories exist.
         init_db(self.db_path)
@@ -257,7 +264,7 @@ class SyncManager:
         # Push to Gmail.
         try:
             results, label_id, thread_id = push_chat(
-                service=self.service,
+                transport=self.transport,
                 display_name=display_name,
                 messages=new_messages,
                 chunk_size=self.chunk_size,
@@ -438,7 +445,7 @@ class SyncManager:
         # Push remaining chunks.
         try:
             results, label_id, thread_id = push_chat(
-                service=self.service,
+                transport=self.transport,
                 display_name=chat["display_name"],
                 messages=remaining,
                 chunk_size=self.chunk_size,
@@ -509,6 +516,60 @@ class SyncManager:
             dest = self.processed_dir / f"{filepath.stem}{suffix}{filepath.suffix}"
         shutil.move(str(filepath), str(dest))
         log.info("Moved %s → processed/%s", filepath.name, dest.name)
+
+
+# ---------------------------------------------------------------------------
+# SyncManager subclass — adds per-file progress events
+#
+# Lives in the shared core (not gui_worker.py, which is Windows-only and not
+# bundled into the Android build) so both the Windows GUI and android_api.py
+# can reuse the same event vocabulary. `progress_queue` only needs a `.put()`
+# method (a real queue.Queue on Windows, a plain callback adapter on
+# Android) and `stop_event` only needs `.is_set()` — duck-typed, not tied to
+# threading.Event, so a caller with no cancellation support can pass anything
+# that always answers False.
+# ---------------------------------------------------------------------------
+
+
+class ProgressSyncManager(SyncManager):
+    def __init__(
+        self,
+        *args,
+        progress_queue: Any,
+        stop_event: Any,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._pq = progress_queue
+        self._stop_event = stop_event
+        self._files_total = 0
+        self._files_done = 0
+
+    def run(self, chat_filter: Optional[str] = None) -> SyncStats:
+        try:
+            files = [
+                f for f in self.inbox_dir.iterdir()
+                if f.is_file() and f.suffix in (".txt", ".zip", "")
+            ]
+            self._files_total = len(files)
+        except Exception:
+            self._files_total = 0
+        self._pq.put({"type": "files_total", "n": self._files_total})
+        return super().run(chat_filter=chat_filter)
+
+    def _sync_file(self, filepath, chat_id, display_name, stats) -> None:
+        # Honour a stop request between files — current file is never started,
+        # so no partial state is written to the DB.
+        if self._stop_event.is_set():
+            return
+        self._pq.put({"type": "syncing", "name": display_name})
+        super()._sync_file(filepath, chat_id, display_name, stats)
+        self._files_done += 1
+        self._pq.put({
+            "type": "file_done",
+            "done": self._files_done,
+            "total": self._files_total,
+        })
 
 
 # ---------------------------------------------------------------------------
