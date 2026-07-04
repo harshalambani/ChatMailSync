@@ -1,0 +1,4 @@
+HarshalAmbani@gmail.com==>owner@example.com
+Bijal Ambani==>John Doe
+Gautam Patel==>Jane Roe
+inabm==>user

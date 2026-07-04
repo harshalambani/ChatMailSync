@@ -36,6 +36,9 @@ added_data += collect_data_files("customtkinter")
 # Google API client ships discovery cache JSON
 added_data += collect_data_files("googleapiclient")
 
+# Ship the user help page next to the exe so the in-app Help button works
+added_data += [("help.html", ".")]
+
 # ---------------------------------------------------------------------------
 # Binary files (native shared libraries / DLLs)
 # ---------------------------------------------------------------------------

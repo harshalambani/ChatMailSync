@@ -14,6 +14,7 @@ import os
 import queue
 import re
 import shutil
+import sys
 import threading
 import webbrowser
 from datetime import datetime
@@ -95,6 +96,20 @@ def _save_settings(settings: dict) -> None:
         _SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
     except Exception:
         pass
+
+
+def _help_html_path() -> "Path | None":
+    """Locate help.html for both source runs and the frozen PyInstaller bundle."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:                                   # PyInstaller onedir bundle
+        candidates.append(Path(meipass) / "help.html")
+        candidates.append(Path(sys.executable).parent / "help.html")
+    candidates.append(Path(__file__).parent / "help.html")  # running from source
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +225,14 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             font=ctk.CTkFont(size=14),
             command=self._open_settings,
         ).pack(side="left")
+
+        ctk.CTkButton(
+            auth_frame, text="?", width=32, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._open_help,
+        ).pack(side="left", padx=(4, 0))
 
     # ------------------------------------------------------------------
     # Footer  (packed before main so it stays pinned to the bottom)
@@ -894,6 +917,22 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._auth_btn.configure(state="normal", text="Connect")
         self._signout_btn.configure(state="disabled")
         self._append_log("Signed out. Token revoked and deleted — connect again to re-authorise.")
+
+    def _open_help(self) -> None:
+        """Open help.html in the default browser; fall back to a brief dialog."""
+        path = _help_html_path()
+        if path is not None:
+            webbrowser.open(path.as_uri())
+            return
+        messagebox.showinfo(
+            "Help",
+            "Quick start:\n\n"
+            "1. Click Connect (top-right) and sign in to Google.\n"
+            "2. Drag a WhatsApp .txt or .zip export onto the window.\n"
+            "3. Click Sync Now.\n\n"
+            "Your synced chats appear in Gmail under the WhatsApp label.\n\n"
+            "(The full help file, help.html, was not found next to the app.)"
+        )
 
     def _open_settings(self) -> None:
         """Open the settings modal. Only one instance allowed at a time."""
