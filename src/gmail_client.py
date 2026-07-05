@@ -31,13 +31,18 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 from pathlib import Path
-from typing import Iterator, Optional, Protocol, Union, runtime_checkable
+from typing import TYPE_CHECKING, Callable, Iterator, Optional, Protocol, Union, runtime_checkable
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+# google-auth-oauthlib / googleapiclient are desktop-OAuth-flow dependencies,
+# used only by get_credentials()/build_service()/DiscoveryTransport below.
+# They're imported lazily inside those functions (not here at module level)
+# so that importing this module — and anything that imports it, like
+# android_api.py — never requires those packages to be installed. Android
+# never calls get_credentials()/build_service() at all (it does its own
+# OAuth in Kotlin and calls set_token() instead), so it only needs
+# python-dateutil (via src.parser) to import this module successfully.
+if TYPE_CHECKING:
+    from google.oauth2.credentials import Credentials
 
 from src.config import (
     API_CALL_DELAY_SECONDS,
@@ -99,15 +104,21 @@ def _restrict_auth_dir_acl(auth_dir: Path) -> None:
 def get_credentials(
     credentials_file: Path = CREDENTIALS_FILE,
     token_file: Path = TOKEN_FILE,
-) -> Credentials:
+) -> "Credentials":
     """Load cached OAuth2 credentials or run the browser-based auth flow.
 
     On first run the browser opens for the user to grant access; the token is
     then persisted to token_file for all subsequent runs.
 
+    Windows/desktop-only — Android never calls this (see module docstring note).
+
     Raises:
         FileNotFoundError: if credentials_file doesn't exist.
     """
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
     if not credentials_file.exists():
         raise FileNotFoundError(
             f"credentials.json not found at {credentials_file}.\n"
@@ -146,20 +157,23 @@ def get_credentials(
     return creds
 
 
-def build_service(creds: Optional[Credentials] = None) -> _GmailService:
+def build_service(creds: Optional["Credentials"] = None) -> _GmailService:
     """Return an authenticated Gmail API service object.
 
     Uses a transport-specific timeout on the Gmail API HTTP client only,
     rather than the global socket.setdefaulttimeout() which would affect all
     network I/O in the process.  Both httplib2 and google-auth-httplib2 are
     hard dependencies of google-api-python-client and always present.
+
+    Windows/desktop-only — Android never calls this (see module docstring note).
     """
     if creds is None:
         creds = get_credentials()
     import httplib2
     from google_auth_httplib2 import AuthorizedHttp
+    from googleapiclient.discovery import build as _build
     http = AuthorizedHttp(creds, http=httplib2.Http(timeout=GMAIL_SOCKET_TIMEOUT))
-    return build("gmail", "v1", http=http)
+    return _build("gmail", "v1", http=http)
 
 
 # ---------------------------------------------------------------------------
@@ -201,24 +215,35 @@ class GmailTransportError(Exception):
 
 
 class DiscoveryTransport:
-    """Wraps a googleapiclient `service` object (today's only Windows path)."""
+    """Wraps a googleapiclient `service` object (today's only Windows path).
+
+    Windows/desktop-only — Android never constructs this (it uses
+    RestTransport via set_token() instead), so googleapiclient is imported
+    lazily here rather than at module level (see module docstring note).
+    """
 
     def __init__(self, service: _GmailService) -> None:
         self.service = service
 
     def labels_list(self) -> dict:
+        from googleapiclient.errors import HttpError
+
         try:
             return self.service.users().labels().list(userId="me").execute()
         except HttpError as exc:
             raise GmailTransportError(str(exc), status=exc.resp.status) from exc
 
     def labels_create(self, body: dict) -> dict:
+        from googleapiclient.errors import HttpError
+
         try:
             return self.service.users().labels().create(userId="me", body=body).execute()
         except HttpError as exc:
             raise GmailTransportError(str(exc), status=exc.resp.status) from exc
 
     def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
+        from googleapiclient.errors import HttpError
+
         if thread_id:
             body = {**body, "threadId": thread_id}
         try:
@@ -232,7 +257,7 @@ class DiscoveryTransport:
             raise GmailTransportError(str(exc), status=exc.resp.status) from exc
 
 
-def build_transport(creds: Optional[Credentials] = None) -> GmailTransport:
+def build_transport(creds: Optional["Credentials"] = None) -> GmailTransport:
     """Build the default (googleapiclient-based) transport. Windows-only path."""
     return DiscoveryTransport(build_service(creds))
 
@@ -747,6 +772,7 @@ def push_chunks(
     gmail_thread_id: Optional[str] = None,
     dry_run: bool = False,
     source_path: Optional[Path] = None,
+    on_chunk: Optional[Callable[[int, int, int, int], None]] = None,
 ) -> list[PushResult]:
     """Push a list of message chunks to Gmail as individual HTML emails in one thread.
 
@@ -764,6 +790,14 @@ def push_chunks(
         dry_run:           If True, log what would be pushed without calling Gmail.
         source_path:       Path to the original export file; used to build a
                            MediaExtractor for embedding images/attachments.
+        on_chunk:          Optional callback(email_index_1based, total_emails,
+                           msgs_done, total_msgs), invoked after each email is
+                           pushed — lets callers (e.g. the Android sync-progress
+                           screen) show live within-file progress for large
+                           chats, instead of only ever learning done/total
+                           *files* (a chat with hundreds of chunks can take
+                           minutes to push, during which file-level progress
+                           alone looks frozen even though work is progressing).
 
     Returns:
         List of PushResult, one per email sent.
@@ -828,6 +862,8 @@ def push_chunks(
             i + 1, total_emails, len(sub_chunk), rendered.total_bytes,
             gmail_msg_id, thread_id_r,
         )
+        if on_chunk is not None:
+            on_chunk(i + 1, total_emails, msgs_done, total_msgs)
 
         if current_anchor_mid is None:
             current_anchor_mid = new_mid
@@ -856,6 +892,7 @@ def push_chat(
     gmail_thread_id: Optional[str] = None,
     dry_run: bool = False,
     source_path: Optional[Path] = None,
+    on_chunk: Optional[Callable[[int, int, int, int], None]] = None,
 ) -> tuple[list[PushResult], str, str]:
     """High-level helper: chunk messages, ensure label, and push to Gmail.
 
@@ -892,6 +929,7 @@ def push_chat(
         gmail_thread_id=gmail_thread_id,
         dry_run=dry_run,
         source_path=source_path,
+        on_chunk=on_chunk,
     )
 
     final_thread_id = results[-1].thread_id if results else (gmail_thread_id or "")
