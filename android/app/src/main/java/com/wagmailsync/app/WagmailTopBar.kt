@@ -3,10 +3,12 @@
 package com.wagmailsync.app
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +31,8 @@ import androidx.compose.ui.unit.sp
  * line under the title — reserved for top-level tabs (Home/Chats/Settings);
  * detail screens pass null and just get mark+title.
  */
+private val MastheadHeight = 88.dp
+
 @Composable
 fun WagmailTopBar(
     title: String,
@@ -37,30 +41,41 @@ fun WagmailTopBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
+        expandedHeight = MastheadHeight,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_launcher_foreground),
-                    contentDescription = null,
-                    modifier = androidx.compose.ui.Modifier.size(34.dp),
-                )
-                Column {
-                    Text(
-                        title,
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
+            // TopAppBar's own vertical placement of the title slot anchors
+            // it toward the bottom of expandedHeight (matching Large/Medium
+            // top-bar collapse behavior) rather than centering it, so with
+            // an expandedHeight taller than the default this left a lot of
+            // dead space above the mark+wordmark. A fixed-height box (not
+            // fillMaxHeight — the slot's height constraint here is
+            // unbounded, which blows fillMaxHeight up to fill the screen)
+            // matching expandedHeight, centered inside, overrides that.
+            Box(modifier = androidx.compose.ui.Modifier.height(MastheadHeight), contentAlignment = Alignment.CenterStart) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = null,
+                        modifier = androidx.compose.ui.Modifier.size(72.dp),
                     )
-                    subtitle?.let {
+                    Column {
                         Text(
-                            it.uppercase(),
-                            fontSize = 10.sp,
+                            title,
+                            fontFamily = FontFamily.Serif,
                             fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.4.sp,
+                            fontSize = 18.sp,
                         )
+                        subtitle?.let {
+                            Text(
+                                it.uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.4.sp,
+                            )
+                        }
                     }
                 }
             }

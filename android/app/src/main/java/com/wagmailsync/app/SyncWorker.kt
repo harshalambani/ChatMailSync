@@ -180,7 +180,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
     private fun buildNotification(text: String) =
         NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WA Chat Sync to Gmail")
+            .setContentTitle("WhatsApp Chat Sync to Gmail")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)

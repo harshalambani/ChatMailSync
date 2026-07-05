@@ -93,7 +93,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             )
         )
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WA Chat Sync to Gmail")
+            .setContentTitle("WhatsApp Chat Sync to Gmail")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setAutoCancel(true)

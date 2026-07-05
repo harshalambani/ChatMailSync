@@ -2,6 +2,7 @@
 
 package com.wagmailsync.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -72,7 +76,7 @@ fun HomeScreen(
     var chunkMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { WagmailTopBar(title = "WA Chat Sync to Gmail", subtitle = "Private Gmail archive") },
+        topBar = { WagmailTopBar(title = "WhatsApp Chat Sync to Gmail", subtitle = "Private Gmail archive") },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -89,11 +93,20 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = connectedEmail?.let { "Connected as $it" }
-                            ?: "Not connected",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (connectedEmail != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFF2E7D32), CircleShape),
+                            )
+                        }
+                        Text(
+                            text = connectedEmail?.let { "Connected as $it" }
+                                ?: "Not connected",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     connectError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }

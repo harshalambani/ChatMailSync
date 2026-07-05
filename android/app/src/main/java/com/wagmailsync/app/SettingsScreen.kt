@@ -133,7 +133,7 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text("About / Help", style = MaterialTheme.typography.titleMedium)
-            Text("WA Chat Sync to Gmail — Android (dev build)")
+            Text("WhatsApp Chat Sync to Gmail — Android (dev build)")
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
 
             HorizontalDivider()
