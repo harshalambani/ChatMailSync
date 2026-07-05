@@ -12,7 +12,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="WA Chat Sync to Gmail"
+        android:label="WhatsApp Chat Sync to Gmail"
         android:theme="@style/Theme.WagmailSync"
         android:supportsRtl="true">
 
