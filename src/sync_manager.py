@@ -50,19 +50,34 @@ from src.state import (
 log = logging.getLogger(__name__)
 
 
+_URL_RE = re.compile(r"https?://\S+")
+_FS_PATH_RE = re.compile(
+    r'(?:[A-Za-z]:\\|\\\\)[^\s,\'")\]]+|(?:/[^/\s,\'")\]]+){2,}'
+)
+
+
 def _scrub_paths(text: str) -> str:
     """Replace absolute filesystem paths in error text with their basename only.
 
     Prevents full installation paths (e.g. C:\\Users\\alice\\...) leaking into
     user-facing error messages.
+
+    URLs (e.g. a Gmail API error's "for url: https://gmail.googleapis.com/...")
+    are left untouched — the filesystem-path pattern below would otherwise
+    treat the URL's path segments as a Unix path and collapse the whole thing
+    down to just its last segment (turning a diagnosable "401 Unauthorized
+    for url: https://.../labels" into an untraceable "https:/labels").
     """
     # Windows: C:\Users\... or \\UNC\...
     # Unix:    /home/alice/...  /tmp/...
-    return re.sub(
-        r'(?:[A-Za-z]:\\|\\\\)[^\s,\'")\]]+|(?:/[^/\s,\'")\]]+){2,}',
-        lambda m: Path(m.group()).name,
-        text,
-    )
+    out = []
+    last = 0
+    for m in _URL_RE.finditer(text):
+        out.append(_FS_PATH_RE.sub(lambda mm: Path(mm.group()).name, text[last:m.start()]))
+        out.append(m.group())
+        last = m.end()
+    out.append(_FS_PATH_RE.sub(lambda mm: Path(mm.group()).name, text[last:]))
+    return "".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -205,9 +220,11 @@ class SyncManager:
         if not self.dry_run:
             run_id = start_sync_run(chat_id, self.db_path)
 
-        # Parse the file.
+        # Parse + dedup the file.
         try:
-            all_messages = list(parse_file(filepath, chat_id))
+            all_messages, new_messages, n_skipped = self._parse_and_filter(
+                filepath, chat_id, last_ts
+            )
         except Exception as exc:
             msg = f"{filepath.name}: parse error — {_scrub_paths(str(exc))}"
             log.error(msg)
@@ -218,9 +235,6 @@ class SyncManager:
             return
 
         stats.messages_parsed += len(all_messages)
-
-        # Deduplicate.
-        new_messages, n_skipped = self._filter_messages(all_messages, chat_id, last_ts)
         stats.messages_skipped += n_skipped
 
         log.info(
@@ -273,6 +287,9 @@ class SyncManager:
                 gmail_thread_id=thread_id,
                 dry_run=False,
                 source_path=filepath,
+                on_chunk=lambda i, total, done, tmsgs: self._on_chunk_progress(
+                    display_name, i, total, done, tmsgs
+                ),
             )
         except Exception as exc:
             msg = f"{display_name}: Gmail push failed — {_scrub_paths(str(exc))}"
@@ -314,6 +331,25 @@ class SyncManager:
         stats.files_synced += 1
         stats.messages_synced += len(new_messages)
         log.info("%s: done — %d messages synced", display_name, len(new_messages))
+
+    def _on_chunk_progress(
+        self, display_name: str, chunk_index: int, total_chunks: int,
+        msgs_done: int, total_msgs: int,
+    ) -> None:
+        """Hook for subclasses (ProgressSyncManager) to observe within-file
+        push progress. No-op on the plain CLI/GUI-facing SyncManager."""
+
+    def _parse_and_filter(
+        self, filepath: Path, chat_id: str, last_synced_ts: Optional[str]
+    ) -> tuple[list[ParsedMessage], list[ParsedMessage], int]:
+        """Parse a file and apply dedup. Raises on parse failure (caller
+        handles). Hook point so ProgressSyncManager's pre-scan (which needs
+        to parse + dedup every file upfront to size its progress denominator)
+        can cache its results here instead of every file being parsed twice.
+        """
+        all_messages = list(parse_file(filepath, chat_id))
+        new_messages, n_skipped = self._filter_messages(all_messages, chat_id, last_synced_ts)
+        return all_messages, new_messages, n_skipped
 
     # ------------------------------------------------------------------
     # Deduplication
@@ -544,6 +580,9 @@ class ProgressSyncManager(SyncManager):
         self._stop_event = stop_event
         self._files_total = 0
         self._files_done = 0
+        self._total_new_messages = 0
+        self._prior_msgs_done = 0
+        self._prescan_cache: dict[str, tuple[list, list, int]] = {}
 
     def run(self, chat_filter: Optional[str] = None) -> SyncStats:
         try:
@@ -553,9 +592,52 @@ class ProgressSyncManager(SyncManager):
             ]
             self._files_total = len(files)
         except Exception:
+            files = []
             self._files_total = 0
         self._pq.put({"type": "files_total", "n": self._files_total})
+
+        # Local-only pre-scan (parse + dedup, no network) so the live progress
+        # screen can show one real percentage for the whole sync's actual
+        # workload — the number of *new* messages left to push — instead of
+        # a file-count that freezes for minutes while one large chat is mid
+        # push, or a per-file chunk count that resets to 0 at every new file.
+        self._total_new_messages = self._estimate_total_new_messages(files, chat_filter)
+        self._prior_msgs_done = 0
+        self._pq.put({"type": "total_messages", "n": self._total_new_messages})
+
         return super().run(chat_filter=chat_filter)
+
+    def _estimate_total_new_messages(self, files, chat_filter: Optional[str]) -> int:
+        """Parse + dedup every file upfront to size the progress denominator.
+
+        Results are cached and consumed by _parse_and_filter() below, so
+        _sync_file's own parse+dedup step reuses this instead of parsing
+        each file a second time — one pass over the inbox, not two.
+        """
+        total = 0
+        for filepath in files:
+            chat_id, display_name = extract_chat_info(filepath.name)
+            if chat_filter and chat_filter.lower() not in (
+                chat_id, display_name.lower()
+            ):
+                continue
+            last_run = get_last_successful_run(chat_id, self.db_path)
+            last_ts = last_run["last_synced_ts"] if last_run else None
+            try:
+                all_messages, new_messages, n_skipped = super()._parse_and_filter(
+                    filepath, chat_id, last_ts
+                )
+            except Exception:
+                continue
+            self._prescan_cache[str(filepath)] = (all_messages, new_messages, n_skipped)
+            total += len(new_messages)
+        return total
+
+    def _parse_and_filter(self, filepath: Path, chat_id: str, last_synced_ts):
+        cached = self._prescan_cache.pop(str(filepath), None)
+        if cached is not None:
+            return cached
+        return super()._parse_and_filter(filepath, chat_id, last_synced_ts)
 
     def _sync_file(self, filepath, chat_id, display_name, stats) -> None:
         # Honour a stop request between files — current file is never started,
@@ -565,10 +647,26 @@ class ProgressSyncManager(SyncManager):
         self._pq.put({"type": "syncing", "name": display_name})
         super()._sync_file(filepath, chat_id, display_name, stats)
         self._files_done += 1
+        self._prior_msgs_done = stats.messages_synced
         self._pq.put({
             "type": "file_done",
             "done": self._files_done,
             "total": self._files_total,
+        })
+
+    def _on_chunk_progress(
+        self, display_name: str, chunk_index: int, total_chunks: int,
+        msgs_done: int, total_msgs: int,
+    ) -> None:
+        self._pq.put({
+            "type": "chunk",
+            "name": display_name,
+            "chunk": chunk_index,
+            "total_chunks": total_chunks,
+            "msgs_done": msgs_done,
+            "total_msgs": total_msgs,
+            "global_done": self._prior_msgs_done + msgs_done,
+            "global_total": self._total_new_messages,
         })
 
 
