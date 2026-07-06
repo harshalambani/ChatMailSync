@@ -1,0 +1,29 @@
+# Line-ending policy — added 2026-07-06 after Windows tooling rewrote
+# src/*.py and docs from LF to CRLF, producing whole-file diffs with zero
+# content change (see session note in git history).
+#
+# Store LF in the repo for everything textual; check out LF for
+# cross-platform code (Python runs fine with LF on Windows), CRLF only for
+# Windows-native script formats that expect it.
+
+* text=auto
+
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.html text eol=lf
+*.kts  text eol=lf
+*.kt   text eol=lf
+*.spec text eol=lf
+
+# Windows-native scripts stay CRLF in the working tree
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+
+# Binaries — never touch
+*.jks  binary
+*.zip  binary
+*.png  binary
+*.jpg  binary
+*.apk  binary
+*.exe  binary
