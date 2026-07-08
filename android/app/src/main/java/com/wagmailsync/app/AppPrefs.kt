@@ -10,6 +10,13 @@ object AppPrefs {
     private const val KEY_AUTO_WATCH_ENABLED = "auto_watch_enabled"
     private const val KEY_IMPORTED_DOC_IDS = "imported_doc_ids"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_WATCH_INTERVAL_MINUTES = "watch_interval_minutes"
+    private const val KEY_SYNCED_FILE_POLICY = "synced_file_policy"
+
+    /** WorkManager's PeriodicWorkRequest has a hard 15-minute floor enforced
+     * by the platform itself — no interval below this is achievable
+     * regardless of what's requested. */
+    const val MIN_WATCH_INTERVAL_MINUTES = 15L
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -47,5 +54,25 @@ object AppPrefs {
 
     fun setThemeMode(context: Context, mode: String) {
         prefs(context).edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun getWatchIntervalMinutes(context: Context): Long =
+        prefs(context).getLong(KEY_WATCH_INTERVAL_MINUTES, MIN_WATCH_INTERVAL_MINUTES)
+
+    fun setWatchIntervalMinutes(context: Context, minutes: Long) {
+        prefs(context).edit().putLong(KEY_WATCH_INTERVAL_MINUTES, minutes).apply()
+    }
+
+    /** "leave" (default, today's behavior) | "move" (into a `synced/`
+     * subfolder of the watched tree) | "delete" — what to do with a file
+     * once it's been successfully imported into inbox/, so the watched
+     * folder doesn't accumulate old exports indefinitely. Defaults to
+     * "leave" so existing installs see no behavior change until the user
+     * opts in. */
+    fun getSyncedFilePolicy(context: Context): String =
+        prefs(context).getString(KEY_SYNCED_FILE_POLICY, "leave") ?: "leave"
+
+    fun setSyncedFilePolicy(context: Context, policy: String) {
+        prefs(context).edit().putString(KEY_SYNCED_FILE_POLICY, policy).apply()
     }
 }

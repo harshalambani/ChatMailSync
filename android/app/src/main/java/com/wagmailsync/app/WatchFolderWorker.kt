@@ -4,12 +4,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -30,11 +33,21 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
 
     companion object {
         const val UNIQUE_WORK_NAME = "watch_folder"
+        const val UNIQUE_WORK_NAME_ONCE = "watch_folder_once"
         const val NOTIFICATION_CHANNEL_ID = "watch_folder_channel"
         const val NOTIFICATION_ID = 1002
 
-        fun enqueue(context: Context) {
-            val request = PeriodicWorkRequestBuilder<WatchFolderWorker>(15, TimeUnit.MINUTES)
+        /** [intervalMinutes] is clamped to WorkManager's 15-minute floor
+         * regardless of what's passed in — Android enforces this
+         * platform-side, not just as a WorkManager default. Uses UPDATE
+         * (not KEEP) so changing the interval in Settings takes effect on
+         * the existing periodic work rather than being ignored because a
+         * request under this unique name already exists. */
+        fun enqueue(context: Context, intervalMinutes: Long = AppPrefs.MIN_WATCH_INTERVAL_MINUTES) {
+            val request = PeriodicWorkRequestBuilder<WatchFolderWorker>(
+                maxOf(intervalMinutes, AppPrefs.MIN_WATCH_INTERVAL_MINUTES),
+                TimeUnit.MINUTES,
+            )
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
@@ -43,13 +56,25 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }
 
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
+        }
+
+        /** "Check now" — runs immediately regardless of the periodic
+         * schedule or whether auto-watch is even turned on, as long as a
+         * folder is chosen. REPLACE means tapping it again while one run is
+         * still in flight restarts rather than queuing a second one. */
+        fun enqueueOnce(context: Context) {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                UNIQUE_WORK_NAME_ONCE,
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<WatchFolderWorker>().build(),
+            )
         }
     }
 
@@ -62,8 +87,13 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             ?: return Result.success()
 
         val alreadyImported = AppPrefs.getImportedDocIds(applicationContext)
+        val policy = AppPrefs.getSyncedFilePolicy(applicationContext)
         var importedCount = 0
 
+        // listFiles() only sees the watched tree's immediate children, not
+        // recursing into subfolders — this is what already keeps a "move to
+        // synced/" policy from re-scanning its own destination folder on the
+        // next run without any extra filtering needed.
         for (doc in folder.listFiles()) {
             if (!doc.isFile) continue
             val docId = doc.uri.toString()
@@ -72,7 +102,10 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             val outcome = ImportManager.importUri(applicationContext, doc.uri)
             if (outcome != null) {
                 AppPrefs.addImportedDocId(applicationContext, docId)
-                if (!outcome.alreadyQueued) importedCount++
+                if (!outcome.alreadyQueued) {
+                    importedCount++
+                    applySyncedFilePolicy(policy, folder, doc)
+                }
             }
         }
 
@@ -80,6 +113,49 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             notify("Imported $importedCount new file(s) from watched folder")
         }
         return Result.success()
+    }
+
+    /** Best-effort — a failure here (e.g. the user granted only read access
+     * to the watched tree before write-permission persistence was added)
+     * must not fail the whole import; the file is already safely copied
+     * into inbox/ by this point regardless. */
+    private fun applySyncedFilePolicy(policy: String, folder: DocumentFile, doc: DocumentFile) {
+        try {
+            when (policy) {
+                "delete" -> doc.delete()
+                "move" -> {
+                    val syncedDir = folder.findFile("synced")?.takeIf { it.isDirectory }
+                        ?: folder.createDirectory("synced")
+                        ?: return
+                    try {
+                        DocumentsContract.moveDocument(
+                            applicationContext.contentResolver,
+                            doc.uri,
+                            folder.uri,
+                            syncedDir.uri,
+                        )
+                    } catch (_: Exception) {
+                        // Some SAF providers don't support moveDocument;
+                        // fall back to a manual copy + delete of the source.
+                        val copy = syncedDir.createFile(
+                            doc.type ?: "application/octet-stream",
+                            doc.name ?: "export",
+                        )
+                        if (copy != null) {
+                            applicationContext.contentResolver.openInputStream(doc.uri)?.use { input ->
+                                applicationContext.contentResolver.openOutputStream(copy.uri)?.use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            doc.delete()
+                        }
+                    }
+                }
+                // "leave" (default): nothing to do.
+            }
+        } catch (_: Exception) {
+            // Leave the file in place; it's already imported either way.
+        }
     }
 
     private fun notify(text: String) {

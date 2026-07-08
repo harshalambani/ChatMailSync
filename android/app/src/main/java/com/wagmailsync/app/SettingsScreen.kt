@@ -38,6 +38,25 @@ private val THEME_LABELS = mapOf(
     "dark" to "Dark",
 )
 
+// WorkManager's PeriodicWorkRequest has a hard 15-minute floor (Android
+// platform-enforced, not a WorkManager default) — no shorter interval is
+// achievable regardless of what's offered here.
+private val WATCH_INTERVAL_LABELS = listOf(
+    15L to "Every 15 min",
+    30L to "Every 30 min",
+    60L to "Every hour",
+    180L to "Every 3 hours",
+    360L to "Every 6 hours",
+    720L to "Every 12 hours",
+    1440L to "Once a day",
+)
+
+private val SYNCED_FILE_POLICY_LABELS = mapOf(
+    "leave" to "Leave in place",
+    "move" to "Move to a \"synced\" subfolder",
+    "delete" to "Delete after import",
+)
+
 @Composable
 fun SettingsScreen(
     connectedEmail: String?,
@@ -48,13 +67,21 @@ fun SettingsScreen(
     onThemeModeChange: (String) -> Unit,
     watchedFolderUri: String?,
     onChooseFolder: () -> Unit,
+    onClearFolder: () -> Unit,
     autoWatchEnabled: Boolean,
     onAutoWatchChange: (Boolean) -> Unit,
+    watchIntervalMinutes: Long,
+    onWatchIntervalChange: (Long) -> Unit,
+    onCheckNow: () -> Unit,
+    syncedFilePolicy: String,
+    onSyncedFilePolicyChange: (String) -> Unit,
     accessTokenAvailable: Boolean,
     onTestConnection: ((String) -> Unit) -> Unit,
 ) {
     var testResult by remember { mutableStateOf<String?>(null) }
     var themeMenuOpen by remember { mutableStateOf(false) }
+    var intervalMenuOpen by remember { mutableStateOf(false) }
+    var policyMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = { WagmailTopBar(title = "Settings") },
@@ -106,11 +133,22 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text("Watched folder", style = MaterialTheme.typography.titleMedium)
-            Text(
-                watchedFolderUri?.let { Uri.parse(it).lastPathSegment ?: it }
-                    ?: "No folder chosen",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    watchedFolderUri?.let { Uri.parse(it).lastPathSegment ?: it }
+                        ?: "No folder chosen",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (watchedFolderUri != null) {
+                    TextButton(
+                        onClick = onClearFolder,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Clear") }
+                }
+            }
             OutlinedButton(onClick = onChooseFolder) {
                 Text(if (watchedFolderUri == null) "Choose folder" else "Change folder")
             }
@@ -118,8 +156,9 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Auto-import from this folder")
                     Text(
-                        "Checks every ~15 min in the background (Android's minimum interval). " +
-                            "Uses a small amount of battery — leave off if you'd rather import manually.",
+                        "Checks in the background on the interval below. Uses a small amount " +
+                            "of battery — leave off if you'd rather import manually or with " +
+                            "\"Check now\".",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -128,6 +167,44 @@ fun SettingsScreen(
                     onCheckedChange = onAutoWatchChange,
                     enabled = watchedFolderUri != null,
                 )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box {
+                    OutlinedButton(
+                        onClick = { intervalMenuOpen = true },
+                        enabled = watchedFolderUri != null,
+                    ) {
+                        Text(WATCH_INTERVAL_LABELS.firstOrNull { it.first == watchIntervalMinutes }?.second ?: "Every $watchIntervalMinutes min")
+                    }
+                    DropdownMenu(expanded = intervalMenuOpen, onDismissRequest = { intervalMenuOpen = false }) {
+                        WATCH_INTERVAL_LABELS.forEach { (minutes, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = { onWatchIntervalChange(minutes); intervalMenuOpen = false },
+                            )
+                        }
+                    }
+                }
+                OutlinedButton(onClick = onCheckNow, enabled = watchedFolderUri != null) {
+                    Text("Check now")
+                }
+            }
+            Text("After import, synced files:", style = MaterialTheme.typography.bodyMedium)
+            Box {
+                OutlinedButton(
+                    onClick = { policyMenuOpen = true },
+                    enabled = watchedFolderUri != null,
+                ) {
+                    Text(SYNCED_FILE_POLICY_LABELS[syncedFilePolicy] ?: syncedFilePolicy)
+                }
+                DropdownMenu(expanded = policyMenuOpen, onDismissRequest = { policyMenuOpen = false }) {
+                    SYNCED_FILE_POLICY_LABELS.forEach { (policy, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { onSyncedFilePolicyChange(policy); policyMenuOpen = false },
+                        )
+                    }
+                }
             }
 
             HorizontalDivider()
