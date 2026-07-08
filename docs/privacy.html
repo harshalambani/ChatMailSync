@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — WhatsApp Chat Sync to Gmail</title>
+<style>
+  :root {
+    --paper: #f5f6f4;
+    --ink: #20242b;
+    --accent: #2e4374;
+    --slate: #565f70;
+    --hairline: #d8dbd6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171c;
+      --ink: #eceef1;
+      --accent: #93a8d6;
+      --slate: #a3acbd;
+      --hairline: #2a2f38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  a { color: var(--accent); }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.7rem;
+    font-family: Verdana, sans-serif;
+    color: var(--slate);
+    margin: 0 0 0.4rem;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 0.3rem; text-wrap: balance; }
+  .updated { color: var(--slate); font-size: 0.9rem; margin: 0 0 2.2rem; }
+  h2 {
+    font-size: 1.05rem;
+    font-family: Verdana, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin: 2.2rem 0 0.8rem;
+    border-top: 1px solid var(--hairline);
+    padding-top: 1.6rem;
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; }
+  ul { padding-left: 1.2rem; }
+  li { margin-bottom: 0.5rem; }
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    background: color-mix(in srgb, var(--paper) 90%, var(--ink) 10%);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--hairline);
+    font-family: Verdana, sans-serif;
+    font-size: 0.85rem;
+    color: var(--slate);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Privacy Policy</p>
+  <h1>WhatsApp Chat Sync to Gmail</h1>
+  <p class="updated">Last updated: July 8, 2026</p>
+
+  <h2>Summary</h2>
+  <p>
+    This app copies WhatsApp chat exports that <strong>you</strong> provide
+    into <strong>your own</strong> Gmail account. It runs entirely on your
+    device. There is no backend server, no account system, no analytics, and
+    no advertising — the developer never receives, stores, or has access to
+    your messages, your Gmail data, or your Google account.
+  </p>
+
+  <h2>What data the app accesses</h2>
+  <p>To do its one job, the app requests three Google OAuth scopes:</p>
+  <ul>
+    <li><code>gmail.insert</code> &mdash; lets the app add new messages to your mailbox. It cannot read, modify, or delete any mail already in your account.</li>
+    <li><code>gmail.labels</code> &mdash; lets the app create and apply a label (e.g. <code>WhatsApp/Mom</code>) so synced chats are organised.</li>
+    <li><code>userinfo.email</code> &mdash; lets the app show which Google account is currently connected.</li>
+  </ul>
+  <p>
+    The app never requests permission to read your existing mail, contacts,
+    or any other Google data.
+  </p>
+
+  <h2>Where your data goes</h2>
+  <p>
+    Nowhere but your own device and your own Gmail account. The WhatsApp
+    export file you share or import is copied into the app's private
+    storage on your device, parsed there, and sent directly from your device
+    to Google's Gmail API over HTTPS &mdash; there is no intermediate server
+    operated by the developer that your messages, attachments, or OAuth
+    tokens ever pass through.
+  </p>
+  <p>
+    The app keeps a small local database on your device (message hashes and
+    sync status) purely to avoid re-sending the same message twice. This
+    database never leaves your device. Deleting the app removes it.
+  </p>
+
+  <h2>Account connection &amp; revoking access</h2>
+  <p>
+    You can disconnect the app at any time from within the app itself
+    (Settings &rarr; Disconnect), or by visiting your Google Account's
+    <a href="https://myaccount.google.com/permissions">third-party access
+    page</a> and removing "WhatsApp Chat Sync to Gmail" from the list.
+    Revoking access does not delete anything already synced to your Gmail
+    &mdash; those are ordinary emails in your mailbox and are yours to keep
+    or delete like any other message.
+  </p>
+
+  <h2>Third parties</h2>
+  <p>
+    None. The app does not share, sell, or transmit any data to any third
+    party. The only network calls it makes are to Google's own OAuth and
+    Gmail API endpoints, directly from your device.
+  </p>
+
+  <h2>Changes to this policy</h2>
+  <p>
+    If this policy changes, the updated version will be published at this
+    same address with a new "Last updated" date.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Questions about this policy or the app can be raised as an issue on the
+    <a href="https://github.com/harshalambani/WAGMailSync/issues">GitHub
+    repository</a>.
+  </p>
+
+  <footer>
+    <a href="index.html">&larr; Back to app overview</a>
+  </footer>
+</div>
+</body>
+</html>

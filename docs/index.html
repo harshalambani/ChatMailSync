@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Chat Sync to Gmail</title>
+<style>
+  :root {
+    --paper: #f5f6f4;
+    --ink: #20242b;
+    --accent: #2e4374;
+    --accent-light: #93a8d6;
+    --slate: #565f70;
+    --hairline: #d8dbd6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171c;
+      --ink: #eceef1;
+      --accent: #93a8d6;
+      --accent-light: #2e4374;
+      --slate: #a3acbd;
+      --hairline: #2a2f38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin-bottom: 2.5rem;
+  }
+  .mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper);
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+  h1 {
+    font-size: 1.5rem;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.7rem;
+    font-family: Verdana, sans-serif;
+    color: var(--slate);
+    margin: 0.15rem 0 0;
+  }
+  p { color: var(--ink); }
+  .lede {
+    font-size: 1.15rem;
+    color: var(--slate);
+  }
+  ul { padding-left: 1.2rem; }
+  li { margin-bottom: 0.5rem; }
+  .card {
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+    margin: 2rem 0;
+    background: color-mix(in srgb, var(--paper) 96%, var(--ink) 4%);
+  }
+  .card h2 {
+    font-size: 1rem;
+    margin: 0 0 0.6rem;
+    font-family: Verdana, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--hairline);
+    font-family: Verdana, sans-serif;
+    font-size: 0.85rem;
+    color: var(--slate);
+  }
+  footer a, .lede a, p a { color: var(--accent); }
+  footer nav a { margin-right: 1.2rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">✉</div>
+    <div>
+      <h1>WhatsApp Chat Sync to Gmail</h1>
+      <p class="eyebrow">Private Gmail archive</p>
+    </div>
+  </header>
+
+  <p class="lede">
+    Turns a WhatsApp "Export chat" file into a searchable, organised archive
+    inside your own Gmail — nothing leaves your device except the messages
+    <em>you</em> choose to sync, sent straight to your own mailbox.
+  </p>
+
+  <div class="card">
+    <h2>What it does</h2>
+    <ul>
+      <li>Reads a WhatsApp chat export (text or zip with media) that you share or import.</li>
+      <li>Adds each message to your Gmail under a label named after the chat, grouped under <strong>WhatsApp</strong>.</li>
+      <li>Keeps photos, videos, and other attachments inline, just like the original conversation.</li>
+      <li>Skips anything already synced, so re-running it never duplicates messages.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>What it never does</h2>
+    <ul>
+      <li>Never reads your existing Gmail — it only <em>adds</em> new messages and labels.</li>
+      <li>Never sends, deletes, or posts anything back to WhatsApp.</li>
+      <li>Never routes your messages through a server the developer controls — the app talks directly from your device to Google's Gmail API.</li>
+      <li>No ads, no analytics, no data sharing with anyone.</li>
+    </ul>
+  </div>
+
+  <p>
+    Available for Android (Kotlin/Compose, embedding the same Python sync
+    engine used by the Windows desktop version) and Windows.
+  </p>
+
+  <footer>
+    <nav>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="user-guide.md">User Guide</a>
+      <a href="https://github.com/harshalambani/WAGMailSync">Source on GitHub</a>
+    </nav>
+  </footer>
+</div>
+</body>
+</html>
