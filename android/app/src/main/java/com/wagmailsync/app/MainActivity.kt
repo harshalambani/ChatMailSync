@@ -47,10 +47,12 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.chaquo.python.Python
+import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Tasks
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -64,6 +66,22 @@ private val GMAIL_SCOPES = listOf(
     Scope("https://www.googleapis.com/auth/gmail.labels"),
     Scope("https://www.googleapis.com/auth/userinfo.email"),
 )
+
+/** Play Services caches OAuth tokens per-account independently of this
+ * app's own storage. If Gmail rejects a token with 401 (revoked, expired,
+ * or otherwise invalidated on Google's side), silently re-authorizing just
+ * hands back the same stale cached token until that cache entry is
+ * explicitly dropped via GoogleAuthUtil.clearToken(). Blocks synchronously
+ * (Tasks.await) — call only from a background thread. */
+private fun refreshStaleToken(activity: android.app.Activity, staleToken: String): String? {
+    return try {
+        GoogleAuthUtil.clearToken(activity, staleToken)
+        val request = AuthorizationRequest.builder().setRequestedScopes(GMAIL_SCOPES).build()
+        Tasks.await(Identity.getAuthorizationClient(activity).authorize(request)).accessToken
+    } catch (_: Exception) {
+        null
+    }
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -471,15 +489,32 @@ fun WagmailApp(
                             onResult("Connect Gmail first.")
                         } else {
                             Thread {
+                                fun labelsList(t: String) = Python.getInstance()
+                                    .getModule("src.gmail_client")
+                                    .callAttr("set_token", t)
+                                    .callAttr("labels_list").toString()
+                                var refreshedToken: String? = null
                                 val text = try {
-                                    val transport = Python.getInstance()
-                                        .getModule("src.gmail_client")
-                                        .callAttr("set_token", token)
-                                    transport.callAttr("labels_list").toString()
+                                    labelsList(token)
                                 } catch (e: Exception) {
-                                    "Error calling labels_list(): ${e.message}"
+                                    if (e.message?.contains("401") == true) {
+                                        val fresh = refreshStaleToken(context as android.app.Activity, token)
+                                        if (fresh != null) {
+                                            refreshedToken = fresh
+                                            try {
+                                                labelsList(fresh)
+                                            } catch (e2: Exception) {
+                                                "Error calling labels_list() after refreshing token: ${e2.message}"
+                                            }
+                                        } else {
+                                            "Error calling labels_list(): ${e.message} (token refresh also failed)"
+                                        }
+                                    } else {
+                                        "Error calling labels_list(): ${e.message}"
+                                    }
                                 }
                                 android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    refreshedToken?.let { accessToken = it }
                                     onResult(text)
                                 }
                             }.start()
