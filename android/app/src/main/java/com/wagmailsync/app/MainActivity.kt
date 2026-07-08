@@ -234,14 +234,19 @@ fun WagmailApp(
     // ---- Watched folder (Home feedback: auto-detect new export files) --
     var watchedFolderUri by remember { mutableStateOf(AppPrefs.getWatchedFolderUri(context)) }
     var autoWatchEnabled by remember { mutableStateOf(AppPrefs.isAutoWatchEnabled(context)) }
+    var watchIntervalMinutes by remember { mutableStateOf(AppPrefs.getWatchIntervalMinutes(context)) }
+    var syncedFilePolicy by remember { mutableStateOf(AppPrefs.getSyncedFilePolicy(context)) }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         if (uri != null) {
+            // Write permission is needed (not just read) so the "move to
+            // synced/" file policy below can create a subfolder and
+            // relocate files in the watched tree, not just copy out of it.
             context.contentResolver.takePersistableUriPermission(
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             AppPrefs.setWatchedFolderUri(context, uri.toString())
             watchedFolderUri = uri.toString()
@@ -251,7 +256,24 @@ fun WagmailApp(
     fun setAutoWatch(enabled: Boolean) {
         autoWatchEnabled = enabled
         AppPrefs.setAutoWatchEnabled(context, enabled)
-        if (enabled) WatchFolderWorker.enqueue(context) else WatchFolderWorker.cancel(context)
+        if (enabled) WatchFolderWorker.enqueue(context, watchIntervalMinutes) else WatchFolderWorker.cancel(context)
+    }
+
+    fun setWatchInterval(minutes: Long) {
+        watchIntervalMinutes = minutes
+        AppPrefs.setWatchIntervalMinutes(context, minutes)
+        if (autoWatchEnabled) WatchFolderWorker.enqueue(context, minutes)
+    }
+
+    fun setSyncedFilePolicy(policy: String) {
+        syncedFilePolicy = policy
+        AppPrefs.setSyncedFilePolicy(context, policy)
+    }
+
+    fun clearWatchedFolder() {
+        setAutoWatch(false)
+        AppPrefs.setWatchedFolderUri(context, null)
+        watchedFolderUri = null
     }
 
     // ---- Sync defaults (Phase A5 Home sync controls) -------------------
@@ -434,8 +456,14 @@ fun WagmailApp(
                     onThemeModeChange = onThemeModeChange,
                     watchedFolderUri = watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
+                    onClearFolder = { clearWatchedFolder() },
                     autoWatchEnabled = autoWatchEnabled,
                     onAutoWatchChange = { setAutoWatch(it) },
+                    watchIntervalMinutes = watchIntervalMinutes,
+                    onWatchIntervalChange = { setWatchInterval(it) },
+                    onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
+                    syncedFilePolicy = syncedFilePolicy,
+                    onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
                     accessTokenAvailable = accessToken != null,
                     onTestConnection = { onResult ->
                         val token = accessToken
