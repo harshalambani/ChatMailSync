@@ -49,14 +49,16 @@ fun SyncProgressScreen(
     var stopRequested by remember { mutableStateOf(false) }
 
     // The sync request's input Data (including the OAuth access token) sits
-    // in WorkManager's own SQLite DB until pruned. Once this work reaches a
-    // terminal state, prune it immediately rather than leaving the token
-    // sitting in plaintext at rest for however long WorkManager would
-    // otherwise keep finished work around.
-    LaunchedEffect(workInfo?.state) {
-        if (workInfo?.state?.isFinished == true) {
-            workManager.pruneWork()
-        }
+    // in WorkManager's own SQLite DB until pruned. pruneWork() deletes the
+    // finished work's row outright, so calling it while this screen is still
+    // observing that same workId's Flow makes the next emission come back
+    // null -- which the screen below reads as "not started yet" and gets
+    // stuck showing an indeterminate "Starting..." forever. So prune only
+    // once the user dismisses this screen (onDoneAndPrune), not the instant
+    // the state flips to finished.
+    fun onDoneAndPrune() {
+        workManager.pruneWork()
+        onDone()
     }
 
     Scaffold(
@@ -78,7 +80,7 @@ fun SyncProgressScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    Button(onClick = onDone) { Text("Done") }
+                    Button(onClick = ::onDoneAndPrune) { Text("Done") }
                 }
                 WorkInfo.State.FAILED -> {
                     Text("Sync failed", style = MaterialTheme.typography.titleMedium)
@@ -86,11 +88,11 @@ fun SyncProgressScreen(
                         workInfo.outputData.getString(SyncWorker.KEY_ERROR) ?: "Unknown error",
                         color = MaterialTheme.colorScheme.error,
                     )
-                    Button(onClick = onDone) { Text("Done") }
+                    Button(onClick = ::onDoneAndPrune) { Text("Done") }
                 }
                 WorkInfo.State.CANCELLED -> {
                     Text("Sync cancelled")
-                    Button(onClick = onDone) { Text("Done") }
+                    Button(onClick = ::onDoneAndPrune) { Text("Done") }
                 }
                 null -> {
                     Text("Starting…")
