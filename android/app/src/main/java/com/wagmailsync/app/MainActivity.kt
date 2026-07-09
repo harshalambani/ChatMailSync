@@ -50,6 +50,7 @@ import com.chaquo.python.Python
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Tasks
@@ -199,6 +200,27 @@ fun WagmailApp(
             .addOnFailureListener { e ->
                 if (!silent) connectError = "Authorization failed: ${e.message}"
             }
+    }
+
+    // Disconnect must revoke the grant in Play Services itself, not just
+    // clear our own state — Play Services caches "this app is authorized
+    // for this account" independently of anything the app stores, so a
+    // local-only disconnect left the next Connect silently re-authorizing
+    // the same account with no picker/consent screen (see 2026-07 account-
+    // switch bug). revokeAccess() clears both the grant and its cached
+    // tokens so the next authorize() call comes back with hasResolution().
+    fun disconnectGmail() {
+        val email = connectedEmail
+        if (email != null) {
+            val account = android.accounts.Account(email, "com.google")
+            val request = RevokeAccessRequest.builder()
+                .setAccount(account)
+                .setScopes(GMAIL_SCOPES)
+                .build()
+            Identity.getAuthorizationClient(context as android.app.Activity).revokeAccess(request)
+        }
+        accessToken = null
+        connectedEmail = null
     }
 
     // "Token survives app restart": silently re-check on screen load.
@@ -467,7 +489,7 @@ fun WagmailApp(
             composable("settings") {
                 SettingsScreen(
                     connectedEmail = connectedEmail,
-                    onDisconnect = { accessToken = null; connectedEmail = null },
+                    onDisconnect = ::disconnectGmail,
                     onReconnect = { connectGmail(silent = false) },
                     onOpenHelp = { navController.navigate("help") },
                     themeMode = themeMode,
