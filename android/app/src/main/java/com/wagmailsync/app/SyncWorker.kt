@@ -39,6 +39,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_DRY_RUN = "dry_run"
         const val KEY_CHUNK_SIZE = "chunk_size"
+        const val KEY_TRIGGER = "trigger"
         const val KEY_RESULT = "result"
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS_TEXT = "progress_text"
@@ -52,6 +53,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             ?: return Result.failure(workDataOf(KEY_ERROR to "Missing access token"))
         val dryRun = inputData.getBoolean(KEY_DRY_RUN, false)
         val chunkSize = inputData.getString(KEY_CHUNK_SIZE)
+        val trigger = inputData.getString(KEY_TRIGGER) ?: "manual"
 
         setForeground(createForegroundInfo("Starting sync…"))
 
@@ -92,7 +94,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 }
             }
             try {
-                val statsResult = withDispatcherIO(token, chunkSize, dryRun, androidApi)
+                val statsResult = withDispatcherIO(token, chunkSize, dryRun, trigger, androidApi)
                 notify("Sync complete — ${statsResult.messagesSynced} message(s) synced")
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
             } catch (e: Exception) {
@@ -108,10 +110,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         token: String,
         chunkSize: String?,
         dryRun: Boolean,
+        trigger: String,
         androidApi: com.chaquo.python.PyObject,
     ): SyncStatsResult = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val transport = Python.getInstance().getModule("src.gmail_client").callAttr("set_token", token)
-        val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, null, null)
+        val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, null, null, trigger)
         SyncStatsResult.from(result)
     }
 

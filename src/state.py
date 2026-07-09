@@ -8,7 +8,7 @@ conversion, matching the timezone limitation described in the architecture doc).
 import hashlib
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     run_id           INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_id          TEXT    NOT NULL REFERENCES chats(chat_id),
     status           TEXT    NOT NULL CHECK(status IN ('pending', 'complete', 'failed')),
+    trigger          TEXT    NOT NULL DEFAULT 'manual',
     last_synced_ts   TEXT,
     last_synced_hash TEXT,
     messages_parsed  INTEGER NOT NULL DEFAULT 0,
@@ -90,6 +91,12 @@ def init_db(db_path: Optional[Path] = None) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with _connect(db_path) as conn:
         conn.executescript(_DDL)
+        # Migration for DBs created before the `trigger` column existed —
+        # CREATE TABLE IF NOT EXISTS above only helps fresh installs.
+        try:
+            conn.execute("ALTER TABLE sync_runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
 
 # ---------------------------------------------------------------------------
@@ -186,15 +193,15 @@ def resolve_chat(target: str, db_path: Optional[Path] = None) -> Optional[sqlite
 # Sync run helpers
 # ---------------------------------------------------------------------------
 
-def start_sync_run(chat_id: str, db_path: Optional[Path] = None) -> int:
+def start_sync_run(chat_id: str, trigger: str = "manual", db_path: Optional[Path] = None) -> int:
     """Open a new sync run in 'pending' status; return the new run_id."""
     with _connect(db_path) as conn:
         cur = conn.execute(
             """
-            INSERT INTO sync_runs (chat_id, status, started_at)
-            VALUES (?, 'pending', ?)
+            INSERT INTO sync_runs (chat_id, status, trigger, started_at)
+            VALUES (?, 'pending', ?, ?)
             """,
-            (chat_id, _now()),
+            (chat_id, trigger, _now()),
         )
         return cur.lastrowid
 
@@ -336,6 +343,31 @@ def get_sync_summary(db_path: Optional[Path] = None) -> list[dict]:
             """
         ).fetchall()
         return [dict(row) for row in rows]
+
+
+def get_recent_runs(days: int = 90, db_path: Optional[Path] = None) -> list[sqlite3.Row]:
+    """Return sync runs started within the last `days` days, newest first,
+    joined with the chat's display name, for the Android Sync log screen.
+
+    This is a display-window filter, not a retention/deletion policy — old
+    `sync_runs` rows are never physically deleted (see module docstring on
+    `reset_chat`/`delete_chat` for the only paths that do delete rows, both
+    scoped to a single chat). Deleting old runs in bulk would either violate
+    the `message_hashes.run_id` foreign key or, if hashes were deleted too,
+    re-open already-synced messages for duplicate re-send.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+    with _connect(db_path) as conn:
+        return conn.execute(
+            """
+            SELECT sync_runs.*, chats.display_name
+            FROM sync_runs
+            JOIN chats ON chats.chat_id = sync_runs.chat_id
+            WHERE sync_runs.started_at >= ?
+            ORDER BY sync_runs.started_at DESC
+            """,
+            (cutoff,),
+        ).fetchall()
 
 
 # ---------------------------------------------------------------------------

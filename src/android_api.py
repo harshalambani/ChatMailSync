@@ -20,7 +20,7 @@ from src import config
 from src.gmail_client import ChunkSize, GmailTransport
 from src.parser import extract_chat_info, parse_file
 from src.state import delete_chat as state_delete_chat
-from src.state import get_sync_summary, init_db, reset_chat, resolve_chat
+from src.state import get_recent_runs, get_sync_summary, init_db, reset_chat, resolve_chat
 from src.sync_manager import ProgressSyncManager
 
 # Mirrors gui_worker.py's existing {"type": ..., ...} event vocabulary
@@ -179,12 +179,17 @@ def sync(
     dry_run: bool = False,
     chat_filter: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
+    trigger: str = "manual",
 ) -> dict:
     """Run one full sync pass over data/inbox/ (or the caller's configured root).
 
     `transport` is an already-built GmailTransport (e.g. from
     gmail_client.set_token() on Android), not a raw service or bearer token —
     this keeps the façade decoupled from how the transport was constructed.
+
+    `trigger` is recorded on each sync_runs row for the Android Sync log
+    screen (e.g. "manual" for Home's Sync now, "watched_folder" for an
+    auto-synced watched-folder import).
     """
     def _relay(event: dict) -> None:
         _publish_progress(event)
@@ -198,6 +203,7 @@ def sync(
         transport=transport,
         chunk_size=chunk_size or config.DEFAULT_CHUNK_SIZE,
         dry_run=dry_run,
+        trigger=trigger,
         progress_queue=_CallbackSink(_relay),
         stop_event=_stop_event,
     )
@@ -211,6 +217,14 @@ def status() -> list[dict]:
     """Return a per-chat sync summary as plain dicts (state.get_sync_summary())."""
     init_db(config.STATE_DB_PATH)
     return get_sync_summary(config.STATE_DB_PATH)
+
+
+def sync_log(days: int = 90) -> list[dict]:
+    """Return sync runs from the last `days` days as plain dicts, newest
+    first, for the Android Sync log screen. See state.get_recent_runs() for
+    why this is a display window rather than a deletion/retention policy."""
+    init_db(config.STATE_DB_PATH)
+    return [dict(row) for row in get_recent_runs(days, config.STATE_DB_PATH)]
 
 
 def reset(chat_id_or_name: str) -> dict:

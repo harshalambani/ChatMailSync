@@ -117,6 +117,30 @@ def test_sync_with_fake_transport_creates_label_and_inserts(tmp_root):
     assert len(transport.inserted) >= 1
 
 
+def test_sync_records_trigger_on_sync_runs(tmp_root, db_path):
+    fixture = FIXTURES_DIR / "android_export.txt"
+    config.INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(fixture, config.INBOX_DIR / "WhatsApp Chat with Test Chat.txt")
+
+    android_api.sync(transport=_FakeTransport(), dry_run=False, trigger="watched_folder")
+
+    runs = android_api.sync_log()
+    assert len(runs) == 1
+    assert runs[0]["trigger"] == "watched_folder"
+    assert runs[0]["display_name"] == "Test Chat"
+
+
+def test_sync_log_defaults_trigger_to_manual(tmp_root, db_path):
+    fixture = FIXTURES_DIR / "android_export.txt"
+    config.INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(fixture, config.INBOX_DIR / "WhatsApp Chat with Test Chat.txt")
+
+    android_api.sync(transport=_FakeTransport(), dry_run=False)
+
+    runs = android_api.sync_log()
+    assert runs[0]["trigger"] == "manual"
+
+
 def test_status_returns_list_of_dicts(tmp_root, db_path):
     upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
     rows = android_api.status()

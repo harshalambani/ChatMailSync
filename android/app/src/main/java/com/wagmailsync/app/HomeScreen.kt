@@ -71,6 +71,7 @@ fun HomeScreen(
     onDryRunDefaultChange: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     lastResult: String,
+    syncInProgress: Boolean,
 ) {
     var previewText by remember { mutableStateOf<String?>(null) }
     var chunkMenuOpen by remember { mutableStateOf(false) }
@@ -82,9 +83,9 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(14.dp)
+                .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Connection chip — compact single row, not a full card, since
             // it's a status line rather than a distinct feature area.
@@ -120,7 +121,7 @@ fun HomeScreen(
             // Inbox + sync — one card: these two are really one workflow
             // (what's waiting -> how to push it), not two separate features.
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = if (inboxFiles.isEmpty()) "Nothing waiting to sync"
                         else "${inboxFiles.size} file(s) ready to sync",
@@ -190,9 +191,14 @@ fun HomeScreen(
                     Button(
                         onClick = onSyncNow,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = inboxFiles.isNotEmpty() && (dryRunDefault || connectedEmail != null),
+                        enabled = !syncInProgress && inboxFiles.isNotEmpty() &&
+                            (dryRunDefault || connectedEmail != null),
                     ) {
-                        Text(if (dryRunDefault) "Run test sync" else "Sync now")
+                        Text(
+                            if (syncInProgress) "Current sync is on"
+                            else if (dryRunDefault) "Run test sync"
+                            else "Sync now"
+                        )
                     }
                 }
             }

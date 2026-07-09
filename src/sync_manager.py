@@ -128,12 +128,16 @@ class SyncManager:
         inbox_dir: Optional[Path] = None,
         processed_dir: Optional[Path] = None,
         transport: Optional[GmailTransport] = None,
+        trigger: str = "manual",
     ) -> None:
         """`service` (existing googleapiclient Resource) and `transport` (an
         already-built GmailTransport, e.g. from gmail_client.set_token() on
         Android) are mutually exclusive — pass at most one. `service` is
         wrapped in a DiscoveryTransport internally so callers below this
         class never touch a raw service object.
+
+        `trigger` is recorded on each opened sync_runs row (e.g. "manual",
+        "watched_folder") — purely descriptive, for the Android Sync log.
         """
         if service is not None and transport is not None:
             raise ValueError("Pass at most one of service= or transport=, not both")
@@ -142,6 +146,7 @@ class SyncManager:
         )
         self.chunk_size = chunk_size
         self.dry_run = dry_run
+        self.trigger = trigger
         self.db_path = db_path or config.STATE_DB_PATH
         self.inbox_dir = inbox_dir or config.INBOX_DIR
         self.processed_dir = processed_dir or config.PROCESSED_DIR
@@ -218,7 +223,7 @@ class SyncManager:
         # Open a pending sync run (skipped in dry-run; no state written).
         run_id: Optional[int] = None
         if not self.dry_run:
-            run_id = start_sync_run(chat_id, self.db_path)
+            run_id = start_sync_run(chat_id, trigger=self.trigger, db_path=self.db_path)
 
         # Parse + dedup the file.
         try:
