@@ -52,6 +52,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Constraints
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -370,19 +371,23 @@ fun WagmailApp(
     }
 
     // ---- Sync defaults (Phase A5 Home sync controls) -------------------
-    var chunkSize by remember { mutableStateOf("day") }
-    var dryRunDefault by remember { mutableStateOf(false) }
+    // Persisted (AppPrefs), not remember-only — previously reset to "day"/
+    // false on every process death, and WatchFolderWorker's auto-sync
+    // couldn't see the user's choice at all since it runs in a separate
+    // process-less Worker with no access to this Compose state.
+    var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
+    var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
     val workManager = remember { WorkManager.getInstance(context) }
-    var syncWorkId by remember { mutableStateOf<UUID?>(null) }
+    var lastSyncWasDryRun by remember { mutableStateOf(false) }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { /* Sync still runs as a foreground service either way; a denied
           notification permission only means the user won't see progress. */ }
 
-    fun startRealSync() {
+    fun startRealSync(chatFilter: String? = null) {
         if (connectedEmail == null) {
             lastResult = "Connect Gmail first."
             return
@@ -423,6 +428,7 @@ fun WagmailApp(
                             .putBoolean(SyncWorker.KEY_DRY_RUN, false)
                             .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
                             .putString(SyncWorker.KEY_TRIGGER, "manual")
+                            .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
                             .build()
                     )
                     // Sync always needs the network; if WorkManager ever defers
@@ -433,8 +439,12 @@ fun WagmailApp(
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
                     )
                     .build()
-                syncWorkId = request.id
-                workManager.enqueue(request)
+                lastSyncWasDryRun = false
+                workManager.enqueueUniqueWork(
+                    SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
+                    ExistingWorkPolicy.REPLACE,
+                    request,
+                )
                 navController.navigate("syncProgress")
             }
             .addOnFailureListener { e ->
@@ -442,21 +452,42 @@ fun WagmailApp(
             }
     }
 
+    // Previously ran android_api.sync() directly on the Compose click
+    // handler — blocking the UI thread for however long a large export
+    // took, with no progress indication and no way to cancel. Routed
+    // through SyncWorker instead (dry_run=true, no access token needed),
+    // same as a real sync.
     fun runDryRunSync() {
-        val stats = Python.getInstance()
-            .getModule("src.android_api")
-            .callAttr("sync", null, chunkSize, true, null, null)
-        lastResult = "Dry-run sync result:\n\n${formatSyncStats(stats)}"
-        refreshInbox()
+        lastSyncWasDryRun = true
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putBoolean(SyncWorker.KEY_DRY_RUN, true)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_TRIGGER, "manual")
+                    .build()
+            )
+            .build()
+        workManager.enqueueUniqueWork(
+            SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        navController.navigate("syncProgress")
     }
 
-    val syncWorkInfo = syncWorkId?.let { id ->
-        workManager.getWorkInfoByIdFlow(id).collectAsState(initial = null).value
-    }
+    // Unique work name (not an in-memory UUID) so this survives the process
+    // being killed mid-sync — a fresh composition can re-find the same run.
+    val syncWorkInfo = workManager
+        .getWorkInfosForUniqueWorkFlow(SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC)
+        .collectAsState(initial = emptyList())
+        .value
+        .firstOrNull()
     LaunchedEffect(syncWorkInfo?.state) {
         when (syncWorkInfo?.state) {
             WorkInfo.State.SUCCEEDED -> {
-                lastResult = "Sync result:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
+                val label = if (lastSyncWasDryRun) "Dry-run sync result" else "Sync result"
+                lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
             }
             WorkInfo.State.FAILED -> {
@@ -505,6 +536,17 @@ fun WagmailApp(
             "Sync failed:\n\n${autoSyncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
         else -> null
     }
+    // Without this, a watched-folder/scheduled auto-sync's outcome was
+    // silently dropped — Home's "Last result" card only ever updated from
+    // the manual-sync LaunchedEffect above, so a completed auto-sync left
+    // the user staring at whatever was there before with no confirmation it
+    // ever finished (or whether it succeeded).
+    LaunchedEffect(autoSyncWorkInfo?.state) {
+        if (autoSyncResultText != null) {
+            lastResult = autoSyncResultText
+            refreshInbox()
+        }
+    }
     val autoSyncRunning = autoSyncWorkInfo?.state == WorkInfo.State.RUNNING ||
         autoSyncWorkInfo?.state == WorkInfo.State.ENQUEUED
     val manualSyncRunning = syncWorkInfo?.state == WorkInfo.State.RUNNING ||
@@ -523,13 +565,19 @@ fun WagmailApp(
     // Dedicated, always-present status row (this is a sync app — the real
     // estate is worth it) instead of burying "is a sync running right now"
     // inside whichever tab happens to be open. Priority: a manual Home sync
-    // in flight, then a watched-folder/scheduled auto-sync, then the
-    // watched-folder's own import-phase status, else an idle placeholder.
+    // in flight, then a watched-folder/scheduled auto-sync, then that
+    // auto-sync's own terminal result (so the footer doesn't get stuck
+    // showing the import phase's stale "syncing to Gmail…" forever once the
+    // chained sync actually finishes), then the watched-folder's own
+    // import-phase status, else an idle placeholder.
     val syncStatusRunning = anySyncRunning
     val syncStatusText = when {
         manualSyncRunning ->
             syncWorkInfo?.progress?.getString(SyncWorker.KEY_PROGRESS_TEXT) ?: "Syncing…"
         autoSyncRunning -> autoSyncProgressText ?: "Syncing (watched folder)…"
+        autoSyncResultText != null ->
+            if (autoSyncWorkInfo?.state == WorkInfo.State.FAILED) "Watched-folder sync failed — tap for details"
+            else "Watched-folder sync complete"
         checkNowStatus != null -> checkNowStatus
         else -> "No sync in progress"
     }
@@ -609,9 +657,9 @@ fun WagmailApp(
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
                     chunkSize = chunkSize,
-                    onChunkSizeChange = { chunkSize = it },
+                    onChunkSizeChange = { chunkSize = it; AppPrefs.setChunkSize(context, it) },
                     dryRunDefault = dryRunDefault,
-                    onDryRunDefaultChange = { dryRunDefault = it },
+                    onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
                     lastResult = lastResult,
                     syncInProgress = anySyncRunning,
@@ -628,6 +676,8 @@ fun WagmailApp(
                     chatId = chatId,
                     onBack = { navController.popBackStack() },
                     onDeleted = { navController.popBackStack() },
+                    onSyncThisChat = { startRealSync(chatFilter = chatId) },
+                    syncInProgress = anySyncRunning,
                 )
             }
             composable("settings") {
@@ -699,7 +749,6 @@ fun WagmailApp(
             composable("syncProgress") {
                 SyncProgressScreen(
                     workManager = workManager,
-                    workId = syncWorkId,
                     onDone = { navController.popBackStack("home", inclusive = false) },
                 )
             }

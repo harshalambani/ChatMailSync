@@ -13,6 +13,8 @@ object AppPrefs {
     private const val KEY_WATCH_INTERVAL_MINUTES = "watch_interval_minutes"
     private const val KEY_SYNCED_FILE_POLICY = "synced_file_policy"
     private const val KEY_CONNECTED_EMAIL = "connected_email"
+    private const val KEY_CHUNK_SIZE = "chunk_size"
+    private const val KEY_DRY_RUN_DEFAULT = "dry_run_default"
 
     /** WorkManager's PeriodicWorkRequest has a hard 15-minute floor enforced
      * by the platform itself — no interval below this is achievable
@@ -86,5 +88,24 @@ object AppPrefs {
 
     fun setConnectedAccountEmail(context: Context, email: String?) {
         prefs(context).edit().putString(KEY_CONNECTED_EMAIL, email).apply()
+    }
+
+    /** "hour" | "day" (default) | "week" — Home's "Split into" picker.
+     * Previously Compose `remember`-only state, reset to "day" on every
+     * process death, and WatchFolderWorker's auto-sync hardcoded "day"
+     * regardless of what the user had actually picked. Windows mirrors this
+     * via data/.settings.json's chunk_size. */
+    fun getChunkSize(context: Context): String =
+        prefs(context).getString(KEY_CHUNK_SIZE, "day") ?: "day"
+
+    fun setChunkSize(context: Context, chunkSize: String) {
+        prefs(context).edit().putString(KEY_CHUNK_SIZE, chunkSize).apply()
+    }
+
+    fun isDryRunDefault(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DRY_RUN_DEFAULT, false)
+
+    fun setDryRunDefault(context: Context, dryRun: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DRY_RUN_DEFAULT, dryRun).apply()
     }
 }
