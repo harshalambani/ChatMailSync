@@ -1,5 +1,6 @@
 package com.wagmailsync.app
 
+import android.accounts.Account
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -9,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
@@ -16,6 +18,10 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import com.google.android.gms.auth.GoogleAuthUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /**
@@ -34,8 +40,16 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
     companion object {
         const val UNIQUE_WORK_NAME = "watch_folder"
         const val UNIQUE_WORK_NAME_ONCE = "watch_folder_once"
+        /** Unique name for the chained SyncWorker request triggered after an
+         * import (see triggerAutoSync) — shared by both the manual "Sync
+         * now" path and the periodic background watcher, so MainActivity can
+         * observe live sync progress for either one the same way, whenever
+         * the app happens to be open while one is running. */
+        const val UNIQUE_WORK_NAME_AUTO_SYNC = "watch_folder_auto_sync"
         const val NOTIFICATION_CHANNEL_ID = "watch_folder_channel"
         const val NOTIFICATION_ID = 1002
+        const val KEY_IMPORTED_COUNT = "imported_count"
+        const val KEY_RESULT_TEXT = "result_text"
 
         /** [intervalMinutes] is clamped to WorkManager's 15-minute floor
          * regardless of what's passed in — Android enforces this
@@ -109,10 +123,78 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             }
         }
 
-        if (importedCount > 0) {
-            notify("Imported $importedCount new file(s) from watched folder")
+        if (importedCount == 0) {
+            return Result.success(
+                workDataOf(
+                    KEY_IMPORTED_COUNT to 0,
+                    KEY_RESULT_TEXT to "No new files found",
+                )
+            )
         }
-        return Result.success()
+
+        val resultText = triggerAutoSync(importedCount)
+        return Result.success(
+            workDataOf(
+                KEY_IMPORTED_COUNT to importedCount,
+                KEY_RESULT_TEXT to resultText,
+            )
+        )
+    }
+
+    /** Imported files sit in the local inbox until actually pushed to Gmail
+     * — Home feedback made clear watched-folder automation should be
+     * hands-off end to end, not "import automatically, then still have to
+     * open the app and tap Sync now." This runs headless (no Activity, and
+     * possibly after the app process was killed), so it can't use
+     * AuthorizationClient's interactive consent flow. GoogleAuthUtil.getToken
+     * is the classic blocking API that works from a plain Context and
+     * returns a token non-interactively if the account already granted these
+     * scopes, or throws (UserRecoverableAuthException / GoogleAuthException)
+     * if interactive consent would be required — in which case this just
+     * skips the auto-sync and tells the user to reconnect in the app,
+     * instead of crashing or hanging. */
+    private suspend fun triggerAutoSync(importedCount: Int): String {
+        val email = AppPrefs.getConnectedAccountEmail(applicationContext)
+        if (email == null) {
+            notify("Imported $importedCount new file(s) — open the app to connect Gmail and sync")
+            return "Imported $importedCount new file(s) — connect Gmail in the app to sync"
+        }
+
+        val scopeString = "oauth2:" + GMAIL_SCOPES.joinToString(" ") { it.scopeUri }
+        val token = try {
+            withContext(Dispatchers.IO) {
+                GoogleAuthUtil.getToken(applicationContext, Account(email, "com.google"), scopeString)
+            }
+        } catch (e: Exception) {
+            notify("Imported $importedCount new file(s) — reconnect Gmail in the app to sync them")
+            return "Imported $importedCount new file(s) — reconnect Gmail to sync"
+        }
+
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putString(SyncWorker.KEY_ACCESS_TOKEN, token)
+                    .putBoolean(SyncWorker.KEY_DRY_RUN, false)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, "day")
+                    .putString(SyncWorker.KEY_TRIGGER, "watched_folder")
+                    .build()
+            )
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        // Unique (not plain enqueue): lets MainActivity observe this run's
+        // live progress via getWorkInfosForUniqueWorkFlow(), the same way
+        // Home already observes its own manual real-sync — REPLACE means a
+        // later auto-sync (e.g. the next periodic tick) simply supersedes
+        // whatever the last one's WorkInfo showed.
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            UNIQUE_WORK_NAME_AUTO_SYNC,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        // SyncWorker's own foreground-service notification covers the actual
+        // sync result ("Sync complete — N synced" / "Sync failed: ...") —
+        // no separate notification needed here.
+        return "Imported $importedCount new file(s) — syncing to Gmail…"
     }
 
     /** Best-effort — a failure here (e.g. the user granted only read access

@@ -11,19 +11,29 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,8 +71,10 @@ import java.util.UUID
 
 // Matches src/config.py's GMAIL_SCOPES, plus userinfo.email so the app can
 // show "Connected as <email>" — AuthorizationResult itself carries only the
-// access token, not account identity (see Phase A3 plan).
-private val GMAIL_SCOPES = listOf(
+// access token, not account identity (see Phase A3 plan). Not private:
+// WatchFolderWorker (headless, no Activity) needs these too, to build the
+// "oauth2:<scopes>" string GoogleAuthUtil.getToken() expects.
+val GMAIL_SCOPES = listOf(
     Scope("https://www.googleapis.com/auth/gmail.insert"),
     Scope("https://www.googleapis.com/auth/gmail.labels"),
     Scope("https://www.googleapis.com/auth/userinfo.email"),
@@ -137,6 +149,45 @@ private val bottomDests = listOf(
     BottomDest("settings", "Settings", Icons.Filled.Settings),
 )
 
+/** Always-present footer row above the bottom nav — this is a sync app, so
+ * "is anything syncing right now" deserves dedicated, permanent real estate
+ * rather than being buried in whichever tab happens to be open. Shows live
+ * progress while a sync (manual or watched-folder/scheduled) is running, and
+ * the last known outcome otherwise; tapping jumps to the most relevant
+ * detail screen for whatever it's currently showing. */
+@Composable
+private fun SyncStatusBar(text: String, fraction: Float?, running: Boolean, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (running) {
+            if (fraction != null && fraction in 0f..1f) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+            }
+        }
+    }
+}
+
 @Composable
 fun WagmailApp(
     registerImportCallback: ((Uri) -> Unit) -> Unit,
@@ -163,6 +214,7 @@ fun WagmailApp(
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 connectedEmail = email ?: "connected (email lookup failed)"
+                if (email != null) AppPrefs.setConnectedAccountEmail(context, email)
             }
         }.start()
     }
@@ -221,6 +273,7 @@ fun WagmailApp(
         }
         accessToken = null
         connectedEmail = null
+        AppPrefs.setConnectedAccountEmail(context, null)
     }
 
     // "Token survives app restart": silently re-check on screen load.
@@ -369,6 +422,7 @@ fun WagmailApp(
                             .putString(SyncWorker.KEY_ACCESS_TOKEN, token)
                             .putBoolean(SyncWorker.KEY_DRY_RUN, false)
                             .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                            .putString(SyncWorker.KEY_TRIGGER, "manual")
                             .build()
                     )
                     // Sync always needs the network; if WorkManager ever defers
@@ -412,6 +466,87 @@ fun WagmailApp(
         }
     }
 
+    // Mirrors the syncWorkInfo pattern above, applied to the "Sync now"
+    // (watched-folder check + auto-sync) one-off work — Settings previously
+    // had zero visual confirmation this ran at all, since enqueueOnce() only
+    // fired a system notification on the (import > 0) path.
+    val checkNowWorkInfos = workManager
+        .getWorkInfosForUniqueWorkFlow(WatchFolderWorker.UNIQUE_WORK_NAME_ONCE)
+        .collectAsState(initial = emptyList())
+        .value
+    val checkNowWorkInfo = checkNowWorkInfos.firstOrNull()
+    val checkNowStatus = when (checkNowWorkInfo?.state) {
+        WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED -> "Checking…"
+        WorkInfo.State.SUCCEEDED ->
+            checkNowWorkInfo.outputData.getString(WatchFolderWorker.KEY_RESULT_TEXT) ?: "Done"
+        WorkInfo.State.FAILED -> "Check failed"
+        else -> null
+    }
+
+    // Live progress for the chained SyncWorker that WatchFolderWorker enqueues
+    // after an import — same unique work name whether it was triggered by
+    // Settings' "Sync now" or the periodic background watcher, so this shows
+    // up here whenever the app is open during either one, not just the
+    // manual trigger. Reuses SyncWorker's existing setProgress() output
+    // (KEY_PROGRESS_TEXT/KEY_PROGRESS_FRACTION) — the same contract
+    // Home/SyncProgressScreen already read for a manual real-sync.
+    val autoSyncWorkInfo = workManager
+        .getWorkInfosForUniqueWorkFlow(WatchFolderWorker.UNIQUE_WORK_NAME_AUTO_SYNC)
+        .collectAsState(initial = emptyList())
+        .value
+        .firstOrNull()
+    val autoSyncProgressText = autoSyncWorkInfo?.progress?.getString(SyncWorker.KEY_PROGRESS_TEXT)
+    val autoSyncProgressFraction = autoSyncWorkInfo?.progress
+        ?.getFloat(SyncWorker.KEY_PROGRESS_FRACTION, -1f)
+    val autoSyncResultText = when (autoSyncWorkInfo?.state) {
+        WorkInfo.State.SUCCEEDED ->
+            "Sync result:\n\n${autoSyncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
+        WorkInfo.State.FAILED ->
+            "Sync failed:\n\n${autoSyncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
+        else -> null
+    }
+    val autoSyncRunning = autoSyncWorkInfo?.state == WorkInfo.State.RUNNING ||
+        autoSyncWorkInfo?.state == WorkInfo.State.ENQUEUED
+    val manualSyncRunning = syncWorkInfo?.state == WorkInfo.State.RUNNING ||
+        syncWorkInfo?.state == WorkInfo.State.ENQUEUED
+    val checkNowRunning = checkNowWorkInfo?.state == WorkInfo.State.RUNNING ||
+        checkNowWorkInfo?.state == WorkInfo.State.ENQUEUED
+
+    // One sync at a time, full stop — a manual Home sync, a watched-folder
+    // check/auto-sync, and the periodic scheduled watcher all ultimately
+    // push through the same shared Python SyncManager/state DB, so letting
+    // two run concurrently risks interleaved writes to sync_runs. Both
+    // Home's and Settings' sync buttons disable off this same flag, whichever
+    // of the three is the one actually in flight.
+    val anySyncRunning = manualSyncRunning || autoSyncRunning || checkNowRunning
+
+    // Dedicated, always-present status row (this is a sync app — the real
+    // estate is worth it) instead of burying "is a sync running right now"
+    // inside whichever tab happens to be open. Priority: a manual Home sync
+    // in flight, then a watched-folder/scheduled auto-sync, then the
+    // watched-folder's own import-phase status, else an idle placeholder.
+    val syncStatusRunning = anySyncRunning
+    val syncStatusText = when {
+        manualSyncRunning ->
+            syncWorkInfo?.progress?.getString(SyncWorker.KEY_PROGRESS_TEXT) ?: "Syncing…"
+        autoSyncRunning -> autoSyncProgressText ?: "Syncing (watched folder)…"
+        checkNowStatus != null -> checkNowStatus
+        else -> "No sync in progress"
+    }
+    val syncStatusFraction = when {
+        manualSyncRunning ->
+            syncWorkInfo?.progress?.getFloat(SyncWorker.KEY_PROGRESS_FRACTION, -1f)
+        autoSyncRunning -> autoSyncProgressFraction
+        else -> null
+    }
+    val onSyncStatusClick: () -> Unit = {
+        when {
+            manualSyncRunning -> navController.navigate("syncProgress")
+            autoSyncRunning -> navController.navigate("settings")
+            else -> navController.navigate("syncLog")
+        }
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in bottomDests.map { it.route }
@@ -419,22 +554,30 @@ fun WagmailApp(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
-                    bottomDests.forEach { dest ->
-                        NavigationBarItem(
-                            selected = currentRoute == dest.route,
-                            onClick = {
-                                navController.navigate(dest.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                Column {
+                    SyncStatusBar(
+                        text = syncStatusText,
+                        fraction = syncStatusFraction,
+                        running = syncStatusRunning,
+                        onClick = onSyncStatusClick,
+                    )
+                    NavigationBar {
+                        bottomDests.forEach { dest ->
+                            NavigationBarItem(
+                                selected = currentRoute == dest.route,
+                                onClick = {
+                                    navController.navigate(dest.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(dest.icon, contentDescription = dest.label) },
-                            label = { Text(dest.label) },
-                        )
+                                },
+                                icon = { Icon(dest.icon, contentDescription = dest.label) },
+                                label = { Text(dest.label) },
+                            )
+                        }
                     }
                 }
             }
@@ -471,6 +614,7 @@ fun WagmailApp(
                     onDryRunDefaultChange = { dryRunDefault = it },
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
                     lastResult = lastResult,
+                    syncInProgress = anySyncRunning,
                 )
             }
             composable("chats") {
@@ -492,6 +636,7 @@ fun WagmailApp(
                     onDisconnect = ::disconnectGmail,
                     onReconnect = { connectGmail(silent = false) },
                     onOpenHelp = { navController.navigate("help") },
+                    onOpenSyncLog = { navController.navigate("syncLog") },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     watchedFolderUri = watchedFolderUri,
@@ -502,6 +647,7 @@ fun WagmailApp(
                     watchIntervalMinutes = watchIntervalMinutes,
                     onWatchIntervalChange = { setWatchInterval(it) },
                     onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
+                    syncInProgress = anySyncRunning,
                     syncedFilePolicy = syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
                     accessTokenAvailable = accessToken != null,
@@ -546,6 +692,9 @@ fun WagmailApp(
             }
             composable("help") {
                 HelpScreen(onBack = { navController.popBackStack() })
+            }
+            composable("syncLog") {
+                SyncLogScreen(onBack = { navController.popBackStack() })
             }
             composable("syncProgress") {
                 SyncProgressScreen(

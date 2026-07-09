@@ -63,6 +63,7 @@ fun SettingsScreen(
     onDisconnect: () -> Unit,
     onReconnect: () -> Unit,
     onOpenHelp: () -> Unit,
+    onOpenSyncLog: () -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
     watchedFolderUri: String?,
@@ -73,6 +74,7 @@ fun SettingsScreen(
     watchIntervalMinutes: Long,
     onWatchIntervalChange: (Long) -> Unit,
     onCheckNow: () -> Unit,
+    syncInProgress: Boolean,
     syncedFilePolicy: String,
     onSyncedFilePolicyChange: (String) -> Unit,
     accessTokenAvailable: Boolean,
@@ -90,9 +92,9 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(20.dp)
+                .padding(14.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Account", style = MaterialTheme.typography.titleMedium)
             Text(connectedEmail ?: "Not connected", style = MaterialTheme.typography.bodyLarge)
@@ -156,9 +158,9 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Auto-import from this folder")
                     Text(
-                        "Checks in the background on the interval below. Uses a small amount " +
-                            "of battery — leave off if you'd rather import manually or with " +
-                            "\"Check now\".",
+                        "Checks and syncs in the background on the interval below. Uses a small " +
+                            "amount of battery — leave off if you'd rather import manually or with " +
+                            "\"Sync now\".",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -185,8 +187,11 @@ fun SettingsScreen(
                         }
                     }
                 }
-                OutlinedButton(onClick = onCheckNow, enabled = watchedFolderUri != null) {
-                    Text("Check now")
+                OutlinedButton(
+                    onClick = onCheckNow,
+                    enabled = watchedFolderUri != null && !syncInProgress,
+                ) {
+                    Text(if (syncInProgress) "Current sync is on" else "Sync now")
                 }
             }
             Text("After import, synced files:", style = MaterialTheme.typography.bodyMedium)
@@ -212,6 +217,7 @@ fun SettingsScreen(
             Text("About / Help", style = MaterialTheme.typography.titleMedium)
             Text("WhatsApp Chat Sync to Gmail — Android (dev build)")
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
+            TextButton(onClick = onOpenSyncLog) { Text("Sync log") }
 
             HorizontalDivider()
 

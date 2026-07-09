@@ -12,6 +12,7 @@ object AppPrefs {
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_WATCH_INTERVAL_MINUTES = "watch_interval_minutes"
     private const val KEY_SYNCED_FILE_POLICY = "synced_file_policy"
+    private const val KEY_CONNECTED_EMAIL = "connected_email"
 
     /** WorkManager's PeriodicWorkRequest has a hard 15-minute floor enforced
      * by the platform itself — no interval below this is achievable
@@ -74,5 +75,16 @@ object AppPrefs {
 
     fun setSyncedFilePolicy(context: Context, policy: String) {
         prefs(context).edit().putString(KEY_SYNCED_FILE_POLICY, policy).apply()
+    }
+
+    /** The connected Gmail account's email, persisted separately from the
+     * in-memory Compose state so WatchFolderWorker — which can run headless,
+     * with no Activity and possibly after the app process was killed — knows
+     * which account to silently request a token for. */
+    fun getConnectedAccountEmail(context: Context): String? =
+        prefs(context).getString(KEY_CONNECTED_EMAIL, null)
+
+    fun setConnectedAccountEmail(context: Context, email: String?) {
+        prefs(context).edit().putString(KEY_CONNECTED_EMAIL, email).apply()
     }
 }

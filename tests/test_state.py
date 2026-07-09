@@ -35,7 +35,7 @@ def test_compute_message_hash_deterministic_and_sensitive():
 
 def test_hash_exists_and_insert_round_trip(db_path):
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
-    run_id = state.start_sync_run("chat1", db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
     h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
 
     assert not state.hash_exists(h, db_path)
@@ -45,7 +45,7 @@ def test_hash_exists_and_insert_round_trip(db_path):
 
 def test_sync_run_lifecycle_complete(db_path):
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
-    run_id = state.start_sync_run("chat1", db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
     state.complete_sync_run(
         run_id,
         last_synced_ts="2025-03-14T09:41:00",
@@ -63,7 +63,7 @@ def test_sync_run_lifecycle_complete(db_path):
 
 def test_sync_run_lifecycle_failed_is_not_pending(db_path):
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
-    run_id = state.start_sync_run("chat1", db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
     state.fail_sync_run(run_id, "network error", db_path)
 
     assert state.get_last_successful_run("chat1", db_path) is None
@@ -74,10 +74,24 @@ def test_get_pending_runs_finds_crashed_run(db_path):
     """Simulates a crash: a run left in 'pending' status (never completed or
     failed) must be surfaced so SyncManager's recovery path can find it."""
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
-    run_id = state.start_sync_run("chat1", db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
 
     pending = state.get_pending_runs(db_path)
     assert run_id in [r["run_id"] for r in pending]
+
+
+def test_get_recent_runs_excludes_runs_outside_window(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", trigger="watched_folder", db_path=db_path)
+
+    recent = state.get_recent_runs(days=90, db_path=db_path)
+    assert len(recent) == 1
+    assert recent[0]["run_id"] == run_id
+    assert recent[0]["trigger"] == "watched_folder"
+    assert recent[0]["display_name"] == "Chat One"
+
+    # A negative window (cutoff in the future) excludes a run that just started.
+    assert state.get_recent_runs(days=-1, db_path=db_path) == []
 
 
 def test_reset_chat_isolates_other_chats(db_path):
@@ -85,7 +99,7 @@ def test_reset_chat_isolates_other_chats(db_path):
     state.upsert_chat("chat2", "Chat Two", "chat2.txt", db_path=db_path)
     state.update_chat_gmail_ids("chat1", gmail_thread_id="t1", gmail_label_id="l1", db_path=db_path)
     state.update_chat_gmail_ids("chat2", gmail_thread_id="t2", gmail_label_id="l2", db_path=db_path)
-    run_id = state.start_sync_run("chat1", db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
     h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
     state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
 
