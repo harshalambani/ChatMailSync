@@ -175,7 +175,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 Data.Builder()
                     .putString(SyncWorker.KEY_ACCESS_TOKEN, token)
                     .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, "day")
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, AppPrefs.getChunkSize(applicationContext))
                     .putString(SyncWorker.KEY_TRIGGER, "watched_folder")
                     .build()
             )

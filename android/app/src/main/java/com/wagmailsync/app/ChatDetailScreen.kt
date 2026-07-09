@@ -33,7 +33,13 @@ import androidx.compose.ui.unit.dp
 import com.chaquo.python.Python
 
 @Composable
-fun ChatDetailScreen(chatId: String, onBack: () -> Unit, onDeleted: () -> Unit) {
+fun ChatDetailScreen(
+    chatId: String,
+    onBack: () -> Unit,
+    onDeleted: () -> Unit,
+    onSyncThisChat: () -> Unit,
+    syncInProgress: Boolean,
+) {
     var chat by remember { mutableStateOf<ChatSummary?>(null) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -84,6 +90,19 @@ fun ChatDetailScreen(chatId: String, onBack: () -> Unit, onDeleted: () -> Unit) 
                     Text("Open in Gmail")
                 }
 
+                // android_api.sync()'s chat_filter param already existed but
+                // nothing on Android called it with one — every sync always
+                // covered the whole inbox. This is the CLI's `--chat` filter,
+                // surfaced here for "just re-sync this one chat" without
+                // waiting on everything else queued up.
+                OutlinedButton(
+                    onClick = onSyncThisChat,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !syncInProgress,
+                ) {
+                    Text(if (syncInProgress) "Current sync is on" else "Sync just this chat")
+                }
+
                 Button(
                     onClick = { showResetConfirm = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -112,10 +131,16 @@ fun ChatDetailScreen(chatId: String, onBack: () -> Unit, onDeleted: () -> Unit) 
             onDismissRequest = { showResetConfirm = false },
             title = { Text("Reset this chat?") },
             text = {
+                // Previously said "re-importing... will create a new Gmail
+                // thread," implying the user always has to manually re-pick
+                // the file — but android_api.reset() already restores it
+                // from processed/ back to inbox/ automatically when found
+                // (see file_restored below), so the common case just needs
+                // "Sync now" with no re-import step at all.
                 Text(
-                    "Local sync state will be cleared. Mail already in Gmail is " +
-                        "NOT deleted. Re-importing the same export will create a new " +
-                        "Gmail thread rather than continuing the old one."
+                    "Local sync state will be cleared, and a new Gmail thread will be " +
+                        "created the next time this chat is synced. Mail already in Gmail " +
+                        "is NOT deleted."
                 )
             },
             confirmButton = {

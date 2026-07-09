@@ -6,6 +6,7 @@ Usage examples:
   python cli.py sync --dry-run --verbose
   python cli.py sync --chunk-size hour --chat "John Doe"
   python cli.py status
+  python cli.py log --days 30
   python cli.py reset john_doe
 """
 
@@ -21,6 +22,7 @@ from src.config import (
     STATE_DB_PATH,
 )
 from src.state import (
+    get_recent_runs,
     get_sync_summary,
     init_db,
     reset_chat,
@@ -145,6 +147,42 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Command: log
+# ---------------------------------------------------------------------------
+
+
+def cmd_log(args: argparse.Namespace) -> int:
+    """Mirrors the Android app's Sync log screen — same underlying
+    state.get_recent_runs() query (per-run history: trigger, status, message
+    counts, error), just rendered as a table instead of a Compose list."""
+    init_db(STATE_DB_PATH)
+    rows = get_recent_runs(days=args.days, db_path=STATE_DB_PATH)
+
+    if not rows:
+        print(f"No sync runs in the last {args.days} days.")
+        return 0
+
+    w_name = max(len(r["display_name"]) for r in rows)
+
+    header = (
+        f"{'Chat':<{w_name}}  {'Status':<8}  {'Trigger':<15}  "
+        f"{'Started':<19}  {'Synced':>7}  {'Skipped':>7}"
+    )
+    print(header)
+    print("-" * len(header))
+
+    for r in rows:
+        print(
+            f"{r['display_name']:<{w_name}}  {r['status']:<8}  {r['trigger']:<15}  "
+            f"{(r['started_at'] or '')[:19]:<19}  "
+            f"{r['messages_synced']:>7}  {r['messages_skipped']:>7}"
+        )
+        if r["status"] == "failed" and r["error_message"]:
+            print(f"{'':<{w_name}}    error: {r['error_message']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Command: reset
 # ---------------------------------------------------------------------------
 
@@ -232,6 +270,18 @@ def build_parser() -> argparse.ArgumentParser:
     # -- status --
     p_status = sub.add_parser("status", help="Show sync state for all tracked chats.")
     p_status.set_defaults(func=cmd_status)
+
+    # -- log --
+    p_log = sub.add_parser(
+        "log", help="Show recent sync run history (default: last 90 days)."
+    )
+    p_log.add_argument(
+        "--days",
+        type=int,
+        default=90,
+        help="How many days of history to show (default: 90).",
+    )
+    p_log.set_defaults(func=cmd_log)
 
     # -- reset --
     p_reset = sub.add_parser(

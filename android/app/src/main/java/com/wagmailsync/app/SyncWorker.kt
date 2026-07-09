@@ -40,27 +40,50 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_DRY_RUN = "dry_run"
         const val KEY_CHUNK_SIZE = "chunk_size"
         const val KEY_TRIGGER = "trigger"
+        const val KEY_CHAT_FILTER = "chat_filter"
         const val KEY_RESULT = "result"
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS_TEXT = "progress_text"
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
+        const val KEY_LOG_LINES = "log_lines"
         const val NOTIFICATION_CHANNEL_ID = "sync_channel"
         const val NOTIFICATION_ID = 1001
+        /** Unique work name for a manual Home-triggered sync (real or dry
+         * run) — lets MainActivity/SyncProgressScreen re-find this run's
+         * WorkInfo by name after a process restart, instead of relying on
+         * an in-memory UUID that's lost the moment the process dies. */
+        const val UNIQUE_WORK_NAME_MANUAL_SYNC = "manual_sync"
     }
 
     override suspend fun doWork(): Result {
-        val token = inputData.getString(KEY_ACCESS_TOKEN)
-            ?: return Result.failure(workDataOf(KEY_ERROR to "Missing access token"))
         val dryRun = inputData.getBoolean(KEY_DRY_RUN, false)
+        // A dry run touches no Gmail API, so no token is needed — only a
+        // real sync requires one. Previously Home's dry-run button called
+        // android_api.sync() directly on the click handler (blocking the UI
+        // thread for however long a large export took, no Stop button, no
+        // progress); routing it through this same Worker fixes that for
+        // free, same as the real-sync path.
+        val token = inputData.getString(KEY_ACCESS_TOKEN)
+        if (token == null && !dryRun) {
+            return Result.failure(workDataOf(KEY_ERROR to "Missing access token"))
+        }
         val chunkSize = inputData.getString(KEY_CHUNK_SIZE)
         val trigger = inputData.getString(KEY_TRIGGER) ?: "manual"
+        val chatFilter = inputData.getString(KEY_CHAT_FILTER)
 
-        setForeground(createForegroundInfo("Starting sync…"))
+        setForeground(createForegroundInfo(if (dryRun) "Starting test run…" else "Starting sync…"))
 
         return coroutineScope {
             val androidApi = Python.getInstance().getModule("src.android_api")
             var lastFraction = -1f
             var lastText: String? = null
+            // Milestone lines only (file started/finished, inbox scan
+            // result) — not every "chunk" tick, which fires many times per
+            // file and would spam a log rather than read like one. Capped
+            // so this stays well under WorkManager Data's ~10KB limit for a
+            // long sync. Mirrors (in spirit) the Windows GUI's rolling log
+            // box (gui_worker._QueueHandler), which Android never had.
+            val logLines = ArrayDeque<String>()
             val pollJob = launch(Dispatchers.IO) {
                 // Check immediately (not delay-then-check): a quick sync —
                 // e.g. all files already up to date, nothing but dedup
@@ -80,6 +103,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                     for (event in events) {
                         eventFraction(event)?.let { lastFraction = it }
                         progressText(event)?.let { lastText = it }
+                        milestoneText(event)?.let { line ->
+                            logLines.addLast(line)
+                            while (logLines.size > 50) logLines.removeFirst()
+                        }
                     }
                     lastText?.let { text ->
                         notify(text)
@@ -87,6 +114,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                             workDataOf(
                                 KEY_PROGRESS_TEXT to text,
                                 KEY_PROGRESS_FRACTION to lastFraction,
+                                KEY_LOG_LINES to logLines.joinToString("\n"),
                             )
                         )
                     }
@@ -94,8 +122,9 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 }
             }
             try {
-                val statsResult = withDispatcherIO(token, chunkSize, dryRun, trigger, androidApi)
-                notify("Sync complete — ${statsResult.messagesSynced} message(s) synced")
+                val statsResult = withDispatcherIO(token, chunkSize, dryRun, trigger, chatFilter, androidApi)
+                val label = if (dryRun) "Test run complete" else "Sync complete"
+                notify("$label — ${statsResult.messagesSynced} message(s) synced")
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
             } catch (e: Exception) {
                 notify("Sync failed: ${e.message}")
@@ -107,14 +136,17 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
     }
 
     private suspend fun withDispatcherIO(
-        token: String,
+        token: String?,
         chunkSize: String?,
         dryRun: Boolean,
         trigger: String,
+        chatFilter: String?,
         androidApi: com.chaquo.python.PyObject,
     ): SyncStatsResult = kotlinx.coroutines.withContext(Dispatchers.IO) {
-        val transport = Python.getInstance().getModule("src.gmail_client").callAttr("set_token", token)
-        val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, null, null, trigger)
+        val transport = token?.let {
+            Python.getInstance().getModule("src.gmail_client").callAttr("set_token", it)
+        }
+        val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, chatFilter, null, trigger)
         SyncStatsResult.from(result)
     }
 
@@ -139,6 +171,26 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             // file-count fraction for however long that one file takes.
             "chunk" -> "Syncing: ${eventGet(event, "name")} — " +
                 "${eventGet(event, "msgs_done")} / ${eventGet(event, "total_msgs")} messages"
+            else -> null
+        }
+    }
+
+    /** Milestone-only subset of progressText's events, for the scrollable
+     * log pane — deliberately excludes "chunk" (fires many times per file;
+     * that's what the single-line live progress text is for). */
+    private fun milestoneText(event: com.chaquo.python.PyObject): String? {
+        val type = try {
+            event.callAttr("get", "type")?.toString()
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        return when (type) {
+            "files_total" -> {
+                val n = eventGet(event, "n")
+                if (n == "0") "Inbox is empty" else "Found $n file(s) to sync"
+            }
+            "syncing" -> "Starting: ${eventGet(event, "name")}"
+            "file_done" -> "Finished ${eventGet(event, "done")} / ${eventGet(event, "total")} files"
             else -> null
         }
     }
@@ -209,11 +261,6 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 }
-
-/** Formats a raw android_api.sync() result the same way for the real-sync
- * worker output and the Home screen's dry-run result banner. */
-fun formatSyncStats(result: com.chaquo.python.PyObject): String =
-    SyncStatsResult.from(result).format()
 
 /**
  * Mirrors SyncStats.__str__ (src/sync_manager.py) so the Android result

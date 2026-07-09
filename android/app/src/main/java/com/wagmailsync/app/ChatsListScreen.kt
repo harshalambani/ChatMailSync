@@ -61,6 +61,7 @@ data class ChatSummary(
     val lastRunStatus: String?,
     val messagesSynced: Long,
     val lastRunAt: String?,
+    val sourceFilename: String?,
 )
 
 fun loadChatSummaries(): List<ChatSummary> {
@@ -75,8 +76,31 @@ fun loadChatSummaries(): List<ChatSummary> {
             lastRunStatus = row.callAttr("get", "last_run_status")?.toString()?.takeIf { it != "None" },
             messagesSynced = row.callAttr("get", "messages_synced")?.toString()?.toLongOrNull() ?: 0L,
             lastRunAt = row.callAttr("get", "last_run_at")?.toString()?.takeIf { it != "None" },
+            sourceFilename = row.callAttr("get", "source_filename")?.toString()?.takeIf { it != "None" },
         )
     }
+}
+
+/** RFC 4180-style: wrap in quotes, double any internal quotes — a display
+ * name containing `"` would otherwise silently corrupt the CSV. */
+private fun csvField(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+
+/** Mirrors the Windows GUI's footer stats label (gui.py _footer_stats_label)
+ * — "N chats · M messages synced · last sync ...". Android's Chats tab had
+ * no equivalent aggregate summary. */
+fun formatFooterStats(chats: List<ChatSummary>): String {
+    val totalChats = chats.size
+    val totalMsgs = chats.sumOf { it.messagesSynced }
+    val lastSyncSuffix = chats.mapNotNull { it.lastRunAt }.maxOrNull()?.let { raw ->
+        try {
+            val dt = LocalDateTime.parse(raw)
+            "  ·  last sync ${dt.format(DateTimeFormatter.ofPattern("MMM d, HH:mm"))}"
+        } catch (_: Exception) {
+            ""
+        }
+    } ?: ""
+    return "$totalChats chat${if (totalChats != 1) "s" else ""}  ·  " +
+        "$totalMsgs message${if (totalMsgs != 1L) "s" else ""} synced$lastSyncSuffix"
 }
 
 @Composable
@@ -103,9 +127,18 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
         val file = File(dir, "wa_chat_sync_chats.csv")
         file.writeText(buildString {
-            appendLine("chat_id,display_name,status,messages_synced,last_run_at")
+            appendLine("chat_id,display_name,status,messages_synced,last_run_at,source_file")
             chats.forEach { c ->
-                appendLine("\"${c.chatId}\",\"${c.displayName}\",\"${c.lastRunStatus ?: ""}\",${c.messagesSynced},\"${c.lastRunAt ?: ""}\"")
+                appendLine(
+                    listOf(
+                        csvField(c.chatId),
+                        csvField(c.displayName),
+                        csvField(c.lastRunStatus ?: ""),
+                        c.messagesSynced.toString(),
+                        csvField(c.lastRunAt ?: ""),
+                        csvField(c.sourceFilename ?: ""),
+                    ).joinToString(",")
+                )
             }
         })
         val uri = FileProvider.getUriForFile(context, "com.wagmailsync.app.fileprovider", file)
@@ -140,6 +173,12 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (chats.isNotEmpty()) {
+                Text(
+                    formatFooterStats(chats),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                )
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
