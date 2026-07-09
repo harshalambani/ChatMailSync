@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -29,18 +32,22 @@ import androidx.compose.ui.unit.dp
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.chaquo.python.Python
-import java.util.UUID
 import kotlin.math.roundToInt
 
 @Composable
 fun SyncProgressScreen(
     workManager: WorkManager,
-    workId: UUID?,
     onDone: () -> Unit,
 ) {
-    val workInfo = workId?.let {
-        workManager.getWorkInfoByIdFlow(it).collectAsState(initial = null).value
-    }
+    // Unique work name (not an in-memory UUID) — lets this screen re-find
+    // an in-flight sync even if the app process was killed and relaunched
+    // mid-sync, since a UUID captured only in Compose state wouldn't
+    // survive that.
+    val workInfo = workManager
+        .getWorkInfosForUniqueWorkFlow(SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC)
+        .collectAsState(initial = emptyList())
+        .value
+        .firstOrNull()
     // Local only — request_stop() is fire-and-forget on the Python side
     // (src/android_api.py sets a threading.Event the in-flight sync polls
     // between files, same mechanism as the Windows GUI's Stop button). This
@@ -136,6 +143,27 @@ fun SyncProgressScreen(
                                 contentColor = MaterialTheme.colorScheme.error,
                             ),
                         ) { Text("Cancel sync") }
+                    }
+
+                    // Rolling milestone log (file started/finished, inbox
+                    // scan result) — Windows' GUI has always shown a log
+                    // box; Android previously showed only the single
+                    // current-line status with nothing to scroll back
+                    // through.
+                    val logLines = workInfo.progress.getString(SyncWorker.KEY_LOG_LINES)
+                    if (!logLines.isNullOrBlank()) {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                logLines,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 220.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(14.dp),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
             }
