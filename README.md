@@ -28,7 +28,8 @@ data/inbox/  →  parser  →  dedup (SQLite)  →  Gmail insert  →  data/proc
 - Files move from `inbox/` to `processed/` only after a fully successful sync.
 
 For the full design — date-parsing engine, state schema, dedup logic, HTML/media
-email format, and packaging — see [2026-05-27-architecture.md](2026-05-27-architecture.md).
+email format, and packaging — see
+[Completed/2026-05-27-architecture.md](Completed/2026-05-27-architecture.md).
 
 ---
 
