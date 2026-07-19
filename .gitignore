@@ -15,6 +15,11 @@ data/.settings.json
 # Debug logs and issue artifacts
 Issues/
 
+# PII/secrets audit deliverables - contain real values, must stay untracked
+2026-06-25-pii-secrets-audit-and-removal-plan.md
+2026-06-25-pii-secrets-cleanup-learnings.md
+2026-06-25-replacements.txt
+
 # Python bytecode
 __pycache__/
 *.pyc
