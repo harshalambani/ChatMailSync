@@ -113,6 +113,41 @@
     database never leaves your device. Deleting the app removes it.
   </p>
 
+  <h2>How your data is protected</h2>
+  <p>
+    Because the messages you sync are sensitive personal data, the app is built
+    so that this data is exposed to as few systems as possible:
+  </p>
+  <ul>
+    <li><strong>Encrypted in transit.</strong> Every network request the app
+      makes &mdash; the OAuth sign-in and every Gmail API call &mdash; goes
+      directly to Google over HTTPS (TLS). Your messages, attachments, and
+      access tokens are never sent over an unencrypted connection.</li>
+    <li><strong>No developer server, ever.</strong> There is no backend operated
+      by the developer. Your data travels only between your own device and
+      Google's own servers, so there is no third-party system that could store,
+      log, or leak it.</li>
+    <li><strong>Credentials stay on your device.</strong> The OAuth access and
+      refresh tokens are cached only in local app storage on your device
+      (<code>auth/token.json</code> on Windows; app-private storage on Android).
+      They are never transmitted anywhere except to Google's own OAuth endpoints
+      to obtain access.</li>
+    <li><strong>Minimal local footprint.</strong> The only thing the app keeps is
+      a small on-device database of message hashes and sync status, used purely
+      to avoid re-sending the same message. It contains no message content and
+      never leaves your device.</li>
+    <li><strong>You control access and can revoke it instantly.</strong> Access
+      is limited to the narrow scopes listed above and can be withdrawn at any
+      time (see the next section), which immediately invalidates the stored
+      tokens.</li>
+  </ul>
+  <p>
+    Because your data lives only on your own device and in your own Google
+    account, we recommend protecting both with the usual safeguards &mdash; a
+    device lock/OS-level encryption, and two-step verification on your Google
+    account.
+  </p>
+
   <h2>Account connection &amp; revoking access</h2>
   <p>
     You can disconnect the app at any time from within the app itself
