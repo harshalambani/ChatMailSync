@@ -75,7 +75,7 @@
 <div class="wrap">
   <p class="eyebrow">Privacy Policy</p>
   <h1>WhatsApp Chat Sync to Gmail</h1>
-  <p class="updated">Last updated: July 8, 2026</p>
+  <p class="updated">Last updated: July 24, 2026</p>
 
   <h2>Summary</h2>
   <p>
@@ -86,16 +86,102 @@
     your messages, your Gmail data, or your Google account.
   </p>
 
-  <h2>What data the app accesses</h2>
-  <p>To do its one job, the app requests three Google OAuth scopes:</p>
+  <h2>What Google user data the app accesses</h2>
+  <p>
+    The app accesses the following Google user data, and nothing else. Each item
+    is obtained through the Google OAuth scope named beside it, which you grant on
+    Google's own consent screen:
+  </p>
   <ul>
-    <li><code>gmail.insert</code> &mdash; lets the app add new messages to your mailbox. It cannot read, modify, or delete any mail already in your account.</li>
-    <li><code>gmail.labels</code> &mdash; lets the app create and apply a label (e.g. <code>WhatsApp/Mom</code>) so synced chats are organised.</li>
-    <li><code>userinfo.email</code> &mdash; lets the app show which Google account is currently connected.</li>
+    <li>
+      <strong>Write access to add new messages to your Gmail mailbox</strong>
+      (<code>https://www.googleapis.com/auth/gmail.insert</code>).
+      This permission allows the app to <em>add</em> a message to your mailbox. It
+      grants no ability to read, search, modify, delete, or send any mail that is
+      already in your account, and the app does not receive the contents of your
+      mailbox through it.
+    </li>
+    <li>
+      <strong>The list of Gmail labels in your account, and the ability to create
+      labels</strong>
+      (<code>https://www.googleapis.com/auth/gmail.labels</code>).
+      The app reads the names and IDs of your existing labels only so that it can
+      tell whether the label it needs already exists, and creates the label if it
+      does not. Label names and IDs are the only Google user data read here; no
+      message content is accessed by this scope.
+    </li>
+    <li>
+      <strong>The email address of the Google account you connect</strong>
+      (<code>https://www.googleapis.com/auth/userinfo.email</code>, Android app only).
+      This is the address string only &mdash; no name, profile photo, contacts, or
+      any other profile field.
+    </li>
   </ul>
   <p>
-    The app never requests permission to read your existing mail, contacts,
-    or any other Google data.
+    The app requests <strong>no read scope for your mail</strong>, and no access to
+    Google Contacts, Google Drive, Calendar, or any other Google service.
+  </p>
+
+  <h2>How the app uses Google user data</h2>
+  <p>
+    Google user data is used for one purpose only: to place the WhatsApp chat
+    export that <em>you</em> supply into <em>your own</em> Gmail account as
+    ordinary, organised emails. Specifically:
+  </p>
+  <ul>
+    <li>
+      The <strong>Gmail write (insert) permission</strong> is used to add each
+      rendered WhatsApp message &mdash; with its original text, timestamps, sender
+      names, and any photos, videos, or documents from the export &mdash; into your
+      mailbox as a new email. This is the app's core and only feature. The app
+      deliberately does not use <code>gmail.send</code>, so nothing is ever
+      transmitted to any recipient; the message simply appears in your own mailbox.
+    </li>
+    <li>
+      The <strong>label data</strong> is used to find or create a parent
+      <code>WhatsApp</code> label and a child label named after the chat (for
+      example <code>WhatsApp/Mom</code>), and to apply that label to the messages
+      the app adds, so your archive is browsable and searchable in Gmail.
+    </li>
+    <li>
+      The <strong>email address</strong> is displayed inside the app as
+      "Connected as &lt;address&gt;", so you can confirm you are archiving into the
+      intended mailbox before you start a sync. It is used for display only.
+    </li>
+  </ul>
+  <p>
+    Google user data is never used for advertising, never used to build a profile
+    of you, never used to train any machine-learning or AI model, never sold, and
+    never used for any purpose other than the ones stated above.
+  </p>
+
+  <h2>How the app shares Google user data</h2>
+  <p>
+    It does not. Google user data is not transferred to the developer or to any
+    other person, company, or service. It moves only between your own device and
+    Google's own API endpoints. There is no developer-operated server, no
+    analytics provider, no crash-reporting service, and no third-party SDK that
+    receives it. The only circumstance in which any of it would be disclosed is if
+    <em>you</em> choose to do so from your own Gmail account.
+  </p>
+
+  <h2>Limited Use disclosure</h2>
+  <p>
+    The app's use and transfer of information received from Google APIs adheres to
+    the <a href="https://developers.google.com/terms/api-services-user-data-policy">
+    Google API Services User Data Policy</a>, including the
+    <a href="https://developers.google.com/terms/api-services-user-data-policy#additional-requirements-for-specific-api-scopes">
+    Limited Use</a> requirements.
+  </p>
+
+  <h2>Data retention and deletion</h2>
+  <p>
+    The developer retains no Google user data, because the developer never
+    receives any. On your own device, the OAuth token is stored until you
+    disconnect or uninstall, and the local dedup database (message hashes only,
+    no message content) is stored until you uninstall or clear the app's data.
+    Emails the app has added to your Gmail are yours &mdash; delete them like any
+    other message at any time.
   </p>
 
   <h2>Where your data goes</h2>
