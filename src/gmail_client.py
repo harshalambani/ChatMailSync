@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -539,7 +540,40 @@ class ImapTransport:
     # -- connection lifetime --------------------------------------------
 
     def _default_connection_factory(self) -> "imaplib.IMAP4":
-        conn = imaplib.IMAP4_SSL(self._host, self._port)
+        # ssl_context is REQUIRED, not optional hardening: imaplib falls back
+        # to ssl._create_stdlib_context(), which sets check_hostname=False and
+        # verify_mode=CERT_NONE, so the handshake would succeed against any
+        # certificate at all — handing the app password (sent in the clear
+        # inside LOGIN) and every archived chat to an active MITM.
+        # create_default_context() gives check_hostname=True + CERT_REQUIRED.
+        #
+        # timeout is keyword-only and is applied to the underlying socket, so
+        # it bounds every later read too, not just the connect. Without it a
+        # server that accepts the TCP connection and then never replies hangs
+        # the worker thread forever. Same value the OAuth path already uses.
+        try:
+            conn = imaplib.IMAP4_SSL(
+                self._host,
+                self._port,
+                ssl_context=ssl.create_default_context(),
+                timeout=GMAIL_SOCKET_TIMEOUT,
+            )
+        except ssl.SSLError as exc:
+            raise GmailTransportError(
+                f"TLS verification failed for {self._host}:{self._port}: "
+                f"{_strip_secret(str(exc), self._password)} — the server's "
+                "certificate could not be verified. Refusing to send "
+                "credentials over this connection.",
+                status=503,
+            ) from exc
+        except OSError as exc:
+            # socket.timeout is an OSError subclass, so a connect that hangs
+            # past GMAIL_SOCKET_TIMEOUT lands here rather than blocking.
+            raise GmailTransportError(
+                f"Could not connect to {self._host}:{self._port}: "
+                f"{_strip_secret(str(exc), self._password)}",
+                status=503,
+            ) from exc
         try:
             conn.login(self._email, self._password)
         except imaplib.IMAP4.error as exc:
