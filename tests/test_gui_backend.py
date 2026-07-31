@@ -1,8 +1,10 @@
 """Tests for Road B phase 2 -- mail-backend selection (gui.py / gui_worker.py).
 
 Covers brief section 3.6:
-  - mail_backend defaults to gmail_oauth; an existing settings file without
-    the key loads the default; a saved value round-trips.
+  - mail_backend defaults to imap on a fresh install; a settings file written
+    before the key existed is pinned back to gmail_oauth when a token.json is
+    present (the upgrade guard) and takes the new default when it isn't; a
+    saved value round-trips.
   - check_auth_status() under each backend, including "no credentials stored".
   - Backend selection picks the right transport builder, and the OAuth path
     is unaffected when mail_backend == "gmail_oauth".
@@ -27,6 +29,7 @@ import pytest
 
 import gui
 import gui_worker
+import src.config
 from src.config import IMAP_PROVIDERS, MAIL_BACKEND_GMAIL_OAUTH, MAIL_BACKEND_IMAP
 
 
@@ -35,24 +38,84 @@ from src.config import IMAP_PROVIDERS, MAIL_BACKEND_GMAIL_OAUTH, MAIL_BACKEND_IM
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def settings_file(tmp_path, monkeypatch):
+def token_file(tmp_path, monkeypatch):
+    """Control whether an OAuth token.json 'exists', for the upgrade guard.
+
+    Points src.config.TOKEN_FILE at a path under tmp_path that is absent
+    until a test creates it -- otherwise resolve_mail_backend() would see the
+    developer's real auth/token.json and the result would depend on whose
+    machine the suite runs on.
+    """
+    path = tmp_path / "auth" / "token.json"
+    monkeypatch.setattr(src.config, "TOKEN_FILE", path)
+    return path
+
+
+@pytest.fixture
+def settings_file(tmp_path, monkeypatch, token_file):
     path = tmp_path / "data" / ".settings.json"
     monkeypatch.setattr(gui, "_SETTINGS_FILE", path)
     return path
 
 
-def test_mail_backend_defaults_to_gmail_oauth_when_no_file(settings_file):
+def test_mail_backend_defaults_to_imap_when_no_file(settings_file):
     settings = gui._load_settings()
-    assert settings["mail_backend"] == MAIL_BACKEND_GMAIL_OAUTH == "gmail_oauth"
+    assert settings["mail_backend"] == MAIL_BACKEND_IMAP == "imap"
     assert settings["backend_notice_shown"] is False
 
 
-def test_existing_settings_file_without_key_loads_default(settings_file):
+def test_settings_file_without_key_takes_new_default_when_no_token(settings_file):
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps({"chunk_size": "hour"}))
     settings = gui._load_settings()
-    assert settings["mail_backend"] == MAIL_BACKEND_GMAIL_OAUTH
+    assert settings["mail_backend"] == MAIL_BACKEND_IMAP
     assert settings["chunk_size"] == "hour"
+
+
+def test_settings_file_without_key_stays_on_oauth_when_token_exists(
+    settings_file, token_file
+):
+    """The upgrade guard: don't move a working OAuth user onto IMAP.
+
+    A settings file predating the mail_backend key means the user was on
+    OAuth. If they also have a token, flipping them to IMAP would ignore that
+    token and demand an app password they have never created.
+    """
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps({"chunk_size": "hour"}))
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text("{}")
+
+    settings = gui._load_settings()
+    assert settings["mail_backend"] == MAIL_BACKEND_GMAIL_OAUTH
+
+
+def test_explicit_saved_backend_beats_the_token_guard(settings_file, token_file):
+    """A user who deliberately chose IMAP keeps IMAP even holding a token."""
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps({"mail_backend": MAIL_BACKEND_IMAP}))
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text("{}")
+
+    assert gui._load_settings()["mail_backend"] == MAIL_BACKEND_IMAP
+
+
+def test_gui_and_worker_agree_on_backend_for_same_file(
+    settings_file, token_file, monkeypatch
+):
+    """The whole point of the shared resolver: no drift between the two."""
+    monkeypatch.setattr(gui_worker, "_SETTINGS_FILE", settings_file)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps({"chunk_size": "hour"}))
+
+    for token_present in (False, True):
+        if token_present:
+            token_file.parent.mkdir(parents=True, exist_ok=True)
+            token_file.write_text("{}")
+        assert (
+            gui._load_settings()["mail_backend"]
+            == gui_worker._load_mail_backend_settings()["mail_backend"]
+        )
 
 
 def test_saved_mail_backend_value_round_trips(settings_file):

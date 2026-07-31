@@ -42,6 +42,7 @@ from src.config import (
     PROCESSED_DIR,
     STATE_DB_PATH,
     TOKEN_FILE,
+    resolve_mail_backend,
 )
 from src.gmail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.state import delete_chat, get_sync_summary, init_db, reset_chat
@@ -100,6 +101,7 @@ _DEFAULT_SETTINGS = {
 def _load_settings() -> dict:
     """Return settings dict, merging saved values over defaults."""
     settings = dict(_DEFAULT_SETTINGS)
+    saved = {}
     try:
         if _SETTINGS_FILE.exists():
             saved = json.loads(_SETTINGS_FILE.read_text())
@@ -108,6 +110,10 @@ def _load_settings() -> dict:
                     settings[k] = saved[k]
     except Exception:
         pass
+    # Resolved separately from the plain merge above because a settings file
+    # written before mail_backend existed needs the token.json guard, not the
+    # bare default. gui_worker calls the same helper on the same file.
+    settings["mail_backend"] = resolve_mail_backend(saved)
     return settings
 
 
@@ -1284,6 +1290,45 @@ class _SettingsWindow(ctk.CTkToplevel):
             self._imap_frame.pack(fill="x")
         else:
             self._imap_frame.pack_forget()
+            self._warn_oauth_is_limited()
+
+    def _warn_oauth_is_limited(self) -> None:
+        """Warn, once per Settings window, that the OAuth path is limited.
+
+        The Google Cloud project this app's OAuth client lives in is in
+        "Testing" publishing status and is staying there: publishing it would
+        require Google's verification for the restricted gmail.insert scope,
+        which now hinges on an annual paid CASA security assessment. Testing
+        status has two consequences a user will otherwise hit as unexplained
+        breakage -- sign-in only works for accounts pre-listed as test users
+        (100 max), and Google expires every consent, refresh token included,
+        7 days after it is granted. That 7-day expiry is a property of Testing
+        status itself: it applies even when the client is configured for a 30-
+        or 180-day token duration, so it cannot be tuned away.
+
+        Fires only when the user actively picks OAuth from the dropdown (the
+        OptionMenu command does not fire on initial render), and is not
+        blocking -- OAuth remains fully supported and selectable, and anyone
+        already signed in is unaffected.
+        """
+        if getattr(self, "_oauth_warning_shown", False):
+            return
+        self._oauth_warning_shown = True
+        messagebox.showinfo(
+            "Google sign-in is limited",
+            "Google sign-in still works, but this app has not completed "
+            "Google's app verification, so it stays in Google's \"Testing\" "
+            "mode. That means:\n\n"
+            "  -  Only accounts added as test users in the Google Cloud "
+            "project can sign in (100 maximum).\n"
+            "  -  Google expires the sign-in about every 7 days, so you will "
+            "have to reconnect roughly weekly.\n\n"
+            "The 7-day limit is set by Google for unverified apps and cannot "
+            "be extended from here.\n\n"
+            "If you would rather not deal with that, choose \"Email app "
+            "password (IMAP)\" instead -- it has neither limit.",
+            parent=self,
+        )
 
     def _on_provider_changed(self) -> None:
         self._apply_host_field_state()

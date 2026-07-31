@@ -34,9 +34,9 @@ from src.config import (
     CREDENTIALS_FILE,
     GMAIL_SCOPES,
     IMAP_CREDENTIALS_FILE,
-    MAIL_BACKEND_GMAIL_OAUTH,
     MAIL_BACKEND_IMAP,
     TOKEN_FILE,
+    resolve_mail_backend,
 )
 from src.gmail_client import (
     ChunkSize,
@@ -137,17 +137,21 @@ class SyncWorker:
 def _load_mail_backend_settings() -> dict:
     """Read just the backend-selection fields from the shared .settings.json.
 
-    Falls back to Gmail OAuth defaults if the file is missing/unreadable --
+    Falls back to sensible defaults if the file is missing/unreadable --
     callers here must never fail a sync over a settings-read problem; the
     downstream connect/transport call will surface the real error instead.
+
+    The backend itself comes from config.resolve_mail_backend rather than a
+    local fallback, so this and gui._load_settings cannot drift apart and run
+    a sync against a different transport than the UI is displaying.
     """
     defaults = {
-        "mail_backend": MAIL_BACKEND_GMAIL_OAUTH,
         "imap_provider": "gmail",
         "imap_host": "",
         "imap_port": 993,
         "imap_email": "",
     }
+    saved = {}
     try:
         if _SETTINGS_FILE.exists():
             saved = json.loads(_SETTINGS_FILE.read_text())
@@ -156,6 +160,7 @@ def _load_mail_backend_settings() -> dict:
                     defaults[k] = saved[k]
     except Exception:
         pass
+    defaults["mail_backend"] = resolve_mail_backend(saved)
     return defaults
 
 
