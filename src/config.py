@@ -45,6 +45,15 @@ def _apply_root(root: Path) -> None:
     g["STATE_DB_PATH"] = g["DATA_DIR"] / "sync_state.db"
     g["CREDENTIALS_FILE"] = g["AUTH_DIR"] / "credentials.json"
     g["TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
+    # IMAP backend (Road B, phase 1): the confirmed storage decision is an
+    # ACL-locked file (Windows NTFS ACL hardening on top of a scheme that
+    # also has to work on Android, which has neither NTFS ACLs nor DPAPI —
+    # so the *file layout/format* is what's shared cross-platform, and
+    # per-OS hardening is layered on separately). Phase 1 writes nothing
+    # here; this constant only reserves the path (routed through
+    # _apply_root like CREDENTIALS_FILE/TOKEN_FILE above) as the seam
+    # Phase 2 will use.
+    g["IMAP_CREDENTIALS_FILE"] = g["AUTH_DIR"] / "imap_credentials.json"
 
 
 def set_root(path: str | Path) -> None:
@@ -70,6 +79,38 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.insert",
     "https://www.googleapis.com/auth/gmail.labels",
 ]
+
+# ---------------------------------------------------------------------------
+# Mail backend selection (Road B, phase 1: vocabulary only)
+#
+# These constants exist so gmail_client.ImapTransport / build_imap_transport
+# have a shared name for "which backend" to plug into later. Phase 1 does not
+# wire this into settings or the UI — DEFAULT_MAIL_BACKEND is the only thing
+# that currently matters, and nothing reads it yet. That wiring, plus actual
+# persistence of IMAP_CREDENTIALS_FILE, is Phase 2.
+# ---------------------------------------------------------------------------
+
+MAIL_BACKEND_GMAIL_OAUTH = "gmail_oauth"
+MAIL_BACKEND_IMAP = "imap"
+DEFAULT_MAIL_BACKEND = MAIL_BACKEND_GMAIL_OAUTH
+
+# ---------------------------------------------------------------------------
+# IMAP provider presets (Road B, phase 1)
+#
+# Host/port presets for the "pick your provider" step of IMAP setup (Phase 2
+# UI). All use implicit TLS on port 993. "custom" is the escape hatch for any
+# other IMAP host/port the user needs to type in by hand; host is None there
+# deliberately, so a caller can't accidentally use it without supplying one.
+# ---------------------------------------------------------------------------
+
+IMAP_PROVIDERS = {
+    "gmail":    {"label": "Gmail",          "host": "imap.gmail.com",        "port": 993},
+    "outlook":  {"label": "Outlook / 365",  "host": "outlook.office365.com", "port": 993},
+    "yahoo":    {"label": "Yahoo",          "host": "imap.mail.yahoo.com",   "port": 993},
+    "icloud":   {"label": "iCloud",         "host": "imap.mail.me.com",      "port": 993},
+    "fastmail": {"label": "Fastmail",       "host": "imap.fastmail.com",     "port": 993},
+    "custom":   {"label": "Custom",         "host": None,                    "port": 993},
+}
 
 # ---------------------------------------------------------------------------
 # Gmail label hierarchy

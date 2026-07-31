@@ -16,6 +16,8 @@ Chunking:
 """
 
 import base64
+import email as _email
+import imaplib
 import logging
 import os
 import re
@@ -24,12 +26,12 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email import encoders as _encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, parsedate_to_datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, Protocol, Union, runtime_checkable
 
@@ -314,6 +316,418 @@ class RestTransport:
 def set_token(access_token: str) -> GmailTransport:
     """Build a transport from a plain OAuth2 bearer token (Android entry point)."""
     return RestTransport(access_token)
+
+
+# ---------------------------------------------------------------------------
+# IMAP APPEND transport (Road B, phase 1) — purely additive alongside the two
+# OAuth transports above. Realizes a Gmail "label" as an IMAP folder and
+# messages.insert() as IMAP APPEND, for providers/accounts where OAuth/API
+# access isn't available but IMAP + an app password is (see
+# 2026-07-30-road-b-imap-append-plan.md). Nothing above this point is touched
+# by this backend; OAuth stays the permanent default (see MAIL_BACKEND_* in
+# config.py — Phase 1 only adds the vocabulary, wiring is Phase 2).
+# ---------------------------------------------------------------------------
+
+
+def _strip_secret(text: str, secret: Optional[str]) -> str:
+    """Defensively scrub a secret (the IMAP password) out of any text that
+    might end up in a log line or exception message — e.g. if a server ever
+    echoed part of the LOGIN command back in an error response."""
+    if secret and secret in text:
+        return text.replace(secret, "***")
+    return text
+
+
+def _join_imap_response(data) -> str:
+    """Flatten an imaplib (typ, data) response's data list into one string
+    for substring-matching against IMAP response codes like [ALREADYEXISTS]."""
+    parts = []
+    for item in data or []:
+        if item is None:
+            continue
+        if isinstance(item, bytes):
+            parts.append(item.decode("utf-8", errors="replace"))
+        elif isinstance(item, tuple):
+            parts.append(" ".join(
+                x.decode("utf-8", errors="replace") if isinstance(x, bytes) else str(x)
+                for x in item
+            ))
+        else:
+            parts.append(str(item))
+    return " ".join(parts)
+
+
+def _is_already_exists_response(data) -> bool:
+    text = _join_imap_response(data).upper()
+    return "ALREADYEXISTS" in text or "ALREADY EXISTS" in text
+
+
+def _status_for_imap_text(text: str) -> int:
+    """Map an IMAP response-code/error string to an HTTP-style status so it
+    can flow through the same GmailTransportError(.status) retry policy the
+    OAuth transports use (_insert_with_backoff retries 429/500/502/503/504).
+
+    Transient (server-side, worth a retry) -> 503.
+    Permanent (auth/policy/quota/bad-request, retrying won't help) -> 401/403/400.
+    Unknown NO responses default to 400 (permanent) rather than 503, per the
+    plan: don't blanket-retry conditions we can't positively identify as
+    transient — a stuck permanent error retried 5x just delays the failure.
+    """
+    t = text.upper()
+    if any(code in t for code in ("SERVERBUG", "UNAVAILABLE", "INUSE")):
+        return 503
+    if "OVERQUOTA" in t:
+        return 403
+    if any(code in t for code in (
+        "AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "PERMISSIONDENIED",
+    )):
+        return 401
+    if "TRYCREATE" in t:
+        return 400
+    return 400
+
+
+_LIST_RESPONSE_RE = re.compile(
+    rb'^\((?P<flags>[^)]*)\)\s+(?P<delim>NIL|"(?:[^"\\]|\\.)*")\s+(?P<name>.+?)\s*$'
+)
+
+
+def _unquote_imap_token(token: bytes) -> Optional[str]:
+    """Decode one IMAP quoted-string or atom token to str; NIL -> None."""
+    if token == b"NIL":
+        return None
+    text = token.decode("utf-8", errors="replace")
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        inner = text[1:-1]
+        return inner.replace('\\"', '"').replace("\\\\", "\\")
+    return text
+
+
+def _parse_list_response(raw) -> Optional[tuple]:
+    """Parse one untagged IMAP LIST line into (delimiter, folder_name).
+
+    e.g. b'(\\HasNoChildren) "/" "WhatsApp/Alice Smith"' -> ("/", "WhatsApp/Alice Smith")
+
+    imaplib occasionally returns a (line, literal_bytes) tuple instead of a
+    plain bytes line when the mailbox name arrives as an IMAP literal (used
+    for names containing unusual characters); the literal bytes are the name
+    verbatim in that case.
+
+    Returns None for lines this parser doesn't recognise — logged and
+    skipped, since dropping one unparseable folder from a LIST response beats
+    crashing the whole sync on an unusual server.
+    """
+    if isinstance(raw, tuple):
+        head, literal = raw
+        head_bytes = head if isinstance(head, bytes) else head.encode()
+        m = _LIST_RESPONSE_RE.match(head_bytes)
+        if not m:
+            log.warning("Could not parse LIST response head: %r", head)
+            return None
+        delim = _unquote_imap_token(m.group("delim"))
+        name = literal.decode("utf-8", errors="replace") if isinstance(literal, bytes) else str(literal)
+        return delim, name
+
+    if not raw:
+        return None
+    m = _LIST_RESPONSE_RE.match(raw)
+    if not m:
+        log.warning("Could not parse LIST response: %r", raw)
+        return None
+    delim = _unquote_imap_token(m.group("delim"))
+    name = _unquote_imap_token(m.group("name")) or ""
+    return delim, name
+
+
+_APPENDUID_RE = re.compile(r"APPENDUID\s+(\d+)\s+(\d+)")
+
+
+def _extract_appenduid(data) -> Optional[str]:
+    """Pull the UID out of an APPEND response's APPENDUID response code
+    (RFC 4315 UIDPLUS), when the server supports it. Format: '<uidvalidity>-<uid>'.
+    Returns None if the server didn't send one (no UIDPLUS extension) — caller
+    falls back to the message's own Message-ID in that case.
+    """
+    m = _APPENDUID_RE.search(_join_imap_response(data))
+    if not m:
+        return None
+    return f"{m.group(1)}-{m.group(2)}"
+
+
+def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]:
+    """Derive an APPEND internaldate (epoch seconds) from the message's own
+    Date: header — never from the clock.
+
+    This mirrors what the two OAuth transports already do: DiscoveryTransport
+    passes internalDateSource="dateHeader" and RestTransport passes
+    internaldatesource=dateheader as a query param (see
+    RestTransport.messages_insert and tests/test_gmail_transport.py::
+    test_rest_transport_messages_insert_merges_thread_id_and_query_param).
+    Both force Gmail to use the message's Date: header as the mailbox
+    timestamp instead of the upload time, which matters here because a
+    years-old WhatsApp archive must land dated when it was actually sent.
+    IMAP has no equivalent "use the Date header" flag — the caller must
+    compute and pass an explicit internaldate to APPEND, or the server
+    defaults it to "now". _build_html_mime_message always sets a Date:
+    header (see gmail_client.py), so this should only return None for
+    hand-built messages in tests.
+    """
+    date_header = msg.get("Date")
+    if not date_header:
+        log.warning(
+            "messages_insert: message has no Date header; IMAP server will "
+            "default internaldate to the upload time, not the original send time"
+        )
+        return None
+    try:
+        dt = parsedate_to_datetime(date_header)
+    except (TypeError, ValueError) as exc:
+        log.warning(
+            "messages_insert: could not parse Date header %r (%s); IMAP "
+            "server will default internaldate to the upload time",
+            date_header, exc,
+        )
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+class ImapTransport:
+    """IMAP APPEND transport (Road B phase 1): app-password IMAP instead of
+    Gmail OAuth. Implements the same 3-method GmailTransport Protocol as
+    DiscoveryTransport / RestTransport, so get_or_create_label(),
+    _insert_with_backoff(), and push_chunks() all work against it unmodified.
+
+    A Gmail "label" maps to an IMAP folder; the folder's path *is* its id
+    (get_or_create_label uses the returned id verbatim as the next call's
+    body["labelIds"][0], so id and name must always be equal — see plan §9.5).
+
+    Folder names are kept in canonical '/'-delimited form (e.g.
+    "WhatsApp/Alice") at this Protocol boundary, matching what
+    get_or_create_label always builds via _full_label_name(). The real
+    server-side hierarchy delimiter (learned from LIST, cached per
+    connection) is only substituted in at the two points that actually talk
+    to the wire: the CREATE/SUBSCRIBE mailbox name in labels_create(), and
+    the APPEND mailbox name in messages_insert(). LIST responses are
+    translated back from the wire delimiter to '/' when parsed. This keeps
+    the id==name contract intact regardless of what delimiter a given
+    provider uses.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        email: str,
+        password: str,
+        connection_factory: Optional[Callable[[], "imaplib.IMAP4"]] = None,
+        set_seen: bool = True,
+    ) -> None:
+        self._host = host
+        self._port = port
+        self._email = email
+        self._password = password
+        self._set_seen = set_seen
+        # Constructor-injected fake connection factory for tests; production
+        # callers (build_imap_transport) leave this None and get a real
+        # imaplib.IMAP4_SSL login via _default_connection_factory().
+        self._connection_factory = connection_factory
+        self._conn: Optional["imaplib.IMAP4"] = None
+        self._delimiter: Optional[str] = None
+
+    # -- connection lifetime --------------------------------------------
+
+    def _default_connection_factory(self) -> "imaplib.IMAP4":
+        conn = imaplib.IMAP4_SSL(self._host, self._port)
+        try:
+            conn.login(self._email, self._password)
+        except imaplib.IMAP4.error as exc:
+            # login() is the one imaplib convenience method that self-raises
+            # on any non-OK response, so it's a clean hook for the one thing
+            # Q1 requires: an account whose provider/admin has disabled
+            # app-password IMAP looks identical from here to a wrong
+            # password, and both must fail permanently (never retried) with
+            # a message that tells the user what's likely going on, instead
+            # of the raw imaplib string being retried 5x by
+            # _insert_with_backoff before finally surfacing.
+            raise GmailTransportError(
+                "IMAP login failed for %s @ %s:%s — this can mean a wrong "
+                "password, but for many providers (especially Workspace/"
+                "Microsoft 365 accounts) it means the provider or an admin "
+                "has disabled app-password / basic-auth IMAP access "
+                "entirely. Server said: %s"
+                % (self._email, self._host, self._port, _strip_secret(str(exc), self._password)),
+                status=401,
+            ) from exc
+        except OSError as exc:
+            raise GmailTransportError(
+                f"Could not connect to {self._host}:{self._port}: "
+                f"{_strip_secret(str(exc), self._password)}",
+                status=503,
+            ) from exc
+        return conn
+
+    def _get_conn(self) -> "imaplib.IMAP4":
+        if self._conn is None:
+            factory = self._connection_factory or self._default_connection_factory
+            self._conn = factory()
+        return self._conn
+
+    def close(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.logout()
+            except Exception:
+                pass
+            finally:
+                self._conn = None
+                self._delimiter = None
+
+    def _call(self, method: str, *args):
+        """Invoke an imaplib.IMAP4 method on the live connection, reconnecting
+        once transparently if the connection has been dropped/aborted (IMAP
+        servers commonly close idle connections). A fresh IMAP4 connection is
+        a brand new session with no memory of the old one, but none of our
+        calls (LIST/CREATE/SUBSCRIBE/APPEND) require a prior SELECT, so there
+        is no server-side session state to re-establish after a reconnect —
+        the only thing we cache locally is the hierarchy delimiter, which is
+        conservatively dropped here and re-learned on the next labels_list().
+        """
+        conn = self._get_conn()
+        try:
+            return getattr(conn, method)(*args)
+        except imaplib.IMAP4.abort as exc:
+            log.warning("IMAP connection aborted during %s; reconnecting once: %s", method, exc)
+            self._conn = None
+            self._delimiter = None
+            conn = self._get_conn()
+            return getattr(conn, method)(*args)
+
+    # -- delimiter translation -------------------------------------------
+
+    def _to_wire(self, name: str) -> str:
+        delim = self._delimiter
+        if not delim or delim == "/":
+            return name
+        return name.replace("/", delim)
+
+    def _from_wire(self, name: str) -> str:
+        delim = self._delimiter
+        if not delim or delim == "/":
+            return name
+        return name.replace(delim, "/")
+
+    # -- error mapping -----------------------------------------------------
+
+    def _map_exception(self, exc: Exception, context: str) -> GmailTransportError:
+        if isinstance(exc, GmailTransportError):
+            return exc  # already normalized (e.g. by _default_connection_factory)
+        text = _strip_secret(str(exc), self._password)
+        if isinstance(exc, imaplib.IMAP4.abort):
+            return GmailTransportError(f"{context}: IMAP connection aborted: {text}", status=503)
+        if isinstance(exc, (socket.timeout, TimeoutError, ConnectionError, OSError)):
+            return GmailTransportError(f"{context}: network error: {text}", status=503)
+        if isinstance(exc, imaplib.IMAP4.error):
+            # BAD/other self-raised imaplib errors. Deliberately NOT treated
+            # as retryable by default (plan §9.2: don't blanket-retry bare
+            # imaplib.IMAP4.error) — only abort/OSError above are.
+            return GmailTransportError(f"{context}: {text}", status=_status_for_imap_text(text))
+        return GmailTransportError(f"{context}: {text}", status=400)
+
+    def _map_response(self, typ: str, data, context: str) -> GmailTransportError:
+        text = _join_imap_response(data)
+        return GmailTransportError(
+            f"{context} failed ({typ}): {text}", status=_status_for_imap_text(text)
+        )
+
+    # -- GmailTransport protocol -------------------------------------------
+
+    def labels_list(self) -> dict:
+        try:
+            typ, data = self._call("list", '""', "*")
+        except Exception as exc:
+            raise self._map_exception(exc, "LIST") from exc
+        if typ != "OK":
+            raise self._map_response(typ, data, "LIST")
+
+        labels = []
+        for raw in data:
+            parsed = _parse_list_response(raw)
+            if parsed is None:
+                continue
+            delim, wire_name = parsed
+            if delim is not None:
+                self._delimiter = delim
+            canonical_name = self._from_wire(wire_name)
+            labels.append({"name": canonical_name, "id": canonical_name})
+        return {"labels": labels}
+
+    def labels_create(self, body: dict) -> dict:
+        name = body["name"]
+        wire_name = self._to_wire(name)
+        try:
+            typ, data = self._call("create", wire_name)
+        except Exception as exc:
+            raise self._map_exception(exc, "CREATE") from exc
+        # "Already exists" is success, not an error (get_or_create_label may
+        # race with a previous run, or the folder may pre-exist from before
+        # this app managed it).
+        if typ != "OK" and not _is_already_exists_response(data):
+            raise self._map_response(typ, data, "CREATE")
+
+        try:
+            self._call("subscribe", wire_name)
+        except Exception as exc:
+            # Subscription only affects whether other IMAP clients show the
+            # folder by default; the folder itself exists and APPEND/
+            # labels_list both work without it, so this is best-effort.
+            log.warning(
+                "Could not SUBSCRIBE to %r: %s", wire_name,
+                _strip_secret(str(exc), self._password),
+            )
+        return {"id": name}
+
+    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
+        raw_bytes = base64.urlsafe_b64decode(body["raw"])
+        # RFC 3501 literals are CRLF-terminated; the message as built by
+        # _build_html_mime_message() uses Python's default (LF-only) email
+        # policy. Normalize explicitly rather than relying solely on
+        # imaplib.IMAP4.append()'s own internal MapCRLF remap, so the bytes
+        # we hand off are correct regardless of which imaplib internals a
+        # given Python version happens to apply them at.
+        raw_bytes = re.sub(rb"\r?\n", b"\r\n", raw_bytes)
+
+        folder = body["labelIds"][0]
+        wire_folder = self._to_wire(folder)
+
+        msg = _email.message_from_bytes(raw_bytes)
+        internaldate = _internaldate_from_message(msg)
+        message_id = msg.get("Message-ID") or _new_message_id()
+
+        flags = "(\\Seen)" if self._set_seen else None
+
+        try:
+            typ, data = self._call("append", wire_folder, flags, internaldate, raw_bytes)
+        except Exception as exc:
+            raise self._map_exception(exc, "APPEND") from exc
+        if typ != "OK":
+            raise self._map_response(typ, data, "APPEND")
+
+        uid = _extract_appenduid(data)
+        response_thread_id = thread_id or message_id
+        return {"id": uid or message_id, "threadId": response_thread_id}
+
+
+def build_imap_transport(host: str, port: int, email: str, password: str) -> GmailTransport:
+    """Build the IMAP APPEND transport (Road B, phase 1 backend).
+
+    Purely additive alongside build_transport() (OAuth/Discovery, Windows)
+    and set_token() (OAuth/REST, Android) — none of those are touched. See
+    IMAP_PROVIDERS / MAIL_BACKEND_* in src/config.py for the (not-yet-wired;
+    phase 2) preset/selection vocabulary this pairs with.
+    """
+    return ImapTransport(host=host, port=port, email=email, password=password)
 
 
 # ---------------------------------------------------------------------------

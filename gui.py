@@ -24,15 +24,26 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from gui_worker import SyncWorker, check_auth_status, connect_gmail
+from gui_worker import (
+    SyncWorker,
+    check_auth_status,
+    connect_gmail,
+    connect_imap,
+)
 from src.config import (
     CREDENTIALS_FILE,
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_MAIL_BACKEND,
+    IMAP_CREDENTIALS_FILE,
+    IMAP_PROVIDERS,
     INBOX_DIR,
+    MAIL_BACKEND_GMAIL_OAUTH,
+    MAIL_BACKEND_IMAP,
     PROCESSED_DIR,
     STATE_DB_PATH,
     TOKEN_FILE,
 )
+from src.gmail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.state import delete_chat, get_sync_summary, init_db, reset_chat
 
 # ---------------------------------------------------------------------------
@@ -73,6 +84,16 @@ _AUTO_REFRESH_OPTIONS = {
 _DEFAULT_SETTINGS = {
     "chunk_size":          "day",
     "auto_refresh_label":  "30 s",   # key into _AUTO_REFRESH_OPTIONS
+    "mail_backend":        DEFAULT_MAIL_BACKEND,
+    "imap_provider":       "gmail",
+    "imap_host":           "",
+    "imap_port":           993,
+    "imap_email":          "",
+    # One-time "there's a new backend option" notice (Road B, phase 2). Never
+    # a second file/key -- persisted in this same .settings.json. Password is
+    # intentionally NOT in this dict; it only ever lives in
+    # IMAP_CREDENTIALS_FILE (see gui_worker._save_imap_credentials).
+    "backend_notice_shown": False,
 }
 
 
@@ -96,6 +117,30 @@ def _save_settings(settings: dict) -> None:
         _SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
     except Exception:
         pass
+
+
+def _should_show_backend_notice(
+    settings: dict, settings_file_exists: bool, token_file_exists: bool
+) -> bool:
+    """Decide whether to show the one-time "IMAP backend now available" notice.
+
+    Per the human's explicit decision (Road B phase 2, §6a): existing users
+    keep defaulting to gmail_oauth with zero behaviour change, but must see a
+    one-time, purely informational notice pointing at the new option in
+    Settings. A genuinely fresh install (no prior settings file, no prior
+    token.json) must NOT see it -- there is nothing "new" relative to what it
+    never had.
+
+    Prior-state condition: settings_file_exists OR token_file_exists, checked
+    against the raw pre-merge file state (not the post-merge settings dict,
+    which always "exists" once defaults are applied). Either file alone is
+    sufficient evidence of a prior install: a user could have a settings file
+    without ever having connected, or (in principle) a token without a saved
+    settings file.
+    """
+    if settings.get("backend_notice_shown", False):
+        return False
+    return settings_file_exists or token_file_exists
 
 
 def _help_html_path() -> "Path | None":
@@ -131,6 +176,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         init_db(STATE_DB_PATH)
 
+        # Raw prior-state check, BEFORE loading settings (which always
+        # "exists" once defaults are merged in) -- used only to decide
+        # whether to show the one-time backend notice below.
+        _had_settings_file = _SETTINGS_FILE.exists()
+        _had_token_file = TOKEN_FILE.exists()
+
         # Load persisted settings.
         _settings = _load_settings()
         self._settings: dict = _settings
@@ -139,7 +190,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
 
         # Runtime state.
-        self._service       = None
+        self._transport     = None
         self._worker: SyncWorker | None = None
         self._log_lines: list[str] = []
         self._theme_mode    = _saved_theme
@@ -151,11 +202,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         # Apply saved settings to UI controls.
         self._chunk_var.set(_settings.get("chunk_size", "day"))
+        self._update_signout_button_label()
 
         # Initial data load.
         self._check_auth()
         self._refresh_chat_list()
         self._refresh_inbox_count()
+        self._maybe_show_backend_notice(_had_settings_file, _had_token_file)
 
         # Schedule periodic inbox refresh (0 = Off).
         if self._auto_refresh_ms > 0:
@@ -687,8 +740,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         dry_run    = self._dry_run_var.get()
         chunk_size = self._chunk_var.get()
 
-        if not dry_run and self._service is None:
-            self._append_log("Not connected to Gmail.  Connect first or enable Dry run.")
+        if not dry_run and self._transport is None:
+            self._append_log("Not connected.  Connect first or enable Dry run.")
             return
 
         # Reset UI state.
@@ -700,7 +753,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._update_log_box()
 
         worker = SyncWorker(
-            service      = self._service,
+            transport    = self._transport,
             chunk_size   = chunk_size,
             dry_run      = dry_run,
             db_path      = STATE_DB_PATH,
@@ -778,18 +831,30 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._auth_label.configure(text=text)
         self._auth_btn.configure(text="Reconnect" if valid else "Connect")
         self._signout_btn.configure(state="normal" if valid else "disabled")
-        if valid and self._service is None:
-            threading.Thread(target=self._silent_build_service, daemon=True).start()
+        if valid and self._transport is None:
+            threading.Thread(target=self._silent_build_transport, daemon=True).start()
 
-    def _silent_build_service(self) -> None:
-        """Build the Gmail service object in the background after a valid token check."""
+    def _silent_build_transport(self) -> None:
+        """Build the transport object in the background after a valid auth-status check."""
         try:
-            from src.gmail_client import build_service
-            self._service = build_service()
+            if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+                if IMAP_CREDENTIALS_FILE.exists():
+                    data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
+                    self._transport = build_imap_transport(
+                        data["host"], data["port"], data["email"], data["password"]
+                    )
+            else:
+                self._transport = DiscoveryTransport(build_service())
         except Exception:
             pass
 
     def _on_connect_click(self) -> None:
+        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+            # IMAP connect is credential-entry based, not a browser flow --
+            # route to Settings where the provider/host/email/password fields
+            # live, rather than trying to run the OAuth dance.
+            self._open_settings()
+            return
         self._auth_btn.configure(state="disabled", text="Connecting…")
         self._auth_label.configure(text="Opening browser…")
         auth_q: queue.Queue = queue.Queue()
@@ -804,7 +869,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         if event["type"] == "auth_ok":
-            self._service = event["service"]
+            self._transport = event["transport"]
             self._auth_dot.configure(text_color="#2ecc71")
             self._auth_label.configure(text="Connected")
             self._auth_btn.configure(state="normal", text="Reconnect")
@@ -879,6 +944,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._worker.stop()
 
     def _on_signout_click(self) -> None:
+        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+            self._on_forget_imap_password_click()
+            return
+        self._on_oauth_signout_click()
+
+    def _on_oauth_signout_click(self) -> None:
         """Revoke the OAuth2 token on Google's servers, then delete the local token.json."""
         import json as _json
         import urllib.parse
@@ -911,12 +982,48 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._append_log(f"Sign out error: {exc}")
             return
 
-        self._service = None
+        self._transport = None
         self._auth_dot.configure(text_color="#e74c3c")
         self._auth_label.configure(text="Not connected")
         self._auth_btn.configure(state="normal", text="Connect")
         self._signout_btn.configure(state="disabled")
         self._append_log("Signed out. Token revoked and deleted — connect again to re-authorise.")
+
+    def _on_forget_imap_password_click(self) -> None:
+        """Delete the saved IMAP app password locally. No network call.
+
+        This does NOT revoke the app password at the provider -- an app
+        password is a standalone credential that only the provider's own
+        account-security page can revoke. The confirm dialog says so
+        explicitly and points at where to do it, mirroring the existing
+        destructive-action dialog pattern used by _on_delete_chat /
+        _on_resync_chat (messagebox.askyesno with icon="warning").
+        """
+        ok = messagebox.askyesno(
+            "Forget saved password?",
+            "This removes the saved app password from this computer only.\n\n"
+            "It does NOT revoke or delete the app password at your email "
+            "provider — for Gmail, remove it under Google Account > Security > "
+            "App passwords; for Outlook/Microsoft, under Security > Advanced "
+            "security options. You'll need to generate a new one (or re-enter "
+            "this one) to connect again.",
+            icon="warning",
+        )
+        if not ok:
+            return
+        try:
+            if IMAP_CREDENTIALS_FILE.exists():
+                IMAP_CREDENTIALS_FILE.unlink()
+        except Exception as exc:
+            self._append_log(f"Could not forget saved password: {exc}")
+            return
+
+        self._transport = None
+        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_label.configure(text="Not connected")
+        self._auth_btn.configure(state="normal", text="Connect")
+        self._signout_btn.configure(state="disabled")
+        self._append_log("Forgot saved app password. Connect again to reconnect.")
 
     def _open_help(self) -> None:
         """Open help.html in the default browser; fall back to a brief dialog."""
@@ -944,6 +1051,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _apply_settings(self, new_settings: dict) -> None:
         """Called by _SettingsWindow on Save."""
         old_refresh_ms = self._auto_refresh_ms
+        old_backend = self._settings.get("mail_backend")
         self._settings = new_settings
         self._chunk_var.set(new_settings.get("chunk_size", "day"))
         self._auto_refresh_ms = _AUTO_REFRESH_OPTIONS.get(
@@ -954,6 +1062,43 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Restart the auto-refresh timer if the interval changed.
         if self._auto_refresh_ms != old_refresh_ms and self._auto_refresh_ms > 0:
             self.after(self._auto_refresh_ms, self._auto_refresh_inbox)
+
+        self._update_signout_button_label()
+        if new_settings.get("mail_backend") != old_backend:
+            # Switching backends invalidates whatever transport we had cached.
+            self._transport = None
+            self._check_auth()
+
+    def _update_signout_button_label(self) -> None:
+        """"Sign Out" (OAuth) vs "Forget saved password" (IMAP) -- wider button
+        for the longer IMAP label so the text isn't clipped."""
+        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+            self._signout_btn.configure(text="Forget saved password", width=170)
+        else:
+            self._signout_btn.configure(text="Sign Out", width=80)
+
+    def _maybe_show_backend_notice(self, had_settings_file: bool, had_token_file: bool) -> None:
+        """Show the one-time "IMAP backend now available" notice, if warranted.
+
+        Informational only -- messagebox.showinfo, not askyesno/askquestion.
+        Does not ask the user to pick a backend; dismissing it leaves
+        mail_backend untouched (still gmail_oauth for anyone who had it
+        before). See _should_show_backend_notice()'s docstring for the exact
+        prior-state condition.
+        """
+        if not _should_show_backend_notice(self._settings, had_settings_file, had_token_file):
+            return
+        messagebox.showinfo(
+            "New: IMAP / app-password option",
+            "You can now optionally connect using an email provider's IMAP "
+            "app password (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a "
+            "custom IMAP server) instead of signing in with Google.\n\n"
+            "This is entirely optional -- you're still connected the same way "
+            "as before, and nothing changes unless you choose to switch it "
+            "in Settings (gear icon, top-right).",
+        )
+        self._settings["backend_notice_shown"] = True
+        _save_settings(self._settings)
 
     def _on_toggle_theme(self) -> None:
         new_mode = "light" if self._theme_mode == "dark" else "dark"
@@ -992,29 +1137,39 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 # Settings modal
 # ---------------------------------------------------------------------------
 
+_BACKEND_LABELS = {
+    MAIL_BACKEND_GMAIL_OAUTH: "Google sign-in (OAuth)",
+    MAIL_BACKEND_IMAP:        "Email app password (IMAP)",
+}
+_BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
+
+_PROVIDER_LABELS = {key: info["label"] for key, info in IMAP_PROVIDERS.items()}
+_PROVIDER_LABELS_REV = {v: k for k, v in _PROVIDER_LABELS.items()}
+
+
 class _SettingsWindow(ctk.CTkToplevel):
-    """Modal settings panel — chunk size + auto-refresh interval."""
+    """Modal settings panel — chunk size, auto-refresh interval, and mail
+    backend (Gmail OAuth vs IMAP app password)."""
 
     def __init__(self, app: "App") -> None:
         super().__init__(app)
         self._app = app
 
         self.title("Settings")
-        self.geometry("320x200")
-        self.resizable(False, False)
+        self.geometry("380x200")
+        self.resizable(False, True)
         self.grab_set()          # modal: block input to main window
         self.lift()
         self.focus()
 
         pad = {"padx": 20, "pady": 8}
+        settings = app._settings
 
         # ── Chunk size ───────────────────────────────────────────────
         row1 = ctk.CTkFrame(self, fg_color="transparent")
         row1.pack(fill="x", **pad)
         ctk.CTkLabel(row1, text="Chunk size:", width=130, anchor="w").pack(side="left")
-        self._chunk_var = ctk.StringVar(
-            value=app._settings.get("chunk_size", "day")
-        )
+        self._chunk_var = ctk.StringVar(value=settings.get("chunk_size", "day"))
         ctk.CTkOptionMenu(
             row1, values=["day", "hour", "week"],
             variable=self._chunk_var, width=120, height=30,
@@ -1024,22 +1179,94 @@ class _SettingsWindow(ctk.CTkToplevel):
         row2 = ctk.CTkFrame(self, fg_color="transparent")
         row2.pack(fill="x", **pad)
         ctk.CTkLabel(row2, text="Auto-refresh:", width=130, anchor="w").pack(side="left")
-        self._refresh_var = ctk.StringVar(
-            value=app._settings.get("auto_refresh_label", "30 s")
-        )
+        self._refresh_var = ctk.StringVar(value=settings.get("auto_refresh_label", "30 s"))
         ctk.CTkOptionMenu(
             row2, values=list(_AUTO_REFRESH_OPTIONS.keys()),
             variable=self._refresh_var, width=120, height=30,
         ).pack(side="left")
 
+        # ── Mail backend ─────────────────────────────────────────────
+        row3 = ctk.CTkFrame(self, fg_color="transparent")
+        row3.pack(fill="x", **pad)
+        ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")
+        current_backend = settings.get("mail_backend", DEFAULT_MAIL_BACKEND)
+        self._backend_var = ctk.StringVar(
+            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
+        )
+        ctk.CTkOptionMenu(
+            row3, values=list(_BACKEND_LABELS.values()),
+            variable=self._backend_var, width=190, height=30,
+            command=lambda _v: self._on_backend_changed(),
+        ).pack(side="left")
+
+        # ── IMAP fields (shown only when backend == imap) ──────────────
+        self._imap_frame = ctk.CTkFrame(self, fg_color="transparent")
+
+        prow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
+        prow.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(prow, text="Provider:", width=130, anchor="w").pack(side="left")
+        current_provider = settings.get("imap_provider", "gmail")
+        self._provider_var = ctk.StringVar(
+            value=_PROVIDER_LABELS.get(current_provider, _PROVIDER_LABELS["gmail"])
+        )
+        ctk.CTkOptionMenu(
+            prow, values=list(_PROVIDER_LABELS.values()),
+            variable=self._provider_var, width=190, height=30,
+            command=lambda _v: self._on_provider_changed(),
+        ).pack(side="left")
+
+        hrow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
+        hrow.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(hrow, text="Host:", width=130, anchor="w").pack(side="left")
+        self._host_entry = ctk.CTkEntry(hrow, width=190, height=30)
+        self._host_entry.insert(0, settings.get("imap_host", "") or "")
+        self._host_entry.pack(side="left")
+
+        prow2 = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
+        prow2.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(prow2, text="Port:", width=130, anchor="w").pack(side="left")
+        self._port_entry = ctk.CTkEntry(prow2, width=190, height=30)
+        self._port_entry.insert(0, str(settings.get("imap_port", 993)))
+        self._port_entry.pack(side="left")
+
+        erow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
+        erow.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(erow, text="Email address:", width=130, anchor="w").pack(side="left")
+        self._email_entry = ctk.CTkEntry(erow, width=190, height=30)
+        self._email_entry.insert(0, settings.get("imap_email", "") or "")
+        self._email_entry.pack(side="left")
+
+        pwrow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
+        pwrow.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(pwrow, text="App password:", width=130, anchor="w").pack(side="left")
+        self._password_entry = ctk.CTkEntry(pwrow, width=190, height=30, show="*")
+        self._password_entry.pack(side="left")
+
+        note_text = (
+            "Leave blank to keep the currently saved password. "
+            "The password is never shown or logged."
+        )
+        ctk.CTkLabel(
+            self._imap_frame, text=note_text, wraplength=340,
+            justify="left", text_color=("gray40", "gray60"), font=("", 11),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
+        self._status_label = ctk.CTkLabel(self._imap_frame, text="", text_color=("gray40", "gray60"))
+        self._status_label.pack(fill="x", padx=20, pady=(0, 4))
+
+        self._apply_host_field_state()
+        if current_backend == MAIL_BACKEND_IMAP:
+            self._imap_frame.pack(fill="x")
+
         # ── Buttons ──────────────────────────────────────────────────
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(12, 8))
 
-        ctk.CTkButton(
+        self._save_btn = ctk.CTkButton(
             btn_row, text="Save", width=100, height=32,
             command=self._on_save,
-        ).pack(side="right", padx=(6, 0))
+        )
+        self._save_btn.pack(side="right", padx=(6, 0))
 
         ctk.CTkButton(
             btn_row, text="Cancel", width=80, height=32,
@@ -1048,13 +1275,111 @@ class _SettingsWindow(ctk.CTkToplevel):
             command=self.destroy,
         ).pack(side="right")
 
+    # ------------------------------------------------------------------
+    # IMAP field show/hide + provider-driven host/port autofill
+    # ------------------------------------------------------------------
+
+    def _on_backend_changed(self) -> None:
+        if self._backend_var.get() == _BACKEND_LABELS[MAIL_BACKEND_IMAP]:
+            self._imap_frame.pack(fill="x")
+        else:
+            self._imap_frame.pack_forget()
+
+    def _on_provider_changed(self) -> None:
+        self._apply_host_field_state()
+
+    def _apply_host_field_state(self) -> None:
+        provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
+        info = IMAP_PROVIDERS.get(provider_key, IMAP_PROVIDERS["custom"])
+        if provider_key == "custom":
+            self._host_entry.configure(state="normal")
+        else:
+            self._host_entry.delete(0, "end")
+            self._host_entry.insert(0, info["host"] or "")
+            self._host_entry.configure(state="disabled")
+            self._port_entry.delete(0, "end")
+            self._port_entry.insert(0, str(info["port"]))
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
+
     def _on_save(self) -> None:
-        new_settings = {
-            "chunk_size":         self._chunk_var.get(),
-            "auto_refresh_label": self._refresh_var.get(),
-        }
+        # Start from a full copy of the existing settings so keys this
+        # dialog doesn't manage (backend_notice_shown, etc.) are preserved
+        # rather than dropped on save.
+        new_settings = dict(self._app._settings)
+        new_settings["chunk_size"] = self._chunk_var.get()
+        new_settings["auto_refresh_label"] = self._refresh_var.get()
+
+        backend = _BACKEND_LABELS_REV.get(self._backend_var.get(), MAIL_BACKEND_GMAIL_OAUTH)
+        new_settings["mail_backend"] = backend
+
+        password = self._password_entry.get()
+
+        if backend == MAIL_BACKEND_IMAP:
+            provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
+            info = IMAP_PROVIDERS.get(provider_key, IMAP_PROVIDERS["custom"])
+            host = self._host_entry.get().strip() or (info["host"] or "")
+            try:
+                port = int(self._port_entry.get().strip())
+            except ValueError:
+                port = info["port"]
+            email = self._email_entry.get().strip()
+
+            if provider_key == "custom" and not host:
+                messagebox.showerror("Settings", "Enter a host for a custom IMAP server.")
+                return
+            if not email:
+                messagebox.showerror("Settings", "Enter the email address to connect with.")
+                return
+
+            new_settings["imap_provider"] = provider_key
+            new_settings["imap_host"] = host
+            new_settings["imap_port"] = port
+            new_settings["imap_email"] = email
+
+            if password:
+                # A password was typed -- validate it before persisting
+                # anything, so a bad password never silently overwrites a
+                # working saved credential. Runs in a background thread;
+                # the password itself never gets logged or echoed back.
+                self._save_btn.configure(state="disabled")
+                self._status_label.configure(text="Testing connection…")
+                result_q: queue.Queue = queue.Queue()
+                threading.Thread(
+                    target=connect_imap,
+                    args=(result_q, host, port, email, password),
+                    daemon=True,
+                ).start()
+                self.after(150, lambda: self._poll_imap_test(result_q, new_settings))
+                return
+            # No password typed: keep whatever credentials file already
+            # exists (if any) and just persist the non-secret fields.
+
         self._app._apply_settings(new_settings)
         self.destroy()
+
+    def _poll_imap_test(self, result_q: "queue.Queue", new_settings: dict) -> None:
+        try:
+            event = result_q.get_nowait()
+        except queue.Empty:
+            self.after(150, lambda: self._poll_imap_test(result_q, new_settings))
+            return
+
+        if event["type"] == "auth_ok":
+            self._status_label.configure(text="")
+            self._app._transport = event["transport"]
+            self._app._apply_settings(new_settings)
+            self._app._check_auth()
+            self.destroy()
+        else:
+            self._save_btn.configure(state="normal")
+            self._status_label.configure(text="")
+            messagebox.showerror(
+                "Could not connect",
+                f"Could not connect with those details:\n\n{event['msg']}",
+            )
 
 
 # ---------------------------------------------------------------------------

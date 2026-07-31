@@ -84,19 +84,22 @@ def cmd_sync(args: argparse.Namespace) -> int:
         print("DRY RUN — no Gmail API calls will be made, no state will be written.\n")
 
     # Authenticate (skipped in dry-run only if no credentials exist yet, to
-    # allow offline testing; the push path would fail anyway).
-    service = None
+    # allow offline testing; the push path would fail anyway). Backend
+    # (Gmail OAuth vs IMAP) is whatever the desktop app's Settings panel has
+    # saved to .settings.json; gui_worker has no tkinter import so this stays
+    # a plain, GUI-free dependency.
+    transport = None
     if not args.dry_run:
-        from src.gmail_client import build_service
+        from gui_worker import build_transport_for_active_backend
         try:
-            service = build_service()
-        except FileNotFoundError as exc:
+            transport = build_transport_for_active_backend()
+        except (FileNotFoundError, RuntimeError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
     from src.sync_manager import SyncManager
     mgr = SyncManager(
-        service=service,
+        transport=transport,
         chunk_size=args.chunk_size,
         dry_run=args.dry_run,
         db_path=STATE_DB_PATH,
