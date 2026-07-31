@@ -205,8 +205,32 @@ backend.
 
 | Backend | Secret at rest | File |
 |---|---|---|
-| `gmail_oauth` (default) | OAuth refresh token | `auth/token.json` |
-| `imap` | **App-specific password, in plaintext JSON** | `auth/imap_credentials.json` |
+| `imap` (default) | **App-specific password, in plaintext JSON** | `auth/imap_credentials.json` |
+| `gmail_oauth` | OAuth refresh token | `auth/token.json` |
+
+### Why IMAP is the default
+
+Not because it is more secure — a scoped, revocable refresh token is the better
+secret, and the section below is candid about the plaintext password. It is the
+default because the OAuth path is **practically** limited:
+
+The OAuth client stays in Google's **Testing** publishing status. Publishing it
+would require Google's verification for the restricted `gmail.insert` scope,
+which hinges on an annual paid CASA security assessment — not worth it for a
+personal tool. Testing status imposes two hard limits Google does not let you
+tune:
+
+- Sign-in works **only for accounts explicitly listed as test users**, capped at
+  100.
+- **Every consent expires 7 days after it is granted**, refresh token included.
+  This applies even if the client is configured for a 30- or 180-day token
+  duration ([Google Cloud Console Help](https://support.google.com/cloud/answer/15549945?hl=en)).
+
+So OAuth means reconnecting roughly weekly. IMAP has neither limit. `gmail_oauth`
+remains fully supported and selectable in Settings, where choosing it shows a
+notice explaining the above. **Existing users are not migrated:** a settings file
+predating the backend setting is pinned back to `gmail_oauth` when an
+`auth/token.json` is present (`config.resolve_mail_backend`).
 
 ### The IMAP app password is stored in plaintext
 
@@ -257,9 +281,10 @@ error — it is never silently left unprotected. On POSIX the file is created vi
 
 **Mitigations that are actually available to you.** Use an app-specific password,
 never your account password — it is scoped to mail only and can be revoked at the
-provider without touching your account. Prefer the default `gmail_oauth` backend
-if you don't need IMAP; a refresh token is revocable and scope-limited in a way a
-password is not. On a shared machine, use separate Windows accounts.
+provider without touching your account. If you are willing to live with the
+weekly reconnect described above, `gmail_oauth` is the stronger choice at rest: a
+refresh token is revocable and scope-limited in a way a password is not. On a
+shared machine, use separate Windows accounts.
 
 ### Other credential handling
 

@@ -23,20 +23,57 @@ anything, and never posts anything back to WhatsApp.
 
 ---
 
-## 2. One-time setup: authorising Google access
+## 2. One-time setup: connecting to your mailbox
 
-Before the first sync, the app needs your permission to add messages to your Gmail.
+Before the first sync, the app needs permission to add messages to your mailbox.
+There are two ways to connect. **Email app password (IMAP)** is the default and
+the recommended one.
+
+### Option A — Email app password (IMAP) — recommended
+
+An "app password" is a separate password your email provider generates for one
+app. It only works for mail, and you can revoke it at any time without changing
+your real password.
+
+1. Create an app password with your provider. For Gmail, go to your Google
+   Account → Security → 2-Step Verification → App passwords. (Most providers
+   require two-factor authentication to be on before they will issue one.)
+2. Open the app, click the **gear icon** (top-right) to open Settings.
+3. Leave **Connect via** set to *Email app password (IMAP)*.
+4. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
+   IMAP server — host and port fill in automatically for the known ones).
+5. Enter your email address and the app password, then **Save**.
+6. The indicator turns **green** and says **Connected**.
+
+This does not expire. To disconnect later, click **Forget saved password**.
+
+### Option B — Google sign-in (OAuth)
+
+This still works, but comes with two limits worth knowing before you pick it.
+The app has not gone through Google's app-verification process, so Google treats
+it as being in "Testing" mode:
+
+- Only Google accounts that have been **added as test users** can sign in, and
+  there is a limit of 100.
+- **Google expires the sign-in about every 7 days**, so you have to reconnect
+  roughly weekly. This is Google's rule for unverified apps and cannot be
+  extended from within the app.
+
+If that suits you anyway:
 
 1. Open the app.
 2. In the top-right corner, click **Connect**.
-3. Your web browser opens a Google sign-in page. Choose the Google account you want
-   your WhatsApp chats saved into.
+3. Your web browser opens a Google sign-in page. Choose the Google account you
+   want your WhatsApp chats saved into.
 4. Google asks whether to allow the app to manage your mail. Approve it.
 5. Back in the app, the indicator turns **green** and says **Connected**.
 
-You only do this once. The app remembers your authorisation for next time. To
-disconnect later, click **Sign Out** (this revokes access and removes the saved
-sign-in).
+To disconnect later, click **Sign Out** (this revokes access and removes the
+saved sign-in).
+
+> **Already using Google sign-in?** Nothing changes for you. The app keeps you on
+> Google sign-in and will not ask for an app password. You can switch to IMAP
+> whenever you like from Settings.
 
 ---
 

@@ -81,18 +81,52 @@ GMAIL_SCOPES = [
 ]
 
 # ---------------------------------------------------------------------------
-# Mail backend selection (Road B, phase 1: vocabulary only)
+# Mail backend selection
 #
-# These constants exist so gmail_client.ImapTransport / build_imap_transport
-# have a shared name for "which backend" to plug into later. Phase 1 does not
-# wire this into settings or the UI — DEFAULT_MAIL_BACKEND is the only thing
-# that currently matters, and nothing reads it yet. That wiring, plus actual
-# persistence of IMAP_CREDENTIALS_FILE, is Phase 2.
+# Both backends are fully supported and user-selectable in Settings. IMAP is
+# the default for NEW installs: the OAuth client stays in Google's "Testing"
+# publishing status (verification stalled on an annual paid CASA assessment
+# that isn't worth it for a personal tool), and Testing status caps the app at
+# 100 explicitly-listed test users AND expires every consent 7 days after it
+# is granted. IMAP + an app password has neither limit.
+#
+# This is a default, not a deprecation -- gmail_oauth remains selectable and
+# its code path is unchanged. See resolve_mail_backend() for why flipping the
+# default does not disturb anyone already signed in with Google.
 # ---------------------------------------------------------------------------
 
 MAIL_BACKEND_GMAIL_OAUTH = "gmail_oauth"
 MAIL_BACKEND_IMAP = "imap"
-DEFAULT_MAIL_BACKEND = MAIL_BACKEND_GMAIL_OAUTH
+DEFAULT_MAIL_BACKEND = MAIL_BACKEND_IMAP
+
+
+def resolve_mail_backend(saved: dict) -> str:
+    """Pick the backend for a settings dict that may predate the setting.
+
+    Shared by gui.py and gui_worker.py precisely so the two cannot drift into
+    disagreeing about which backend a given settings file means -- they read
+    the same file and must reach the same answer or a sync would run against
+    a different transport than the UI is showing.
+
+    An explicit saved value always wins. The interesting case is its absence,
+    which means a settings file written before the setting existed. Those
+    users were, by definition, on OAuth and may have a working token; falling
+    through to DEFAULT_MAIL_BACKEND would silently move them to IMAP on
+    upgrade, ignore that token, and demand an app password they have never
+    created. An existing token.json is the evidence that this is such a user,
+    so it pins them to gmail_oauth and only genuinely new installs get the
+    new default.
+
+    TOKEN_FILE is read from the module globals at call time rather than
+    captured at import, because _apply_root() rebinds it when WAGMAIL_ROOT
+    moves the storage root out from under us.
+    """
+    backend = saved.get("mail_backend")
+    if backend:
+        return backend
+    if globals()["TOKEN_FILE"].exists():
+        return MAIL_BACKEND_GMAIL_OAUTH
+    return DEFAULT_MAIL_BACKEND
 
 # ---------------------------------------------------------------------------
 # IMAP provider presets (Road B, phase 1)

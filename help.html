@@ -108,7 +108,7 @@
     <strong>On this page</strong>
     <ol>
       <li><a href="#what">What this app does</a></li>
-      <li><a href="#setup">One-time setup: authorising Google access</a></li>
+      <li><a href="#setup">One-time setup: connecting to your mailbox</a></li>
       <li><a href="#export">Exporting a WhatsApp chat to a file</a></li>
       <li><a href="#add">Adding chat files to the app</a></li>
       <li><a href="#sync">Running a sync</a></li>
@@ -130,8 +130,28 @@
   </section>
 
   <section id="setup">
-    <h2>2. One-time setup: authorising Google access</h2>
-    <p>Before the first sync, the app needs your permission to add messages to your Gmail.</p>
+    <h2>2. One-time setup: connecting to your mailbox</h2>
+    <p>Before the first sync, the app needs permission to add messages to your mailbox. There are two ways to connect. <strong>Email app password (IMAP)</strong> is the default and the recommended one.</p>
+
+    <h3>Option A &mdash; Email app password (IMAP) &mdash; recommended</h3>
+    <p>An &ldquo;app password&rdquo; is a separate password your email provider generates for one app. It only works for mail, and you can revoke it at any time without changing your real password.</p>
+    <ol>
+      <li>Create an app password with your provider. For Gmail: Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App passwords. (Most providers require two-factor authentication to be on first.)</li>
+      <li>Open the app and click the <strong>gear icon</strong> (top-right) to open Settings.</li>
+      <li>Leave <strong>Connect via</strong> set to <em>Email app password (IMAP)</em>.</li>
+      <li>Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom IMAP server &mdash; host and port fill in automatically for the known ones).</li>
+      <li>Enter your email address and the app password, then <strong>Save</strong>.</li>
+      <li>The indicator turns <span class="pill">● green</span> and says <strong>Connected</strong>.</li>
+    </ol>
+    <p>This does not expire. To disconnect later, click <strong>Forget saved password</strong>.</p>
+
+    <h3>Option B &mdash; Google sign-in (OAuth)</h3>
+    <p>This still works, but comes with two limits worth knowing first. The app has not gone through Google&rsquo;s app-verification process, so Google treats it as being in &ldquo;Testing&rdquo; mode:</p>
+    <ul>
+      <li>Only Google accounts that have been <strong>added as test users</strong> can sign in, and there is a limit of 100.</li>
+      <li><strong>Google expires the sign-in about every 7 days</strong>, so you have to reconnect roughly weekly. This is Google&rsquo;s rule for unverified apps and cannot be extended from within the app.</li>
+    </ul>
+    <p>If that suits you anyway:</p>
     <ol>
       <li>Open the app.</li>
       <li>In the top-right corner, click <strong>Connect</strong>.</li>
@@ -139,7 +159,8 @@
       <li>Google asks whether to allow the app to manage your mail. Approve it.</li>
       <li>Back in the app, the indicator turns <span class="pill">● green</span> and says <strong>Connected</strong>.</li>
     </ol>
-    <p>You only do this once. To disconnect later, click <strong>Sign Out</strong> (this revokes access and removes the saved sign-in).</p>
+    <p>To disconnect later, click <strong>Sign Out</strong> (this revokes access and removes the saved sign-in).</p>
+    <p><strong>Already using Google sign-in?</strong> Nothing changes for you. The app keeps you on Google sign-in and will not ask for an app password. You can switch to IMAP whenever you like from Settings.</p>
   </section>
 
   <section id="export">
