@@ -197,6 +197,83 @@ The **Help** button opens this project's user guide.
 
 ---
 
+## Security and credential storage
+
+Both mail backends keep their secrets in `auth/`, which is gitignored and never
+travels with the code. What is stored, and how well it is protected, differs by
+backend.
+
+| Backend | Secret at rest | File |
+|---|---|---|
+| `gmail_oauth` (default) | OAuth refresh token | `auth/token.json` |
+| `imap` | **App-specific password, in plaintext JSON** | `auth/imap_credentials.json` |
+
+### The IMAP app password is stored in plaintext
+
+This is a deliberate, documented decision, not an oversight.
+
+**Why not encrypt it.** The obvious Windows answers — DPAPI, Windows Credential
+Manager, `keyring` — all bind the secret to one machine and one Windows profile.
+That breaks the two things this app is built to be: a **PortableApps** bundle that
+runs from a USB stick on any machine, and an app whose sync engine is intended to
+run under **Chaquopy on Android**, where none of those APIs exist. Encrypting with
+a key that ships next to the ciphertext would be obfuscation, not protection, and
+would make the security posture harder to reason about rather than better.
+
+**This matches how Android IMAP clients solve the same problem.** K-9 Mail /
+Thunderbird for Android store account passwords base64-encoded inside the
+`storeUri`/`transportUri` in app-private storage — encoding, not encryption;
+[the request to move them into the Android KeyStore](https://github.com/k9mail/k-9/issues/1200)
+was closed without being implemented. FairEmail states the position explicitly in
+[its FAQ](https://github.com/M66B/FairEmail/blob/master/FAQ.md): because Android
+already encrypts all user data, it deliberately does not add a keystore layer, and
+it points users on shared devices at OS user profiles instead. The industry norm
+for this exact problem is a plaintext credential in OS-protected private storage,
+with the **operating system** as the control.
+
+**What actually protects the file.** On Windows, `auth/` and the credentials file
+both get an NTFS ACL stripped of inherited entries and granting only the current
+user (`icacls /inheritance:r /grant:r <user>:F`). The directory is hardened
+*before* the file is created, so the file is never briefly world-readable, and if
+the ACL cannot be applied the password is **deleted and not saved**, with a loud
+error — it is never silently left unprotected. On POSIX the file is created via
+`os.open(..., 0o600)` so the mode applies at creation.
+
+**What that does and does not defend against.** Be clear-eyed about this:
+
+- ✅ Other **user accounts** on the same machine cannot read the file.
+- ✅ Casual copying of the folder by another user, and inheritance from a
+  permissive parent directory.
+- ❌ **Other software running as you.** An NTFS ACL is a per-*user* boundary, not
+  a per-*application* one. Windows has no app sandbox, so anything running in your
+  session can read the file. This is where Android's guarantee is genuinely
+  stronger than ours — its app-private storage isolates per app.
+- ❌ **Anyone with the disk.** Unless BitLocker (or equivalent) is on — not
+  guaranteed on Windows Home — the file is readable from another OS. FairEmail can
+  rely on mandatory Android user-data encryption here; we cannot.
+- ❌ **Backup and sync tools.** A USB bundle or a folder inside OneDrive/Dropbox
+  carries the plaintext password with it. Keep the portable bundle off synced
+  folders if that matters to you.
+
+**Mitigations that are actually available to you.** Use an app-specific password,
+never your account password — it is scoped to mail only and can be revoked at the
+provider without touching your account. Prefer the default `gmail_oauth` backend
+if you don't need IMAP; a refresh token is revocable and scope-limited in a way a
+password is not. On a shared machine, use separate Windows accounts.
+
+### Other credential handling
+
+- The password is written **only** to `auth/imap_credentials.json` — never to
+  `.settings.json`, never to a log line, never echoed back into the UI, and never
+  into an exception message (`_strip_secret` is a backstop over the transport's
+  error text; the real control is not passing it to a log or UI call at all).
+- IMAP connections use `ssl.create_default_context()`, so certificates and
+  hostnames are verified, and carry a socket timeout. A failed verification
+  refuses to send credentials rather than falling back to an unverified session.
+- Credentials are persisted only *after* a login and a real `LIST` call succeed.
+
+---
+
 ## Building the portable exe
 
 The build uses PyInstaller (`--onedir`) and assembles a PortableApps-style layout.
