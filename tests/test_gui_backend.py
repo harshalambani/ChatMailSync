@@ -322,6 +322,116 @@ def test_save_imap_credentials_file_shape(worker_paths):
 
 
 # ---------------------------------------------------------------------------
+# At-rest protection of the credentials file (F2 sub-findings)
+# ---------------------------------------------------------------------------
+
+def test_save_imap_credentials_hardens_directory_before_file_exists(worker_paths, monkeypatch):
+    """The directory ACL must be applied while the file does NOT yet exist, so
+    the file inherits a restricted ACL at creation. Writing first and
+    hardening afterwards left a window with a live password in a
+    world-readable file."""
+    monkeypatch.setattr(gui_worker.os, "name", "nt")
+    seen = {}
+
+    def fake_dir_acl(path):
+        seen["file_existed_at_dir_acl"] = worker_paths["imap_credentials"].exists()
+        return True
+
+    monkeypatch.setattr(gui_worker, "_restrict_auth_dir_acl", fake_dir_acl)
+    monkeypatch.setattr(gui_worker, "_restrict_file_acl", lambda p: True)
+
+    gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", "pw")
+
+    assert seen["file_existed_at_dir_acl"] is False
+
+
+def test_save_imap_credentials_raises_and_deletes_when_windows_acl_fails(worker_paths, monkeypatch):
+    """A failed ACL must fail loud, not silently leave a readable password."""
+    monkeypatch.setattr(gui_worker.os, "name", "nt")
+    monkeypatch.setattr(gui_worker, "_restrict_auth_dir_acl", lambda p: False)
+    monkeypatch.setattr(gui_worker, "_restrict_file_acl", lambda p: False)
+
+    password = "hunter2-app-pw"
+    with pytest.raises(RuntimeError) as excinfo:
+        gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", password)
+
+    assert not worker_paths["imap_credentials"].exists()
+    assert password not in str(excinfo.value)
+
+
+def test_save_imap_credentials_raises_when_posix_chmod_fails(worker_paths, monkeypatch):
+    monkeypatch.setattr(gui_worker.os, "name", "posix")
+
+    def boom(*a, **kw):
+        raise OSError("chmod refused")
+
+    monkeypatch.setattr(gui_worker.os, "chmod", boom)
+
+    with pytest.raises(RuntimeError):
+        gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", "pw")
+    assert not worker_paths["imap_credentials"].exists()
+
+
+def test_connect_imap_surfaces_acl_failure_as_auth_error(worker_paths, monkeypatch):
+    """The loud failure must reach the user through the existing queue
+    contract rather than escaping as an unhandled exception."""
+    monkeypatch.setattr(
+        gui_worker, "build_imap_transport",
+        lambda h, p, e, pw: _FakeSucceedingImapTransport(),
+    )
+    monkeypatch.setattr(gui_worker.os, "name", "nt")
+    monkeypatch.setattr(gui_worker, "_restrict_auth_dir_acl", lambda p: False)
+    monkeypatch.setattr(gui_worker, "_restrict_file_acl", lambda p: False)
+
+    password = "hunter2-app-pw"
+    q: queue.Queue = queue.Queue()
+    gui_worker.connect_imap(q, "imap.gmail.com", 993, "me@example.com", password)
+
+    event = q.get_nowait()
+    assert event["type"] == "auth_error"
+    assert password not in event["msg"]
+    assert not worker_paths["imap_credentials"].exists()
+
+
+def test_current_username_falls_back_when_username_env_missing(monkeypatch):
+    """%USERNAME% is absent in some service/scheduled-task contexts; that used
+    to make ACL hardening a silent no-op."""
+    import src.gmail_client as gmail_client_mod
+
+    monkeypatch.delenv("USERNAME", raising=False)
+    monkeypatch.setattr(gmail_client_mod.getpass, "getuser", lambda: "fallback-user")
+    assert gmail_client_mod._current_username() == "fallback-user"
+
+
+def test_restrict_acl_returns_false_when_username_unresolvable(tmp_path, monkeypatch):
+    import src.gmail_client as gmail_client_mod
+
+    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: None)
+    assert gmail_client_mod._restrict_acl(tmp_path, "F") is False
+
+
+def test_restrict_file_acl_omits_directory_inheritance_flags(tmp_path, monkeypatch):
+    """(OI)(CI) are directory-only flags; icacls rejects them on a file."""
+    import src.gmail_client as gmail_client_mod
+
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        class _Done:
+            returncode = 0
+            stdout = ""
+        return _Done()
+
+    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: "someuser")
+    monkeypatch.setattr(gmail_client_mod.subprocess, "run", fake_run)
+
+    assert gmail_client_mod._restrict_file_acl(tmp_path / "f.json") is True
+    assert "someuser:F" in captured["cmd"]
+    assert not any("(OI)(CI)" in part for part in captured["cmd"])
+
+
+# ---------------------------------------------------------------------------
 # IMAP_PROVIDERS sanity (used by the Settings-window provider dropdown)
 # ---------------------------------------------------------------------------
 

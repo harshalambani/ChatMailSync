@@ -43,6 +43,7 @@ from src.gmail_client import (
     DiscoveryTransport,
     GmailTransport,
     _restrict_auth_dir_acl,
+    _restrict_file_acl,
     build_imap_transport,
     build_service,
 )
@@ -167,19 +168,52 @@ def _save_imap_credentials(host: str, port: int, email: str, password: str) -> N
     logged, never echoed back into the UI after saving.
     """
     IMAP_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    IMAP_CREDENTIALS_FILE.write_text(json.dumps({
-        "host": host,
-        "port": port,
-        "email": email,
-        "password": password,
-    }))
+
+    # Harden the directory BEFORE the file exists, so the file inherits a
+    # restricted ACL from the moment it is created. Writing first and
+    # hardening afterwards left a window in which a world-readable file
+    # containing a live password sat on disk.
     if os.name == "nt":
         _restrict_auth_dir_acl(IMAP_CREDENTIALS_FILE.parent)
+
+    # O_CREAT|O_EXCL-free but mode-carrying open: on POSIX the 0o600 applies
+    # at creation rather than after the content is already there. Truncate an
+    # existing file rather than leaving a stale longer password tail behind.
+    fd = os.open(IMAP_CREDENTIALS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump({
+                "host": host,
+                "port": port,
+                "email": email,
+                "password": password,
+            }, fh)
+    except Exception:
+        # Never leave a half-written credentials file behind.
+        IMAP_CREDENTIALS_FILE.unlink(missing_ok=True)
+        raise
+
+    # Now confirm the file itself really is protected. This must fail loud:
+    # a plaintext password readable by every local account is exactly the
+    # thing the auth/ folder exists to prevent, and silently carrying on
+    # would leave the user believing it was stored safely.
+    if os.name == "nt":
+        protected = _restrict_file_acl(IMAP_CREDENTIALS_FILE)
     else:
         try:
             os.chmod(IMAP_CREDENTIALS_FILE, 0o600)
+            protected = True
         except OSError:
-            pass
+            protected = False
+
+    if not protected:
+        IMAP_CREDENTIALS_FILE.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Refusing to store the app password: its file permissions could "
+            "not be restricted to your user account, so it would be readable "
+            "by other accounts on this machine. The password was NOT saved "
+            "(it is still valid at your provider). See the log for details."
+        )
 
 
 # ---------------------------------------------------------------------------
