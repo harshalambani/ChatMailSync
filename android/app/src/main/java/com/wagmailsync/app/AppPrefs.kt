@@ -15,11 +15,24 @@ object AppPrefs {
     private const val KEY_CONNECTED_EMAIL = "connected_email"
     private const val KEY_CHUNK_SIZE = "chunk_size"
     private const val KEY_DRY_RUN_DEFAULT = "dry_run_default"
+    private const val KEY_MAIL_BACKEND = "mail_backend"
+    private const val KEY_IMAP_PROVIDER = "imap_provider"
+    private const val KEY_IMAP_HOST = "imap_host"
+    private const val KEY_IMAP_PORT = "imap_port"
+    private const val KEY_IMAP_EMAIL = "imap_email"
+    private const val KEY_IMAP_PASSWORD_SECRET = "imap_password_secret"
 
     /** WorkManager's PeriodicWorkRequest has a hard 15-minute floor enforced
      * by the platform itself — no interval below this is achievable
      * regardless of what's requested. */
     const val MIN_WATCH_INTERVAL_MINUTES = 15L
+
+    /** Mirrors src/config.py's MAIL_BACKEND_GMAIL_OAUTH / MAIL_BACKEND_IMAP —
+     * kept public (not private const like the KEY_* prefs keys) so
+     * SyncWorker, WatchFolderWorker, MainActivity and SettingsScreen can all
+     * compare against the same literal instead of duplicating the string. */
+    const val MAIL_BACKEND_GMAIL_OAUTH = "gmail_oauth"
+    const val MAIL_BACKEND_IMAP = "imap"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -107,5 +120,79 @@ object AppPrefs {
 
     fun setDryRunDefault(context: Context, dryRun: Boolean) {
         prefs(context).edit().putBoolean(KEY_DRY_RUN_DEFAULT, dryRun).apply()
+    }
+
+    /** Null when the user has never explicitly picked a backend — distinct
+     * from resolveMailBackend()'s resolved value, so callers that need to
+     * know "did the user choose this, or are we defaulting" (e.g. the
+     * Settings dropdown's initial selection) can tell the difference. */
+    fun getSavedMailBackend(context: Context): String? =
+        prefs(context).getString(KEY_MAIL_BACKEND, null)
+
+    fun setMailBackend(context: Context, backend: String) {
+        prefs(context).edit().putString(KEY_MAIL_BACKEND, backend).apply()
+    }
+
+    /** Mirrors src/config.py:resolve_mail_backend exactly: an explicit saved
+     * choice always wins; otherwise an already-connected OAuth account wins
+     * (the upgrade guard — an existing OAuth user must never be silently
+     * switched onto IMAP just because IMAP is now the default for fresh
+     * installs); otherwise IMAP, since that's DEFAULT_MAIL_BACKEND on the
+     * Windows side too. */
+    fun resolveMailBackend(context: Context): String {
+        getSavedMailBackend(context)?.let { return it }
+        if (getConnectedAccountEmail(context) != null) return MAIL_BACKEND_GMAIL_OAUTH
+        return MAIL_BACKEND_IMAP
+    }
+
+    fun getImapProvider(context: Context): String =
+        prefs(context).getString(KEY_IMAP_PROVIDER, "gmail") ?: "gmail"
+
+    fun setImapProvider(context: Context, provider: String) {
+        prefs(context).edit().putString(KEY_IMAP_PROVIDER, provider).apply()
+    }
+
+    fun getImapHost(context: Context): String =
+        prefs(context).getString(KEY_IMAP_HOST, "") ?: ""
+
+    fun setImapHost(context: Context, host: String) {
+        prefs(context).edit().putString(KEY_IMAP_HOST, host).apply()
+    }
+
+    fun getImapPort(context: Context): Int =
+        prefs(context).getInt(KEY_IMAP_PORT, 993)
+
+    fun setImapPort(context: Context, port: Int) {
+        prefs(context).edit().putInt(KEY_IMAP_PORT, port).apply()
+    }
+
+    fun getImapEmail(context: Context): String =
+        prefs(context).getString(KEY_IMAP_EMAIL, "") ?: ""
+
+    fun setImapEmail(context: Context, email: String) {
+        prefs(context).edit().putString(KEY_IMAP_EMAIL, email).apply()
+    }
+
+    /** The app password itself never lives in this class' plain
+     * SharedPreferences fields — only Keystore-encrypted, via SecretStore,
+     * under this same key name. Kept here (rather than inlining the literal
+     * at every call site) so the key name has exactly one source of truth. */
+    fun getImapPasswordSecretKey(): String = KEY_IMAP_PASSWORD_SECRET
+
+    fun hasImapPassword(context: Context): Boolean =
+        SecretStore.getSecret(context, KEY_IMAP_PASSWORD_SECRET) != null
+
+    /** Clears every saved IMAP field, including the Keystore-encrypted
+     * password — used by Settings' "Forget saved password". Does not touch
+     * mail_backend itself, matching Windows' equivalent Disconnect (which
+     * only clears credentials, leaving the backend selection as-is). */
+    fun clearImapSettings(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_IMAP_PROVIDER)
+            .remove(KEY_IMAP_HOST)
+            .remove(KEY_IMAP_PORT)
+            .remove(KEY_IMAP_EMAIL)
+            .apply()
+        SecretStore.clearSecret(context, KEY_IMAP_PASSWORD_SECRET)
     }
 }

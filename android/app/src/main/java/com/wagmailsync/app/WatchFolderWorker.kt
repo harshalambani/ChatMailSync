@@ -154,31 +154,43 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
      * skips the auto-sync and tells the user to reconnect in the app,
      * instead of crashing or hanging. */
     private suspend fun triggerAutoSync(importedCount: Int): String {
-        val email = AppPrefs.getConnectedAccountEmail(applicationContext)
-        if (email == null) {
-            notify("Imported $importedCount new file(s) — open the app to connect Gmail and sync")
-            return "Imported $importedCount new file(s) — connect Gmail in the app to sync"
-        }
+        val backend = AppPrefs.resolveMailBackend(applicationContext)
+        val dataBuilder = Data.Builder()
+            .putBoolean(SyncWorker.KEY_DRY_RUN, false)
+            .putString(SyncWorker.KEY_CHUNK_SIZE, AppPrefs.getChunkSize(applicationContext))
+            .putString(SyncWorker.KEY_TRIGGER, "watched_folder")
+            .putString(SyncWorker.KEY_MAIL_BACKEND, backend)
 
-        val scopeString = "oauth2:" + GMAIL_SCOPES.joinToString(" ") { it.scopeUri }
-        val token = try {
-            withContext(Dispatchers.IO) {
-                GoogleAuthUtil.getToken(applicationContext, Account(email, "com.google"), scopeString)
+        if (backend == AppPrefs.MAIL_BACKEND_IMAP) {
+            // No token to fetch — SyncWorker reads host/email from AppPrefs
+            // and the password from SecretStore itself. Only check here that
+            // *something* is saved, so a clear notification fires instead of
+            // silently enqueuing a run that's guaranteed to fail.
+            if (!AppPrefs.hasImapPassword(applicationContext) || AppPrefs.getImapHost(applicationContext).isBlank()) {
+                notify("Imported $importedCount new file(s) — open Settings and save your IMAP app password to sync")
+                return "Imported $importedCount new file(s) — save an IMAP app password in Settings to sync"
             }
-        } catch (e: Exception) {
-            notify("Imported $importedCount new file(s) — reconnect Gmail in the app to sync them")
-            return "Imported $importedCount new file(s) — reconnect Gmail to sync"
+        } else {
+            val email = AppPrefs.getConnectedAccountEmail(applicationContext)
+            if (email == null) {
+                notify("Imported $importedCount new file(s) — open the app to connect Gmail and sync")
+                return "Imported $importedCount new file(s) — connect Gmail in the app to sync"
+            }
+
+            val scopeString = "oauth2:" + GMAIL_SCOPES.joinToString(" ") { it.scopeUri }
+            val token = try {
+                withContext(Dispatchers.IO) {
+                    GoogleAuthUtil.getToken(applicationContext, Account(email, "com.google"), scopeString)
+                }
+            } catch (e: Exception) {
+                notify("Imported $importedCount new file(s) — reconnect Gmail in the app to sync them")
+                return "Imported $importedCount new file(s) — reconnect Gmail to sync"
+            }
+            dataBuilder.putString(SyncWorker.KEY_ACCESS_TOKEN, token)
         }
 
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setInputData(
-                Data.Builder()
-                    .putString(SyncWorker.KEY_ACCESS_TOKEN, token)
-                    .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, AppPrefs.getChunkSize(applicationContext))
-                    .putString(SyncWorker.KEY_TRIGGER, "watched_folder")
-                    .build()
-            )
+            .setInputData(dataBuilder.build())
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
         // Unique (not plain enqueue): lets MainActivity observe this run's

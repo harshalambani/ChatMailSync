@@ -280,6 +280,134 @@ fun WagmailApp(
     // "Token survives app restart": silently re-check on screen load.
     LaunchedEffect(Unit) { connectGmail(silent = true) }
 
+    // ---- Mail backend: IMAP app password parity with Windows -----------
+    // mailBackend/imapProvider/imapHost/imapPort/imapEmail mirror AppPrefs
+    // (persisted there), but only *after* a successful Save & connect — see
+    // saveImapSettings below, which follows gui_worker.connect_imap's
+    // "validate, build transport, force a real login via labels_list(),
+    // persist only on success" contract. imapPasswordSaved never reflects
+    // the password itself, only whether SecretStore currently holds one.
+    var mailBackend by remember { mutableStateOf(AppPrefs.resolveMailBackend(context)) }
+    var imapProvider by remember { mutableStateOf(AppPrefs.getImapProvider(context)) }
+    var imapHost by remember { mutableStateOf(AppPrefs.getImapHost(context)) }
+    var imapPort by remember { mutableStateOf(AppPrefs.getImapPort(context)) }
+    var imapEmail by remember { mutableStateOf(AppPrefs.getImapEmail(context)) }
+    var imapPasswordSaved by remember { mutableStateOf(AppPrefs.hasImapPassword(context)) }
+    var imapProviders by remember { mutableStateOf(listOf<ImapProviderInfo>()) }
+
+    // Reads config.IMAP_PROVIDERS via the Python side once per composition —
+    // same preset table (host/port per provider) the Windows GUI uses, so
+    // Android never duplicates that data in Kotlin.
+    LaunchedEffect(Unit) {
+        val result = Python.getInstance().getModule("src.android_api").callAttr("imap_providers")
+        imapProviders = result.asList().map { entry ->
+            ImapProviderInfo(
+                key = entry.callAttr("get", "key").toString(),
+                label = entry.callAttr("get", "label").toString(),
+                host = entry.callAttr("get", "host").toString(),
+                port = entry.callAttr("get", "port").toString().toIntOrNull() ?: 993,
+            )
+        }
+    }
+
+    fun onMailBackendChange(backend: String) {
+        mailBackend = backend
+        AppPrefs.setMailBackend(context, backend)
+    }
+
+    fun onImapProviderChange(provider: String) {
+        imapProvider = provider
+        if (provider != "custom") {
+            imapProviders.firstOrNull { it.key == provider }?.let {
+                imapHost = it.host
+                imapPort = it.port
+            }
+        }
+    }
+
+    // Never echoes the secret itself back into a UI string, even on
+    // failure — imaplib/ssl exception text doesn't normally embed the
+    // password, but this is a zero-cost belt-and-braces check against the
+    // "must never reach ... an exception message" constraint.
+    fun redactSecret(text: String, secret: String?): String =
+        if (!secret.isNullOrEmpty() && text.contains(secret)) text.replace(secret, "********") else text
+
+    fun saveImapSettings(
+        provider: String,
+        host: String,
+        port: Int,
+        email: String,
+        password: String,
+        onResult: (Boolean, String) -> Unit,
+    ) {
+        val effectiveHost = if (provider == "custom") host else
+            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+        if (provider == "custom" && effectiveHost.isBlank()) {
+            onResult(false, "Enter a host for a custom IMAP server.")
+            return
+        }
+        if (email.isBlank()) {
+            onResult(false, "Enter the email address to connect with.")
+            return
+        }
+        // Blank password field means "keep the currently saved password" —
+        // the field is deliberately never pre-filled with the real value
+        // (see SettingsScreen), so this is the only way to re-save
+        // provider/host/email without re-entering an unchanged password.
+        val existingPassword = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+        val effectivePassword = password.ifBlank { existingPassword ?: "" }
+        if (effectivePassword.isBlank()) {
+            onResult(false, "Enter the app password to connect with.")
+            return
+        }
+        Thread {
+            var transport: com.chaquo.python.PyObject? = null
+            val errorText = try {
+                transport = Python.getInstance().getModule("src.gmail_client")
+                    .callAttr("build_imap_transport", effectiveHost, port, email, effectivePassword)
+                // Forces a real login (mirrors gui_worker.connect_imap) so a
+                // wrong host/port/password/app-password is caught here, not
+                // on the next real sync.
+                transport?.callAttr("labels_list")
+                null
+            } catch (e: Exception) {
+                redactSecret("Could not connect: ${e.message ?: "unknown error"}", effectivePassword)
+            } finally {
+                try {
+                    transport?.callAttr("close")
+                } catch (_: Exception) {
+                    // Best-effort logout only.
+                }
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (errorText == null) {
+                    AppPrefs.setImapProvider(context, provider)
+                    AppPrefs.setImapHost(context, effectiveHost)
+                    AppPrefs.setImapPort(context, port)
+                    AppPrefs.setImapEmail(context, email)
+                    SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), effectivePassword)
+                    imapProvider = provider
+                    imapHost = effectiveHost
+                    imapPort = port
+                    imapEmail = email
+                    imapPasswordSaved = true
+                    onResult(true, "Connected — settings saved.")
+                } else {
+                    onResult(false, errorText)
+                }
+            }
+        }.start()
+    }
+
+    fun forgetImapPassword() {
+        AppPrefs.clearImapSettings(context)
+        imapPasswordSaved = false
+        imapProvider = "gmail"
+        imapHost = ""
+        imapPort = 993
+        imapEmail = ""
+    }
+
     // ---- Inbox + import (Phase A2) -----------------------------------
     var inboxFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
     var lastResult by remember { mutableStateOf("Nothing run yet.") }
@@ -388,6 +516,43 @@ fun WagmailApp(
           notification permission only means the user won't see progress. */ }
 
     fun startRealSync(chatFilter: String? = null) {
+        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+            // No OAuth dance at all for IMAP — SyncWorker reads host/email
+            // from AppPrefs and the password from SecretStore itself, same
+            // as the watched-folder auto-sync path.
+            if (!imapPasswordSaved) {
+                lastResult = "Save your IMAP app password in Settings first."
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setInputData(
+                    Data.Builder()
+                        .putBoolean(SyncWorker.KEY_DRY_RUN, false)
+                        .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                        .putString(SyncWorker.KEY_TRIGGER, "manual")
+                        .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
+                        .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_IMAP)
+                        .build()
+                )
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                )
+                .build()
+            lastSyncWasDryRun = false
+            workManager.enqueueUniqueWork(
+                SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
+            navController.navigate("syncProgress")
+            return
+        }
         if (connectedEmail == null) {
             lastResult = "Connect Gmail first."
             return
@@ -429,6 +594,7 @@ fun WagmailApp(
                             .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
                             .putString(SyncWorker.KEY_TRIGGER, "manual")
                             .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
+                            .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_GMAIL_OAUTH)
                             .build()
                     )
                     // Sync always needs the network; if WorkManager ever defers
@@ -465,6 +631,7 @@ fun WagmailApp(
                     .putBoolean(SyncWorker.KEY_DRY_RUN, true)
                     .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
+                    .putString(SyncWorker.KEY_MAIL_BACKEND, mailBackend)
                     .build()
             )
             .build()
@@ -644,10 +811,37 @@ fun WagmailApp(
                 // WorkManager id), the list would keep showing already-synced
                 // files. Re-check every time this screen is (re)entered.
                 LaunchedEffect(Unit) { refreshInbox() }
+                // Backend-neutral pair for HomeScreen's connection chip/Sync-now
+                // gating — OAuth's connectedEmail/ready-token pair and IMAP's
+                // saved-email/password-saved pair collapse to the same shape
+                // rather than plumbing five OAuth-specific params through.
+                val homeAccountLabel = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                    imapEmail.ifBlank { null }
+                } else {
+                    connectedEmail
+                }
+                val homeBackendReady = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                    imapPasswordSaved && imapHost.isNotBlank()
+                } else {
+                    connectedEmail != null
+                }
+                val homeConnectActionLabel = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                    if (homeBackendReady) "Change" else "Set up"
+                } else {
+                    if (homeBackendReady) "Reconnect" else "Connect"
+                }
                 HomeScreen(
-                    connectedEmail = connectedEmail,
+                    accountLabel = homeAccountLabel,
+                    backendReady = homeBackendReady,
+                    connectActionLabel = homeConnectActionLabel,
                     connectError = connectError,
-                    onConnect = { connectGmail(silent = false) },
+                    onConnect = {
+                        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                            navController.navigate("settings")
+                        } else {
+                            connectGmail(silent = false)
+                        }
+                    },
                     inboxFiles = inboxFiles,
                     onImportPick = { pickFile.launch(arrayOf("*/*")) },
                     onPreview = { name ->
@@ -702,42 +896,87 @@ fun WagmailApp(
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
                     accessTokenAvailable = accessToken != null,
                     onTestConnection = { onResult ->
-                        val token = accessToken
-                        if (token == null) {
-                            onResult("Connect Gmail first.")
+                        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                            if (!imapPasswordSaved) {
+                                onResult("Save an IMAP app password first.")
+                            } else {
+                                Thread {
+                                    var transport: com.chaquo.python.PyObject? = null
+                                    val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+                                    val text = try {
+                                        transport = Python.getInstance().getModule("src.gmail_client")
+                                            .callAttr(
+                                                "build_imap_transport",
+                                                AppPrefs.getImapHost(context),
+                                                AppPrefs.getImapPort(context),
+                                                AppPrefs.getImapEmail(context),
+                                                password,
+                                            )
+                                        transport?.callAttr("labels_list").toString()
+                                    } catch (e: Exception) {
+                                        redactSecret("Error calling labels_list(): ${e.message}", password)
+                                    } finally {
+                                        try {
+                                            transport?.callAttr("close")
+                                        } catch (_: Exception) {
+                                            // Best-effort logout only.
+                                        }
+                                    }
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(text) }
+                                }.start()
+                            }
                         } else {
-                            Thread {
-                                fun labelsList(t: String) = Python.getInstance()
-                                    .getModule("src.gmail_client")
-                                    .callAttr("set_token", t)
-                                    .callAttr("labels_list").toString()
-                                var refreshedToken: String? = null
-                                val text = try {
-                                    labelsList(token)
-                                } catch (e: Exception) {
-                                    if (e.message?.contains("401") == true) {
-                                        val fresh = refreshStaleToken(context as android.app.Activity, token)
-                                        if (fresh != null) {
-                                            refreshedToken = fresh
-                                            try {
-                                                labelsList(fresh)
-                                            } catch (e2: Exception) {
-                                                "Error calling labels_list() after refreshing token: ${e2.message}"
+                            val token = accessToken
+                            if (token == null) {
+                                onResult("Connect Gmail first.")
+                            } else {
+                                Thread {
+                                    fun labelsList(t: String) = Python.getInstance()
+                                        .getModule("src.gmail_client")
+                                        .callAttr("set_token", t)
+                                        .callAttr("labels_list").toString()
+                                    var refreshedToken: String? = null
+                                    val text = try {
+                                        labelsList(token)
+                                    } catch (e: Exception) {
+                                        if (e.message?.contains("401") == true) {
+                                            val fresh = refreshStaleToken(context as android.app.Activity, token)
+                                            if (fresh != null) {
+                                                refreshedToken = fresh
+                                                try {
+                                                    labelsList(fresh)
+                                                } catch (e2: Exception) {
+                                                    "Error calling labels_list() after refreshing token: ${e2.message}"
+                                                }
+                                            } else {
+                                                "Error calling labels_list(): ${e.message} (token refresh also failed)"
                                             }
                                         } else {
-                                            "Error calling labels_list(): ${e.message} (token refresh also failed)"
+                                            "Error calling labels_list(): ${e.message}"
                                         }
-                                    } else {
-                                        "Error calling labels_list(): ${e.message}"
                                     }
-                                }
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    refreshedToken?.let { accessToken = it }
-                                    onResult(text)
-                                }
-                            }.start()
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        refreshedToken?.let { accessToken = it }
+                                        onResult(text)
+                                    }
+                                }.start()
+                            }
                         }
                     },
+                    mailBackend = mailBackend,
+                    onMailBackendChange = ::onMailBackendChange,
+                    imapProviders = imapProviders,
+                    imapProvider = imapProvider,
+                    onImapProviderChange = ::onImapProviderChange,
+                    imapHost = imapHost,
+                    onImapHostChange = { imapHost = it },
+                    imapPort = imapPort,
+                    onImapPortChange = { imapPort = it },
+                    imapEmail = imapEmail,
+                    onImapEmailChange = { imapEmail = it },
+                    imapPasswordSaved = imapPasswordSaved,
+                    onSaveImapSettings = ::saveImapSettings,
+                    onForgetImapPassword = ::forgetImapPassword,
                 )
             }
             composable("help") {

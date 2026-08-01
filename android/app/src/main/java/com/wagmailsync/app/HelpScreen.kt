@@ -40,8 +40,12 @@ private val FAQ = listOf(
         "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
         "anything already in Gmail. Re-importing the export afterwards starts a brand-new Gmail thread.",
     "Why does it ask me to reconnect every week?" to
-        "While this app is in Google's \"Testing\" publishing mode (personal-use phase), access tokens " +
-        "expire after about 7 days and need a fresh consent tap. This goes away once the app is verified.",
+        "Only if you're using Google sign-in (OAuth) — the app hasn't gone through Google's app-" +
+        "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +
+        "and only accounts added as test users (up to 100) can connect. This is Google's rule for " +
+        "unverified apps and can't be extended from within the app. The Email app password (IMAP) " +
+        "backend doesn't have this limit — it's the default, and connecting once doesn't expire. You can " +
+        "switch to it any time from Settings without losing anything already synced.",
     "What can't this app do?" to
         "It can't read your existing Gmail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",

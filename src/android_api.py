@@ -111,6 +111,18 @@ def remove_from_inbox(name: str) -> dict:
     return {"ok": True, "error": None}
 
 
+def imap_providers() -> list[dict]:
+    """Expose config.IMAP_PROVIDERS to Kotlin so the Android provider picker
+    reads from the same preset table as the Windows GUI instead of
+    duplicating hosts/ports in Kotlin. "custom" comes through with
+    host == "" (None isn't JSON-clean for Chaquopy) so the Android field
+    stays editable, matching gui.py's _apply_host_field_state."""
+    return [
+        {"key": key, "label": info["label"], "host": info["host"] or "", "port": info["port"]}
+        for key, info in config.IMAP_PROVIDERS.items()
+    ]
+
+
 def preview(file_path: str) -> dict:
     """Parse one export file without touching Gmail or the state DB — the
     quick local preview for the Android "Import review" screen (§4 of the

@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -30,12 +31,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+
+/** Mirrors android_api.imap_providers(), itself a mirror of
+ * src/config.py's IMAP_PROVIDERS — [host] is "" for "custom" (no preset). */
+data class ImapProviderInfo(val key: String, val label: String, val host: String, val port: Int)
 
 private val THEME_LABELS = mapOf(
     "system" to "Match system",
     "light" to "Light",
     "dark" to "Dark",
+)
+
+// Matches gui.py's _BACKEND_LABELS exactly, so the two apps describe the
+// same choice with the same words.
+private val BACKEND_LABELS = mapOf(
+    AppPrefs.MAIL_BACKEND_IMAP to "Email app password (IMAP)",
+    AppPrefs.MAIL_BACKEND_GMAIL_OAUTH to "Google sign-in (OAuth)",
 )
 
 // WorkManager's PeriodicWorkRequest has a hard 15-minute floor (Android
@@ -79,11 +93,38 @@ fun SettingsScreen(
     onSyncedFilePolicyChange: (String) -> Unit,
     accessTokenAvailable: Boolean,
     onTestConnection: ((String) -> Unit) -> Unit,
+    mailBackend: String,
+    onMailBackendChange: (String) -> Unit,
+    imapProviders: List<ImapProviderInfo>,
+    imapProvider: String,
+    onImapProviderChange: (String) -> Unit,
+    imapHost: String,
+    onImapHostChange: (String) -> Unit,
+    imapPort: Int,
+    onImapPortChange: (Int) -> Unit,
+    imapEmail: String,
+    onImapEmailChange: (String) -> Unit,
+    imapPasswordSaved: Boolean,
+    onSaveImapSettings: (String, String, Int, String, String, (Boolean, String) -> Unit) -> Unit,
+    onForgetImapPassword: () -> Unit,
 ) {
     var testResult by remember { mutableStateOf<String?>(null) }
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
     var policyMenuOpen by remember { mutableStateOf(false) }
+    var backendMenuOpen by remember { mutableStateOf(false) }
+    var providerMenuOpen by remember { mutableStateOf(false) }
+    // Password is deliberately never pre-filled from a saved value — Compose
+    // state here is plain (unencrypted) memory, and re-displaying a saved
+    // password back into a text field is exactly the kind of surfacing the
+    // security spec for this feature rules out. An empty field with
+    // imapPasswordSaved shown as a separate status line is the same UX
+    // gui.py's Settings window uses ("Leave blank to keep the currently
+    // saved password. The password is never shown or logged.").
+    var imapPasswordInput by remember { mutableStateOf("") }
+    var imapSaveBusy by remember { mutableStateOf(false) }
+    var imapSaveStatus by remember { mutableStateOf<String?>(null) }
+    val backendUsable = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessTokenAvailable
 
     Scaffold(
         topBar = { WagmailTopBar(title = "Settings") },
@@ -96,23 +137,130 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Account", style = MaterialTheme.typography.titleMedium)
-            Text(connectedEmail ?: "Not connected", style = MaterialTheme.typography.bodyLarge)
-            if (connectedEmail == null) {
-                Button(onClick = onReconnect) { Text("Connect") }
-            } else {
+            Text("Mail backend", style = MaterialTheme.typography.titleMedium)
+            Box {
+                OutlinedButton(onClick = { backendMenuOpen = true }) {
+                    Text(BACKEND_LABELS[mailBackend] ?: mailBackend)
+                }
+                DropdownMenu(expanded = backendMenuOpen, onDismissRequest = { backendMenuOpen = false }) {
+                    BACKEND_LABELS.forEach { (backend, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = { onMailBackendChange(backend); backendMenuOpen = false },
+                        )
+                    }
+                }
+            }
+
+            if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                Box {
+                    OutlinedButton(onClick = { providerMenuOpen = true }) {
+                        Text(imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider)
+                    }
+                    DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { providerMenuOpen = false }) {
+                        imapProviders.forEach { info ->
+                            DropdownMenuItem(
+                                text = { Text(info.label) },
+                                onClick = { onImapProviderChange(info.key); providerMenuOpen = false },
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = imapHost,
+                    onValueChange = onImapHostChange,
+                    label = { Text("Host") },
+                    enabled = imapProvider == "custom",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = imapPort.toString(),
+                    onValueChange = { it.toIntOrNull()?.let(onImapPortChange) },
+                    label = { Text("Port") },
+                    enabled = imapProvider == "custom",
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = imapEmail,
+                    onValueChange = onImapEmailChange,
+                    label = { Text("Email address") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = imapPasswordInput,
+                    onValueChange = { imapPasswordInput = it },
+                    label = { Text("App password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    if (imapPasswordSaved) "An app password is saved for $imapEmail."
+                    else "No app password saved yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Leave the password field blank to keep the currently saved password. " +
+                        "The password is never shown or logged.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    OutlinedButton(onClick = onReconnect) { Text("Reconnect") }
-                    TextButton(
-                        onClick = onDisconnect,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text("Disconnect") }
+                    Button(
+                        enabled = !imapSaveBusy,
+                        onClick = {
+                            imapSaveBusy = true
+                            imapSaveStatus = null
+                            onSaveImapSettings(imapProvider, imapHost, imapPort, imapEmail, imapPasswordInput) { success, message ->
+                                imapSaveBusy = false
+                                imapSaveStatus = message
+                                if (success) imapPasswordInput = ""
+                            }
+                        },
+                    ) { Text(if (imapSaveBusy) "Connecting…" else "Save & connect") }
+                    if (imapPasswordSaved) {
+                        TextButton(
+                            onClick = onForgetImapPassword,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) { Text("Forget saved password") }
+                    }
                 }
+                imapSaveStatus?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+            } else {
+                Text("Account", style = MaterialTheme.typography.titleMedium)
+                Text(connectedEmail ?: "Not connected", style = MaterialTheme.typography.bodyLarge)
+                if (connectedEmail == null) {
+                    Button(onClick = onReconnect) { Text("Connect") }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(onClick = onReconnect) { Text("Reconnect") }
+                        TextButton(
+                            onClick = onDisconnect,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) { Text("Disconnect") }
+                    }
+                }
+                // Business reason IMAP exists at all: this app hasn't been
+                // through Google's paid annual CASA verification, so it stays
+                // in "Testing" mode — see HelpScreen for the full explanation.
+                Text(
+                    "Google sign-in is limited to 100 test users and expires roughly every 7 " +
+                        "days while this app is in Google's \"Testing\" publishing mode. See " +
+                        "Help & FAQ for details, or switch to \"Email app password (IMAP)\" above " +
+                        "to avoid both limits.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             HorizontalDivider()
@@ -226,9 +374,9 @@ fun SettingsScreen(
                 onClick = {
                     onTestConnection { result -> testResult = result }
                 },
-                enabled = accessTokenAvailable,
+                enabled = backendUsable,
             ) {
-                Text("Test Gmail connection (labels.list)")
+                Text("Test connection (labels.list)")
             }
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
         }

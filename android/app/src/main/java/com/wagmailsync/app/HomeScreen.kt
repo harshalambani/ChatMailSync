@@ -58,7 +58,9 @@ private val CHUNK_LABELS = mapOf(
 
 @Composable
 fun HomeScreen(
-    connectedEmail: String?,
+    accountLabel: String?,
+    backendReady: Boolean,
+    connectActionLabel: String,
     connectError: String?,
     onConnect: () -> Unit,
     inboxFiles: List<Pair<String, Long>>,
@@ -95,7 +97,7 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (connectedEmail != null) {
+                        if (backendReady) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
@@ -103,7 +105,7 @@ fun HomeScreen(
                             )
                         }
                         Text(
-                            text = connectedEmail?.let { "Connected as $it" }
+                            text = accountLabel?.let { "Connected as $it" }
                                 ?: "Not connected",
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -113,7 +115,7 @@ fun HomeScreen(
                     }
                 }
                 TextButton(onClick = onConnect) {
-                    Text(if (connectedEmail == null) "Connect" else "Reconnect")
+                    Text(connectActionLabel)
                 }
             }
             HorizontalDivider()
@@ -192,7 +194,7 @@ fun HomeScreen(
                         onClick = onSyncNow,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !syncInProgress && inboxFiles.isNotEmpty() &&
-                            (dryRunDefault || connectedEmail != null),
+                            (dryRunDefault || backendReady),
                     ) {
                         Text(
                             if (syncInProgress) "Current sync is on"
