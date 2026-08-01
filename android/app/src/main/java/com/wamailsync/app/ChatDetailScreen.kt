@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.content.Intent
 import android.net.Uri
@@ -45,6 +45,9 @@ fun ChatDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var resetMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val isGmailBackend = remember {
+        AppPrefs.resolveMailBackend(context) == AppPrefs.MAIL_BACKEND_GMAIL_OAUTH
+    }
 
     LaunchedEffect(chatId) {
         chat = loadChatSummaries().find { it.chatId == chatId }
@@ -52,7 +55,7 @@ fun ChatDetailScreen(
 
     Scaffold(
         topBar = {
-            WagmailTopBar(
+            WaMailTopBar(
                 title = chat?.displayName ?: chatId,
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -73,21 +76,32 @@ fun ChatDetailScreen(
                 Text("Status: ${c.lastRunStatus ?: "pending"}", style = MaterialTheme.typography.bodyLarge)
                 Text("Messages synced: ${c.messagesSynced}")
                 Text("Last sync: ${formatSyncTime(c.lastRunAt)}")
-                Text("Gmail thread exists: ${if (c.hasThread) "Yes" else "No"}")
+                Text("Mail thread exists: ${if (c.hasThread) "Yes" else "No"}")
 
-                OutlinedButton(
-                    onClick = {
-                        // Same #all/{thread_id} deep link the Windows GUI uses
-                        // (gui.py) — direct thread-ID jump, which is reliable
-                        // where label/search URL fragments were not when tried
-                        // on mobile Gmail web.
-                        val uri = Uri.parse("https://mail.google.com/mail/u/0/#all/${c.gmailThreadId}")
-                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = c.hasThread,
-                ) {
-                    Text("Open in Gmail")
+                // Gated on the *backend*, not just on a thread existing: under
+                // IMAP the stored thread id is the RFC 822 Message-ID we
+                // generated (that's what IMAP threads on via References/
+                // In-Reply-To), so hasThread is always true there and this
+                // button used to always render — pointing at Gmail for someone
+                // who archives to Outlook or Fastmail, and at a thread id
+                // Gmail has never heard of. Hidden rather than disabled: there
+                // is no cross-provider equivalent of this deep link, so on IMAP
+                // there is nothing the user could do to enable it.
+                if (isGmailBackend) {
+                    OutlinedButton(
+                        onClick = {
+                            // Same #all/{thread_id} deep link the Windows GUI uses
+                            // (gui.py) — direct thread-ID jump, which is reliable
+                            // where label/search URL fragments were not when tried
+                            // on mobile Gmail web.
+                            val uri = Uri.parse("https://mail.google.com/mail/u/0/#all/${c.gmailThreadId}")
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = c.hasThread,
+                    ) {
+                        Text("Open in Gmail")
+                    }
                 }
 
                 // android_api.sync()'s chat_filter param already existed but
@@ -138,9 +152,9 @@ fun ChatDetailScreen(
                 // (see file_restored below), so the common case just needs
                 // "Sync now" with no re-import step at all.
                 Text(
-                    "Local sync state will be cleared, and a new Gmail thread will be " +
-                        "created the next time this chat is synced. Mail already in Gmail " +
-                        "is NOT deleted."
+                    "Local sync state will be cleared, and a new mail thread will be " +
+                        "created the next time this chat is synced. Mail already in your " +
+                        "mailbox is NOT deleted."
                 )
             },
             confirmButton = {
@@ -171,7 +185,8 @@ fun ChatDetailScreen(
             text = {
                 Text(
                     "This removes the chat from your list entirely — unlike Reset, it " +
-                        "won't be kept for re-syncing. Mail already in Gmail is NOT deleted."
+                        "won't be kept for re-syncing. Mail already in your mailbox is " +
+                        "NOT deleted."
                 )
             },
             confirmButton = {

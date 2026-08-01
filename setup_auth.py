@@ -16,11 +16,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.config import CREDENTIALS_FILE, GMAIL_SCOPES, TOKEN_FILE
-from src.gmail_client import get_credentials
+from src.mail_client import get_credentials
 
 
 def main() -> None:
-    print("WA Chat Sync — OAuth2 Setup")
+    print("WA Mail Sync — OAuth2 Setup")
     print("=" * 40)
 
     if not CREDENTIALS_FILE.exists():

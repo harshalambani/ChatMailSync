@@ -359,10 +359,10 @@ def test_connect_imap_failure_never_leaks_password_and_does_not_persist(worker_p
     imaplib.IMAP4_SSL is faked (to avoid a real network call); the
     scrubbing itself is exercised for real, proving _strip_secret actually
     runs on this path rather than trusting it does."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     password = "hunter2-app-pw"
-    monkeypatch.setattr(gmail_client_mod.imaplib, "IMAP4_SSL", _FakeLoginFailIMAP4SSL)
+    monkeypatch.setattr(mail_client_mod.imaplib, "IMAP4_SSL", _FakeLoginFailIMAP4SSL)
 
     q: queue.Queue = queue.Queue()
     gui_worker.connect_imap(q, "imap.gmail.com", 993, "me@example.com", password)
@@ -459,23 +459,23 @@ def test_connect_imap_surfaces_acl_failure_as_auth_error(worker_paths, monkeypat
 def test_current_username_falls_back_when_username_env_missing(monkeypatch):
     """%USERNAME% is absent in some service/scheduled-task contexts; that used
     to make ACL hardening a silent no-op."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     monkeypatch.delenv("USERNAME", raising=False)
-    monkeypatch.setattr(gmail_client_mod.getpass, "getuser", lambda: "fallback-user")
-    assert gmail_client_mod._current_username() == "fallback-user"
+    monkeypatch.setattr(mail_client_mod.getpass, "getuser", lambda: "fallback-user")
+    assert mail_client_mod._current_username() == "fallback-user"
 
 
 def test_restrict_acl_returns_false_when_username_unresolvable(tmp_path, monkeypatch):
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
-    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: None)
-    assert gmail_client_mod._restrict_acl(tmp_path, "F") is False
+    monkeypatch.setattr(mail_client_mod, "_current_username", lambda: None)
+    assert mail_client_mod._restrict_acl(tmp_path, "F") is False
 
 
 def test_restrict_file_acl_omits_directory_inheritance_flags(tmp_path, monkeypatch):
     """(OI)(CI) are directory-only flags; icacls rejects them on a file."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     captured = {}
 
@@ -486,10 +486,10 @@ def test_restrict_file_acl_omits_directory_inheritance_flags(tmp_path, monkeypat
             stdout = ""
         return _Done()
 
-    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: "someuser")
-    monkeypatch.setattr(gmail_client_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mail_client_mod, "_current_username", lambda: "someuser")
+    monkeypatch.setattr(mail_client_mod.subprocess, "run", fake_run)
 
-    assert gmail_client_mod._restrict_file_acl(tmp_path / "f.json") is True
+    assert mail_client_mod._restrict_file_acl(tmp_path / "f.json") is True
     assert "someuser:F" in captured["cmd"]
     assert not any("(OI)(CI)" in part for part in captured["cmd"])
 

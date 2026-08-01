@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -87,7 +87,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             if (host.isBlank() || email.isBlank() || password.isNullOrEmpty()) {
                 return Result.failure(
                     workDataOf(
-                        KEY_ERROR to "No saved IMAP app password — open Settings and save your email app password."
+                        KEY_ERROR to "No saved IMAP app password — open Settings > Mail account and save your email app password."
                     )
                 )
             }
@@ -180,11 +180,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 val port = AppPrefs.getImapPort(applicationContext)
                 val email = AppPrefs.getImapEmail(applicationContext)
                 val password = SecretStore.getSecret(applicationContext, AppPrefs.getImapPasswordSecretKey())
-                Python.getInstance().getModule("src.gmail_client")
+                Python.getInstance().getModule("src.mail_client")
                     .callAttr("build_imap_transport", host, port, email, password)
             }
             else -> token?.let {
-                Python.getInstance().getModule("src.gmail_client").callAttr("set_token", it)
+                Python.getInstance().getModule("src.mail_client").callAttr("set_token", it)
             }
         }
         try {
@@ -286,7 +286,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
     private fun buildNotification(text: String) =
         NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WhatsApp Chat Sync to Gmail")
+            .setContentTitle("WA Mail Sync")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)

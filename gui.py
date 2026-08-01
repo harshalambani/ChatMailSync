@@ -1,5 +1,5 @@
 """
-GUI entry point for WA Chat Sync to Gmail.
+GUI entry point for WA Mail Sync.
 
 Run with:
     python gui.py
@@ -44,7 +44,7 @@ from src.config import (
     TOKEN_FILE,
     resolve_mail_backend,
 )
-from src.gmail_client import DiscoveryTransport, build_imap_transport, build_service
+from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.state import delete_chat, get_sync_summary, init_db, reset_chat
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title("WA Chat Sync  →  Gmail")
+        self.title("WA Mail Sync")
         self.geometry("800x580")
         self.minsize(700, 500)
 
@@ -231,7 +231,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         ctk.CTkLabel(
             hdr,
-            text="WA Chat Sync  →  Gmail",
+            text="WA Mail Sync",
             font=ctk.CTkFont(size=16, weight="bold"),
         ).pack(side="left", padx=16)
 
@@ -449,7 +449,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self._dry_run_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            opts, text="Dry run (no Gmail writes)",
+            opts, text="Dry run (no mailbox writes)",
             variable=self._dry_run_var, height=28,
         ).pack(side="left", padx=14, pady=8)
 
@@ -587,9 +587,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             anchor="w",
         ).pack(side="left", fill="x", expand=True, padx=(4, 4))
 
-        # ↗ Open Gmail thread button (only when a thread exists).
+        # ↗ Open Gmail thread button. Gated on the *backend*, not just on a
+        # thread existing: under IMAP the stored gmail_thread_id column holds
+        # the RFC 822 Message-ID we generated (that's what IMAP threads on via
+        # References/In-Reply-To), so it is always populated and the mail.
+        # google.com/#all/<id> deep link would always render — pointing at
+        # Gmail for someone who archives to Outlook or Fastmail, and at a
+        # thread id Gmail has never heard of. Hidden rather than disabled:
+        # there is no cross-provider equivalent of this deep link, so on IMAP
+        # there is nothing the user could do to enable it.
         gmail_thread_id = row.get("gmail_thread_id")
-        if gmail_thread_id:
+        if gmail_thread_id and self._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
             url = f"https://mail.google.com/mail/u/0/#all/{gmail_thread_id}"
             ctk.CTkButton(
                 top, text="↗", width=22, height=20,
@@ -894,7 +902,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ok = messagebox.askyesno(
                 "Remove chat?",
                 f"Remove '{display_name}' from the list?\n\n"
-                "This only deletes the local record — emails already in Gmail are not affected.",
+                "This only deletes the local record — emails already in your mailbox are not affected.",
                 icon="warning",
             )
             if not ok:
@@ -912,7 +920,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "Reset and re-sync?",
             f"Reset sync history for '{display_name}'?\n\n"
             "All local sync records will be cleared.\n"
-            "Emails already in Gmail are not affected.",
+            "Emails already in your mailbox are not affected.",
             icon="warning",
         )
         if not ok:
@@ -1043,7 +1051,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "1. Click Connect (top-right) and sign in to Google.\n"
             "2. Drag a WhatsApp .txt or .zip export onto the window.\n"
             "3. Click Sync Now.\n\n"
-            "Your synced chats appear in Gmail under the WhatsApp label.\n\n"
+            "Your synced chats appear in your mailbox under the WhatsApp label.\n\n"
             "(The full help file, help.html, was not found next to the app.)"
         )
 

@@ -10,7 +10,7 @@ Events posted to SyncWorker.q (all plain dicts):
   {"type": "error",       "msg": str}
 
 Events posted to the queue passed into connect_gmail()/connect_imap():
-  {"type": "auth_ok",    "transport": GmailTransport}
+  {"type": "auth_ok",    "transport": MailTransport}
   {"type": "auth_error", "msg": str}
 
 This module has no tkinter/customtkinter import, so cli.py can import the
@@ -38,10 +38,10 @@ from src.config import (
     TOKEN_FILE,
     resolve_mail_backend,
 )
-from src.gmail_client import (
+from src.mail_client import (
     ChunkSize,
     DiscoveryTransport,
-    GmailTransport,
+    MailTransport,
     _restrict_auth_dir_acl,
     _restrict_file_acl,
     build_imap_transport,
@@ -167,7 +167,7 @@ def _load_mail_backend_settings() -> dict:
 def _save_imap_credentials(host: str, port: int, email: str, password: str) -> None:
     """Persist IMAP connection details to the ACL-hardened auth/ file.
 
-    Reuses gmail_client._restrict_auth_dir_acl -- the exact same hardening
+    Reuses mail_client._restrict_auth_dir_acl -- the exact same hardening
     OAuth's token.json already gets -- rather than inventing a second
     mechanism. The password lives ONLY here, never in .settings.json, never
     logged, never echoed back into the UI after saving.
@@ -296,7 +296,7 @@ def connect_imap(
     Mirrors connect_gmail()'s queue-event contract so gui.py's poll loop can
     treat both the same way. The password is never persisted unless the
     validation call succeeds, and it is never included in the posted event
-    or in the error message (gmail_client's ImapTransport already scrubs the
+    or in the error message (mail_client's ImapTransport already scrubs the
     password out of any login/connection error text before it gets here).
     """
     try:
@@ -308,7 +308,7 @@ def connect_imap(
         result_queue.put({"type": "auth_error", "msg": _scrub_paths(str(exc))})
 
 
-def build_transport_for_active_backend() -> Optional[GmailTransport]:
+def build_transport_for_active_backend() -> Optional[MailTransport]:
     """Build a transport for whichever backend .settings.json says is active.
 
     Used by cli.py (headless) and available to gui.py too. For Gmail OAuth

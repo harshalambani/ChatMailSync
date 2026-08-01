@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.Manifest
 import android.content.Intent
@@ -111,9 +111,9 @@ class MainActivity : ComponentActivity() {
                 "dark" -> true
                 else -> isSystemInDarkTheme()
             }
-            WagmailTheme(darkTheme = darkTheme) {
+            WaMailTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    WagmailApp(
+                    WaMailApp(
                         registerImportCallback = { onImported = it },
                         themeMode = themeMode,
                         onThemeModeChange = {
@@ -190,7 +190,7 @@ private fun SyncStatusBar(text: String, fraction: Float?, running: Boolean, onCl
 }
 
 @Composable
-fun WagmailApp(
+fun WaMailApp(
     registerImportCallback: ((Uri) -> Unit) -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
@@ -363,7 +363,7 @@ fun WagmailApp(
         Thread {
             var transport: com.chaquo.python.PyObject? = null
             val errorText = try {
-                transport = Python.getInstance().getModule("src.gmail_client")
+                transport = Python.getInstance().getModule("src.mail_client")
                     .callAttr("build_imap_transport", effectiveHost, port, email, effectivePassword)
                 // Forces a real login (mirrors gui_worker.connect_imap) so a
                 // wrong host/port/password/app-password is caught here, not
@@ -521,7 +521,7 @@ fun WagmailApp(
             // from AppPrefs and the password from SecretStore itself, same
             // as the watched-folder auto-sync path.
             if (!imapPasswordSaved) {
-                lastResult = "Save your IMAP app password in Settings first."
+                lastResult = "Save your IMAP app password in Settings > Mail account first."
                 return
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -554,7 +554,7 @@ fun WagmailApp(
             return
         }
         if (connectedEmail == null) {
-            lastResult = "Connect Gmail first."
+            lastResult = "Connect your mailbox first."
             return
         }
         // Re-authorize right before enqueuing, rather than trusting whatever
@@ -575,7 +575,7 @@ fun WagmailApp(
                 }
                 val token = result.accessToken
                 if (token == null) {
-                    lastResult = "Connect Gmail first."
+                    lastResult = "Connect your mailbox first."
                     return@addOnSuccessListener
                 }
                 accessToken = token
@@ -845,7 +845,7 @@ fun WagmailApp(
                     inboxFiles = inboxFiles,
                     onImportPick = { pickFile.launch(arrayOf("*/*")) },
                     onPreview = { name ->
-                        val path = WagmailApplication.inboxDir(context).resolve(name).absolutePath
+                        val path = WaMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
                             .callAttr("preview", path).toString()
                     },
@@ -875,10 +875,18 @@ fun WagmailApp(
                 )
             }
             composable("settings") {
+                // Backend-neutral one-line status for the "Mail account" nav
+                // row — SettingsScreen no longer receives the backend params
+                // it would need to compute this itself now that the account
+                // UI lives on its own screen.
+                val mailAccountSummary = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                    if (imapPasswordSaved) imapEmail else "Not connected"
+                } else {
+                    connectedEmail ?: "Not connected"
+                }
                 SettingsScreen(
-                    connectedEmail = connectedEmail,
-                    onDisconnect = ::disconnectGmail,
-                    onReconnect = { connectGmail(silent = false) },
+                    mailAccountSummary = mailAccountSummary,
+                    onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
                     onOpenSyncLog = { navController.navigate("syncLog") },
                     themeMode = themeMode,
@@ -894,6 +902,14 @@ fun WagmailApp(
                     syncInProgress = anySyncRunning,
                     syncedFilePolicy = syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
+                )
+            }
+            composable("mailAccount") {
+                MailAccountScreen(
+                    onBack = { navController.popBackStack() },
+                    connectedEmail = connectedEmail,
+                    onDisconnect = ::disconnectGmail,
+                    onReconnect = { connectGmail(silent = false) },
                     accessTokenAvailable = accessToken != null,
                     onTestConnection = { onResult ->
                         if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
@@ -904,7 +920,7 @@ fun WagmailApp(
                                     var transport: com.chaquo.python.PyObject? = null
                                     val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
                                     val text = try {
-                                        transport = Python.getInstance().getModule("src.gmail_client")
+                                        transport = Python.getInstance().getModule("src.mail_client")
                                             .callAttr(
                                                 "build_imap_transport",
                                                 AppPrefs.getImapHost(context),
@@ -928,11 +944,11 @@ fun WagmailApp(
                         } else {
                             val token = accessToken
                             if (token == null) {
-                                onResult("Connect Gmail first.")
+                                onResult("Connect your mailbox first.")
                             } else {
                                 Thread {
                                     fun labelsList(t: String) = Python.getInstance()
-                                        .getModule("src.gmail_client")
+                                        .getModule("src.mail_client")
                                         .callAttr("set_token", t)
                                         .callAttr("labels_list").toString()
                                     var refreshedToken: String? = null

@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.app.Application
 import android.content.Context
@@ -12,7 +12,7 @@ import java.io.File
  * anything else touches it — config.set_root() must run before any other
  * src.* module resolves a path-derived constant (see config.py's docstring).
  */
-class WagmailApplication : Application() {
+class WaMailApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 

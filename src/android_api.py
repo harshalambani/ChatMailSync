@@ -2,7 +2,7 @@
 Thin façade module for Kotlin/Chaquopy calls (Phase A1+).
 
 Deliberately minimal — see the Phase A0 plan for what's still intentionally
-deferred: a wrapper around config.set_root() or gmail_client.set_token()
+deferred: a wrapper around config.set_root() or mail_client.set_token()
 (Kotlin calls those directly, one line each), and any threads.get/
 messages.list wiring (no caller exists for those yet).
 
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from src import config
-from src.gmail_client import ChunkSize, GmailTransport
+from src.mail_client import ChunkSize, MailTransport
 from src.parser import extract_chat_info, parse_file
 from src.state import delete_chat as state_delete_chat
 from src.state import get_recent_runs, get_sync_summary, init_db, reset_chat, resolve_chat
@@ -124,7 +124,7 @@ def imap_providers() -> list[dict]:
 
 
 def preview(file_path: str) -> dict:
-    """Parse one export file without touching Gmail or the state DB — the
+    """Parse one export file without touching the mailbox or the state DB — the
     quick local preview for the Android "Import review" screen (§4 of the
     screen-guides doc): chat name, participant count, message count, date
     range, media count.
@@ -186,7 +186,7 @@ def request_stop() -> None:
 
 
 def sync(
-    transport: Optional[GmailTransport] = None,
+    transport: Optional[MailTransport] = None,
     chunk_size: Optional[ChunkSize] = None,
     dry_run: bool = False,
     chat_filter: Optional[str] = None,
@@ -195,8 +195,8 @@ def sync(
 ) -> dict:
     """Run one full sync pass over data/inbox/ (or the caller's configured root).
 
-    `transport` is an already-built GmailTransport (e.g. from
-    gmail_client.set_token() on Android), not a raw service or bearer token —
+    `transport` is an already-built MailTransport (e.g. from
+    mail_client.set_token() on Android), not a raw service or bearer token —
     this keeps the façade decoupled from how the transport was constructed.
 
     `trigger` is recorded on each sync_runs row for the Android Sync log

@@ -14,10 +14,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.gmail_client import (
+from src.mail_client import (
     DiscoveryTransport,
-    GmailTransport,
-    GmailTransportError,
+    MailTransport,
+    MailTransportError,
     ImapTransport,
     RestTransport,
     _build_html_mime_message,
@@ -112,9 +112,9 @@ def test_all_transports_satisfy_gmail_transport_protocol():
     discovery = DiscoveryTransport(MagicMock())
     rest = RestTransport("token")
     imap, _ = _make_transport()
-    assert isinstance(discovery, GmailTransport)
-    assert isinstance(rest, GmailTransport)
-    assert isinstance(imap, GmailTransport)
+    assert isinstance(discovery, MailTransport)
+    assert isinstance(rest, MailTransport)
+    assert isinstance(imap, MailTransport)
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def test_labels_create_real_no_error_is_permanent_not_retried():
     transport, conn = _make_transport()
     conn.create_response = ("NO", [b"[TRYCREATE] invalid mailbox"])
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.labels_create({"name": "Bad/Name"})
     assert exc_info.value.status not in (429, 500, 502, 503, 504)
 
@@ -394,7 +394,7 @@ def test_login_failure_maps_to_permanent_non_retryable_status():
     import imaplib
 
     def factory():
-        raise GmailTransportError(
+        raise MailTransportError(
             "IMAP login failed for me@example.com @ imap.example.com:993 — "
             "provider blocked app-password IMAP. Server said: boom",
             status=401,
@@ -405,7 +405,7 @@ def test_login_failure_maps_to_permanent_non_retryable_status():
         password="s3cret", connection_factory=factory,
     )
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.labels_list()
     assert exc_info.value.status not in (429, 500, 502, 503, 504)
     assert "s3cret" not in str(exc_info.value)
@@ -416,7 +416,7 @@ def test_transient_server_error_maps_to_503():
     conn.append_response = ("NO", [b"[UNAVAILABLE] Server temporarily unavailable"])
     body = _real_message_body()
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.messages_insert(body)
     assert exc_info.value.status == 503
 
@@ -428,7 +428,7 @@ def test_password_never_appears_in_any_exception_message():
     conn.raise_on["append"] = imaplib.IMAP4.error("auth failed with s3cret in it")
     body = _real_message_body()
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.messages_insert(body)
     assert "s3cret" not in str(exc_info.value)
 
@@ -440,7 +440,7 @@ def test_imap4_error_is_not_blanket_retried():
     conn.raise_on["append"] = imaplib.IMAP4.error("BAD command syntax")
     body = _real_message_body()
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.messages_insert(body)
     assert exc_info.value.status not in (429, 500, 502, 503, 504)
 
@@ -473,8 +473,8 @@ def test_abort_reconnects_once_transparently():
 # ---------------------------------------------------------------------------
 
 def test_insert_with_backoff_retries_transient_imap_error_then_succeeds(monkeypatch):
-    monkeypatch.setattr("src.gmail_client.time.sleep", lambda *_: None)
-    monkeypatch.setattr("src.gmail_client.API_CALL_DELAY_SECONDS", 0)
+    monkeypatch.setattr("src.mail_client.time.sleep", lambda *_: None)
+    monkeypatch.setattr("src.mail_client.API_CALL_DELAY_SECONDS", 0)
 
     transport, conn = _make_transport()
     body = _real_message_body()

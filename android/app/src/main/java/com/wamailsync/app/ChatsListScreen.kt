@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.content.Intent
 import androidx.compose.material.icons.Icons
@@ -141,7 +141,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
                 )
             }
         })
-        val uri = FileProvider.getUriForFile(context, "com.wagmailsync.app.fileprovider", file)
+        val uri = FileProvider.getUriForFile(context, "com.wamailsync.app.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
@@ -152,7 +152,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
 
     Scaffold(
         topBar = {
-            WagmailTopBar(
+            WaMailTopBar(
                 title = "Chats",
                 actions = {
                     IconButton(onClick = { refresh() }) {
