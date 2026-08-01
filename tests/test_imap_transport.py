@@ -174,9 +174,13 @@ def test_labels_create_success_returns_id_equal_to_name():
 
     result = transport.labels_create({"name": "WhatsApp/Alice"})
 
+    # The label id/name contract stays on the canonical, unquoted string --
+    # quoting/mUTF-7 is purely a wire-argument concern (see
+    # test_labels_create_quotes_name_with_space_on_the_wire below for what
+    # actually goes out over the wire).
     assert result == {"id": "WhatsApp/Alice"}
-    assert ("create", "WhatsApp/Alice") in conn.calls
-    assert ("subscribe", "WhatsApp/Alice") in conn.calls
+    assert ("create", '"WhatsApp/Alice"') in conn.calls
+    assert ("subscribe", '"WhatsApp/Alice"') in conn.calls
 
 
 def test_labels_create_already_exists_is_success_not_error():
@@ -195,7 +199,7 @@ def test_labels_create_translates_name_to_wire_delimiter():
 
     transport.labels_create({"name": "WhatsApp/Alice"})
 
-    assert ("create", "WhatsApp.Alice") in conn.calls
+    assert ("create", '"WhatsApp.Alice"') in conn.calls
 
 
 def test_labels_create_real_no_error_is_permanent_not_retried():
@@ -205,6 +209,86 @@ def test_labels_create_real_no_error_is_permanent_not_retried():
     with pytest.raises(GmailTransportError) as exc_info:
         transport.labels_create({"name": "Bad/Name"})
     assert exc_info.value.status not in (429, 500, 502, 503, 504)
+
+
+# ---------------------------------------------------------------------------
+# Wire syntax: quoting + modified UTF-7 (RFC 3501 SS4.3 / SS5.1.3)
+#
+# The tests above only ever exercised names with no spaces or special
+# characters, so they never would have caught the real production bug: a
+# mailbox name containing a space (e.g. a WhatsApp contact called "Parity
+# Test") produces the wire command "CREATE WhatsApp/Parity Test", which the
+# server parses as two arguments and rejects with BAD. These tests assert on
+# the *exact string* handed to the fake imaplib methods, so they fail loudly
+# if quoting/encoding is ever lost again.
+# ---------------------------------------------------------------------------
+
+def test_labels_create_quotes_name_with_space_on_the_wire():
+    transport, conn = _make_transport()
+
+    transport.labels_create({"name": "WhatsApp/Parity Test"})
+
+    assert ("create", '"WhatsApp/Parity Test"') in conn.calls
+    assert ("subscribe", '"WhatsApp/Parity Test"') in conn.calls
+
+
+def test_labels_create_escapes_backslash_and_quote_on_the_wire():
+    transport, conn = _make_transport()
+
+    transport.labels_create({"name": 'WhatsApp/Weird\\"Name'})
+
+    assert ("create", '"WhatsApp/Weird\\\\\\"Name"') in conn.calls
+
+
+def test_labels_create_encodes_non_ascii_name_as_modified_utf7():
+    transport, conn = _make_transport()
+
+    # An emoji chat name -- routine for real WhatsApp contacts. Expected
+    # value computed independently via the RFC 3501 SS5.1.3 algorithm:
+    # U+1F600 ("\U0001F600") is a surrogate pair in UTF-16BE
+    # (0xD83D 0xDE00) -> base64 "2D3eAA==" -> "/" swapped for "," and "="
+    # padding stripped -> "2D3eAA".
+    transport.labels_create({"name": "WhatsApp/\U0001F600"})
+
+    assert ("create", '"WhatsApp/&2D3eAA-"') in conn.calls
+
+
+def test_labels_create_plain_ascii_name_still_works_unquoted_content():
+    transport, conn = _make_transport()
+
+    result = transport.labels_create({"name": "WhatsApp/Alice"})
+
+    assert result == {"id": "WhatsApp/Alice"}
+    assert ("create", '"WhatsApp/Alice"') in conn.calls
+
+
+def test_labels_list_round_trips_encoded_non_ascii_name_back_to_canonical():
+    transport, conn = _make_transport()
+    conn.list_response = (
+        "OK",
+        [b'(\\HasNoChildren) "/" "WhatsApp/&2D3eAA-"'],
+    )
+
+    result = transport.labels_list()
+
+    names = {lbl["name"] for lbl in result["labels"]}
+    assert "WhatsApp/\U0001F600" in names
+    for lbl in result["labels"]:
+        assert lbl["id"] == lbl["name"]
+
+
+def test_non_slash_delimiter_combines_correctly_with_utf7_encoding():
+    transport, conn = _make_transport()
+    conn.list_response = ("OK", [b'(\\HasNoChildren) "." "INBOX"'])
+    transport.labels_list()  # learns "." delimiter
+
+    transport.labels_create({"name": "WhatsApp/\U0001F600 Alice"})
+
+    # Delimiter substitution ("/" -> ".") happens before mUTF-7 encoding, so
+    # the literal "." from the hierarchy separator passes through the
+    # printable-ASCII path untouched while the emoji is encoded, and the
+    # plain-ASCII " Alice" suffix stays outside the &...- block.
+    assert ("create", '"WhatsApp.&2D3eAA- Alice"') in conn.calls
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +512,7 @@ def test_get_or_create_label_end_to_end_with_imap_transport():
 
     assert label_id == "WhatsApp/Alice Smith"
     created = [c for c in conn.calls if c[0] == "create"]
-    assert ("create", "WhatsApp") in created or ("create", "WhatsApp/Alice Smith") in created
+    assert ("create", '"WhatsApp"') in created or ("create", '"WhatsApp/Alice Smith"') in created
 
 
 def test_get_or_create_label_returns_existing_without_recreating():

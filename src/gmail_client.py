@@ -446,6 +446,101 @@ def _status_for_imap_text(text: str) -> int:
     return 400
 
 
+def _quote_imap_mailbox(wire_name: str) -> str:
+    """Wrap a mailbox-name wire argument in an RFC 3501 quoted-string.
+
+    imaplib's create()/subscribe()/append() (Lib/imaplib.py) do zero quoting
+    or escaping of the mailbox argument — they hand it to _simple_command()
+    verbatim, which just joins it into the command line with a space. So
+    a name containing a literal space (e.g. "WhatsApp/Parity Test", the
+    overwhelming common case for real contact names) becomes the wire
+    command "CREATE WhatsApp/Parity Test", which the server parses as two
+    arguments and rejects with BAD. RFC 3501 section 4.3 requires such
+    strings to be sent as a quoted-string: wrapped in double quotes, with
+    any '\\' or '"' inside backslash-escaped (section 9, quoted-specials).
+    Must be applied to every CREATE/SUBSCRIBE/APPEND mailbox argument, and
+    NOT to already-well-formed atoms/quoted-strings like the '""'/'*'
+    arguments labels_list() passes to LIST.
+    """
+    escaped = wire_name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _encode_imap_utf7(text: str) -> str:
+    """Encode a unicode string as IMAP "modified UTF-7" (RFC 3501 section
+    5.1.3, "Mailbox International Naming Convention").
+
+    Mailbox names must travel as 7-bit-safe wire text, but WhatsApp chat
+    names routinely contain emoji or non-Latin scripts ("Mom <3 emoji"),
+    so fixing only the quoting bug above would leave an identical BAD
+    response for any such name. Modified UTF-7 differs from standard UTF-7
+    (RFC 2152) in two ways that make hand-rolling this unavoidable — Python
+    ships no imap4-utf-7 codec: '&' (not '+') is the shift character, and
+    the modified BASE64 alphabet used inside a shift sequence replaces '/'
+    with ',' and omits '=' padding.
+
+    Printable ASCII 0x20-0x7e passes through unchanged (with '&' itself
+    escaped as "&-"); any other character starts a run that is UTF-16BE
+    encoded, base64'd, and wrapped as "&<base64>-".
+    """
+    result = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "&":
+            result.append("&-")
+            i += 1
+            continue
+        if 0x20 <= ord(ch) <= 0x7E:
+            result.append(ch)
+            i += 1
+            continue
+        # Collect the whole run of consecutive non-ASCII-printable chars
+        # into a single &...- block rather than one block per char.
+        j = i
+        while j < n and not (text[j] == "&" or 0x20 <= ord(text[j]) <= 0x7E):
+            j += 1
+        utf16 = text[i:j].encode("utf-16-be")
+        b64 = base64.b64encode(utf16).decode("ascii").replace("/", ",").rstrip("=")
+        result.append("&" + b64 + "-")
+        i = j
+    return "".join(result)
+
+
+def _decode_imap_utf7(text: str) -> str:
+    """Inverse of _encode_imap_utf7() — see that function for the RFC 3501
+    section 5.1.3 modified-UTF-7 rules being reversed here."""
+    result = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch != "&":
+            result.append(ch)
+            i += 1
+            continue
+        if i + 1 < n and text[i + 1] == "-":
+            result.append("&")
+            i += 2
+            continue
+        j = i + 1
+        while j < n and text[j] != "-":
+            j += 1
+        b64_chunk = text[i + 1 : j].replace(",", "/")
+        b64_chunk += "=" * ((-len(b64_chunk)) % 4)
+        try:
+            raw = base64.b64decode(b64_chunk)
+            result.append(raw.decode("utf-16-be"))
+        except (ValueError, UnicodeDecodeError):
+            # Malformed shift sequence from an unusual server — keep the
+            # original text verbatim rather than raising and losing the
+            # whole LIST response for one bad folder name.
+            result.append(text[i : j + 1])
+        i = j + 1 if j < n else j
+    return "".join(result)
+
+
 _LIST_RESPONSE_RE = re.compile(
     rb'^\((?P<flags>[^)]*)\)\s+(?P<delim>NIL|"(?:[^"\\]|\\.)*")\s+(?P<name>.+?)\s*$'
 )
@@ -710,6 +805,43 @@ class ImapTransport:
             return name
         return name.replace(delim, "/")
 
+    # -- wire encoding (RFC 3501 quoting + modified UTF-7) -----------------
+    #
+    # mUTF-7 encode/decode is deliberately kept OUTSIDE _to_wire()/_from_wire()
+    # above, which the class docstring documents as handling the hierarchy
+    # delimiter only. Reasons:
+    #   - _to_wire()/_from_wire() are pure str->str delimiter substitution and
+    #     several existing tests assert on their behaviour directly; folding
+    #     mUTF-7 in would change their contract.
+    #   - Quoting is a *transport-argument* concern (only CREATE/SUBSCRIBE/
+    #     APPEND's mailbox argument needs it — labels_list()'s '""'/'*' LIST
+    #     arguments must NOT be touched), so it belongs next to the call
+    #     sites, not inside a name-translation helper reused by parsing.
+    #   - The two translations must compose in opposite orders on encode vs.
+    #     decode: encode does delimiter-substitution first (while the name is
+    #     still plain text, so "/" reliably maps to the server's delimiter),
+    #     then mUTF-7-encodes the result; decode reverses that — mUTF-7-decode
+    #     first, then delimiter-substitution back to "/". This is safe because
+    #     delimiter characters are always printable ASCII, so mUTF-7 always
+    #     passes them through literally in both directions.
+    # Quoting is layered on top only for the outbound (to-wire) direction:
+    # _unquote_imap_token() (used by _parse_list_response()) already strips
+    # the RFC 3501 quoted-string wrapper on the way in, so the inbound side
+    # only ever needs the mUTF-7 decode here.
+    def _mailbox_to_wire(self, name: str) -> str:
+        """Canonical '/'-delimited label name -> a fully wire-ready mailbox
+        argument for CREATE/SUBSCRIBE/APPEND: delimiter substitution, then
+        RFC 3501 SS5.1.3 modified UTF-7 encoding, then RFC 3501 SS4.3
+        quoted-string quoting."""
+        wire_name = self._to_wire(name)
+        return _quote_imap_mailbox(_encode_imap_utf7(wire_name))
+
+    def _mailbox_from_wire(self, wire_name: str) -> str:
+        """Inverse of _mailbox_to_wire() for a name already unquoted by
+        _unquote_imap_token(): mUTF-7 decode, then delimiter substitution
+        back to the canonical '/' form."""
+        return self._from_wire(_decode_imap_utf7(wire_name))
+
     # -- error mapping -----------------------------------------------------
 
     def _map_exception(self, exc: Exception, context: str) -> GmailTransportError:
@@ -751,15 +883,15 @@ class ImapTransport:
             delim, wire_name = parsed
             if delim is not None:
                 self._delimiter = delim
-            canonical_name = self._from_wire(wire_name)
+            canonical_name = self._mailbox_from_wire(wire_name)
             labels.append({"name": canonical_name, "id": canonical_name})
         return {"labels": labels}
 
     def labels_create(self, body: dict) -> dict:
         name = body["name"]
-        wire_name = self._to_wire(name)
+        wire_arg = self._mailbox_to_wire(name)
         try:
-            typ, data = self._call("create", wire_name)
+            typ, data = self._call("create", wire_arg)
         except Exception as exc:
             raise self._map_exception(exc, "CREATE") from exc
         # "Already exists" is success, not an error (get_or_create_label may
@@ -769,13 +901,13 @@ class ImapTransport:
             raise self._map_response(typ, data, "CREATE")
 
         try:
-            self._call("subscribe", wire_name)
+            self._call("subscribe", wire_arg)
         except Exception as exc:
             # Subscription only affects whether other IMAP clients show the
             # folder by default; the folder itself exists and APPEND/
             # labels_list both work without it, so this is best-effort.
             log.warning(
-                "Could not SUBSCRIBE to %r: %s", wire_name,
+                "Could not SUBSCRIBE to %r: %s", wire_arg,
                 _strip_secret(str(exc), self._password),
             )
         return {"id": name}
@@ -791,7 +923,7 @@ class ImapTransport:
         raw_bytes = re.sub(rb"\r?\n", b"\r\n", raw_bytes)
 
         folder = body["labelIds"][0]
-        wire_folder = self._to_wire(folder)
+        wire_folder = self._mailbox_to_wire(folder)
 
         msg = _email.message_from_bytes(raw_bytes)
         internaldate = _internaldate_from_message(msg)
