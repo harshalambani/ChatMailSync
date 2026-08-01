@@ -31,6 +31,12 @@ For the full design — date-parsing engine, state schema, dedup logic, HTML/med
 email format, and packaging — see
 [Completed/2026-05-27-architecture.md](Completed/2026-05-27-architecture.md).
 
+There are two clients — Windows and Android — over this one shared core, and
+they are kept **head to head in features**. Before adding anything user-visible,
+read [PLATFORM-PARITY.md](PLATFORM-PARITY.md): it lists what is genuinely shared
+(`src/`) and what has to be written twice (UI, settings storage, secret storage,
+help text), which is most of a typical feature.
+
 ---
 
 ## Project structure
