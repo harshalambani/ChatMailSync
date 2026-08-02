@@ -181,6 +181,11 @@ fun MailAccountScreen(
     // toast/confirmation on clipboard writes, so this just needs to say what
     // to do next (paste into an AI assistant), not duplicate "copied".
     var promptCopied by remember { mutableStateOf(false) }
+    // Collapsed by default. Expanded inline this runs to roughly a screen and a
+    // half of text, and it used to sit between the password field and "Save &
+    // connect" — so the one control every user needs was pushed off-screen by
+    // help that most users need once, if ever.
+    var helpExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -262,121 +267,6 @@ fun MailAccountScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // Contextual app-password help, keyed off the selected provider.
-                // Every static URL here was fetched and eyeballed as the
-                // provider's own current "create an app password" page before
-                // being hardcoded (see task report) — this is the one place in
-                // this screen that sends the user off-app, so it's worth the
-                // extra care. Provider console menus drift over time though,
-                // which is why this also offers a live "ask an AI / search"
-                // path below rather than relying solely on a static link.
-                val helpUrl = APP_PASSWORD_HELP_URLS[imapProvider]
-                val helpText = APP_PASSWORD_HELP_TEXT[imapProvider]
-                val providerLabel = imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider
-
-                if (imapProvider == "custom") {
-                    Text(
-                        "Turn on two-factor authentication in your email account first, then look " +
-                            "for \"App passwords\" or \"App-specific passwords\" in its security settings.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                } else if (helpText != null) {
-                    Text(helpText, style = MaterialTheme.typography.bodySmall)
-                }
-
-                // Inline numbered steps — only for the two providers whose
-                // official pages were actually read and translated into
-                // steps here (Gmail, Outlook). Every other provider relies on
-                // the help-page link and the prompt buttons below instead of
-                // guessed steps.
-                val inlineSteps = when (imapProvider) {
-                    "gmail" -> APP_PASSWORD_STEPS_GMAIL
-                    "outlook" -> APP_PASSWORD_STEPS_OUTLOOK
-                    else -> null
-                }
-                if (inlineSteps != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        inlineSteps.forEachIndexed { index, step ->
-                            Text("${index + 1}. $step", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text(
-                            "Steps checked $APP_PASSWORD_STEPS_REVIEWED. If they don't match what you " +
-                                "see, use the buttons below to get the current version.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                // Provider-specific gotchas that aren't obvious from the generic
-                // help text above, surfaced only when they're relevant.
-                if (imapProvider == "outlook") {
-                    Text(
-                        "Work or school Microsoft 365 accounts often have IMAP access disabled by " +
-                            "the organisation's administrator — if so, even a correct app password " +
-                            "will be rejected.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (imapProvider == "icloud") {
-                    Text(
-                        "This must be an app-specific password generated at appleid.apple.com, not " +
-                            "your main Apple ID password.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-
-                // "Not sure how to get an app password?" — a live-current
-                // fallback (and primary path for providers with no inline
-                // steps) that doesn't depend on any URL staying valid. The
-                // prompt text itself never contains imapEmail/the password —
-                // see buildAppPasswordPrompt's own doc comment for why that
-                // boundary matters here specifically.
-                Text(
-                    "Not sure how to get an app password?",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = {
-                            val prompt = buildAppPasswordPrompt(imapProvider, providerLabel, imapHost)
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("App password question", prompt))
-                            promptCopied = true
-                        },
-                    ) { Text("Copy question") }
-                    TextButton(
-                        onClick = {
-                            val prompt = buildAppPasswordPrompt(imapProvider, providerLabel, imapHost)
-                            val encoded = URLEncoder.encode(prompt, "UTF-8")
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$encoded")),
-                            )
-                        },
-                    ) { Text("Search for steps") }
-                }
-                if (promptCopied) {
-                    Text(
-                        "Copied — paste it into Gemini, ChatGPT, or any AI assistant.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                // Lower-emphasis third option: the static, pre-verified link.
-                // Precise when current, but only as fresh as the last time
-                // someone re-verified it — the two buttons above don't have
-                // that expiry problem.
-                if (helpUrl != null) {
-                    TextButton(
-                        onClick = {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(helpUrl)))
-                        },
-                    ) { Text("Open $providerLabel's help page") }
-                }
-
                 Text(
                     if (imapPasswordSaved) "An app password is saved for $imapEmail."
                     else "No app password saved yet.",
@@ -413,6 +303,130 @@ fun MailAccountScreen(
                     }
                 }
                 imapSaveStatus?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+
+                // Contextual app-password help, keyed off the selected provider.
+                // Deliberately placed *after* "Save & connect" and collapsed:
+                // it is reference material for a once-per-account task, and
+                // sitting above the button it pushed the only control that
+                // matters off the bottom of the screen.
+                //
+                // Every static URL here was fetched and eyeballed as the
+                // provider's own current "create an app password" page before
+                // being hardcoded — this is the one place in this screen that
+                // sends the user off-app, so it's worth the extra care.
+                // Provider console menus drift over time though, which is why
+                // this also offers a live "ask an AI / search" path rather than
+                // relying solely on a static link.
+                HorizontalDivider()
+                val helpUrl = APP_PASSWORD_HELP_URLS[imapProvider]
+                val helpText = APP_PASSWORD_HELP_TEXT[imapProvider]
+                val providerLabel = imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider
+
+                TextButton(onClick = { helpExpanded = !helpExpanded }) {
+                    Text(
+                        if (helpExpanded) "Hide app password help"
+                        else "Not sure how to get an app password?",
+                    )
+                }
+
+                if (helpExpanded) {
+                    if (imapProvider == "custom") {
+                        Text(
+                            "Turn on two-factor authentication in your email account first, then look " +
+                                "for \"App passwords\" or \"App-specific passwords\" in its security settings.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else if (helpText != null) {
+                        Text(helpText, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    // Inline numbered steps — only for the two providers whose
+                    // official pages were actually read and translated into
+                    // steps here (Gmail, Outlook). Every other provider relies on
+                    // the help-page link and the prompt buttons below instead of
+                    // guessed steps.
+                    val inlineSteps = when (imapProvider) {
+                        "gmail" -> APP_PASSWORD_STEPS_GMAIL
+                        "outlook" -> APP_PASSWORD_STEPS_OUTLOOK
+                        else -> null
+                    }
+                    if (inlineSteps != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            inlineSteps.forEachIndexed { index, step ->
+                                Text("${index + 1}. $step", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(
+                                "Steps checked $APP_PASSWORD_STEPS_REVIEWED. If they don't match what you " +
+                                    "see, use the buttons below to get the current version.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    // Provider-specific gotchas that aren't obvious from the generic
+                    // help text above, surfaced only when they're relevant.
+                    if (imapProvider == "outlook") {
+                        Text(
+                            "Work or school Microsoft 365 accounts often have IMAP access disabled by " +
+                                "the organisation's administrator — if so, even a correct app password " +
+                                "will be rejected.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (imapProvider == "icloud") {
+                        Text(
+                            "This must be an app-specific password generated at appleid.apple.com, not " +
+                                "your main Apple ID password.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    // A live-current fallback (and the primary path for providers
+                    // with no inline steps) that doesn't depend on any URL staying
+                    // valid. The prompt text itself never contains imapEmail/the
+                    // password — see buildAppPasswordPrompt's own doc comment for
+                    // why that boundary matters here specifically.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val prompt = buildAppPasswordPrompt(imapProvider, providerLabel, imapHost)
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("App password question", prompt))
+                                promptCopied = true
+                            },
+                        ) { Text("Copy question") }
+                        TextButton(
+                            onClick = {
+                                val prompt = buildAppPasswordPrompt(imapProvider, providerLabel, imapHost)
+                                val encoded = URLEncoder.encode(prompt, "UTF-8")
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$encoded")),
+                                )
+                            },
+                        ) { Text("Search for steps") }
+                    }
+                    if (promptCopied) {
+                        Text(
+                            "Copied — paste it into Gemini, ChatGPT, or any AI assistant.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    // Lower-emphasis third option: the static, pre-verified link.
+                    // Precise when current, but only as fresh as the last time
+                    // someone re-verified it — the two buttons above don't have
+                    // that expiry problem.
+                    if (helpUrl != null) {
+                        TextButton(
+                            onClick = {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(helpUrl)))
+                            },
+                        ) { Text("Open $providerLabel's help page") }
+                    }
+                }
             } else {
                 Text("Account", style = MaterialTheme.typography.titleMedium)
                 Text(connectedEmail ?: "Not connected", style = MaterialTheme.typography.bodyLarge)
