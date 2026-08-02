@@ -8,19 +8,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
-        android:name=".WagmailApplication"
+        android:name=".WaMailApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="WhatsApp Chat Sync to Gmail"
-        android:theme="@style/Theme.WagmailSync"
+        android:label="WA Mail Sync"
+        android:theme="@style/Theme.WaMailSync"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.WagmailSync">
+            android:theme="@style/Theme.WaMailSync">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -44,7 +44,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.wagmailsync.app.fileprovider"
+            android:authorities="com.wamailsync.app.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

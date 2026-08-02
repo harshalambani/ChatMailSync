@@ -1,7 +1,7 @@
-# WA Chat Sync to Gmail — User Guide
+# WA Mail Sync — User Guide
 
-A friendly, step-by-step guide to backing up your WhatsApp chats into Gmail.
-No technical knowledge needed.
+A friendly, step-by-step guide to backing up your WhatsApp chats into your
+mailbox. No technical knowledge needed.
 
 ---
 
@@ -10,11 +10,11 @@ No technical knowledge needed.
 WhatsApp lets you **export** a chat to a file. On its own, that file is hard to
 read and easy to lose.
 
-This app takes those exported chat files and copies the conversations into your
-**Gmail**, where they're:
+This app takes those exported chat files and copies the conversations into
+**your mailbox**, where they're:
 
 - Searchable, like any other email.
-- Organised under labels — one label per chat, all grouped under **WhatsApp**.
+- Organised under labels/folders — one per chat, all grouped under **WhatsApp**.
 - Shown as a tidy, WhatsApp-style conversation, with photos and files included
   (if you exported them).
 
@@ -122,7 +122,7 @@ Added files appear in the **Files in inbox** list, with a count like
 1. Make sure the indicator at the top says **Connected** (green).
 2. Check the options at the bottom-right:
    - **Dry run** — tick this to do a practice run that reports what *would* happen
-     without changing your Gmail. Great for a first try.
+     without changing your mailbox. Great for a first try.
    - **Chunk size** — how much of the conversation goes into each email:
      **day** (default), **hour**, or **week**. "Day" means one email per day of chat.
 3. Click **▶ Sync Now**.
@@ -134,27 +134,35 @@ message count. Synced files move out of the inbox automatically.
 
 ---
 
-## 6. Where your messages appear in Gmail
+## 6. Where your messages appear
 
-Open Gmail and look in the labels list (left side). You'll find:
+**If you connected with Gmail**, open Gmail and look in the labels list (left
+side). You'll find:
 
 - A **WhatsApp** label.
 - Under it, one label per chat, e.g. **WhatsApp/John Doe**, **WhatsApp/Family Group**.
 
-Each chat is a single **conversation thread**. Opening it shows the messages laid
-out like WhatsApp, with photos shown inline and other files attached for download.
+**If you connected with IMAP**, open your mail app and look for a **WhatsApp**
+folder, with one subfolder per chat, in the same structure.
 
-> **Shortcut:** In the app's chat list, click the **↗** icon next to a chat to jump
-> straight to its Gmail thread in your browser.
+Either way, each chat is a single **conversation thread**. Opening it shows the
+messages laid out like WhatsApp, with photos shown inline and other files
+attached for download.
+
+> **Shortcut (Gmail only):** In the app's chat list, click the **↗** icon next to
+> a chat to jump straight to its Gmail thread in your browser.
 
 ---
 
 ## 7. Troubleshooting & FAQ
 
 **The app says "Not connected" or authorising fails.**
-Click **Connect** and complete the Google sign-in in your browser. Make sure you
-pick the right Google account and approve the permission request. If it still
-fails, click **Sign Out**, then **Connect** again to start fresh.
+If you're using **Email app password (IMAP)**, double-check the email address
+and app password in Settings, and that the app password hasn't been revoked by
+your provider. If you're using **Google sign-in**, click **Connect** and
+complete the sign-in in your browser, making sure you pick the right Google
+account and approve the permission request. If it still fails, click **Sign
+Out**, then **Connect** again to start fresh.
 
 **My file doesn't show up in the inbox.**
 Only `.txt` and `.zip` files are accepted. Make sure you exported the chat (not a
@@ -169,13 +177,13 @@ automatically.
 **I want to re-do a chat from scratch.**
 Click the **↺** (re-sync) icon next to the chat in the list. This clears the app's
 record of that chat and moves its file back to the inbox so you can sync it again.
-Emails already in Gmail are not removed — you may end up with two threads, so
-delete the old one in Gmail if you want a clean result.
+Emails already in your mailbox are not removed — you may end up with two threads,
+so delete the old one yourself if you want a clean result.
 
 **I removed a chat from the list by mistake.**
 The **✕** button only removes the chat from the app's list — it does **not** delete
-anything from Gmail. Your emails are safe. Just add the export file again to bring
-it back.
+anything from your mailbox. Your emails are safe. Just add the export file again
+to bring it back.
 
 **The times on some messages look off.**
 WhatsApp exports don't include a timezone. If your phone's timezone changed between

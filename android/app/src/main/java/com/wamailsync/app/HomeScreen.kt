@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -79,7 +79,7 @@ fun HomeScreen(
     var chunkMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { WagmailTopBar(title = "WhatsApp Chat Sync to Gmail", subtitle = "Private Gmail archive") },
+        topBar = { WaMailTopBar(title = "WA Mail Sync", subtitle = "Private mail archive") },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -183,7 +183,7 @@ fun HomeScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Test run", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "Shows what would happen — writes nothing to Gmail",
+                                "Shows what would happen — writes nothing to your mailbox",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }

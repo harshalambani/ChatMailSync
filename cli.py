@@ -81,7 +81,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     _timezone_notice()
 
     if args.dry_run:
-        print("DRY RUN — no Gmail API calls will be made, no state will be written.\n")
+        print("DRY RUN — no mail API calls will be made, no state will be written.\n")
 
     # Authenticate (skipped in dry-run only if no credentials exist yet, to
     # allow offline testing; the push path would fail anyway). Backend
@@ -217,7 +217,7 @@ def cmd_reset(args: argparse.Namespace) -> int:
     reset_chat(chat_id, STATE_DB_PATH)
     print(
         f"Reset complete for '{display_name}'. "
-        "The next sync will start from scratch and create a new Gmail thread."
+        "The next sync will start from scratch and create a new mail thread."
     )
     source_file = PROCESSED_DIR / chat["source_filename"]
     if source_file.exists():
@@ -237,7 +237,7 @@ def cmd_reset(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python cli.py",
-        description="Sync WhatsApp chat exports to Gmail.",
+        description="Sync WhatsApp chat exports to your mailbox.",
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -253,7 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument(
         "--dry-run",
         action="store_true",
-        help="Parse and report without touching Gmail or writing state.",
+        help="Parse and report without touching your mailbox or writing state.",
     )
     p_sync.add_argument(
         "--chunk-size",
@@ -317,7 +317,7 @@ def _timezone_notice() -> None:
     print(
         "NOTE: WhatsApp exports carry no timezone information. All timestamps\n"
         "      are stored as naive local times. If your phone's timezone changed\n"
-        "      between exports, some timestamps may appear shifted in Gmail.\n"
+        "      between exports, some timestamps may appear shifted in your mailbox.\n"
         "      See the README for details.\n"
     )
     try:

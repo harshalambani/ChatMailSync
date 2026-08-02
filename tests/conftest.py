@@ -14,7 +14,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 def tmp_root(tmp_path):
     """Point src.config at a throwaway root, proving set_root() rebinds
     every derived path constant (this is the exact call an Android/Chaquopy
-    entry point makes before importing sync_manager/gmail_client/parser)."""
+    entry point makes before importing sync_manager/mail_client/parser)."""
     config.set_root(tmp_path)
     yield tmp_path
     # Restore the real project root so later tests / a real run aren't left

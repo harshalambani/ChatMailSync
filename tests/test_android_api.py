@@ -2,14 +2,14 @@ import shutil
 from pathlib import Path
 
 from src import android_api, config
-from src.gmail_client import GmailTransport
+from src.mail_client import MailTransport
 from src.state import get_chat, upsert_chat
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 class _FakeTransport:
-    """Minimal hand-written GmailTransport fake — no real network, no
+    """Minimal hand-written MailTransport fake — no real network, no
     googleapiclient/requests involvement at all."""
 
     def __init__(self):
@@ -109,7 +109,7 @@ def test_sync_with_fake_transport_creates_label_and_inserts(tmp_root):
     shutil.copy(fixture, config.INBOX_DIR / "WhatsApp Chat with Test Chat.txt")
 
     transport = _FakeTransport()
-    assert isinstance(transport, GmailTransport)  # structural check via duck typing
+    assert isinstance(transport, MailTransport)  # structural check via duck typing
     result = android_api.sync(transport=transport, dry_run=False)
 
     assert result["files_synced"] == 1

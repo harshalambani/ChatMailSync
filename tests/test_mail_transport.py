@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
-from src.gmail_client import (
+from src.mail_client import (
     DiscoveryTransport,
-    GmailTransportError,
+    MailTransportError,
     RestTransport,
     set_token,
 )
@@ -65,7 +65,7 @@ def test_discovery_transport_wraps_http_error():
     service.users().labels().list().execute.side_effect = _http_error(429)
 
     transport = DiscoveryTransport(service)
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.labels_list()
     assert exc_info.value.status == 429
 
@@ -123,6 +123,6 @@ def test_rest_transport_raises_gmail_transport_error_on_http_error(requests_mock
     )
     transport = RestTransport("fake-token")
 
-    with pytest.raises(GmailTransportError) as exc_info:
+    with pytest.raises(MailTransportError) as exc_info:
         transport.labels_list()
     assert exc_info.value.status == 429

@@ -1,5 +1,5 @@
 """
-GUI entry point for WA Chat Sync to Gmail.
+GUI entry point for WA Mail Sync.
 
 Run with:
     python gui.py
@@ -44,7 +44,7 @@ from src.config import (
     TOKEN_FILE,
     resolve_mail_backend,
 )
-from src.gmail_client import DiscoveryTransport, build_imap_transport, build_service
+from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.state import delete_chat, get_sync_summary, init_db, reset_chat
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title("WA Chat Sync  →  Gmail")
+        self.title("WA Mail Sync")
         self.geometry("800x580")
         self.minsize(700, 500)
 
@@ -231,7 +231,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         ctk.CTkLabel(
             hdr,
-            text="WA Chat Sync  →  Gmail",
+            text="WA Mail Sync",
             font=ctk.CTkFont(size=16, weight="bold"),
         ).pack(side="left", padx=16)
 
@@ -449,7 +449,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self._dry_run_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            opts, text="Dry run (no Gmail writes)",
+            opts, text="Dry run (no mailbox writes)",
             variable=self._dry_run_var, height=28,
         ).pack(side="left", padx=14, pady=8)
 
@@ -587,9 +587,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             anchor="w",
         ).pack(side="left", fill="x", expand=True, padx=(4, 4))
 
-        # ↗ Open Gmail thread button (only when a thread exists).
+        # ↗ Open Gmail thread button. Gated on the *backend*, not just on a
+        # thread existing: under IMAP the stored gmail_thread_id column holds
+        # the RFC 822 Message-ID we generated (that's what IMAP threads on via
+        # References/In-Reply-To), so it is always populated and the mail.
+        # google.com/#all/<id> deep link would always render — pointing at
+        # Gmail for someone who archives to Outlook or Fastmail, and at a
+        # thread id Gmail has never heard of. Hidden rather than disabled:
+        # there is no cross-provider equivalent of this deep link, so on IMAP
+        # there is nothing the user could do to enable it.
         gmail_thread_id = row.get("gmail_thread_id")
-        if gmail_thread_id:
+        if gmail_thread_id and self._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
             url = f"https://mail.google.com/mail/u/0/#all/{gmail_thread_id}"
             ctk.CTkButton(
                 top, text="↗", width=22, height=20,
@@ -894,7 +902,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ok = messagebox.askyesno(
                 "Remove chat?",
                 f"Remove '{display_name}' from the list?\n\n"
-                "This only deletes the local record — emails already in Gmail are not affected.",
+                "This only deletes the local record — emails already in your mailbox are not affected.",
                 icon="warning",
             )
             if not ok:
@@ -912,7 +920,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "Reset and re-sync?",
             f"Reset sync history for '{display_name}'?\n\n"
             "All local sync records will be cleared.\n"
-            "Emails already in Gmail are not affected.",
+            "Emails already in your mailbox are not affected.",
             icon="warning",
         )
         if not ok:
@@ -1043,7 +1051,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "1. Click Connect (top-right) and sign in to Google.\n"
             "2. Drag a WhatsApp .txt or .zip export onto the window.\n"
             "3. Click Sync Now.\n\n"
-            "Your synced chats appear in Gmail under the WhatsApp label.\n\n"
+            "Your synced chats appear in your mailbox under the WhatsApp label.\n\n"
             "(The full help file, help.html, was not found next to the app.)"
         )
 
@@ -1151,6 +1159,94 @@ _BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
 
 _PROVIDER_LABELS = {key: info["label"] for key, info in IMAP_PROVIDERS.items()}
 _PROVIDER_LABELS_REV = {v: k for k, v in _PROVIDER_LABELS.items()}
+
+# ---------------------------------------------------------------------------
+# App-password help content -- ported from android/.../MailAccountScreen.kt
+# (APP_PASSWORD_HELP_URLS / APP_PASSWORD_HELP_TEXT / APP_PASSWORD_STEPS_* /
+# buildAppPasswordPrompt). Kept string-for-string identical to the Android
+# copy so the two apps describe the same steps in the same words -- see
+# PLATFORM-PARITY.md. Do not edit one side without the other.
+# ---------------------------------------------------------------------------
+
+# Official, human-verified "create an app password" pages, one per
+# IMAP_PROVIDERS key. Verified by fetching each URL and confirming it is the
+# provider's own current app-password help page -- do not swap in an
+# unverified link, these go stale often as providers redesign support sites.
+# "custom" has no entry: there's no provider to link to, so the UI falls back
+# to generic guidance instead.
+APP_PASSWORD_HELP_URLS = {
+    "gmail": "https://support.google.com/accounts/answer/185833",
+    "outlook": "https://support.microsoft.com/en-us/account-billing/using-app-passwords-with-apps-that-don-t-support-two-step-verification-5896ed9b-4263-e681-128a-a6f2979a7944",
+    "yahoo": "https://help.yahoo.com/kb/SLN15241.html",
+    "icloud": "https://support.apple.com/en-us/102654",
+    "fastmail": "https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords",
+}
+
+APP_PASSWORD_HELP_TEXT = {
+    "gmail": "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
+    "outlook": "Outlook / Microsoft app passwords are generated from your Microsoft account's security settings (requires two-step verification to be on).",
+    "yahoo": "Yahoo app passwords are generated from your Yahoo Account security page.",
+    "icloud": "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
+    "fastmail": "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
+}
+
+# Bump this string (to the month/year you actually re-checked the steps
+# below) any time APP_PASSWORD_STEPS_GMAIL or APP_PASSWORD_STEPS_OUTLOOK is
+# edited. It's rendered next to the steps so a user whose provider has since
+# changed its menus knows to trust the "Search for steps" / help-page button
+# over this in-app text rather than assume the app is simply wrong.
+APP_PASSWORD_STEPS_REVIEWED = "August 2026"
+
+# Derived from support.google.com/accounts/answer/185833. That page does not
+# itself enumerate numbered steps; it states the 2-Step Verification
+# prerequisite and links myaccount.google.com/apppasswords as the place app
+# passwords are created and managed. The steps below are written from those
+# confirmed facts only -- nothing here is invented UI copy that wasn't on
+# the page.
+APP_PASSWORD_STEPS_GMAIL = [
+    "Turn on 2-Step Verification for your Google Account first — the app password option stays hidden until it's on.",
+    "Go to myaccount.google.com/apppasswords (in a browser) and sign in.",
+    "Create a new app password there — Google gives you a 16-character code.",
+    "Paste that 16-character code into the \"App password\" field below (not your normal Google password).",
+]
+
+# Derived from support.microsoft.com's "Using app passwords with apps that
+# don't support two-step verification" page, which describes: two-step
+# verification must be on; go to Advanced security options; scroll to the
+# App passwords section; select the option to create one; use it wherever
+# the app would normally ask for your Microsoft account password.
+APP_PASSWORD_STEPS_OUTLOOK = [
+    "Turn on two-step verification for your Microsoft account first — app passwords are only offered once it's on.",
+    "Go to your Microsoft account's Advanced security options (account.microsoft.com) and sign in.",
+    "Scroll to the \"App passwords\" section and choose to create one.",
+    "Paste the generated app password into the \"App password\" field below (not your normal Microsoft password).",
+    "If this is a work or school (Microsoft 365) account, see the note below — IMAP may be disabled by the admin regardless.",
+]
+
+
+def _build_app_password_prompt(provider_key: str, provider_label: str, host: str) -> str:
+    """Builds the provider-specific question a user can copy into an AI
+    assistant or paste into a web search to get current, provider-specific
+    app-password steps. Deliberately takes only provider_key/provider_label/
+    host -- the email address and app password must NEVER be interpolated
+    into this string. It gets copied to the clipboard and/or opened in a
+    browser search, both of which are effectively public once triggered, so
+    leaking either credential here would be a real exposure, not a cosmetic
+    one. If you're editing this function to add more context, keep that
+    boundary -- provider name and host only. Mirrors Android's
+    buildAppPasswordPrompt() in MailAccountScreen.kt; keep both in sync.
+    """
+    year = datetime.now().year
+    if provider_key == "custom":
+        provider_phrase = f"my email provider at {host}" if host.strip() else "my email provider"
+    else:
+        provider_phrase = provider_label
+    return (
+        f"How do I create an app password for {provider_phrase} in {year} to use with a third-party IMAP "
+        "email app? Tell me whether I need to turn on two-factor authentication first, the exact page or "
+        "menu path where I generate the app password, and the IMAP server name and port to use. Give me "
+        "the current steps and link the official help page."
+    )
 
 
 class _SettingsWindow(ctk.CTkToplevel):
@@ -1265,7 +1361,9 @@ class _SettingsWindow(ctk.CTkToplevel):
             self._imap_frame.pack(fill="x")
 
         # ── Buttons ──────────────────────────────────────────────────
-        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        # Kept on self because _on_backend_changed re-packs _imap_frame
+        # against it -- see the `before=` note there.
+        btn_row = self._btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(fill="x", padx=20, pady=(12, 8))
 
         self._save_btn = ctk.CTkButton(
@@ -1281,16 +1379,63 @@ class _SettingsWindow(ctk.CTkToplevel):
             command=self.destroy,
         ).pack(side="right")
 
+        # ── App-password help (collapsed by default) ───────────────────
+        # This used to sit inside _imap_frame, between the password field
+        # and the Save/Cancel row -- and got rejected for exactly the
+        # problem Android hit first: expanded, it runs to more text than
+        # this whole window, and it pushed the one control every user
+        # needs (Save) off the bottom. It now lives below btn_row instead,
+        # behind a toggle, mirroring where Android ended up after the same
+        # correction. See _on_backend_changed for how it shows/hides with
+        # _imap_frame, and _toggle_help/_sync_window_height for how the
+        # window grows to fit it without ever hiding Save/Cancel.
+        self._help_expanded = False
+        self._help_container = ctk.CTkFrame(self, fg_color="transparent")
+
+        self._help_toggle_btn = ctk.CTkButton(
+            self._help_container, text="Not sure how to get an app password?",
+            fg_color="transparent", hover_color=("gray85", "gray25"),
+            text_color=("gray10", "gray90"), font=("", 11),
+            anchor="w", height=24,
+            command=self._toggle_help,
+        )
+        self._help_toggle_btn.pack(fill="x", padx=20, pady=(0, 4))
+
+        # Content frame -- left unpacked (collapsed) until _toggle_help
+        # packs it; its children are rebuilt by _render_help_content each
+        # time it's shown or the provider changes, since the steps/notes/
+        # links are all provider-specific.
+        self._help_frame = ctk.CTkFrame(self._help_container, fg_color="transparent")
+
+        if current_backend == MAIL_BACKEND_IMAP:
+            self._help_container.pack(fill="x")
+
+        # The 380x200 above is only right for the OAuth backend, where the
+        # IMAP form is hidden. IMAP is the default now, so without this the
+        # window opens clipped at the Host field with Save below the bottom
+        # edge -- the same "Save is off-screen" failure that got the help
+        # block moved down here in the first place.
+        self._sync_window_height()
+
     # ------------------------------------------------------------------
     # IMAP field show/hide + provider-driven host/port autofill
     # ------------------------------------------------------------------
 
     def _on_backend_changed(self) -> None:
         if self._backend_var.get() == _BACKEND_LABELS[MAIL_BACKEND_IMAP]:
-            self._imap_frame.pack(fill="x")
+            # before=self._btn_row is load-bearing, not tidiness: pack_forget
+            # drops a widget out of the packing order entirely, and a later
+            # bare pack() *appends* it. So OAuth -> IMAP -> back would have
+            # re-packed the IMAP fields below Save/Cancel, leaving the form
+            # underneath its own buttons. The help block genuinely belongs
+            # last, so it can pack bare.
+            self._imap_frame.pack(fill="x", before=self._btn_row)
+            self._help_container.pack(fill="x")
         else:
             self._imap_frame.pack_forget()
+            self._help_container.pack_forget()
             self._warn_oauth_is_limited()
+        self._sync_window_height()
 
     def _warn_oauth_is_limited(self) -> None:
         """Warn, once per Settings window, that the OAuth path is limited.
@@ -1332,6 +1477,11 @@ class _SettingsWindow(ctk.CTkToplevel):
 
     def _on_provider_changed(self) -> None:
         self._apply_host_field_state()
+        if self._help_expanded:
+            # Steps/notes/links are all keyed off the provider, so re-render
+            # rather than leaving the previous provider's help on screen.
+            self._render_help_content()
+            self._sync_window_height()
 
     def _apply_host_field_state(self) -> None:
         provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
@@ -1339,11 +1489,157 @@ class _SettingsWindow(ctk.CTkToplevel):
         if provider_key == "custom":
             self._host_entry.configure(state="normal")
         else:
+            # state="normal" first is required, not defensive: a disabled Tk
+            # entry silently drops delete/insert. Coming from another
+            # non-custom provider the field is already disabled, so this used
+            # to no-op and leave the previous provider's host in place --
+            # every non-Gmail user got imap.gmail.com, and _on_save reads
+            # straight from this widget, so the wrong host was saved too.
+            self._host_entry.configure(state="normal")
             self._host_entry.delete(0, "end")
             self._host_entry.insert(0, info["host"] or "")
             self._host_entry.configure(state="disabled")
             self._port_entry.delete(0, "end")
             self._port_entry.insert(0, str(info["port"]))
+
+    # ------------------------------------------------------------------
+    # App-password help (collapsible, below Save/Cancel)
+    # ------------------------------------------------------------------
+
+    def _toggle_help(self) -> None:
+        self._help_expanded = not self._help_expanded
+        if self._help_expanded:
+            self._help_toggle_btn.configure(text="Hide app password help")
+            self._render_help_content()
+            self._help_frame.pack(fill="x", padx=20, pady=(0, 8))
+        else:
+            self._help_toggle_btn.configure(text="Not sure how to get an app password?")
+            self._help_frame.pack_forget()
+        self._sync_window_height()
+
+    def _render_help_content(self) -> None:
+        """Rebuild _help_frame's children for the currently selected
+        provider. Called on expand and again whenever the provider changes
+        while expanded -- simplest to throw the old widgets away and
+        rebuild rather than track per-provider diffs for what is, at most,
+        a handful of labels and two button rows."""
+        for child in self._help_frame.winfo_children():
+            child.destroy()
+
+        provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
+        provider_label = _PROVIDER_LABELS.get(provider_key, provider_key)
+        host = self._host_entry.get().strip()
+        help_url = APP_PASSWORD_HELP_URLS.get(provider_key)
+        help_text = APP_PASSWORD_HELP_TEXT.get(provider_key)
+
+        def secondary(text: str) -> None:
+            # anchor="w" as well as justify="left": justify only aligns lines
+            # within the text block, while anchor places that block inside the
+            # label, which fill="x" has stretched to the full frame width. With
+            # the default centre anchor, every step whose longest line is
+            # shorter than the frame got its own indent, so a numbered list
+            # rendered as a ragged zig-zag.
+            ctk.CTkLabel(
+                self._help_frame, text=text, wraplength=340, anchor="w",
+                justify="left", text_color=("gray40", "gray60"), font=("", 11),
+            ).pack(fill="x", pady=(0, 4))
+
+        if provider_key == "custom":
+            secondary(
+                "Turn on two-factor authentication in your email account first, then look "
+                "for \"App passwords\" or \"App-specific passwords\" in its security settings."
+            )
+        elif help_text:
+            secondary(help_text)
+
+        # Inline numbered steps -- only for the two providers whose official
+        # pages were actually read and translated into steps here (Gmail,
+        # Outlook). Every other provider relies on the help-page link and
+        # the prompt buttons below instead of guessed steps.
+        inline_steps = {"gmail": APP_PASSWORD_STEPS_GMAIL, "outlook": APP_PASSWORD_STEPS_OUTLOOK}.get(provider_key)
+        if inline_steps:
+            for i, step in enumerate(inline_steps, start=1):
+                secondary(f"{i}. {step}")
+            secondary(
+                f"Steps checked {APP_PASSWORD_STEPS_REVIEWED}. If they don't match what you "
+                "see, use the buttons below to get the current version."
+            )
+
+        # Provider-specific gotchas that aren't obvious from the generic
+        # help text above, surfaced only when they're relevant.
+        if provider_key == "outlook":
+            secondary(
+                "Work or school Microsoft 365 accounts often have IMAP access disabled by "
+                "the organisation's administrator — if so, even a correct app password "
+                "will be rejected."
+            )
+        if provider_key == "icloud":
+            secondary(
+                "This must be an app-specific password generated at appleid.apple.com, not "
+                "your main Apple ID password."
+            )
+
+        # A live-current fallback (and the primary path for providers with
+        # no inline steps) that doesn't depend on any URL staying valid.
+        # The prompt text itself never contains the email/password -- see
+        # _build_app_password_prompt's own doc comment for why that
+        # boundary matters here specifically.
+        link_row = ctk.CTkFrame(self._help_frame, fg_color="transparent")
+        link_row.pack(fill="x", pady=(4, 0))
+        ctk.CTkButton(
+            link_row, text="Copy question", width=110, height=26,
+            fg_color="transparent", border_width=1, text_color=("gray10", "gray90"),
+            command=lambda: self._copy_prompt(provider_key, provider_label, host),
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(
+            link_row, text="Search for steps", width=120, height=26,
+            fg_color="transparent", border_width=1, text_color=("gray10", "gray90"),
+            command=lambda: self._search_prompt(provider_key, provider_label, host),
+        ).pack(side="left")
+
+        self._help_copied_label = ctk.CTkLabel(
+            self._help_frame, text="", text_color=("gray40", "gray60"), font=("", 11),
+        )
+        self._help_copied_label.pack(fill="x", pady=(2, 0))
+
+        # Lower-emphasis third option: the static, pre-verified link.
+        # Precise when current, but only as fresh as the last time someone
+        # re-verified it -- the two buttons above don't have that expiry
+        # problem.
+        if help_url:
+            ctk.CTkButton(
+                self._help_frame, text=f"Open {provider_label}'s help page",
+                height=26, fg_color="transparent", border_width=1,
+                text_color=("gray10", "gray90"),
+                command=lambda: webbrowser.open(help_url),
+            ).pack(fill="x", pady=(4, 0))
+
+    def _copy_prompt(self, provider_key: str, provider_label: str, host: str) -> None:
+        prompt = _build_app_password_prompt(provider_key, provider_label, host)
+        # clipboard_clear/append + update (not update_idletasks) is the Tk
+        # idiom for a clipboard write that survives after this window --
+        # and the app itself, in the "Copy question" case -- closes.
+        self.clipboard_clear()
+        self.clipboard_append(prompt)
+        self.update()
+        if hasattr(self, "_help_copied_label"):
+            self._help_copied_label.configure(text="Copied — paste it into an AI assistant.")
+
+    def _search_prompt(self, provider_key: str, provider_label: str, host: str) -> None:
+        import urllib.parse
+        prompt = _build_app_password_prompt(provider_key, provider_label, host)
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote_plus(prompt))
+
+    def _sync_window_height(self) -> None:
+        """Grow/shrink the window to fit the help block instead of letting
+        it clip content or, worse, push Save/Cancel out of reach -- the
+        exact failure this whole feature was moved below the button row to
+        fix. Relies on pack's default propagate behaviour: winfo_reqheight()
+        reports the height the currently packed children actually need,
+        whether that's the collapsed 380x200 footprint or the expanded help
+        block, so this works for both toggling and provider changes."""
+        self.update_idletasks()
+        self.geometry(f"{self.winfo_width()}x{self.winfo_reqheight()}")
 
     # ------------------------------------------------------------------
     # Save

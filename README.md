@@ -1,8 +1,10 @@
-# WA Chat Sync to Gmail
+# WA Mail Sync
 
-Sync exported WhatsApp `.txt` (or `.zip`) chats into your Gmail account. Each chat
-becomes a Gmail thread under a `WhatsApp/<Chat Name>` label, with messages rendered
-as a readable, WhatsApp-style HTML conversation (inline images, attached media).
+Sync exported WhatsApp `.txt` (or `.zip`) chats into your own mailbox. Each chat
+becomes an email thread under a `WhatsApp/<Chat Name>` label/folder, with messages
+rendered as a readable, WhatsApp-style HTML conversation (inline images, attached
+media). Gmail (OAuth) and IMAP (any provider — Outlook, Yahoo, iCloud, Fastmail,
+and more) are both supported backends.
 
 It ships as a Windows desktop GUI (`gui.py`) and a command-line tool (`cli.py`).
 A packaged, portable `.exe` build is also available (see [Building the portable exe](#building-the-portable-exe)).
@@ -15,14 +17,15 @@ A packaged, portable `.exe` build is also available (see [Building the portable 
 ## Architecture at a glance
 
 Messages flow from a drop folder, through a parser and deduplication layer, into
-Gmail via the API:
+your mailbox via the active backend (Gmail API or IMAP):
 
 ```
-data/inbox/  →  parser  →  dedup (SQLite)  →  Gmail insert  →  data/processed/
+data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (Gmail API / IMAP)  →  data/processed/
 ```
 
-- Messages are pushed with `gmail.users.messages.insert()` (not `send()`), so
-  nothing leaves your mailbox and no sending quota is consumed.
+- On Gmail, messages are pushed with `gmail.users.messages.insert()` (not
+  `send()`); on IMAP, with `APPEND`. Either way nothing leaves your mailbox and
+  no sending quota is consumed.
 - Per-chat sync state lives in `data/sync_state.db`; re-running a sync only pushes
   new messages.
 - Files move from `inbox/` to `processed/` only after a fully successful sync.
@@ -45,7 +48,7 @@ help text), which is most of a typical feature.
 .
 ├── src/
 │   ├── parser.py            # WhatsApp .txt parsing engine (timestamp formats, multi-line)
-│   ├── gmail_client.py      # Gmail API wrapper (auth, insert, threads, labels)
+│   ├── mail_client.py       # Mail backend wrapper (Gmail API + IMAP: auth, insert/append, threads, labels)
 │   ├── sync_manager.py      # Orchestrator: incremental sync, dedup, recovery
 │   ├── state.py             # SQLite state tracker
 │   ├── media_extractor.py   # Resolve attachment filename → bytes + mime type
@@ -157,7 +160,7 @@ python cli.py sync --dry-run --chunk-size week --chat john_doe -v
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
-| `--dry-run` | flag | off | Parse and report only — no Gmail calls, no state writes, no file moves. |
+| `--dry-run` | flag | off | Parse and report only — no mail calls, no state writes, no file moves. |
 | `--chunk-size SIZE` | `day`, `hour`, `week`, or a positive integer | `day` | Messages per email. An integer means N messages per email. |
 | `--chat NAME` | display name or `chat_id` | all chats | Sync only the matching chat. |
 
@@ -168,7 +171,7 @@ python cli.py status
 ```
 
 Prints a table of tracked chats: status, last-synced time, messages synced, and
-whether a Gmail thread exists.
+whether a mail thread exists.
 
 ### `reset` — re-sync a chat from scratch
 
@@ -178,7 +181,7 @@ python cli.py reset john_doe --yes
 ```
 
 Takes a `chat_id` **or** display name. Clears local sync state so the next sync
-rebuilds the chat into a new Gmail thread (emails already in Gmail are untouched).
+rebuilds the chat into a new mail thread (emails already in your mailbox are untouched).
 `-y` / `--yes` skips the confirmation prompt. After resetting, move the export file
 from `processed/` back to `inbox/` to re-sync — the command prints the exact
 `Move-Item` line.
@@ -196,9 +199,9 @@ cd "<repo root>"
 python gui.py
 ```
 
-The window lets you connect to Gmail, drag-and-drop export files into the inbox,
+The window lets you connect your mailbox, drag-and-drop export files into the inbox,
 choose chunk size / dry-run, run a sync with live progress, browse synced chats,
-open a chat's Gmail thread, reset/re-sync, and export the chat list to CSV.
+open a chat's mail thread, reset/re-sync, and export the chat list to CSV.
 The **Help** button opens this project's user guide.
 
 ---

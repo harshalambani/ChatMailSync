@@ -253,7 +253,7 @@ def build_service(creds: Optional["Credentials"] = None) -> _GmailService:
 
 
 @runtime_checkable
-class GmailTransport(Protocol):
+class MailTransport(Protocol):
     def labels_list(self) -> dict: ...
 
     def labels_create(self, body: dict) -> dict: ...
@@ -261,8 +261,8 @@ class GmailTransport(Protocol):
     def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict: ...
 
 
-class GmailTransportError(Exception):
-    """Normalized transport error, raised by every GmailTransport implementation.
+class MailTransportError(Exception):
+    """Normalized transport error, raised by every MailTransport implementation.
 
     _insert_with_backoff() and other retry logic key off `.status` (HTTP
     status code, when known) rather than catching library-specific exceptions
@@ -292,7 +292,7 @@ class DiscoveryTransport:
         try:
             return self.service.users().labels().list(userId="me").execute()
         except HttpError as exc:
-            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+            raise MailTransportError(str(exc), status=exc.resp.status) from exc
 
     def labels_create(self, body: dict) -> dict:
         from googleapiclient.errors import HttpError
@@ -300,7 +300,7 @@ class DiscoveryTransport:
         try:
             return self.service.users().labels().create(userId="me", body=body).execute()
         except HttpError as exc:
-            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+            raise MailTransportError(str(exc), status=exc.resp.status) from exc
 
     def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
         from googleapiclient.errors import HttpError
@@ -315,10 +315,10 @@ class DiscoveryTransport:
                 .execute()
             )
         except HttpError as exc:
-            raise GmailTransportError(str(exc), status=exc.resp.status) from exc
+            raise MailTransportError(str(exc), status=exc.resp.status) from exc
 
 
-def build_transport(creds: Optional["Credentials"] = None) -> GmailTransport:
+def build_transport(creds: Optional["Credentials"] = None) -> MailTransport:
     """Build the default (googleapiclient-based) transport. Windows-only path."""
     return DiscoveryTransport(build_service(creds))
 
@@ -351,9 +351,9 @@ class RestTransport:
             return resp.json()
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else None
-            raise GmailTransportError(str(exc), status=status) from exc
+            raise MailTransportError(str(exc), status=status) from exc
         except requests.RequestException as exc:
-            raise GmailTransportError(str(exc)) from exc
+            raise MailTransportError(str(exc)) from exc
 
     def labels_list(self) -> dict:
         return self._request("GET", f"{_GMAIL_API_BASE}/labels")
@@ -372,7 +372,7 @@ class RestTransport:
         )
 
 
-def set_token(access_token: str) -> GmailTransport:
+def set_token(access_token: str) -> MailTransport:
     """Build a transport from a plain OAuth2 bearer token (Android entry point)."""
     return RestTransport(access_token)
 
@@ -423,7 +423,7 @@ def _is_already_exists_response(data) -> bool:
 
 def _status_for_imap_text(text: str) -> int:
     """Map an IMAP response-code/error string to an HTTP-style status so it
-    can flow through the same GmailTransportError(.status) retry policy the
+    can flow through the same MailTransportError(.status) retry policy the
     OAuth transports use (_insert_with_backoff retries 429/500/502/503/504).
 
     Transient (server-side, worth a retry) -> 503.
@@ -623,7 +623,7 @@ def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]
     IMAP has no equivalent "use the Date header" flag — the caller must
     compute and pass an explicit internaldate to APPEND, or the server
     defaults it to "now". _build_html_mime_message always sets a Date:
-    header (see gmail_client.py), so this should only return None for
+    header (see mail_client.py), so this should only return None for
     hand-built messages in tests.
     """
     date_header = msg.get("Date")
@@ -649,7 +649,7 @@ def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]
 
 class ImapTransport:
     """IMAP APPEND transport (Road B phase 1): app-password IMAP instead of
-    Gmail OAuth. Implements the same 3-method GmailTransport Protocol as
+    Gmail OAuth. Implements the same 3-method MailTransport Protocol as
     DiscoveryTransport / RestTransport, so get_or_create_label(),
     _insert_with_backoff(), and push_chunks() all work against it unmodified.
 
@@ -712,7 +712,7 @@ class ImapTransport:
                 timeout=GMAIL_SOCKET_TIMEOUT,
             )
         except ssl.SSLError as exc:
-            raise GmailTransportError(
+            raise MailTransportError(
                 f"TLS verification failed for {self._host}:{self._port}: "
                 f"{_strip_secret(str(exc), self._password)} — the server's "
                 "certificate could not be verified. Refusing to send "
@@ -722,7 +722,7 @@ class ImapTransport:
         except OSError as exc:
             # socket.timeout is an OSError subclass, so a connect that hangs
             # past GMAIL_SOCKET_TIMEOUT lands here rather than blocking.
-            raise GmailTransportError(
+            raise MailTransportError(
                 f"Could not connect to {self._host}:{self._port}: "
                 f"{_strip_secret(str(exc), self._password)}",
                 status=503,
@@ -738,7 +738,7 @@ class ImapTransport:
             # a message that tells the user what's likely going on, instead
             # of the raw imaplib string being retried 5x by
             # _insert_with_backoff before finally surfacing.
-            raise GmailTransportError(
+            raise MailTransportError(
                 "IMAP login failed for %s @ %s:%s — this can mean a wrong "
                 "password, but for many providers (especially Workspace/"
                 "Microsoft 365 accounts) it means the provider or an admin "
@@ -748,7 +748,7 @@ class ImapTransport:
                 status=401,
             ) from exc
         except OSError as exc:
-            raise GmailTransportError(
+            raise MailTransportError(
                 f"Could not connect to {self._host}:{self._port}: "
                 f"{_strip_secret(str(exc), self._password)}",
                 status=503,
@@ -844,28 +844,28 @@ class ImapTransport:
 
     # -- error mapping -----------------------------------------------------
 
-    def _map_exception(self, exc: Exception, context: str) -> GmailTransportError:
-        if isinstance(exc, GmailTransportError):
+    def _map_exception(self, exc: Exception, context: str) -> MailTransportError:
+        if isinstance(exc, MailTransportError):
             return exc  # already normalized (e.g. by _default_connection_factory)
         text = _strip_secret(str(exc), self._password)
         if isinstance(exc, imaplib.IMAP4.abort):
-            return GmailTransportError(f"{context}: IMAP connection aborted: {text}", status=503)
+            return MailTransportError(f"{context}: IMAP connection aborted: {text}", status=503)
         if isinstance(exc, (socket.timeout, TimeoutError, ConnectionError, OSError)):
-            return GmailTransportError(f"{context}: network error: {text}", status=503)
+            return MailTransportError(f"{context}: network error: {text}", status=503)
         if isinstance(exc, imaplib.IMAP4.error):
             # BAD/other self-raised imaplib errors. Deliberately NOT treated
             # as retryable by default (plan §9.2: don't blanket-retry bare
             # imaplib.IMAP4.error) — only abort/OSError above are.
-            return GmailTransportError(f"{context}: {text}", status=_status_for_imap_text(text))
-        return GmailTransportError(f"{context}: {text}", status=400)
+            return MailTransportError(f"{context}: {text}", status=_status_for_imap_text(text))
+        return MailTransportError(f"{context}: {text}", status=400)
 
-    def _map_response(self, typ: str, data, context: str) -> GmailTransportError:
+    def _map_response(self, typ: str, data, context: str) -> MailTransportError:
         text = _join_imap_response(data)
-        return GmailTransportError(
+        return MailTransportError(
             f"{context} failed ({typ}): {text}", status=_status_for_imap_text(text)
         )
 
-    # -- GmailTransport protocol -------------------------------------------
+    # -- MailTransport protocol -------------------------------------------
 
     def labels_list(self) -> dict:
         try:
@@ -943,7 +943,7 @@ class ImapTransport:
         return {"id": uid or message_id, "threadId": response_thread_id}
 
 
-def build_imap_transport(host: str, port: int, email: str, password: str) -> GmailTransport:
+def build_imap_transport(host: str, port: int, email: str, password: str) -> MailTransport:
     """Build the IMAP APPEND transport (Road B, phase 1 backend).
 
     Purely additive alongside build_transport() (OAuth/Discovery, Windows)
@@ -979,7 +979,7 @@ def _full_label_name(display_name: str) -> str:
     return f"{LABEL_PARENT}/{_sanitise_label_name(display_name)}"
 
 
-def get_or_create_label(transport: GmailTransport, display_name: str) -> str:
+def get_or_create_label(transport: MailTransport, display_name: str) -> str:
     """Return the Gmail label ID for 'WhatsApp/<display_name>', creating if absent.
 
     Also ensures the parent 'WhatsApp' label exists.
@@ -1336,7 +1336,7 @@ def _print_progress(
 
 
 def _insert_with_backoff(
-    transport: GmailTransport,
+    transport: MailTransport,
     body: dict,
     thread_id: Optional[str] = None,
 ) -> dict:
@@ -1351,7 +1351,7 @@ def _insert_with_backoff(
         The API response dict (contains 'id' and 'threadId').
 
     Raises:
-        GmailTransportError: after BACKOFF_MAX_ATTEMPTS failures.
+        MailTransportError: after BACKOFF_MAX_ATTEMPTS failures.
     """
     # Exceptions that warrant a retry (network/timeout errors in addition to
     # HTTP 429 / 5xx).  socket.timeout is an alias for TimeoutError on Py3.3+.
@@ -1363,7 +1363,7 @@ def _insert_with_backoff(
             response = transport.messages_insert(body, thread_id=thread_id)
             time.sleep(API_CALL_DELAY_SECONDS)
             return response
-        except GmailTransportError as exc:
+        except MailTransportError as exc:
             if exc.status in (429, 500, 502, 503, 504) and attempt < BACKOFF_MAX_ATTEMPTS:
                 log.warning(
                     "Gmail API %s on attempt %d/%d - retrying in %.1fs",
@@ -1401,7 +1401,7 @@ class PushResult:
 
 
 def push_chunks(
-    transport: GmailTransport,
+    transport: MailTransport,
     display_name: str,
     chunks: list[list[ParsedMessage]],
     label_id: str,
@@ -1521,7 +1521,7 @@ def push_chunks(
 
 
 def push_chat(
-    transport: GmailTransport,
+    transport: MailTransport,
     display_name: str,
     messages: list[ParsedMessage],
     chunk_size: ChunkSize = "day",

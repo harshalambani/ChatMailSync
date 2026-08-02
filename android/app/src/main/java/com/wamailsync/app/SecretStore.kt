@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec

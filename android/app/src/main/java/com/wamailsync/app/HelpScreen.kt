@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,17 +28,18 @@ private val FAQ = listOf(
         "Choose \"Include media\" for a .zip with photos/videos, or \"Without media\" for a plain .txt. " +
         "Then share it to this app (or use \"Import a WhatsApp export\" on Home).",
     "Why doesn't this app \"send\" my messages anywhere?" to
-        "It uses Gmail's insert API, which adds mail directly into your own mailbox without " +
-        "actually sending anything. Nobody else receives these emails — they only appear in your Gmail.",
+        "It uses your mail provider's insert API (Gmail's insert API, or IMAP APPEND for other " +
+        "providers), which adds mail directly into your own mailbox without actually sending " +
+        "anything. Nobody else receives these emails — they only appear in your mailbox.",
     "What happens if I sync the same export twice?" to
         "Every message is fingerprinted (hashed). Re-syncing the same file, or a fresh export that " +
-        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in Gmail.",
+        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your mailbox.",
     "Why do message times look off by a few hours?" to
         "WhatsApp exports don't include a timezone — the app assumes the exporting phone's local " +
         "clock. If you export from a different timezone than the chat was recorded in, times may shift.",
     "What does Reset actually do?" to
         "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
-        "anything already in Gmail. Re-importing the export afterwards starts a brand-new Gmail thread.",
+        "anything already in your mailbox. Re-importing the export afterwards starts a brand-new thread.",
     "Why does it ask me to reconnect every week?" to
         "Only if you're using Google sign-in (OAuth) — the app hasn't gone through Google's app-" +
         "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +
@@ -47,7 +48,7 @@ private val FAQ = listOf(
         "backend doesn't have this limit — it's the default, and connecting once doesn't expire. You can " +
         "switch to it any time from Settings without losing anything already synced.",
     "What can't this app do?" to
-        "It can't read your existing Gmail, send email on your behalf, or keep syncing live in the " +
+        "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
 )
 
@@ -55,7 +56,7 @@ private val FAQ = listOf(
 fun HelpScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
-            WagmailTopBar(
+            WaMailTopBar(
                 title = "Help & FAQ",
                 navigationIcon = {
                     IconButton(onClick = onBack) {

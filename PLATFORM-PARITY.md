@@ -99,12 +99,18 @@ Neither of the following is done, and neither is Windows-first.
    Android already uses AndroidKeyStore AES/GCM. Scope a Windows equivalent
    (DPAPI or Credential Manager) and confirm both ends still agree on
    semantics. To be picked up immediately after the Android release.
-2. **P2 - We are no longer a Gmail-only tool.** With IMAP as the default
-   backend the app archives into Outlook, Yahoo, iCloud, Fastmail or any IMAP
-   server, yet the product name, repository name, labels, help text, screen
-   copy, notification strings and internal identifiers (`gmail_client.py`,
-   `GmailTransport`, `getModule("src.gmail_client")`, "Test Gmail connection",
-   "Connect Gmail first.") all still say Gmail. This needs a plan, not a
-   find-and-replace: naming and identity, user-facing copy, internal API
-   names, and how much of it is safe to rename after a public release has
-   already shipped. Parked as P2, immediately after P1.
+2. **P2 - We are no longer a Gmail-only tool. DONE (working tree).** With IMAP
+   as the default backend the app archives into Outlook, Yahoo, iCloud,
+   Fastmail or any IMAP server. The product is renamed **WA Mail Sync**
+   (Android package `com.wamailsync.app`), the shared core module is
+   `src/mail_client.py` (`MailTransport`/`MailTransportError`), the Chaquopy
+   bridge loads it via `getModule("src.mail_client")`, and user-facing copy
+   ("Connect your mailbox first.", "writes nothing to your mailbox", etc.) no
+   longer says Gmail unless the statement is genuinely Gmail-specific (the
+   Gmail OAuth Testing-status limits, the Gmail deep-link/thread-open feature,
+   real API identifiers like `gmail.insert`/`GMAIL_SCOPES`, and persisted
+   on-disk/DB names such as `gmail_thread_id`, the `gmail_oauth` backend
+   value, and the `wagmail_prefs`/`wagmail_imap_key` Android storage names,
+   which are intentionally left alone to avoid orphaning existing installs).
+   Repository folder name and remaining historical/dated docs were left as-is
+   per the rename task's scope.

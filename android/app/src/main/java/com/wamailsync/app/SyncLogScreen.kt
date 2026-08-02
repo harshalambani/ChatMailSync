@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -71,7 +71,7 @@ fun SyncLogScreen(onBack: () -> Unit) {
 
     Scaffold(
         topBar = {
-            WagmailTopBar(
+            WaMailTopBar(
                 title = "Sync log",
                 subtitle = "Last 90 days",
                 navigationIcon = {

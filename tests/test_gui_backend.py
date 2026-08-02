@@ -359,10 +359,10 @@ def test_connect_imap_failure_never_leaks_password_and_does_not_persist(worker_p
     imaplib.IMAP4_SSL is faked (to avoid a real network call); the
     scrubbing itself is exercised for real, proving _strip_secret actually
     runs on this path rather than trusting it does."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     password = "hunter2-app-pw"
-    monkeypatch.setattr(gmail_client_mod.imaplib, "IMAP4_SSL", _FakeLoginFailIMAP4SSL)
+    monkeypatch.setattr(mail_client_mod.imaplib, "IMAP4_SSL", _FakeLoginFailIMAP4SSL)
 
     q: queue.Queue = queue.Queue()
     gui_worker.connect_imap(q, "imap.gmail.com", 993, "me@example.com", password)
@@ -459,23 +459,23 @@ def test_connect_imap_surfaces_acl_failure_as_auth_error(worker_paths, monkeypat
 def test_current_username_falls_back_when_username_env_missing(monkeypatch):
     """%USERNAME% is absent in some service/scheduled-task contexts; that used
     to make ACL hardening a silent no-op."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     monkeypatch.delenv("USERNAME", raising=False)
-    monkeypatch.setattr(gmail_client_mod.getpass, "getuser", lambda: "fallback-user")
-    assert gmail_client_mod._current_username() == "fallback-user"
+    monkeypatch.setattr(mail_client_mod.getpass, "getuser", lambda: "fallback-user")
+    assert mail_client_mod._current_username() == "fallback-user"
 
 
 def test_restrict_acl_returns_false_when_username_unresolvable(tmp_path, monkeypatch):
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
-    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: None)
-    assert gmail_client_mod._restrict_acl(tmp_path, "F") is False
+    monkeypatch.setattr(mail_client_mod, "_current_username", lambda: None)
+    assert mail_client_mod._restrict_acl(tmp_path, "F") is False
 
 
 def test_restrict_file_acl_omits_directory_inheritance_flags(tmp_path, monkeypatch):
     """(OI)(CI) are directory-only flags; icacls rejects them on a file."""
-    import src.gmail_client as gmail_client_mod
+    import src.mail_client as mail_client_mod
 
     captured = {}
 
@@ -486,10 +486,10 @@ def test_restrict_file_acl_omits_directory_inheritance_flags(tmp_path, monkeypat
             stdout = ""
         return _Done()
 
-    monkeypatch.setattr(gmail_client_mod, "_current_username", lambda: "someuser")
-    monkeypatch.setattr(gmail_client_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mail_client_mod, "_current_username", lambda: "someuser")
+    monkeypatch.setattr(mail_client_mod.subprocess, "run", fake_run)
 
-    assert gmail_client_mod._restrict_file_acl(tmp_path / "f.json") is True
+    assert mail_client_mod._restrict_file_acl(tmp_path / "f.json") is True
     assert "someuser:F" in captured["cmd"]
     assert not any("(OI)(CI)" in part for part in captured["cmd"])
 
@@ -508,3 +508,125 @@ def test_imap_providers_all_have_label_host_port():
             assert info["host"] is None
         else:
             assert info["host"]
+
+
+# ---------------------------------------------------------------------------
+# Settings window: provider dropdown -> host/port autofill
+#
+# These need a real Tk display, so they skip where one isn't available. They
+# exist because the bug they guard against shipped: _apply_host_field_state
+# disables the host entry after filling it, and a disabled Tk entry silently
+# drops delete/insert -- so every provider change after the first no-oped and
+# left the previous provider's host in the field, which _on_save then wrote.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def tk_root():
+    """One Tk root for the whole session. Creating and destroying a fresh
+    CTk() per test eventually leaves Tcl in a state where the next one dies
+    with `invalid command name "tcl_findLibrary"` -- which surfaced as a test
+    that skipped at random, moving between runs. Only the Toplevel under test
+    is per-test."""
+    ctk = pytest.importorskip("customtkinter")
+    try:
+        root = ctk.CTk()
+    except Exception as exc:  # no display / no Tk
+        pytest.skip(f"Tk unavailable: {exc}")
+    root.withdraw()
+    yield root
+    root.destroy()
+
+
+@pytest.fixture
+def settings_window(settings_file, tk_root):
+    root = tk_root
+    root._settings = {
+        "mail_backend": MAIL_BACKEND_IMAP,
+        "imap_provider": "gmail",
+        "imap_host": IMAP_PROVIDERS["gmail"]["host"],
+        "imap_port": 993,
+        "imap_email": "you@example.com",
+        "chunk_size": "day",
+        "auto_refresh_label": "30 s",
+    }
+    win = gui._SettingsWindow(root)
+    yield win
+    # grab_set() in __init__ makes this window modal; release it explicitly so
+    # a failed assertion can't leave the shared root grabbed for later tests.
+    try:
+        win.grab_release()
+    except Exception:
+        pass
+    win.destroy()
+
+
+def _select(win, provider_key):
+    win._provider_var.set(gui._PROVIDER_LABELS[provider_key])
+    win._on_provider_changed()
+
+
+@pytest.mark.parametrize(
+    "provider_key", [k for k in IMAP_PROVIDERS if k != "custom"]
+)
+def test_provider_change_updates_host_even_when_field_is_disabled(
+    settings_window, provider_key
+):
+    # Start on gmail (the fixture's saved provider) so every non-gmail case
+    # arrives with the host entry already disabled -- the failing path.
+    _select(settings_window, "gmail")
+    _select(settings_window, provider_key)
+    assert settings_window._host_entry.get() == IMAP_PROVIDERS[provider_key]["host"]
+    assert settings_window._port_entry.get() == str(IMAP_PROVIDERS[provider_key]["port"])
+
+
+def test_custom_provider_leaves_host_editable(settings_window):
+    _select(settings_window, "fastmail")
+    _select(settings_window, "custom")
+    assert str(settings_window._host_entry.cget("state")) == "normal"
+
+
+def test_help_stays_below_the_save_row_across_a_backend_round_trip(settings_window):
+    win = settings_window
+    order = lambda: [str(c) for c in win.pack_slaves()]
+    assert win._help_expanded is False
+    assert order().index(str(win._help_container)) > order().index(str(win._btn_row))
+
+    win._warn_oauth_is_limited = lambda: None
+    win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
+    win._on_backend_changed()
+    assert str(win._help_container) not in order()
+
+    win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_IMAP])
+    win._on_backend_changed()
+    # pack_forget drops a widget from the packing order; a bare re-pack would
+    # append it, leaving the IMAP form below its own Save button.
+    assert order().index(str(win._imap_frame)) < order().index(str(win._btn_row))
+    assert order().index(str(win._help_container)) > order().index(str(win._btn_row))
+
+
+@pytest.mark.parametrize("provider_key", list(IMAP_PROVIDERS))
+def test_app_password_prompt_never_contains_email_or_password(
+    settings_window, provider_key
+):
+    win = settings_window
+    win._password_entry.insert(0, "hunter2-app-password")
+    _select(win, provider_key)
+    win._toggle_help()
+
+    texts = []
+
+    def walk(parent):
+        for child in parent.winfo_children():
+            try:
+                texts.append(str(child.cget("text")))
+            except Exception:
+                pass
+            walk(child)
+
+    walk(win._help_frame)
+    prompt = gui._build_app_password_prompt(
+        provider_key, gui._PROVIDER_LABELS[provider_key], win._host_entry.get()
+    )
+    blob = " ".join(texts) + " " + prompt
+    assert "you@example.com" not in blob
+    assert "hunter2-app-password" not in blob

@@ -26,15 +26,15 @@ kotlin {
 }
 
 android {
-    namespace = "com.wagmailsync.app"
+    namespace = "com.wamailsync.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.wagmailsync.app"
+        applicationId = "com.wamailsync.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0-a1"
+        versionName = "0.1.0-beta"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
@@ -89,7 +89,7 @@ android {
 // module's default Chaquopy source dir at build time, instead of pointing
 // Chaquopy's sourceSet directly at ../../src. Chaquopy treats a srcDir's
 // *contents* as sitting at the Python path root, so pointing it straight at
-// ../../src would expose config.py/gmail_client.py/etc. as top-level modules
+// ../../src would expose config.py/mail_client.py/etc. as top-level modules
 // (import config) instead of the package Windows already uses everywhere
 // (import src.config) — this Copy task instead recreates a literal "src"
 // package folder under src/main/python/ so every existing `from src.x import
@@ -102,7 +102,13 @@ android {
 val pythonCoreSrc = rootProject.projectDir.parentFile.resolve("src")
 val pythonCoreDest = layout.projectDirectory.dir("src/main/python/src").asFile
 
-val syncPythonCore by tasks.registering(Copy::class) {
+// Sync, not Copy: a Copy task only adds and overwrites, so a module deleted or
+// renamed in the top-level src/ was left behind here forever and still got
+// packaged into the APK. That is worse than a missing file — Chaquopy resolves
+// modules by name at runtime, so getModule("src.old_name") would keep silently
+// succeeding against a frozen copy that drifts further from the real one with
+// every fix. Sync mirrors the source exactly, deletions included.
+val syncPythonCore by tasks.registering(Sync::class) {
     from(pythonCoreSrc)
     into(pythonCoreDest)
     include("**/*.py")

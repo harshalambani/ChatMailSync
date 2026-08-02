@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +55,7 @@ private val QuietArchiveDark = darkColorScheme(
 )
 
 @Composable
-fun WagmailTheme(
+fun WaMailTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

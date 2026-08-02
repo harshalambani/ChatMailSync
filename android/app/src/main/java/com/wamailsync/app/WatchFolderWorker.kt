@@ -1,4 +1,4 @@
-package com.wagmailsync.app
+package com.wamailsync.app
 
 import android.accounts.Account
 import android.app.NotificationChannel
@@ -167,8 +167,8 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             // *something* is saved, so a clear notification fires instead of
             // silently enqueuing a run that's guaranteed to fail.
             if (!AppPrefs.hasImapPassword(applicationContext) || AppPrefs.getImapHost(applicationContext).isBlank()) {
-                notify("Imported $importedCount new file(s) — open Settings and save your IMAP app password to sync")
-                return "Imported $importedCount new file(s) — save an IMAP app password in Settings to sync"
+                notify("Imported $importedCount new file(s) — open Settings > Mail account and save your IMAP app password to sync")
+                return "Imported $importedCount new file(s) — save an IMAP app password in Settings > Mail account to sync"
             }
         } else {
             val email = AppPrefs.getConnectedAccountEmail(applicationContext)
@@ -263,7 +263,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             )
         )
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WhatsApp Chat Sync to Gmail")
+            .setContentTitle("WA Mail Sync")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setAutoCancel(true)

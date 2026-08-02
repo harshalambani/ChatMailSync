@@ -29,7 +29,7 @@ from typing import Any, Optional
 
 from src import config
 from src.config import DEFAULT_CHUNK_SIZE
-from src.gmail_client import ChunkSize, DiscoveryTransport, GmailTransport, push_chat
+from src.mail_client import ChunkSize, DiscoveryTransport, MailTransport, push_chat
 from src.parser import ParsedMessage, extract_chat_info, parse_file
 from src.state import (
     complete_sync_run,
@@ -127,11 +127,11 @@ class SyncManager:
         db_path: Optional[Path] = None,
         inbox_dir: Optional[Path] = None,
         processed_dir: Optional[Path] = None,
-        transport: Optional[GmailTransport] = None,
+        transport: Optional[MailTransport] = None,
         trigger: str = "manual",
     ) -> None:
         """`service` (existing googleapiclient Resource) and `transport` (an
-        already-built GmailTransport, e.g. from gmail_client.set_token() on
+        already-built MailTransport, e.g. from mail_client.set_token() on
         Android) are mutually exclusive — pass at most one. `service` is
         wrapped in a DiscoveryTransport internally so callers below this
         class never touch a raw service object.
@@ -297,7 +297,7 @@ class SyncManager:
                 ),
             )
         except Exception as exc:
-            msg = f"{display_name}: Gmail push failed — {_scrub_paths(str(exc))}"
+            msg = f"{display_name}: Mail push failed — {_scrub_paths(str(exc))}"
             log.error(msg)
             stats.files_failed += 1
             stats.errors.append(msg)
