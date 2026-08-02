@@ -280,7 +280,22 @@ class SyncManager:
         thread_id = chat_row["gmail_thread_id"] if chat_row else None
         anchor_mid = chat_row["anchor_message_id"] if chat_row else None
 
-        # Push to Gmail.
+        # Push to Gmail. Hashes are recorded per-chunk as each one is
+        # confirmed delivered (see _record_chunk() below) rather than in one
+        # bulk insert after push_chat() returns — push_chat sends the file in
+        # multiple separate mailbox writes, and if the process dies partway
+        # through, a single end-of-call insert would leave the DB believing
+        # nothing was pushed even though earlier chunks already landed in the
+        # mailbox. On the next run, _recover_run()'s "already_pushed" lookup
+        # would then come back empty and re-push the entire chat — a real
+        # incident this has already caused. Recording incrementally means an
+        # interruption leaves the DB matching exactly what reached the mailbox.
+        def _record_chunk(i, total, done, tmsgs, chunk_msgs):
+            insert_message_hashes(
+                _build_hash_entries(chunk_msgs, run_id), self.db_path
+            )
+            self._on_chunk_progress(display_name, i, total, done, tmsgs)
+
         try:
             results, label_id, thread_id = push_chat(
                 transport=self.transport,
@@ -292,9 +307,7 @@ class SyncManager:
                 gmail_thread_id=thread_id,
                 dry_run=False,
                 source_path=filepath,
-                on_chunk=lambda i, total, done, tmsgs: self._on_chunk_progress(
-                    display_name, i, total, done, tmsgs
-                ),
+                on_chunk=_record_chunk,
             )
         except Exception as exc:
             msg = f"{display_name}: Mail push failed — {_scrub_paths(str(exc))}"
@@ -315,9 +328,12 @@ class SyncManager:
             chat_id, thread_id, label_id, new_anchor_mid, self.db_path
         )
 
-        # Persist message hashes.
-        hash_entries = _build_hash_entries(new_messages, run_id)
-        insert_message_hashes(hash_entries, self.db_path)
+        # Message hashes for every pushed chunk were already recorded
+        # incrementally by _record_chunk() above as push_chat() progressed;
+        # nothing left to insert here. (insert_message_hashes uses INSERT OR
+        # IGNORE, so there would be no harm in a redundant call, but there's
+        # also nothing left for it to do — every message in new_messages
+        # belongs to exactly one chunk, and on_chunk fires for all of them.)
 
         # Mark run complete.
         last_msg = new_messages[-1]
@@ -483,7 +499,17 @@ class SyncManager:
             )
             return True
 
-        # Push remaining chunks.
+        # Push remaining chunks. Same incremental-hash treatment as
+        # _sync_file() above and for the same reason: this is itself a
+        # recovery path, so it above all others must not repeat the original
+        # bug — if *this* push gets interrupted too, the hashes for whatever
+        # it did manage to deliver must already be recorded rather than lost
+        # again pending a second recovery.
+        def _record_chunk(i, total, done, tmsgs, chunk_msgs):
+            insert_message_hashes(
+                _build_hash_entries(chunk_msgs, run_id), self.db_path
+            )
+
         try:
             results, label_id, thread_id = push_chat(
                 transport=self.transport,
@@ -495,6 +521,7 @@ class SyncManager:
                 gmail_thread_id=chat.get("gmail_thread_id"),
                 dry_run=False,
                 source_path=source_file,
+                on_chunk=_record_chunk,
             )
         except Exception as exc:
             log.error(
@@ -514,8 +541,8 @@ class SyncManager:
             chat_id, thread_id, label_id, new_anchor_mid, self.db_path
         )
 
-        hash_entries = _build_hash_entries(remaining, run_id)
-        insert_message_hashes(hash_entries, self.db_path)
+        # Hashes for `remaining` were already recorded incrementally by
+        # _record_chunk() above (see comment before the push_chat() call).
 
         total_synced = prior_synced + len(remaining)
         last_msg = remaining[-1]
