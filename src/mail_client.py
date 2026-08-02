@@ -1410,7 +1410,7 @@ def push_chunks(
     gmail_thread_id: Optional[str] = None,
     dry_run: bool = False,
     source_path: Optional[Path] = None,
-    on_chunk: Optional[Callable[[int, int, int, int], None]] = None,
+    on_chunk: Optional[Callable[[int, int, int, int, list[ParsedMessage]], None]] = None,
 ) -> list[PushResult]:
     """Push a list of message chunks to Gmail as individual HTML emails in one thread.
 
@@ -1429,13 +1429,23 @@ def push_chunks(
         source_path:       Path to the original export file; used to build a
                            MediaExtractor for embedding images/attachments.
         on_chunk:          Optional callback(email_index_1based, total_emails,
-                           msgs_done, total_msgs), invoked after each email is
-                           pushed — lets callers (e.g. the Android sync-progress
-                           screen) show live within-file progress for large
-                           chats, instead of only ever learning done/total
-                           *files* (a chat with hundreds of chunks can take
-                           minutes to push, during which file-level progress
-                           alone looks frozen even though work is progressing).
+                           msgs_done, total_msgs, chunk_messages), invoked once
+                           per email — and only *after* that email's
+                           messages.insert()/APPEND has returned successfully
+                           (see the call site below) — lets callers (e.g. the
+                           Android sync-progress screen) show live within-file
+                           progress for large chats, instead of only ever
+                           learning done/total *files* (a chat with hundreds
+                           of chunks can take minutes to push, during which
+                           file-level progress alone looks frozen even though
+                           work is progressing). `chunk_messages` is exactly
+                           the sub-list of ParsedMessage that just landed in
+                           the mailbox in that one email — callers that need
+                           to durably record "this much has been delivered"
+                           (e.g. sync_manager's message-hash bookkeeping) key
+                           off this rather than the whole `messages` argument,
+                           so an interruption partway through a push leaves
+                           the record matching reality instead of all-or-nothing.
 
     Returns:
         List of PushResult, one per email sent.
@@ -1501,7 +1511,11 @@ def push_chunks(
             gmail_msg_id, thread_id_r,
         )
         if on_chunk is not None:
-            on_chunk(i + 1, total_emails, msgs_done, total_msgs)
+            # sub_chunk is the exact set of messages this email just carried,
+            # and this call happens strictly after _insert_with_backoff()
+            # returned successfully above — so by the time a caller sees this,
+            # the messages are durably in the mailbox, not merely attempted.
+            on_chunk(i + 1, total_emails, msgs_done, total_msgs, sub_chunk)
 
         if current_anchor_mid is None:
             current_anchor_mid = new_mid
@@ -1530,7 +1544,7 @@ def push_chat(
     gmail_thread_id: Optional[str] = None,
     dry_run: bool = False,
     source_path: Optional[Path] = None,
-    on_chunk: Optional[Callable[[int, int, int, int], None]] = None,
+    on_chunk: Optional[Callable[[int, int, int, int, list[ParsedMessage]], None]] = None,
 ) -> tuple[list[PushResult], str, str]:
     """High-level helper: chunk messages, ensure label, and push to Gmail.
 
