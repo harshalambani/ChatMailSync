@@ -1,5 +1,20 @@
 # Google Play Publishing SOP — WA Chat Sync to Gmail
 
+> **⚠ PARTIALLY SUPERSEDED (2026-08-02) — read `2026-08-02-android-store-distribution-phase.md` first.**
+>
+> This document is **Google Play only**. Play is now *deferred*; the current plan lists on Samsung
+> Galaxy Store first, then Indus Appstore and Xiaomi GetApps. See the phase doc for the store
+> shortlist, the cross-store signing trap, and the battle-testing gate.
+>
+> **Obsolete sections:** everything about Google OAuth — Stage 0.3 (Android OAuth client, SHA-1
+> registration), the OAuth consent screen, and the Stage 3 OAuth verification. The app moved to
+> IMAP + app password (Road B, 2026-07-30) and no longer uses Google OAuth on Android.
+>
+> **Still accurate:** Play Console mechanics — account signup, the US$25 fee, Play App Signing,
+> closed-testing rules for personal accounts, content/data-safety declarations.
+>
+> Contents below are left unedited as a historical record.
+
 **Version:** 1.0 (2026-07-04)
 **Audience:** first-time publisher. Written as a do-this-then-that guide.
 **Scope:** Stage 1 (personal use — plan phase A7), Stage 2 (closed testing — A8), Stage 3 (public production + Google OAuth verification — A9).

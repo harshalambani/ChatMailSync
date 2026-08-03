@@ -49,6 +49,9 @@ from src.mail_client import (
 )
 from src.sync_manager import ProgressSyncManager as _ProgressSyncManager
 from src.sync_manager import SyncStats, _scrub_paths
+from src import secret_store
+
+log = logging.getLogger(__name__)
 
 # Shared with gui.py's _SETTINGS_FILE -- both modules live at the project's
 # top level, so Path(__file__).parent resolves to the same "data" dir for
@@ -171,6 +174,25 @@ def _save_imap_credentials(host: str, port: int, email: str, password: str) -> N
     OAuth's token.json already gets -- rather than inventing a second
     mechanism. The password lives ONLY here, never in .settings.json, never
     logged, never echoed back into the UI after saving.
+
+    On Windows, the password is additionally encrypted at rest with DPAPI
+    (src/secret_store.py) before it ever reaches disk -- see that module's
+    docstring for why the ACL alone isn't enough. When DPAPI succeeds the
+    file gets a "password_dpapi" key (base64 ciphertext) and NO "password"
+    key at all; when it is unavailable (non-Windows, or any DPAPI failure)
+    the file falls back to the legacy plaintext "password" key exactly as
+    before. Exactly one of the two keys is ever present in a file this
+    function writes.
+
+    Failure policy for DPAPI specifically (deliberate, do not "fix" this by
+    making a DPAPI failure fatal): the ACL check below is what stays fail-
+    loud, because it is the guarantee this function has always made. DPAPI
+    is a defence-in-depth layer added on top of that guarantee, not a
+    replacement for it -- an install where DPAPI happens to be unavailable
+    (e.g. a locked-down Windows image without a usable per-user profile) is
+    no worse off than every install before this feature existed, and
+    refusing to save the password there would take away a working feature
+    to protect a layer that was never the load-bearing one.
     """
     IMAP_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -181,18 +203,25 @@ def _save_imap_credentials(host: str, port: int, email: str, password: str) -> N
     if os.name == "nt":
         _restrict_auth_dir_acl(IMAP_CREDENTIALS_FILE.parent)
 
+    payload = {"host": host, "port": port, "email": email}
+    encrypted = secret_store.protect(password) if os.name == "nt" else None
+    if encrypted is not None:
+        payload["password_dpapi"] = encrypted
+    else:
+        if os.name == "nt":
+            log.warning(
+                "DPAPI encryption unavailable; storing the IMAP app password "
+                "as plaintext protected only by file permissions."
+            )
+        payload["password"] = password
+
     # O_CREAT|O_EXCL-free but mode-carrying open: on POSIX the 0o600 applies
     # at creation rather than after the content is already there. Truncate an
     # existing file rather than leaving a stale longer password tail behind.
     fd = os.open(IMAP_CREDENTIALS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         with os.fdopen(fd, "w") as fh:
-            json.dump({
-                "host": host,
-                "port": port,
-                "email": email,
-                "password": password,
-            }, fh)
+            json.dump(payload, fh)
     except Exception:
         # Never leave a half-written credentials file behind.
         IMAP_CREDENTIALS_FILE.unlink(missing_ok=True)
@@ -308,6 +337,67 @@ def connect_imap(
         result_queue.put({"type": "auth_error", "msg": _scrub_paths(str(exc))})
 
 
+def resolve_imap_password(data: dict) -> str:
+    """Return the plaintext app password from a loaded imap_credentials.json dict.
+
+    Accepts both credential-file shapes written by _save_imap_credentials:
+      - "password_dpapi" (current): decrypted via secret_store.unprotect().
+      - "password" (legacy, installs <= v0.2.1-beta): used as-is.
+
+    A "password_dpapi" entry that fails to decrypt is NOT a case to fall
+    through silently -- it means the auth/ folder was copied to a different
+    machine or a different Windows user account, where DPAPI intentionally
+    refuses to decrypt (that is the whole point of it being per-user). The
+    old password is not lost (it's still valid at the provider), so this
+    raises a specific, actionable RuntimeError rather than pretending the
+    password is empty or retrying forever. The blob itself never appears in
+    that message.
+
+    A legacy plaintext "password" read on a Windows machine where DPAPI is
+    available is opportunistically re-saved encrypted -- a transparent
+    upgrade so existing installs migrate off plaintext storage the next time
+    they connect, with no user action required. This is best-effort: any
+    failure while re-saving is swallowed so an upgrade hiccup can never turn
+    a working read into a failed sync; the caller still gets the password
+    that was already proven to work.
+    """
+    if "password_dpapi" in data:
+        password = secret_store.unprotect(data["password_dpapi"])
+        if password is None:
+            raise RuntimeError(
+                "The saved IMAP app password could not be decrypted on this "
+                "computer/account. This happens when the auth folder is "
+                "copied to a different machine or a different Windows user "
+                "-- Windows ties the encryption to the original account by "
+                "design. Please re-enter the app password in Settings."
+            )
+        return password
+
+    if "password" not in data:
+        # Neither key present: the file exists but carries no password at all
+        # (a truncated write, a hand-edit, or a shape from some future
+        # version). Before this helper existed the direct data["password"]
+        # lookup blew up loudly right here, and it should stay loud --
+        # degrading to an empty password would surface as an authentication
+        # rejection from the provider and send the user hunting for the fault
+        # in entirely the wrong place.
+        raise RuntimeError(
+            "The saved IMAP credentials file does not contain an app "
+            "password. Please re-enter the app password in Settings."
+        )
+
+    password = data["password"]
+    if os.name == "nt" and secret_store.is_available():
+        try:
+            _save_imap_credentials(data["host"], data["port"], data["email"], password)
+        except Exception:
+            log.warning(
+                "Could not upgrade legacy plaintext IMAP credentials to "
+                "DPAPI encryption; continuing with the existing plaintext copy."
+            )
+    return password
+
+
 def build_transport_for_active_backend() -> Optional[MailTransport]:
     """Build a transport for whichever backend .settings.json says is active.
 
@@ -326,6 +416,7 @@ def build_transport_for_active_backend() -> Optional[MailTransport]:
                 "Open the desktop app's Settings to connect an IMAP account first."
             )
         data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
-        return build_imap_transport(data["host"], data["port"], data["email"], data["password"])
+        password = resolve_imap_password(data)
+        return build_imap_transport(data["host"], data["port"], data["email"], password)
     service = build_service()
     return DiscoveryTransport(service)

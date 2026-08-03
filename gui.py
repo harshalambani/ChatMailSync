@@ -29,6 +29,7 @@ from gui_worker import (
     check_auth_status,
     connect_gmail,
     connect_imap,
+    resolve_imap_password,
 )
 from src.config import (
     CREDENTIALS_FILE,
@@ -854,8 +855,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
                 if IMAP_CREDENTIALS_FILE.exists():
                     data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
+                    password = resolve_imap_password(data)
                     self._transport = build_imap_transport(
-                        data["host"], data["port"], data["email"], data["password"]
+                        data["host"], data["port"], data["email"], password
                     )
             else:
                 self._transport = DiscoveryTransport(build_service())
