@@ -12,10 +12,10 @@
 Nothing below moves until you say so.
 
 ### A1. Test the Android APK — *you asked for this*
-Built from a clean worktree of the `v0.2.1-beta` tag, signed, and verified.
+Built from a clean worktree of the `v0.2.1-beta` tag, signed, verified, and now **published**.
 
-- **Path:** `C:\Users\inabm\AppData\Local\Temp\claude\c--VSCode\6fde7748-aa03-4fcc-b787-cc8640743610\scratchpad\release\WAMailSync-v0.2.1-beta.apk`
-- **Size:** ~21 MB
+- **Download:** attached to the [v0.2.1-beta release](https://github.com/harshalambani/WAGMailSync/releases/tag/v0.2.1-beta) as `WAMailSync-v0.2.1-beta.apk`
+- **Size:** ~21 MB (22,067,808 bytes), SHA-256 `da4cd7dd…c8cd055f`
 - **Verified:** `package com.wamailsync.app`, versionCode 3, versionName `0.2.1-beta`, label "WA Mail Sync", `arm64-v8a`, minSdk 24, targetSdk 36
 - **Signer:** `CN=Harshal Ambani, OU=Personal, O=WA Chat Sync to Gmail, C=IN`, SHA-256 `096ca121…905095`
 
@@ -102,14 +102,6 @@ All 157 tests pass with these in place.
   listing at all.
 - **Safer credential storage (P1)** — the DPAPI work in §C is this phase, part-delivered.
 - **"No longer Gmail-only" renaming (P2)** — B5 is a piece of it.
-
----
-
-## E. Environment
-
-The claude.ai **Gmail**, **Google Calendar**, and **Google Drive** connectors need OAuth
-authorization via your claude.ai connector settings. That flow can't run from this session, so those
-tools are unavailable until you authorize them.
 
 ---
 
