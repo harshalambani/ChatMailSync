@@ -30,6 +30,7 @@ import pytest
 import gui
 import gui_worker
 import src.config
+from src import secret_store
 from src.config import IMAP_PROVIDERS, MAIL_BACKEND_GMAIL_OAUTH, MAIL_BACKEND_IMAP
 
 
@@ -318,18 +319,29 @@ def test_connect_imap_success_persists_credentials_and_posts_transport(worker_pa
     monkeypatch.setattr(gui_worker, "build_imap_transport", lambda h, p, e, pw: fake_transport)
 
     q: queue.Queue = queue.Queue()
-    gui_worker.connect_imap(q, "imap.gmail.com", 993, "me@example.com", "hunter2-app-pw")
+    password = "hunter2-app-pw"
+    gui_worker.connect_imap(q, "imap.gmail.com", 993, "me@example.com", password)
 
     event = q.get_nowait()
     assert event["type"] == "auth_ok"
     assert event["transport"] is fake_transport
 
-    # Credentials file shape.
-    saved = json.loads(worker_paths["imap_credentials"].read_text())
-    assert saved == {
-        "host": "imap.gmail.com", "port": 993,
-        "email": "me@example.com", "password": "hunter2-app-pw",
-    }
+    # Credentials file shape. This test machine is Windows, so
+    # _save_imap_credentials will actually go through real DPAPI encryption
+    # (see test_save_imap_credentials_file_shape below for the dedicated,
+    # non-conditional assertion of that) -- but assert both branches here so
+    # this test stays meaningful even if DPAPI is ever unavailable in CI.
+    raw = worker_paths["imap_credentials"].read_bytes()
+    saved = json.loads(raw)
+    assert saved["host"] == "imap.gmail.com"
+    assert saved["port"] == 993
+    assert saved["email"] == "me@example.com"
+    if secret_store.is_available():
+        assert "password_dpapi" in saved
+        assert "password" not in saved
+        assert password.encode() not in raw
+    else:
+        assert saved.get("password") == password
 
 
 class _FakeLoginFailIMAP4SSL:
@@ -375,13 +387,170 @@ def test_connect_imap_failure_never_leaks_password_and_does_not_persist(worker_p
 
 
 def test_save_imap_credentials_file_shape(worker_paths):
-    gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", "hunter2-app-pw")
-    saved = json.loads(worker_paths["imap_credentials"].read_text())
-    assert set(saved.keys()) == {"host", "port", "email", "password"}
+    """On this Windows test machine, saving goes through real DPAPI: the
+    file gets password_dpapi and NO password key, and the plaintext password
+    string does not appear anywhere in the raw file bytes. Written to also
+    cover the plaintext-fallback shape so the assertion stays correct on a
+    hypothetical non-Windows/DPAPI-unavailable CI runner."""
+    password = "hunter2-app-pw"
+    gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", password)
+    raw = worker_paths["imap_credentials"].read_bytes()
+    saved = json.loads(raw)
     assert saved["host"] == "imap.gmail.com"
     assert saved["port"] == 993
     assert saved["email"] == "me@example.com"
+    if secret_store.is_available():
+        assert set(saved.keys()) == {"host", "port", "email", "password_dpapi"}
+        assert password.encode() not in raw
+    else:
+        assert set(saved.keys()) == {"host", "port", "email", "password"}
+        assert saved["password"] == password
+
+
+def test_save_imap_credentials_falls_back_to_plaintext_when_dpapi_unavailable(worker_paths, monkeypatch):
+    """secret_store.protect() failing (DPAPI unavailable, or any runtime
+    error inside it) must not refuse the save -- see _save_imap_credentials's
+    docstring for why that's a deliberate call. It falls back to the same
+    plaintext-protected-by-ACL storage this app always used."""
+    monkeypatch.setattr(gui_worker.secret_store, "is_available", lambda: False)
+    monkeypatch.setattr(gui_worker.secret_store, "protect", lambda pw: None)
+
+    gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", "hunter2-app-pw")
+
+    saved = json.loads(worker_paths["imap_credentials"].read_text())
+    assert set(saved.keys()) == {"host", "port", "email", "password"}
     assert saved["password"] == "hunter2-app-pw"
+
+
+# ---------------------------------------------------------------------------
+# DPAPI-encrypted credentials: read path, transparent upgrade, hard failure
+# ---------------------------------------------------------------------------
+
+def test_build_transport_imap_decrypts_dpapi_password(worker_paths, monkeypatch):
+    """A file saved with password_dpapi (the current shape) must round-trip
+    back to the real plaintext password on the read path too."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    password = "hunter2-app-pw"
+    gui_worker._save_imap_credentials("imap.gmail.com", 993, "me@example.com", password)
+    if not secret_store.is_available():
+        pytest.skip("DPAPI not available in this environment")
+    assert "password_dpapi" in json.loads(worker_paths["imap_credentials"].read_text())
+
+    captured = {}
+
+    def fake_build_imap_transport(host, port, email, pw):
+        captured.update(host=host, port=port, email=email, password=pw)
+        return "FAKE_TRANSPORT"
+
+    monkeypatch.setattr(gui_worker, "build_imap_transport", fake_build_imap_transport)
+    transport = gui_worker.build_transport_for_active_backend()
+    assert transport == "FAKE_TRANSPORT"
+    assert captured["password"] == password
+
+
+def test_build_transport_imap_undecryptable_dpapi_raises_runtimeerror_without_leaking(worker_paths):
+    """A password_dpapi blob that fails to decrypt (auth/ copied to another
+    machine or another Windows user) must raise a specific RuntimeError --
+    never silently fall through to an empty/garbage password -- and that
+    error must not contain the blob or any password-shaped content."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    fake_blob = "AQAAANCMnd8BFdERjHoAwE_this_is_not_a_real_dpapi_blob=="
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993,
+        "email": "me@example.com", "password_dpapi": fake_blob,
+    }))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        gui_worker.build_transport_for_active_backend()
+
+    msg = str(excinfo.value)
+    assert fake_blob not in msg
+    assert "re-enter the app password" in msg.lower() or "re-enter" in msg.lower()
+
+
+def test_build_transport_imap_raises_when_file_has_neither_password_key(worker_paths):
+    """A credentials file carrying neither "password" nor "password_dpapi"
+    must fail loudly. Routing both readers through resolve_imap_password()
+    replaced a direct data["password"] lookup that used to raise KeyError
+    here; degrading to an empty password instead would reach the provider as
+    an ordinary authentication rejection and point the user at their app
+    password rather than at the damaged file."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993, "email": "me@example.com",
+    }))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        gui_worker.build_transport_for_active_backend()
+
+    assert "does not contain an app password" in str(excinfo.value)
+
+
+def test_build_transport_imap_upgrades_legacy_plaintext_to_dpapi_on_read(worker_paths, monkeypatch):
+    """Reading a legacy plaintext-format file on a Windows box where DPAPI is
+    available must opportunistically rewrite the file encrypted (transparent
+    upgrade), while still returning the correct password for this read."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    password = "hunter2-app-pw"
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993,
+        "email": "me@example.com", "password": password,
+    }))
+    if not secret_store.is_available():
+        pytest.skip("DPAPI not available in this environment")
+
+    monkeypatch.setattr(gui_worker, "build_imap_transport", lambda h, p, e, pw: "FAKE_TRANSPORT")
+    transport = gui_worker.build_transport_for_active_backend()
+    assert transport == "FAKE_TRANSPORT"
+
+    upgraded = json.loads(worker_paths["imap_credentials"].read_text())
+    assert "password_dpapi" in upgraded
+    assert "password" not in upgraded
+    # And the upgraded file itself decrypts back to the same password.
+    assert secret_store.unprotect(upgraded["password_dpapi"]) == password
+
+
+def test_build_transport_imap_upgrade_failure_does_not_break_read(worker_paths, monkeypatch):
+    """If the opportunistic re-save during a transparent upgrade blows up for
+    any reason, the read that triggered it must still succeed with the
+    password that was already proven to work -- an upgrade hiccup must never
+    turn into a sync failure."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    password = "hunter2-app-pw"
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993,
+        "email": "me@example.com", "password": password,
+    }))
+
+    def boom(*a, **kw):
+        raise RuntimeError("simulated upgrade failure")
+
+    monkeypatch.setattr(gui_worker, "_save_imap_credentials", boom)
+    monkeypatch.setattr(gui_worker.secret_store, "is_available", lambda: True)
+
+    captured = {}
+
+    def fake_build_imap_transport(host, port, email, pw):
+        captured["password"] = pw
+        return "FAKE_TRANSPORT"
+
+    monkeypatch.setattr(gui_worker, "build_imap_transport", fake_build_imap_transport)
+    transport = gui_worker.build_transport_for_active_backend()
+    assert transport == "FAKE_TRANSPORT"
+    assert captured["password"] == password
+
+
+def test_check_imap_auth_status_works_for_dpapi_shape(worker_paths):
+    """_check_imap_auth_status only ever reads 'email', so it must keep
+    working unchanged for the new password_dpapi file shape."""
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993,
+        "email": "me@example.com", "password_dpapi": "irrelevant-for-this-check",
+    }))
+    valid, text = gui_worker.check_auth_status()
+    assert valid is True
+    assert text == "Connected (me@example.com)"
 
 
 # ---------------------------------------------------------------------------
