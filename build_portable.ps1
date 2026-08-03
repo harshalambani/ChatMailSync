@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Build WAGmailSync as a PortableApps-compatible folder.
+    Build WAMailSync as a PortableApps-compatible folder.
 
 .DESCRIPTION
-    1. Runs PyInstaller with wa-chat-sync.spec  ->  dist\WAGmailSync\
-    2. Assembles the PortableApps directory layout under dist\WAGmailSyncPortable\
+    1. Runs PyInstaller with wa-chat-sync.spec  ->  dist\WAMailSync\
+    2. Assembles the PortableApps directory layout under dist\WAMailSyncPortable\
     3. Copies user-supplied credentials.json into the bundle (if present).
 
 .EXAMPLE
@@ -37,9 +37,9 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot   = $PSScriptRoot
 $DistDir       = Join-Path $ProjectRoot "dist"
-$BundleDir     = Join-Path $DistDir "WAGmailSync"        # PyInstaller output
-$PortableDir   = Join-Path $DistDir "WAGmailSyncPortable"
-$AppDir        = Join-Path $PortableDir "App\WAGmailSync"
+$BundleDir     = Join-Path $DistDir "WAMailSync"          # PyInstaller output
+$PortableDir   = Join-Path $DistDir "WAMailSyncPortable"
+$AppDir        = Join-Path $PortableDir "App\WAMailSync"
 $DataDir       = Join-Path $PortableDir "Data"
 $AppInfoDir    = Join-Path $PortableDir "App\AppInfo"
 $LauncherDir   = Join-Path $PortableDir "Other\Source"
@@ -93,7 +93,7 @@ if (Test-Path $AppDir) {
     Remove-Item $AppDir -Recurse -Force
 }
 
-# App\WAGmailSync\ - the frozen exe + all its DLLs / data
+# App\WAMailSync\ - the frozen exe + all its DLLs / data
 New-Item -ItemType Directory -Force $AppDir | Out-Null
 Copy-Item "$BundleDir\*" $AppDir -Recurse
 
@@ -131,22 +131,22 @@ foreach ($authFile in @("credentials.json", "token.json")) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 - Launcher script  (WAGmailSyncPortable.bat)
+# Step 3 - Launcher script  (WAMailSyncPortable.bat)
 # ---------------------------------------------------------------------------
 
 Write-Host "`n==> Writing launcher..." -ForegroundColor Cyan
 
-$LauncherBat = Join-Path $PortableDir "WAGmailSyncPortable.bat"
+$LauncherBat = Join-Path $PortableDir "WAMailSyncPortable.bat"
 $LauncherContent = @'
 @echo off
-:: WAGmailSync PortableApps launcher
-:: Sets WAGMAIL_ROOT so the frozen app resolves paths relative to Data\
+:: WAMailSync PortableApps launcher
+:: Sets WAMAILSYNC_ROOT so the frozen app resolves paths relative to Data\
 setlocal
 
 set "PA_ROOT=%~dp0"
-set "WAGMAIL_ROOT=%PA_ROOT%Data"
+set "WAMAILSYNC_ROOT=%PA_ROOT%Data"
 
-start "" "%PA_ROOT%App\WAGmailSync\WAGmailSync.exe"
+start "" "%PA_ROOT%App\WAMailSync\WAMailSync.exe"
 endlocal
 '@
 Set-Content -Path $LauncherBat -Value $LauncherContent -Encoding ASCII

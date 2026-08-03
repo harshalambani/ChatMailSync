@@ -11,7 +11,7 @@ from pathlib import Path
 
 # When running as a PyInstaller bundle, __file__ points inside the frozen
 # binary and relative paths break.  The PortableApps launcher sets
-# WAGMAIL_ROOT to the App/WAGmailSync/ directory before starting the exe.
+# WAMAILSYNC_ROOT to the App/WAMailSync/ directory before starting the exe.
 #
 # An Android/Chaquopy caller has no env var to set and no __file__-relative
 # layout to fall back to (app-private storage lives under
@@ -22,7 +22,10 @@ _explicit_root: Path | None = None
 def _compute_root() -> Path:
     if _explicit_root is not None:
         return _explicit_root
-    env_root = os.environ.get("WAGMAIL_ROOT")
+    # WAMAILSYNC_ROOT is the current name; WAGMAIL_ROOT is kept as a fallback
+    # for portable installs built before the WAGmailSync -> WAMailSync rename
+    # whose launcher .bat still exports the old variable. Not dead code.
+    env_root = os.environ.get("WAMAILSYNC_ROOT") or os.environ.get("WAGMAIL_ROOT")
     return Path(env_root) if env_root else Path(__file__).parent.parent
 
 
@@ -61,8 +64,8 @@ def set_root(path: str | Path) -> None:
 
     Must be called before any other src.* module imports config's derived
     path constants (AUTH_DIR, DATA_DIR, INBOX_DIR, ...) — see _apply_root()'s
-    docstring. Windows never calls this; it keeps using the WAGMAIL_ROOT env
-    var / __file__-relative fallback below.
+    docstring. Windows never calls this; it keeps using the WAMAILSYNC_ROOT
+    (or legacy WAGMAIL_ROOT) env var / __file__-relative fallback below.
     """
     global _explicit_root
     _explicit_root = Path(path)
@@ -118,7 +121,7 @@ def resolve_mail_backend(saved: dict) -> str:
     new default.
 
     TOKEN_FILE is read from the module globals at call time rather than
-    captured at import, because _apply_root() rebinds it when WAGMAIL_ROOT
+    captured at import, because _apply_root() rebinds it when WAMAILSYNC_ROOT
     moves the storage root out from under us.
     """
     backend = saved.get("mail_backend")
