@@ -7,7 +7,9 @@
     1. Runs PyInstaller with wa-chat-sync.spec  ->  dist\WAMailSync\
     2. Assembles the PortableApps directory layout under dist\WAMailSyncPortable\
     3. Generates the compiled PortableApps.com launcher (WAMailSyncPortable.exe)
-    4. Optionally builds the .paf.exe PortableApps.com installer (-Installer)
+    4. Optionally packages a distributable: the .paf.exe PortableApps.com
+       installer (-Installer) and/or a plain portable zip (-Zip). Both are cut
+       from the same clean staging tree, never from the live working copy.
     Data\ is created empty. Live credentials are copied in only with the
     explicit -SeedCredentials switch, and never for a package you intend to
     hand to anyone.
@@ -38,6 +40,7 @@ param(
     [switch]$Sign,
     [switch]$InstallCert,
     [switch]$Installer,
+    [switch]$Zip,
     [switch]$SeedCredentials
 )
 
@@ -149,9 +152,20 @@ if (-not $SkipBuild) {
     if (-not (Test-Path $LockFile)) {
         Write-Error "requirements-lock.txt not found at '$LockFile'. Regenerate it with pip-compile --generate-hashes."
     }
+    # $ErrorActionPreference is Stop for the script, but under PowerShell 5.1
+    # that also applies to anything a native exe writes to stderr: PS wraps each
+    # stderr line in a NativeCommandError and kills the build on it. pip writes
+    # ordinary warnings there - an unrelated half-uninstalled package elsewhere
+    # in site-packages is enough - so the build died on someone else's mess
+    # while pip itself had exited 0. The exit code is the only thing that
+    # actually says whether pip succeeded, so let stderr through and check that.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     & python -m pip install --require-hashes -r $LockFile
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Installing from requirements-lock.txt failed (exit $LASTEXITCODE). Aborting."
+    $pipExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($pipExit -ne 0) {
+        Write-Error "Installing from requirements-lock.txt failed (exit $pipExit). Aborting."
     }
 
     Write-Host "`n==> Running PyInstaller..." -ForegroundColor Cyan
@@ -162,9 +176,15 @@ if (-not $SkipBuild) {
     } else {
         $PyInstaller = "$env:APPDATA\Python\Python314\Scripts\pyinstaller.exe"
     }
+    # Same stderr trap as pip above - PyInstaller logs INFO/WARNING to stderr
+    # as a matter of course, so its exit code is the only reliable signal.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     & $PyInstaller "$ProjectRoot\wa-chat-sync.spec" --clean --noconfirm
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "PyInstaller failed (exit $LASTEXITCODE). Aborting."
+    $paExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    if ($paExit -ne 0) {
+        Write-Error "PyInstaller failed (exit $paExit). Aborting."
     }
     Write-Host "==> PyInstaller done." -ForegroundColor Green
 } else {
@@ -328,18 +348,22 @@ if ($Sign) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5 (optional) - .paf.exe PortableApps.com installer
+# Step 5 (optional) - clean staging tree, shared by every distributable
 #
 # NOT built from $PortableDir directly. That directory is the live working
 # copy: Step 2 deliberately preserves its Data\ across rebuilds so auth tokens
-# survive, which means it holds real credentials and real chat exports. The
-# installer packages everything it is pointed at, so pointing it there would
+# survive, which means it holds real credentials and real chat exports. A
+# packager takes everything it is pointed at, so pointing it there would
 # publish those. Instead we stage App\ + AppInfo\ + the launcher into a clean
 # tree with an empty Data\ skeleton, and package that.
+#
+# Both -Installer and -Zip consume this same tree. That is the point: two
+# staging routines would be two definitions of "what ships", and the day they
+# drift is the day the zip carries something the installer was scanned for.
 # ---------------------------------------------------------------------------
 
-if ($Installer) {
-    Write-Host "`n==> Staging a clean package for the installer..." -ForegroundColor Cyan
+if ($Installer -or $Zip) {
+    Write-Host "`n==> Staging a clean package..." -ForegroundColor Cyan
 
     $StageDir = Join-Path $DistDir "$AppID-stage"
     if (Test-Path $StageDir) {
@@ -383,6 +407,20 @@ if ($Installer) {
         Write-Error "Refusing to package: credential or user-data files are present in the staging tree (listed above)."
     }
 
+    # DisplayVersion is the single source of truth for what this build is
+    # called, so the zip name cannot drift from the installer's.
+    if ($infoText -match "(?m)^\s*DisplayVersion\s*=\s*(\S+)") {
+        $DisplayVersion = $Matches[1]
+    } else {
+        Write-Error "appinfo.ini has no DisplayVersion. Cannot name the package."
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 5a (optional) - .paf.exe PortableApps.com installer
+# ---------------------------------------------------------------------------
+
+if ($Installer) {
     Write-Host "`n==> Building .paf.exe installer..." -ForegroundColor Cyan
 
     $InstExe = Resolve-PortableAppsTool `
@@ -410,6 +448,45 @@ if ($Installer) {
 }
 
 # ---------------------------------------------------------------------------
+# Step 5b (optional) - plain portable zip
+#
+# For people who will not run an installer, or who want the folder on a stick.
+# Same staged tree as the .paf.exe above, so it has already been through the
+# credential scan - do not be tempted to zip $PortableDir instead, which is the
+# live working copy with real credentials in Data\.
+#
+# Zipped with the AppID folder as the top level rather than loose files, so
+# extracting to a drive root does not scatter App\, Data\ and the exe across
+# it - the same shape the installer produces on disk.
+# ---------------------------------------------------------------------------
+
+if ($Zip) {
+    Write-Host "`n==> Building portable zip..." -ForegroundColor Cyan
+
+    $ZipPath = Join-Path $DistDir "$($AppID)_$($DisplayVersion).zip"
+    if (Test-Path $ZipPath) {
+        Remove-Item $ZipPath -Force
+    }
+
+    # Compress-Archive on a directory (no \*) keeps it as the root entry, but
+    # names that entry after the source directory - which here is
+    # "<AppID>-stage", a build-internal name the user should never see after
+    # extracting. So copy the staged tree to a correctly named sibling and zip
+    # that, rather than shipping the wrong folder name.
+    $ZipRoot = Join-Path $DistDir $AppID
+    if (Test-Path $ZipRoot) {
+        Remove-Item $ZipRoot -Recurse -Force
+    }
+    Copy-Item $StageDir $ZipRoot -Recurse
+    Compress-Archive -Path $ZipRoot -DestinationPath $ZipPath -CompressionLevel Optimal
+    Remove-Item $ZipRoot -Recurse -Force
+
+    $zipItem = Get-Item $ZipPath
+    Write-Host "   Built $($zipItem.Name) ($($zipItem.Length) bytes)" -ForegroundColor Green
+    Write-Host "   SHA-256 $((Get-FileHash $ZipPath -Algorithm SHA256).Hash)" -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -418,6 +495,9 @@ Write-Host "    Portable folder : $PortableDir"
 Write-Host "    Launch with     : $LauncherExe"
 if ($Installer) {
     Write-Host "    Installer       : $PafPath"
+}
+if ($Zip) {
+    Write-Host "    Portable zip    : $ZipPath"
 }
 Write-Host ""
 Write-Host "    Data\ ships empty. The app prompts for mail settings on first run;"
