@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -186,6 +187,15 @@ fun MailAccountScreen(
     // connect" — so the one control every user needs was pushed off-screen by
     // help that most users need once, if ever.
     var helpExpanded by remember { mutableStateOf(false) }
+    // "Touched" state so the required-field error only shows once the user
+    // has actually visited and left the field blank, not on first render —
+    // marking every required field as an error before the user has typed
+    // anything would be hostile UX for a brand-new, empty screen.
+    var emailTouched by remember { mutableStateOf(false) }
+    var hostTouched by remember { mutableStateOf(false) }
+    val emailIsError = emailTouched && imapEmail.isBlank()
+    val hostIsError = imapProvider == "custom" && hostTouched && imapHost.isBlank()
+    val saveEnabled = !imapSaveBusy && imapEmail.isNotBlank() && (imapProvider != "custom" || imapHost.isNotBlank())
 
     Scaffold(
         topBar = {
@@ -239,9 +249,15 @@ fun MailAccountScreen(
                 OutlinedTextField(
                     value = imapHost,
                     onValueChange = onImapHostChange,
-                    label = { Text("Host") },
+                    label = { Text(if (imapProvider == "custom") "Host *" else "Host") },
                     enabled = imapProvider == "custom",
-                    modifier = Modifier.fillMaxWidth(),
+                    isError = hostIsError,
+                    supportingText = {
+                        if (hostIsError) Text("Required")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { if (!it.isFocused) hostTouched = true },
                 )
                 OutlinedTextField(
                     value = imapPort.toString(),
@@ -254,9 +270,15 @@ fun MailAccountScreen(
                 OutlinedTextField(
                     value = imapEmail,
                     onValueChange = onImapEmailChange,
-                    label = { Text("Email address") },
+                    label = { Text("Email address *") },
+                    isError = emailIsError,
+                    supportingText = {
+                        if (emailIsError) Text("Required")
+                    },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { if (!it.isFocused) emailTouched = true },
                 )
                 OutlinedTextField(
                     value = imapPasswordInput,
@@ -282,7 +304,7 @@ fun MailAccountScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Button(
-                        enabled = !imapSaveBusy,
+                        enabled = saveEnabled,
                         onClick = {
                             imapSaveBusy = true
                             imapSaveStatus = null
@@ -472,7 +494,7 @@ fun MailAccountScreen(
                 },
                 enabled = backendUsable,
             ) {
-                Text("Test connection (labels.list)")
+                Text("Test connection")
             }
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
         }

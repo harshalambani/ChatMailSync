@@ -28,3 +28,6 @@ __pycache__/
 # Build artifacts
 dist/
 build/
+
+# Kotlin incremental-compile cache, emitted next to the Gradle build dir
+android/.kotlin/

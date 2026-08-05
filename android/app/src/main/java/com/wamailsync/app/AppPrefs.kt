@@ -21,6 +21,11 @@ object AppPrefs {
     private const val KEY_IMAP_PORT = "imap_port"
     private const val KEY_IMAP_EMAIL = "imap_email"
     private const val KEY_IMAP_PASSWORD_SECRET = "imap_password_secret"
+    private const val KEY_PENDING_SYNCED_FILES = "pending_synced_files"
+    /** Control character used to pack a "filename<sep>sourceUri" pair into
+     * one StringSet element — SharedPreferences has no native Map type, and
+     * this can't collide with a real filename or content:// Uri. */
+    private const val PENDING_SYNCED_FILE_SEPARATOR = "\u0001"
 
     /** WorkManager's PeriodicWorkRequest has a hard 15-minute floor enforced
      * by the platform itself — no interval below this is achievable
@@ -181,6 +186,43 @@ object AppPrefs {
 
     fun hasImapPassword(context: Context): Boolean =
         SecretStore.getSecret(context, KEY_IMAP_PASSWORD_SECRET) != null
+
+    /** Inbox filename -> watched-folder source doc URI, recorded at import
+     * time and only consumed once WatchFolderWorker.applyPendingSyncedFilePolicies
+     * confirms the file has actually left inbox/ (moved to processed/ by a
+     * completed sync) — applying synced_file_policy at import time, before
+     * delivery, risked moving/deleting a user's source zip for a chat that
+     * was never actually sent. A leftover entry here is always safe: it's
+     * only acted on once the corresponding file is independently observed
+     * to be gone from inbox/, never on trust that a prior run "must have"
+     * delivered it. */
+    fun getPendingSyncedFiles(context: Context): MutableMap<String, String> {
+        val raw = prefs(context).getStringSet(KEY_PENDING_SYNCED_FILES, emptySet()) ?: emptySet()
+        val map = LinkedHashMap<String, String>()
+        for (entry in raw) {
+            val parts = entry.split(PENDING_SYNCED_FILE_SEPARATOR, limit = 2)
+            if (parts.size == 2) map[parts[0]] = parts[1]
+        }
+        return map
+    }
+
+    fun addPendingSyncedFile(context: Context, filename: String, sourceUri: String) {
+        val current = getPendingSyncedFiles(context)
+        current[filename] = sourceUri
+        persistPendingSyncedFiles(context, current)
+    }
+
+    fun removePendingSyncedFile(context: Context, filename: String) {
+        val current = getPendingSyncedFiles(context)
+        if (current.remove(filename) != null) persistPendingSyncedFiles(context, current)
+    }
+
+    private fun persistPendingSyncedFiles(context: Context, map: Map<String, String>) {
+        val encoded = map.entries
+            .map { (name, uri) -> "$name$PENDING_SYNCED_FILE_SEPARATOR$uri" }
+            .toSet()
+        prefs(context).edit().putStringSet(KEY_PENDING_SYNCED_FILES, encoded).apply()
+    }
 
     /** Clears every saved IMAP field, including the Keystore-encrypted
      * password — used by Settings' "Forget saved password". Does not touch

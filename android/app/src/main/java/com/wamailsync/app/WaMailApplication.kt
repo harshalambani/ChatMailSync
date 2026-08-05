@@ -32,5 +32,14 @@ class WaMailApplication : Application() {
 
         fun inboxDir(context: Context): File =
             File(pythonRoot(context), "data/inbox").apply { mkdirs() }
+
+        /** Mirrors android_api.list_inbox()'s own definition of "something
+         * waiting" (any plain file directly under data/inbox/) — the single
+         * source of truth both MainActivity's Home "Sync now" and
+         * WatchFolderWorker's "Sync now" consult for whether there's a
+         * backlog to deliver, instead of each inventing its own notion of
+         * pending work. */
+        fun hasPendingInboxFiles(context: Context): Boolean =
+            inboxDir(context).listFiles { f -> f.isFile }?.isNotEmpty() == true
     }
 }
