@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -20,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +50,19 @@ fun ChatDetailScreen(
     val context = LocalContext.current
     val isGmailBackend = remember {
         AppPrefs.resolveMailBackend(context) == AppPrefs.MAIL_BACKEND_GMAIL_OAUTH
+    }
+    // Whether the *mailbox* is Gmail, which is a wider question than whether we
+    // authenticated with OAuth: IMAP is now the default backend, and most IMAP
+    // users here point it at imap.gmail.com with an app password. It matters
+    // for the reset instructions, because Gmail has no real folders - an IMAP
+    // folder is a label, and deleting a label does not delete the mail, it
+    // just unlabels it and leaves every message in All Mail. "Delete that
+    // folder" is therefore the one instruction that will make a Gmail user
+    // answer "yes, I deleted it" honestly and still get duplicates.
+    val isGmailMailbox = remember {
+        isGmailBackend || AppPrefs.getImapHost(context).lowercase().let {
+            it.contains("gmail") || it.contains("googlemail")
+        }
     }
 
     LaunchedEffect(chatId) {
@@ -138,7 +149,9 @@ fun ChatDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text("Reset (re-sync from scratch)")
+                    // Not "re-sync from scratch": this button syncs nothing. It
+                    // clears the record so that a *later* sync starts over.
+                    Text("Reset (forget sync history)")
                 }
 
                 OutlinedButton(
@@ -178,95 +191,114 @@ fun ChatDetailScreen(
     // step, and the confirm button advances to gate 2 rather than resetting.
     if (resetStage == 1) {
         val hasMail = archivedCount > 0
-        AlertDialog(
-            onDismissRequest = { resetStage = 0 },
-            title = { Text(if (hasMail) "Delete the old mail first" else "Reset this chat?") },
-            text = {
+        DestructiveAlertDialog(
+            title = if (hasMail) "Delete the old mail first" else "Reset this chat?",
+            confirmText = if (hasMail) "Yes, I deleted it" else "Reset",
+            onConfirm = { if (hasMail) resetStage = 2 else performReset() },
+            onDismiss = { resetStage = 0 },
+        ) {
+            if (hasMail) {
                 // The old text said mail in your mailbox is "NOT deleted" and
                 // stopped there — true, and exactly backwards as reassurance:
-                // it is precisely because the old copies survive that a re-sync
-                // files a second copy of every message.
-                Text(
-                    if (hasMail) {
-                        "$archivedCount message(s) from this chat are already archived in:" +
-                            "\n\n    $mailboxFolder\n\n" +
-                            "Re-syncing does NOT replace them. It adds a second copy of all " +
-                            "$archivedCount, in a new thread. This app can never delete mail, " +
-                            "so nothing here can undo that afterwards.\n\n" +
-                            "Before continuing:\n" +
-                            "1. Open your mail app.\n" +
-                            "2. Delete the folder '$mailboxFolder' (or all mail inside it).\n" +
-                            "3. Empty the trash, if your provider keeps one.\n\n" +
-                            "Have you already deleted that mail?"
-                    } else {
-                        // android_api.reset() restores the export from processed/
-                        // back to inbox/ when it finds it (see file_restored), so
-                        // the common case needs no manual re-import.
-                        "Local sync state will be cleared, and a new mail thread will be " +
-                            "created the next time this chat is synced. Nothing has been " +
-                            "archived for this chat yet, so no duplicate mail can result."
-                    }
+                // it is precisely because the old copies survive that a later
+                // sync files a second copy of every message.
+                DialogBody(
+                    "${plural(archivedCount, "message")} " +
+                        "${if (archivedCount == 1) "is" else "are"} already archived in"
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (hasMail) resetStage = 2 else performReset()
-                }) { Text(if (hasMail) "Yes, I deleted it" else "Reset") }
-            },
-            dismissButton = {
-                TextButton(onClick = { resetStage = 0 }) { Text("Cancel") }
-            },
-        )
+                FolderChip(mailboxFolder)
+                DialogBody(
+                    "Resetting makes the app forget it sent " +
+                        "${if (archivedCount == 1) "it" else "them"}, so the next sync files " +
+                        "a second copy. This app can never delete mail - only you can."
+                )
+                DialogRule()
+                if (isGmailMailbox) {
+                    // Gmail has no folders to delete. Moving a message to
+                    // [Gmail]/Trash is the only action that strips every label
+                    // and takes it out of All Mail; removing the label leaves
+                    // the message in place, fully intact and still a duplicate
+                    // target for the next sync.
+                    NumberedStep(1, "In Gmail, open that label and select every conversation.")
+                    NumberedStep(2, "Delete them. Deleting the label itself is not enough - the mail stays in All Mail.")
+                    NumberedStep(3, "Empty the Bin.")
+                } else {
+                    NumberedStep(1, "In your mail app, delete that folder.")
+                    NumberedStep(2, "Empty the trash, if your provider keeps one.")
+                }
+                DialogRule()
+                DialogBody("Have you already deleted that mail?", emphasis = true)
+            } else {
+                // android_api.reset() restores the export from processed/
+                // back to inbox/ when it finds it (see file_restored), so
+                // the common case needs no manual re-import.
+                DialogBody(
+                    "This clears what the app remembers about this chat. Nothing has " +
+                        "been archived for it yet, so no duplicate mail can result."
+                )
+                DialogBody(
+                    "A new mail thread is created the next time this chat is synced."
+                )
+            }
+        }
     }
 
     // Gate 2. Deliberately a second tap on a second screen: the cost of being
     // wrong here is duplicate mail only the user can clean up by hand.
+    //
+    // Wording note: this used to confirm "Reset and re-archive" / "Reset and
+    // archive this chat again from scratch?", which read as though tapping it
+    // would start sending mail there and then. It does not - performReset()
+    // only clears local state and moves the export back to the inbox. Saying
+    // otherwise was misleading in the more dangerous direction too: someone
+    // who thinks the duplicates arrive immediately will look at their mailbox,
+    // see nothing, and assume it was fine, when the duplication actually
+    // happens at the next sync.
     if (resetStage == 2) {
-        AlertDialog(
-            onDismissRequest = { resetStage = 0 },
-            title = { Text("Confirm re-archive") },
-            text = {
-                Text(
-                    "Last check. If '$mailboxFolder' still has mail in it, you will end " +
-                        "up with $archivedCount duplicate message(s) that only you can " +
-                        "clean up.\n\nReset and archive this chat again from scratch?"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { performReset() }) { Text("Reset and re-archive") }
-            },
-            dismissButton = {
-                TextButton(onClick = { resetStage = 0 }) { Text("Cancel") }
-            },
-        )
+        DestructiveAlertDialog(
+            title = "Confirm reset",
+            confirmText = "Reset",
+            onConfirm = { performReset() },
+            onDismiss = { resetStage = 0 },
+        ) {
+            DialogBody("You've said this folder is now empty:")
+            FolderChip(mailboxFolder)
+            DialogBody(
+                "Resetting clears the app's record of this chat. No mail is sent now - " +
+                    "the next sync re-archives all ${plural(archivedCount, "message")} " +
+                    "into a fresh thread."
+            )
+            DialogBody(
+                "If any of the old mail is still there, that sync gives you a second " +
+                    "copy of it, and only you can clean it up.",
+                emphasis = true,
+            )
+        }
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete this chat?") },
-            text = {
-                Text(
-                    "This removes the chat from your list entirely — unlike Reset, it " +
-                        "won't be kept for re-syncing. Mail already in your mailbox is " +
-                        "NOT deleted.\n\n" +
-                        "It also forgets which messages were already archived, so if you " +
-                        "ever import this export again you will get a second copy of all " +
-                        "of them unless you delete the old mail first."
-                )
+        DestructiveAlertDialog(
+            title = "Delete this chat?",
+            confirmText = "Delete",
+            onConfirm = {
+                showDeleteConfirm = false
+                val result = Python.getInstance().getModule("src.android_api")
+                    .callAttr("delete_chat", chatId)
+                val ok = result.callAttr("get", "ok")?.toString() == "True"
+                if (ok) onDeleted() else resetMessage = "Delete failed: ${result.callAttr("get", "error")}"
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    val result = Python.getInstance().getModule("src.android_api")
-                        .callAttr("delete_chat", chatId)
-                    val ok = result.callAttr("get", "ok")?.toString() == "True"
-                    if (ok) onDeleted() else resetMessage = "Delete failed: ${result.callAttr("get", "error")}"
-                }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-            },
-        )
+            onDismiss = { showDeleteConfirm = false },
+        ) {
+            DialogBody(
+                "This removes the chat from your list entirely — unlike Reset, it " +
+                    "won't be kept for re-syncing. Mail already in your mailbox is " +
+                    "not deleted."
+            )
+            DialogBody(
+                "It also forgets which messages were already archived, so if you ever " +
+                    "import this export again you will get a second copy of all of them " +
+                    "unless you delete the old mail first."
+            )
+        }
     }
 }

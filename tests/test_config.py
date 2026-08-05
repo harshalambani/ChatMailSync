@@ -71,3 +71,55 @@ def test_env_root_fallback_prefers_new_var_over_legacy(tmp_path, monkeypatch):
     monkeypatch.setenv("WAGMAIL_ROOT", str(old_root))
     monkeypatch.setenv("WAMAILSYNC_ROOT", str(new_root))
     assert config._compute_root() == new_root
+
+
+# ---------------------------------------------------------------------------
+# is_gmail_mailbox / mailbox_clear_steps
+#
+# These two exist so gui.py and cli.py cannot give contradictory instructions
+# for the same destructive action (reset), and because getting the Gmail case
+# wrong is worse than saying nothing: Gmail has no folders, only labels, so
+# "delete the folder" unlabels every message and leaves it in All Mail. The
+# user then truthfully answers "yes, I deleted it" and the next sync
+# duplicates the lot.
+# ---------------------------------------------------------------------------
+
+
+def test_is_gmail_mailbox_true_for_oauth_regardless_of_host():
+    assert config.is_gmail_mailbox({"mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH})
+
+
+def test_is_gmail_mailbox_true_for_imap_pointed_at_gmail():
+    """The case the OAuth-only check missed: IMAP is the default backend now
+    and most users here point it at imap.gmail.com with an app password."""
+    for host in ("imap.gmail.com", "IMAP.GMAIL.COM", "imap.googlemail.com"):
+        assert config.is_gmail_mailbox(
+            {"mail_backend": config.MAIL_BACKEND_IMAP, "imap_host": host}
+        ), host
+
+
+def test_is_gmail_mailbox_false_for_other_imap_hosts():
+    for host in ("imap.fastmail.com", "outlook.office365.com", ""):
+        assert not config.is_gmail_mailbox(
+            {"mail_backend": config.MAIL_BACKEND_IMAP, "imap_host": host}
+        ), host
+
+
+def test_is_gmail_mailbox_tolerates_missing_and_null_host():
+    assert not config.is_gmail_mailbox({"mail_backend": config.MAIL_BACKEND_IMAP})
+    assert not config.is_gmail_mailbox(
+        {"mail_backend": config.MAIL_BACKEND_IMAP, "imap_host": None}
+    )
+
+
+def test_mailbox_clear_steps_gmail_never_says_delete_the_folder():
+    steps = config.mailbox_clear_steps("WhatsApp/Alice", gmail=True)
+    joined = " ".join(steps).lower()
+    assert "delete the folder" not in joined
+    assert "all mail" in joined          # says why unlabelling is not enough
+    assert any("WhatsApp/Alice" in s for s in steps)
+
+
+def test_mailbox_clear_steps_non_gmail_names_the_folder():
+    steps = config.mailbox_clear_steps("WhatsApp/Alice", gmail=False)
+    assert any("delete the folder 'WhatsApp/Alice'" in s for s in steps)

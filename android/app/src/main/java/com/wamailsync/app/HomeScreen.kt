@@ -101,7 +101,12 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(Color(0xFF2E7D32), CircleShape),
+                                    // Was a hardcoded Material green, the one
+                                    // colour in the app that belonged to no
+                                    // palette. tertiary is the same idea, in
+                                    // the app's own muted family, and follows
+                                    // the theme into dark mode.
+                                    .background(MaterialTheme.colorScheme.tertiary, CircleShape),
                             )
                         }
                         Text(
@@ -126,7 +131,7 @@ fun HomeScreen(
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = if (inboxFiles.isEmpty()) "Nothing waiting to sync"
-                        else "${inboxFiles.size} file(s) ready to sync",
+                        else "${plural(inboxFiles.size, "file")} ready to sync",
                         style = MaterialTheme.typography.titleSmall,
                     )
                     if (inboxFiles.isEmpty()) {
@@ -156,7 +161,9 @@ fun HomeScreen(
                         }
                     }
                     OutlinedButton(onClick = onImportPick) {
-                        Text("Import WhatsApp export(s)…")
+                        // No count to agree with here - the picker is
+                        // multi-select, so the plural is simply correct.
+                        Text("Import WhatsApp exports…")
                     }
 
                     HorizontalDivider()
