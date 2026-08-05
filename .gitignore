@@ -1,13 +1,13 @@
 # OAuth credentials and tokens — never commit these
 auth/
 
-# Runtime data
-data/sync_state.db
-data/inbox/
-data/processed/
-data/.tz_notice_shown
-data/.theme
-data/.settings.json
+# Runtime data - the whole directory, not a list of known filenames.
+# This was an enumeration (sync_state.db, inbox/, processed/, dotfiles) until
+# SQLite's -shm/-wal sidecars turned up untracked: a WAL holds real message
+# rows that have not been checkpointed into the .db yet. Nothing under data/
+# is tracked or ever should be, so ignore it wholesale rather than adding a
+# line each time the app writes a new kind of file here.
+data/
 
 # Claude Code local settings
 .claude/
