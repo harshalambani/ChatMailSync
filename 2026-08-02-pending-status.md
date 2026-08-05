@@ -1,9 +1,13 @@
 # WA Mail Sync — What's Pending
 
-**As of:** 2026-08-02
-**Released:** v0.2.1-beta (prerelease, targeting `main` at `c34b4d1`) — Windows portable zip published.
-**Test suite:** 157 passing.
-**Working tree:** dirty — see §C.
+**As of:** 2026-08-05
+**Released:** v0.2.2-beta (prerelease, `main` at `381eee2`) — **Android APK only**. The Windows
+portable zip was deliberately not built for this release: `build_portable.ps1` preserves an existing
+`dist\...\Data\` containing live credentials and real exports, so shipping it requires staging
+`App\` + launcher only and recreating an empty `Data\`. Previous release v0.2.1-beta did carry the
+Windows zip.
+**Test suite:** 158 passing.
+**Working tree:** clean as of the v0.2.2-beta merge.
 
 ---
 
@@ -11,49 +15,70 @@
 
 Nothing below moves until you say so.
 
-### A1. Test the Android APK — *you asked for this*
-Built from a clean worktree of the `v0.2.1-beta` tag, signed, verified, and now **published**.
+### A1. ~~Test the Android APK~~ — **installed 2026-08-03, still to be exercised**
+The release-signed build installed cleanly *as an update* (`firstInstallTime` 2026-08-03 14:07:31
+vs `lastUpdateTime` 14:51:02) — `sync_state.db`, the saved IMAP password, the watched folder and all
+settings survived. The earlier data-wipe warning about the debug build no longer applies.
 
-- **Download:** attached to the [v0.2.1-beta release](https://github.com/harshalambani/WAGMailSync/releases/tag/v0.2.1-beta) as `WAMailSync-v0.2.1-beta.apk`
-- **Size:** ~21 MB (22,067,808 bytes), SHA-256 `da4cd7dd…c8cd055f`
-- **Verified:** `package com.wamailsync.app`, versionCode 3, versionName `0.2.1-beta`, label "WA Mail Sync", `arm64-v8a`, minSdk 24, targetSdk 36
-- **Signer:** `CN=Harshal Ambani, OU=Personal, O=WA Chat Sync to Gmail, C=IN`, SHA-256 `096ca121…905095`
+**Still open:** the phone is running the pre-bump **versionCode 3** binary. The
+[v0.2.2-beta APK](https://github.com/harshalambani/WAGMailSync/releases/tag/v0.2.2-beta)
+(`WAMailSync-v0.2.2-beta.apk`, 22,067,820 bytes, SHA-256
+`C24AE333…CCC37895`, versionCode 4) has **not** been installed, so the four fixes in it are
+untested on device. Same signing key, so it installs straight over the top.
 
-> **⚠ Install warning.** This is *release*-signed. It will not install over your existing *debug*
-> build — Android rejects it with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Uninstalling the debug build
-> first wipes app data **including `sync_state.db`**, after which the app treats every chat as new
-> and re-syncs everything. Decide how you want to handle that before installing.
+### A2. ~~Attach the APK to the GitHub release~~ — **done 2026-08-05** (v0.2.2-beta)
 
-### A2. Attach the APK to the v0.2.1-beta GitHub release
-Same code as the tag, so it belongs on that release rather than a new one. Not done.
-
-### A3. Commit the DPAPI credential encryption?
-Built and green, but uncommitted. Your call on whether to commit, and whether it warrants its own
-release. See §C for the file list.
+### A3. ~~Commit the DPAPI credential encryption~~ — **done**, shipped in v0.2.2-beta.
 
 ### A4. Build the `.paf.exe` PortableApps installer
-Researched, deliberately not started. Blockers:
+
+**Two decisions taken 2026-08-05 — do not re-litigate:**
+
+1. **Compiled `.exe` launcher, not the `.bat`.** The `.bat` cannot carry an icon, so the icon set
+   generated in B2 does nothing for the portable bundle until a real launcher exists. A4 therefore
+   includes: write `launcher.ini`, run the PortableApps.com Launcher generator to produce
+   `WAMailSync.exe`, and retire the `.bat`.
+2. **Do not vendor `PortableApps.comInstaller.exe` — fetch it with a pinned hash.** It is a
+   published third-party release artifact, not our source, so storing it in git (LFS or plain) is
+   solving the wrong problem. `build_portable.ps1` should use
+   `C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe` when present and
+   otherwise download from the official URL, **verifying a pinned SHA-256 before executing it** —
+   the pin is the point, since this is a fetched binary we then run. Zero LFS quota, no submodule,
+   nothing binary in git, and the vendor's own release is the shared source across every repo.
+
+   Rejected alternatives, with reasons: `.lfsconfig` pointing at another repo's LFS store works but
+   is fragile (every clone needs read access to that repo, quota bills against its owner, and
+   renaming/archiving it silently breaks checkout everywhere). A tools repo consumed as a git
+   submodule is the correct answer *if* offline/air-gapped builds are ever needed, at the cost of
+   real clone and CI friction. Note LFS quota is per-**account**, not per-repo, so repos under the
+   same owner already share one pool — there was never a separate "shared LFS" to configure.
+
+   The sibling `platform-agnostic-skills-portable` repo currently vendors this binary under LFS and
+   should be migrated to the same design; a hand-off prompt for that was written 2026-08-05.
+
+Remaining blockers:
 - ~~The repo has zero icon assets~~ — **cleared 2026-08-03** (B2 below). `appicon.ico` +
   `appicon_16/32/75/128/1024.png` now sit in `portable/App/AppInfo/`, so `Icons=1` is satisfied.
 - ~~`portable/App/AppInfo/appinfo.ini` is stale~~ — **cleared** on
   `rename/wamailsync-build-artifacts`: Name "WA Mail Sync", version `0.2.1-beta`.
-- The `platform-agnostic-skills-portable` repo vendors `PortableApps.comInstaller.exe` under
-  **Git LFS**. Reusing that approach means either adding LFS here or committing MBs as plain git
-  objects — a real decision, since LFS checkout bandwidth is the actual quota lever.
-- A local installer does exist at `C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe`.
+- ~~Vendoring `PortableApps.comInstaller.exe` (LFS vs plain git)~~ — **decided 2026-08-05**: neither,
+  see decision 2 above. A local copy already exists at
+  `C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe`.
+- **Open:** actually writing `launcher.ini` and generating `WAMailSync.exe` (decision 1 above).
+- **Open:** obtaining and recording the pinned SHA-256 for the official installer download.
 
-### A5. Delete the tag worktree — needs an explicit approval against a listed set
-`scratchpad\wt-v021` contains copies of `release.jks` and `keystore.properties`. Per your standing
-rule I will present exact paths, sizes and dates before removing anything. Local fixed drive, so it
-goes to the Recycle Bin.
+### A5. ~~Delete the tag worktree~~ — **resolved 2026-08-05, nothing to delete**
+`scratchpad\wt-v021` no longer exists and `git worktree list` shows only the main checkout, so the
+copies of `release.jks` and `keystore.properties` it held are gone with it. No deletion was
+performed by this session.
 
 ---
 
 ## B. Queued work — no decision needed, just sequencing
 
-### B1. Verify end-to-end IMAP delivery on device  ← **highest value outstanding**
-Never done. The headless `WatchFolderWorker` has not been exercised against IMAP on the phone. This
-is also the **gate on the entire app-store phase** — nothing gets submitted anywhere until it passes.
+### B1. ~~Verify end-to-end IMAP delivery on device~~ — **PASSED**, store-phase gate is clear
+Verified against a live Gmail mailbox: 2 chats, 68 messages, clean foreground-service start and
+shutdown. The four v0.2.2-beta fixes have had only limited on-device exercise beyond that — see A1.
 
 ### B2. Create icon assets — **DONE 2026-08-03**
 Generated from `WhatsApp Gmail sync icon.zip` (which was already in the repo — my earlier "zero icon
@@ -65,9 +90,11 @@ upscale (no source exceeds 512), and the arrows are illegible at 16px.
 Still open: the `.bat` launcher cannot carry an icon — a PortableApps.com-style `.exe` launcher
 would be needed for that, which is part of A4 rather than B2.
 
-### B3. Update `WA-Mail-Sync-Password-Storage.docx` §4.1
-It currently describes Windows DPAPI as not yet built. That is accurate for the released
-v0.2.1-beta, but becomes wrong the moment the §C changes ship.
+### B3. Update `WA-Mail-Sync-Password-Storage.docx` §4.1 — **now actively wrong**
+It describes Windows DPAPI as not yet built. DPAPI shipped in v0.2.2-beta, so the statement is no
+longer merely premature. **Blocked on** confirming whether `scratchpad/make_password_doc.py` (the
+generator that produced the `.docx`) still exists — the scratchpad is session-scoped and may be
+gone, in which case the generator has to be rewritten before the doc can be regenerated.
 
 ### B4. Clear Unaise Urfi's rows from `sync_state.db`
 So that chat can be re-archived. Offered previously, never carried out.
@@ -88,20 +115,11 @@ and say "Gmail" accurately.
 
 ---
 
-## C. Uncommitted working tree
+## C. ~~Uncommitted working tree~~ — **all committed**
 
-| State | File |
-|---|---|
-| new | `src/secret_store.py` — Windows DPAPI wrapper (224 lines) |
-| new | `tests/test_secret_store.py` — real unmocked DPAPI round-trips |
-| new | `WA-Mail-Sync-Password-Storage.docx` — the password-design document |
-| new | `2026-08-02-android-store-distribution-phase.md` — the store phase plan |
-| modified | `gui_worker.py` — DPAPI on save, `resolve_imap_password()` shared reader |
-| modified | `gui.py` — silent transport path now uses `resolve_imap_password` |
-| modified | `tests/test_gui_backend.py` — DPAPI branches + new tests |
-| modified | `2026-07-04-playstore-publishing-sop.md` — superseded banner (approved 2026-08-02) |
-
-All 157 tests pass with these in place.
+Everything that sat here (Windows DPAPI `src/secret_store.py` + tests, the password-storage `.docx`,
+the store-distribution phase doc, the `gui_worker.py`/`gui.py`/`test_gui_backend.py` changes, the
+superseded banner) went in with the v0.2.2-beta merge `381eee2`. Tree is clean; 158 tests pass.
 
 ---
 
@@ -121,5 +139,10 @@ All 157 tests pass with these in place.
 
 ## Suggested order
 
-**B1 → B2 → A1.** B1 is the gate on everything you said you want next; B2 pays into two separate
-deliverables; A1 is yours to schedule around the data-wipe warning.
+B1 and B2 are both done. Next: **A1 (install v0.2.2 and exercise the four fixes) → A4 (launcher +
+pinned-hash installer fetch) → B3**. A1 first because everything else is downstream of trusting the
+current build; A4 because it is the only thing standing between the icon set and a real Windows
+deliverable; B3 because it is the one document that is now actively wrong rather than merely stale.
+
+Also outstanding but not sequenced here: a Windows portable zip for v0.2.2-beta (needs the `Data\`
+sanitization described at the top), and dismissing the GitHub secret alert as a false positive.
