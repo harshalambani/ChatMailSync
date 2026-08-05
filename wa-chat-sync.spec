@@ -105,7 +105,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,              # no console window (GUI app)
-    icon=None,                  # set to "portable/App/AppInfo/appicon.ico" once available
+    icon="portable/App/AppInfo/appicon.ico",
 )
 
 coll = COLLECT(

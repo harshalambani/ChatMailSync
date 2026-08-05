@@ -24,6 +24,7 @@
 *.jks  binary
 *.zip  binary
 *.png  binary
+*.ico  binary
 *.jpg  binary
 *.apk  binary
 *.exe  binary
