@@ -8,7 +8,9 @@
     2. Assembles the PortableApps directory layout under dist\WAMailSyncPortable\
     3. Generates the compiled PortableApps.com launcher (WAMailSyncPortable.exe)
     4. Optionally builds the .paf.exe PortableApps.com installer (-Installer)
-    5. Copies user-supplied credentials.json into the bundle (if present).
+    Data\ is created empty. Live credentials are copied in only with the
+    explicit -SeedCredentials switch, and never for a package you intend to
+    hand to anyone.
 
 .EXAMPLE
     cd "C:\Users\inabm\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
@@ -25,13 +27,18 @@
 
     To also produce the distributable .paf.exe installer:
     .\build_portable.ps1 -Installer
+
+    To copy your real auth\ credentials into dist\ for local testing
+    (the result is NOT distributable):
+    .\build_portable.ps1 -SeedCredentials
 #>
 
 param(
     [switch]$SkipBuild,
     [switch]$Sign,
     [switch]$InstallCert,
-    [switch]$Installer
+    [switch]$Installer,
+    [switch]$SeedCredentials
 )
 
 Set-StrictMode -Version Latest
@@ -209,23 +216,47 @@ foreach ($sub in @("auth", "data\inbox", "data\processed")) {
     New-Item -ItemType Directory -Force (Join-Path $DataDir $sub) | Out-Null
 }
 
-# Seed Data\auth\ from the project's auth\ folder - only if the destination
-# file does not already exist (never overwrite tokens the user has live).
-foreach ($authFile in @("credentials.json", "token.json")) {
-    $src  = Join-Path $ProjectRoot "auth\$authFile"
-    $dest = Join-Path $DataDir "auth\$authFile"
-    if (Test-Path $src) {
-        if (-not (Test-Path $dest)) {
-            Copy-Item $src $dest
-            Write-Host "   Seeded Data\auth\$authFile" -ForegroundColor Green
-        } else {
-            Write-Host "   Kept existing Data\auth\$authFile (not overwritten)" -ForegroundColor DarkGray
-        }
-    } else {
-        if ($authFile -eq "credentials.json") {
-            Write-Host "   WARNING: credentials.json not found - user must copy it to Data\auth\ before first run." -ForegroundColor Yellow
+# Data\auth\ is left EMPTY by default, and that is the point.
+#
+# This script used to copy the project's real auth\credentials.json and
+# token.json in here on every build. That put live credentials inside the one
+# directory tree whose whole purpose is to be handed to someone else, and the
+# only thing standing between that and a bad upload was remembering not to zip
+# it. -SeedCredentials makes it a deliberate act instead of the default.
+#
+# For local smoke-testing prefer running the app from the repo with
+# WAMAILSYNC_ROOT pointed at the project root - it reads the same auth\ folder
+# without ever copying it. Note that the PortableApps launcher always sets
+# WAMAILSYNC_ROOT to its own Data\, so this applies to running the app
+# directly, not to launching WAMailSyncPortable.exe.
+if ($SeedCredentials) {
+    Write-Host "   -SeedCredentials: copying LIVE credentials into dist\ - do not distribute this folder." -ForegroundColor Yellow
+    foreach ($authFile in @("credentials.json", "token.json")) {
+        $src  = Join-Path $ProjectRoot "auth\$authFile"
+        $dest = Join-Path $DataDir "auth\$authFile"
+        if (Test-Path $src) {
+            if (-not (Test-Path $dest)) {
+                Copy-Item $src $dest
+                Write-Host "   Seeded Data\auth\$authFile" -ForegroundColor Yellow
+            } else {
+                Write-Host "   Kept existing Data\auth\$authFile (not overwritten)" -ForegroundColor DarkGray
+            }
+        } elseif ($authFile -eq "credentials.json") {
+            Write-Host "   WARNING: auth\credentials.json not found - nothing to seed." -ForegroundColor Yellow
         }
     }
+}
+
+# Credentials from an earlier build survive in Data\ because Step 2 preserves
+# it. Flag them rather than removing them - they may be a live token the user
+# is mid-test with, and deleting user data is never this script's call.
+$stale = @("credentials.json", "token.json") |
+    ForEach-Object { Join-Path $DataDir "auth\$_" } |
+    Where-Object { Test-Path $_ }
+if ($stale -and -not $SeedCredentials) {
+    Write-Host "   NOTE: this package already carries credentials from an earlier build:" -ForegroundColor Yellow
+    $stale | ForEach-Object { Write-Host "         $_" -ForegroundColor Yellow }
+    Write-Host "         Not distributable as-is. Use -Installer, which packages a clean staging tree." -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
@@ -389,6 +420,9 @@ if ($Installer) {
     Write-Host "    Installer       : $PafPath"
 }
 Write-Host ""
-Write-Host "    Before first run, ensure Data\auth\credentials.json is present,"
-Write-Host "    then run setup_auth.py (or launch the app - it will prompt for auth)."
+Write-Host "    Data\ ships empty. The app prompts for mail settings on first run;"
+Write-Host "    for the Gmail API backend, drop credentials.json into Data\auth\ first."
+if (-not $SeedCredentials) {
+    Write-Host "    (-SeedCredentials copies this machine's live credentials in, for testing only.)" -ForegroundColor DarkGray
+}
 Write-Host ""
