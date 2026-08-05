@@ -149,6 +149,48 @@ IMAP_PROVIDERS = {
     "custom":   {"label": "Custom",         "host": None,                    "port": 993},
 }
 
+def is_gmail_mailbox(saved: dict) -> bool:
+    """Whether the destination mailbox is Gmail, however we authenticate to it.
+
+    Wider than `resolve_mail_backend(...) == MAIL_BACKEND_GMAIL_OAUTH`: IMAP is
+    the default backend now, and most IMAP users here point it at
+    imap.gmail.com with an app password. Both land on the same mailbox with
+    the same label semantics, so anything that depends on Gmail's behaviour
+    rather than on our auth method has to ask this question instead.
+    """
+    if resolve_mail_backend(saved) == MAIL_BACKEND_GMAIL_OAUTH:
+        return True
+    host = (saved.get("imap_host") or "").lower()
+    return "gmail" in host or "googlemail" in host
+
+
+def mailbox_clear_steps(folder: str, gmail: bool) -> list[str]:
+    """The steps a user must actually follow to empty `folder` before a reset.
+
+    Gmail needs different instructions, and getting this wrong is worse than
+    saying nothing: Gmail has no folders, only labels, so "delete the folder"
+    unlabels every message and leaves it sitting in All Mail. Someone follows
+    that, truthfully answers "yes, I deleted it", and the next sync duplicates
+    the lot. Moving the messages themselves to the Bin is the only action that
+    strips every label and removes them from All Mail.
+
+    Shared by gui.py and cli.py so the two front-ends cannot give contradictory
+    instructions for the same destructive action; the Android copy of this
+    wording lives in ChatDetailScreen.kt and must be kept in step (see
+    PLATFORM-PARITY.md).
+    """
+    if gmail:
+        return [
+            f"In Gmail, open the label '{folder}' and select every conversation.",
+            "Delete them. Deleting the label itself is not enough - the mail "
+            "stays in All Mail.",
+            "Empty the Bin.",
+        ]
+    return [
+        f"In your mail client, delete the folder '{folder}' (or all mail inside it).",
+        "Empty the trash, if your provider keeps one.",
+    ]
+
 # ---------------------------------------------------------------------------
 # Gmail label hierarchy
 # ---------------------------------------------------------------------------

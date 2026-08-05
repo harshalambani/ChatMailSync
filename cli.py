@@ -20,6 +20,8 @@ from src.config import (
     INBOX_DIR,
     PROCESSED_DIR,
     STATE_DB_PATH,
+    is_gmail_mailbox,
+    mailbox_clear_steps,
 )
 from src.state import (
     MailboxNotClearedError,
@@ -208,25 +210,30 @@ def cmd_reset(args: argparse.Namespace) -> int:
     display_name = chat["display_name"]
 
     archived = count_archived_messages(chat_id, STATE_DB_PATH)
+    noun = "message" if archived == 1 else "messages"
 
     if archived > 0:
         # Imported here rather than at module scope: cli.py otherwise never
         # touches mail_client, and this keeps the transport imports off the
         # startup path of every other subcommand.
         from src.mail_client import mailbox_folder_for
+        # Same reader gui_worker uses, so the CLI reaches the same conclusion
+        # about the mailbox as the GUI would for the same settings file.
+        from gui_worker import _load_mail_backend_settings
 
         folder = mailbox_folder_for(display_name)
+        steps = mailbox_clear_steps(
+            folder, is_gmail_mailbox(_load_mail_backend_settings())
+        )
+        numbered = "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1))
         print(
-            f"WARNING: '{display_name}' has {archived} message(s) already archived "
-            f"in your mailbox, in the folder:\n"
+            f"WARNING: '{display_name}' has {archived} {noun} already archived "
+            f"in your mailbox, in:\n"
             f"    {folder}\n\n"
-            f"Resetting does NOT remove them. The next sync files a second copy of "
-            f"all {archived}, in a new thread. This app can never delete mail, so\n"
-            f"nothing here can undo that afterwards.\n\n"
+            f"Resetting makes the app forget it sent them, so the next sync files\n"
+            f"a second copy. This app can never delete mail - only you can.\n\n"
             f"Before resetting:\n"
-            f"  1. Open your mail client.\n"
-            f"  2. Delete the folder '{folder}' (or all mail inside it).\n"
-            f"  3. Empty the trash, if your provider keeps one.\n"
+            f"{numbered}\n"
         )
 
     if not args.yes:
@@ -238,10 +245,16 @@ def cmd_reset(args: argparse.Namespace) -> int:
             print("Aborted.")
             return 0
         if archived > 0:
+            # Note what this does NOT claim: reset sends no mail, it only
+            # clears local state. The duplicate risk is conditional on the
+            # old mail still being there, which is exactly what is being
+            # asked here - asserting it outright would contradict the
+            # answer the user is about to give.
             answer = input(
-                f"Have you already deleted those {archived} message(s) from your "
-                "mailbox? Answering 'y' when you have not will leave you with "
-                "duplicates only you can clean up. [y/N] "
+                f"Have you already deleted those {archived} {noun} from your "
+                "mailbox? No mail is sent now - the next sync re-archives all "
+                f"{archived} into a fresh thread, and if the old mail is still "
+                "there you get a second copy only you can clean up. [y/N] "
             ).strip().lower()
             if answer != "y":
                 print("Aborted. Delete the mail first, then run this again.")

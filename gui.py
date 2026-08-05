@@ -43,6 +43,8 @@ from src.config import (
     PROCESSED_DIR,
     STATE_DB_PATH,
     TOKEN_FILE,
+    is_gmail_mailbox,
+    mailbox_clear_steps,
     resolve_mail_backend,
 )
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
@@ -937,14 +939,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         archived = count_archived_messages(chat_id, STATE_DB_PATH)
         folder = mailbox_folder_for(display_name)
 
+        noun = "message" if archived == 1 else "messages"
+
         if archived == 0:
             # Nothing has ever been sent for this chat, so there is nothing to
             # duplicate and no reason to make the user go and check.
             ok = messagebox.askyesno(
-                "Reset and re-sync?",
+                "Reset this chat?",
                 f"Reset sync history for '{display_name}'?\n\n"
                 "Nothing has been archived for this chat yet, so no duplicate "
-                "mail can result.",
+                "mail can result.\n\n"
+                "A new mail thread is created the next time this chat is synced.",
                 icon="warning",
                 default=messagebox.NO,
             )
@@ -952,34 +957,43 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 return
         else:
             # Gate 1 - the instruction. State the number and the exact folder.
+            # Steps come from src.config so this and cli.py cannot drift into
+            # giving different instructions for the same destructive action.
+            steps = mailbox_clear_steps(folder, is_gmail_mailbox(self._settings))
+            numbered = "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1))
             ready = messagebox.askyesno(
                 "Delete the old mail first",
-                f"'{display_name}' already has {archived} message(s) archived in "
-                f"your mailbox, in the folder:\n\n    {folder}\n\n"
-                "Re-syncing does NOT replace them. It adds a second copy of all "
-                f"{archived}, in a new thread. This app can never delete mail, so "
-                "nothing here can undo that afterwards.\n\n"
-                "Before continuing:\n"
-                f"  1. Open your mail client.\n"
-                f"  2. Delete the folder '{folder}' (or all mail inside it).\n"
-                "  3. Empty the trash, if your provider keeps one.\n\n"
+                f"'{display_name}' already has {archived} {noun} archived in "
+                f"your mailbox, in:\n\n    {folder}\n\n"
+                "Resetting makes the app forget it sent them, so the next sync "
+                "files a second copy. This app can never delete mail - only "
+                "you can.\n\n"
+                f"{numbered}\n\n"
                 "Have you already deleted that mail?",
                 icon="warning",
                 default=messagebox.NO,
             )
             if not ready:
                 self._append_log(
-                    f"Reset cancelled for '{display_name}' - delete '{folder}' in your "
+                    f"Reset cancelled for '{display_name}' - clear '{folder}' in your "
                     "mail client first, then reset."
                 )
                 return
 
-            # Gate 2 - the commitment, restating the cost of being wrong.
+            # Gate 2 - the commitment. Note it does NOT claim an immediate
+            # re-archive: reset only clears local state and moves the export
+            # back to the inbox, and it reaches this point only because the
+            # user has just said the mailbox side is clear. Asserting duplicates
+            # outright would contradict that answer; the risk belongs in the
+            # conditional, where it is actually true.
             confirmed = messagebox.askyesno(
-                "Confirm re-archive",
-                f"Last check. If '{folder}' still has mail in it, you will end up "
-                f"with {archived} duplicate message(s) that only you can clean up.\n\n"
-                f"Reset '{display_name}' and archive it again from scratch?",
+                "Confirm reset",
+                f"You've said this folder is now empty:\n\n    {folder}\n\n"
+                "Resetting clears the app's record of this chat. No mail is sent "
+                f"now - the next sync re-archives all {archived} {noun} into a "
+                "fresh thread.\n\n"
+                "If any of the old mail is still there, that sync gives you a "
+                "second copy of it, and only you can clean it up.",
                 icon="warning",
                 default=messagebox.NO,
             )
