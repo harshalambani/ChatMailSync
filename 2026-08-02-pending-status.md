@@ -33,9 +33,10 @@ release. See §C for the file list.
 
 ### A4. Build the `.paf.exe` PortableApps installer
 Researched, deliberately not started. Blockers:
-- The repo has **zero icon assets**; `Icons=1` in `appinfo.ini` requires real ones.
-- `portable/App/AppInfo/appinfo.ini` is stale — Name still "WAGmail Sync", PackageVersion/
-  DisplayVersion still `1.0.0`.
+- ~~The repo has zero icon assets~~ — **cleared 2026-08-03** (B2 below). `appicon.ico` +
+  `appicon_16/32/75/128/1024.png` now sit in `portable/App/AppInfo/`, so `Icons=1` is satisfied.
+- ~~`portable/App/AppInfo/appinfo.ini` is stale~~ — **cleared** on
+  `rename/wamailsync-build-artifacts`: Name "WA Mail Sync", version `0.2.1-beta`.
 - The `platform-agnostic-skills-portable` repo vendors `PortableApps.comInstaller.exe` under
   **Git LFS**. Reusing that approach means either adding LFS here or committing MBs as plain git
   objects — a real decision, since LFS checkout bandwidth is the actual quota lever.
@@ -54,9 +55,15 @@ goes to the Recycle Bin.
 Never done. The headless `WatchFolderWorker` has not been exercised against IMAP on the phone. This
 is also the **gate on the entire app-store phase** — nothing gets submitted anywhere until it passes.
 
-### B2. Create icon assets
-Needed: `appicon.ico` plus `appicon_16/32/75/128/1024.png`. Unblocks **both** the `.paf.exe` (A4)
-**and** every store listing. Best value-per-effort after B1.
+### B2. Create icon assets — **DONE 2026-08-03**
+Generated from `WhatsApp Gmail sync icon.zip` (which was already in the repo — my earlier "zero icon
+assets" claim was wrong) into `portable/App/AppInfo/`: `appicon.ico` (10 frames, 16-256) plus
+`appicon_16/32/75/128/1024.png`. `wa-chat-sync.spec` now sets `icon=` instead of `None`, so the
+frozen `WAMailSync.exe` carries it. Two caveats in §4a of the store-phase doc: the 1024 is an
+upscale (no source exceeds 512), and the arrows are illegible at 16px.
+
+Still open: the `.bat` launcher cannot carry an icon — a PortableApps.com-style `.exe` launcher
+would be needed for that, which is part of A4 rather than B2.
 
 ### B3. Update `WA-Mail-Sync-Password-Storage.docx` §4.1
 It currently describes Windows DPAPI as not yet built. That is accurate for the released
@@ -64,6 +71,13 @@ v0.2.1-beta, but becomes wrong the moment the §C changes ship.
 
 ### B4. Clear Unaise Urfi's rows from `sync_state.db`
 So that chat can be re-archived. Offered previously, never carried out.
+
+### B7. "Gmail" / "WAGmail" naming sweep — *scoped 2026-08-03*
+Full plan in `2026-08-03-gmail-naming-sweep.md`. 704 "gmail" hits across 52 files, "wagmail" in 25.
+Not a find-and-replace: two traps documented there — the frozen runtime identifiers
+(`wagmail_prefs`, `wagmail_imap_key`, python root `wagmail`) whose rename makes a user's saved
+password permanently undecryptable, and `Completed/**` + dated docs which are historical records
+and say "Gmail" accurately.
 
 ### B5. Rename the Windows build artifacts
 `build_portable.ps1`, `wa-chat-sync.spec` (`name="WAGmailSync"`), the `.bat` launcher, and

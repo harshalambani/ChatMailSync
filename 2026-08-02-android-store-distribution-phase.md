@@ -84,8 +84,12 @@ and must stay that way.
 
 ## 4. Prerequisites (do these regardless — they unblock other work too)
 
-- [ ] **Icon assets.** The repo has *none*. Needed: `appicon.ico`, `appicon_16/32/75/128/1024.png`.
-      This is the same gap blocking the Windows `.paf.exe` PortableApps installer, so it pays twice.
+- [x] **Icon assets.** *(done 2026-08-03)* `appicon.ico` + `appicon_16/32/75/128/1024.png` generated
+      into `portable/App/AppInfo/` from `WhatsApp Gmail sync icon.zip`, and `wa-chat-sync.spec` now
+      points `icon=` at the `.ico`. Note the correction to the original wording: the repo was never
+      icon-*less* — it shipped Android launcher layers all along; only the Windows set was missing.
+      Caveat: every source is 512x512, so `appicon_1024.png` is an upscale (see §4a).
+      Store artwork still needs a real 512 (Galaxy Store) — `play_store_icon_512.png` covers that.
 - [ ] **Privacy policy URL.** Required by all three shortlisted stores. A GitHub Pages page is
       sufficient. Content: the app sends the user's own WhatsApp exports to the user's own mailbox
       via their own IMAP credentials; no data reaches the developer or any third party.
@@ -93,6 +97,19 @@ and must stay that way.
 - [ ] **Fix stale `portable/App/AppInfo/appinfo.ini`** — Name still says "WAGmail Sync",
       PackageVersion/DisplayVersion still 1.0.0. Not a store blocker but the same rename sweep.
 - [ ] **End-to-end IMAP delivery verified on device.** THE GATE. Nothing ships until this passes.
+
+### 4a. Icon resolution ceiling
+
+The whole icon set derives from `WhatsApp Gmail sync icon.zip`, and **every file in it is 512x512**.
+Consequences to keep in mind:
+
+- `appicon_1024.png` is a 2x LANCZOS upscale. It is soft on the shape edges. Flat artwork upscales
+  better than photographic, so it is usable, but it is not a true 1024 asset.
+- At 16x16 the two arrows disappear entirely; the icon reads as a blue tile with a red and a green
+  mark. That is the artwork's detail budget, not a resampling fault — a genuinely legible 16px
+  icon would need a simplified variant drawn for that size.
+- If a store or the PortableApps.com submission ever demands a real 1024 (or larger), the artwork
+  has to be re-exported from its vector source, not resampled again.
 
 ## 5. Submission steps (Galaxy Store first, once the gate clears)
 
