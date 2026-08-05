@@ -930,7 +930,7 @@ fun WaMailApp(
                                             )
                                         transport?.callAttr("labels_list").toString()
                                     } catch (e: Exception) {
-                                        redactSecret("Error calling labels_list(): ${e.message}", password)
+                                        redactSecret("Could not connect: ${e.message}", password)
                                     } finally {
                                         try {
                                             transport?.callAttr("close")
@@ -962,13 +962,13 @@ fun WaMailApp(
                                                 try {
                                                     labelsList(fresh)
                                                 } catch (e2: Exception) {
-                                                    "Error calling labels_list() after refreshing token: ${e2.message}"
+                                                    "Could not connect to Gmail after refreshing token: ${e2.message}"
                                                 }
                                             } else {
-                                                "Error calling labels_list(): ${e.message} (token refresh also failed)"
+                                                "Could not connect to Gmail: ${e.message} (token refresh also failed)"
                                             }
                                         } else {
-                                            "Error calling labels_list(): ${e.message}"
+                                            "Could not connect to Gmail: ${e.message}"
                                         }
                                     }
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {

@@ -90,6 +90,108 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 OneTimeWorkRequestBuilder<WatchFolderWorker>().build(),
             )
         }
+
+        /** Called from SyncWorker after every real (non-dry-run) sync attempt,
+         * success or failure — reconciles AppPrefs' pending_synced_files ledger
+         * against what's actually still sitting in inbox/. A pending entry
+         * whose file is no longer in inbox/ was moved to processed/ by
+         * sync_manager.py, which only ever does that on confirmed delivery or
+         * a dedup-skip (never on a parse failure) — so "gone from inbox/" is
+         * the same ground truth already relied on elsewhere as "delivered",
+         * not a new invented signal. Only once that's true do we act on
+         * synced_file_policy for that file's original watched-folder source.
+         *
+         * A pending entry whose file is still in inbox/ (sync failed, was
+         * skipped, or hasn't run yet) is left untouched — safe to retry on
+         * the next call, and never mistaken for "must have delivered by now". */
+        fun applyPendingSyncedFilePolicies(context: Context) {
+            val pending = AppPrefs.getPendingSyncedFiles(context)
+            if (pending.isEmpty()) return
+
+            val delivered = pending.keys.filter { name ->
+                !WaMailApplication.inboxDir(context).resolve(name).exists()
+            }
+            if (delivered.isEmpty()) return
+
+            val policy = AppPrefs.getSyncedFilePolicy(context)
+            // Resolve the watched folder once per call, not once per file —
+            // there is only ever one global watched folder, not one per
+            // pending entry (see AppPrefs.getPendingSyncedFiles' doc comment).
+            val folder = if (policy != "leave") {
+                AppPrefs.getWatchedFolderUri(context)?.let { uriString ->
+                    try {
+                        DocumentFile.fromTreeUri(context, Uri.parse(uriString))
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            } else {
+                null
+            }
+
+            for (name in delivered) {
+                val sourceUri = pending.getValue(name)
+                // Always clear the ledger entry regardless of what follows —
+                // the file is confirmed delivered either way, and leaving a
+                // resolved entry around would just mean re-attempting a
+                // move/delete against a doc that may no longer exist next time.
+                AppPrefs.removePendingSyncedFile(context, name)
+
+                if (policy == "leave" || folder == null) continue
+                val doc = try {
+                    DocumentFile.fromSingleUri(context, Uri.parse(sourceUri))
+                } catch (_: Exception) {
+                    null
+                }
+                // SAF permission revoked, source already gone, etc. — nothing
+                // more to do; the file is safely delivered either way.
+                if (doc == null || !doc.exists()) continue
+                applySyncedFilePolicy(context, policy, folder, doc)
+            }
+        }
+
+        /** Best-effort — a failure here (e.g. the user granted only read access
+         * to the watched tree before write-permission persistence was added)
+         * must not affect the sync result itself; the file is already safely
+         * delivered by this point regardless. */
+        private fun applySyncedFilePolicy(context: Context, policy: String, folder: DocumentFile, doc: DocumentFile) {
+            try {
+                when (policy) {
+                    "delete" -> doc.delete()
+                    "move" -> {
+                        val syncedDir = folder.findFile("synced")?.takeIf { it.isDirectory }
+                            ?: folder.createDirectory("synced")
+                            ?: return
+                        try {
+                            DocumentsContract.moveDocument(
+                                context.contentResolver,
+                                doc.uri,
+                                folder.uri,
+                                syncedDir.uri,
+                            )
+                        } catch (_: Exception) {
+                            // Some SAF providers don't support moveDocument;
+                            // fall back to a manual copy + delete of the source.
+                            val copy = syncedDir.createFile(
+                                doc.type ?: "application/octet-stream",
+                                doc.name ?: "export",
+                            )
+                            if (copy != null) {
+                                context.contentResolver.openInputStream(doc.uri)?.use { input ->
+                                    context.contentResolver.openOutputStream(copy.uri)?.use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                doc.delete()
+                            }
+                        }
+                    }
+                    // "leave" (default): nothing to do.
+                }
+            } catch (_: Exception) {
+                // Leave the file in place; it's already delivered either way.
+            }
+        }
     }
 
     override suspend fun doWork(): Result {
@@ -101,7 +203,6 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             ?: return Result.success()
 
         val alreadyImported = AppPrefs.getImportedDocIds(applicationContext)
-        val policy = AppPrefs.getSyncedFilePolicy(applicationContext)
         var importedCount = 0
 
         // listFiles() only sees the watched tree's immediate children, not
@@ -118,18 +219,32 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 AppPrefs.addImportedDocId(applicationContext, docId)
                 if (!outcome.alreadyQueued) {
                     importedCount++
-                    applySyncedFilePolicy(policy, folder, doc)
+                    // synced_file_policy is applied only once this file is
+                    // actually delivered (see applyPendingSyncedFilePolicies),
+                    // not here at import time — applying "move"/"delete" right
+                    // after import would relocate/erase the user's source zip
+                    // even if delivery never happens (e.g. no mail account
+                    // configured yet, see the importedCount==0 fallback below).
+                    AppPrefs.addPendingSyncedFile(applicationContext, outcome.file.name, docId)
                 }
             }
         }
 
         if (importedCount == 0) {
-            return Result.success(
-                workDataOf(
-                    KEY_IMPORTED_COUNT to 0,
-                    KEY_RESULT_TEXT to "No new files found",
+            // Nothing new this run, but inbox/ can still hold files that a
+            // *previous* run already imported (and ledgered in
+            // imported_doc_ids) yet never actually delivered — e.g. imported
+            // before a mail account was configured. Without this check, every
+            // subsequent "Sync now" reported a false "No new files found"
+            // forever, since alreadyImported skips them here unconditionally.
+            if (!WaMailApplication.hasPendingInboxFiles(applicationContext)) {
+                return Result.success(
+                    workDataOf(
+                        KEY_IMPORTED_COUNT to 0,
+                        KEY_RESULT_TEXT to "No new files found",
+                    )
                 )
-            )
+            }
         }
 
         val resultText = triggerAutoSync(importedCount)
@@ -154,6 +269,11 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
      * skips the auto-sync and tells the user to reconnect in the app,
      * instead of crashing or hanging. */
     private suspend fun triggerAutoSync(importedCount: Int): String {
+        // "Imported N new file(s)" only makes sense when this run actually
+        // imported something — when it's 0 and we're only here because
+        // doWork() found an undelivered backlog from a previous run, say so
+        // instead of the misleading "Imported 0 new file(s)".
+        val lead = if (importedCount > 0) "Imported $importedCount new file(s)" else "Syncing previously imported file(s)"
         val backend = AppPrefs.resolveMailBackend(applicationContext)
         val dataBuilder = Data.Builder()
             .putBoolean(SyncWorker.KEY_DRY_RUN, false)
@@ -167,14 +287,14 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             // *something* is saved, so a clear notification fires instead of
             // silently enqueuing a run that's guaranteed to fail.
             if (!AppPrefs.hasImapPassword(applicationContext) || AppPrefs.getImapHost(applicationContext).isBlank()) {
-                notify("Imported $importedCount new file(s) — open Settings > Mail account and save your IMAP app password to sync")
-                return "Imported $importedCount new file(s) — save an IMAP app password in Settings > Mail account to sync"
+                notify("$lead — open Settings > Mail account and save your IMAP app password to sync")
+                return "$lead — save an IMAP app password in Settings > Mail account to sync"
             }
         } else {
             val email = AppPrefs.getConnectedAccountEmail(applicationContext)
             if (email == null) {
-                notify("Imported $importedCount new file(s) — open the app to connect Gmail and sync")
-                return "Imported $importedCount new file(s) — connect Gmail in the app to sync"
+                notify("$lead — open the app to connect Gmail and sync")
+                return "$lead — connect Gmail in the app to sync"
             }
 
             val scopeString = "oauth2:" + GMAIL_SCOPES.joinToString(" ") { it.scopeUri }
@@ -183,8 +303,8 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                     GoogleAuthUtil.getToken(applicationContext, Account(email, "com.google"), scopeString)
                 }
             } catch (e: Exception) {
-                notify("Imported $importedCount new file(s) — reconnect Gmail in the app to sync them")
-                return "Imported $importedCount new file(s) — reconnect Gmail to sync"
+                notify("$lead — reconnect Gmail in the app to sync them")
+                return "$lead — reconnect Gmail to sync"
             }
             dataBuilder.putString(SyncWorker.KEY_ACCESS_TOKEN, token)
         }
@@ -206,50 +326,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         // SyncWorker's own foreground-service notification covers the actual
         // sync result ("Sync complete — N synced" / "Sync failed: ...") —
         // no separate notification needed here.
-        return "Imported $importedCount new file(s) — syncing to Gmail…"
-    }
-
-    /** Best-effort — a failure here (e.g. the user granted only read access
-     * to the watched tree before write-permission persistence was added)
-     * must not fail the whole import; the file is already safely copied
-     * into inbox/ by this point regardless. */
-    private fun applySyncedFilePolicy(policy: String, folder: DocumentFile, doc: DocumentFile) {
-        try {
-            when (policy) {
-                "delete" -> doc.delete()
-                "move" -> {
-                    val syncedDir = folder.findFile("synced")?.takeIf { it.isDirectory }
-                        ?: folder.createDirectory("synced")
-                        ?: return
-                    try {
-                        DocumentsContract.moveDocument(
-                            applicationContext.contentResolver,
-                            doc.uri,
-                            folder.uri,
-                            syncedDir.uri,
-                        )
-                    } catch (_: Exception) {
-                        // Some SAF providers don't support moveDocument;
-                        // fall back to a manual copy + delete of the source.
-                        val copy = syncedDir.createFile(
-                            doc.type ?: "application/octet-stream",
-                            doc.name ?: "export",
-                        )
-                        if (copy != null) {
-                            applicationContext.contentResolver.openInputStream(doc.uri)?.use { input ->
-                                applicationContext.contentResolver.openOutputStream(copy.uri)?.use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            doc.delete()
-                        }
-                    }
-                }
-                // "leave" (default): nothing to do.
-            }
-        } catch (_: Exception) {
-            // Leave the file in place; it's already imported either way.
-        }
+        return "$lead — syncing to Gmail…"
     }
 
     private fun notify(text: String) {

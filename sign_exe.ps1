@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Sign WAGmailSync.exe with a self-signed code-signing certificate.
+    Sign WAMailSync.exe with a self-signed code-signing certificate.
 
 .DESCRIPTION
     1. Looks for an existing "CN=WAGmailSync Dev" cert in Cert:\CurrentUser\My.
     2. Creates one (valid 3 years) if none exists.
-    3. Signs the exe in dist\WAGmailSyncPortable\App\WAGmailSync\ using signtool.
+    3. Signs the exe in dist\WAMailSyncPortable\App\WAMailSync\ using signtool.
     4. With -InstallCert: installs the cert to LocalMachine\TrustedPublisher so
        Windows stops SmartScreen-flagging the exe on THIS machine (requires admin).
 
@@ -31,7 +31,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $Signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-$ExePath  = Join-Path $PSScriptRoot "dist\WAGmailSyncPortable\App\WAGmailSync\WAGmailSync.exe"
+$ExePath  = Join-Path $PSScriptRoot "dist\WAMailSyncPortable\App\WAMailSync\WAMailSync.exe"
 
 if (-not (Test-Path $ExePath)) {
     Write-Error "Exe not found at '$ExePath'. Run build_portable.ps1 first."
@@ -45,6 +45,11 @@ if (-not (Test-Path $Signtool)) {
 # Step 1 - Get or create the dev signing certificate
 # ---------------------------------------------------------------------------
 
+# Left as "WAGmailSync Dev" deliberately (NOT renamed to WAMailSync): this is
+# the identity string baked into the self-signed cert. Changing it mints a
+# NEW certificate with a new thumbprint, so anyone who already ran
+# -InstallCert to trust the old one would start seeing SmartScreen warnings
+# again. Treat this as a trusted identity, not a build path.
 $CertSubject = "CN=WAGmailSync Dev"
 
 $cert = Get-ChildItem "Cert:\CurrentUser\My" -CodeSigningCert |

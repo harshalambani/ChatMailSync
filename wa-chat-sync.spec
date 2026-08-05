@@ -6,7 +6,7 @@
 #   cd "C:\Users\user\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
 #   pyinstaller wa-chat-sync.spec
 #
-# Output: dist\WAGmailSync\  (--onedir bundle)
+# Output: dist\WAMailSync\  (--onedir bundle)
 
 import sys
 from pathlib import Path
@@ -99,13 +99,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,      # --onedir: binaries go in the COLLECT step
-    name="WAGmailSync",
+    name="WAMailSync",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,              # no console window (GUI app)
-    icon=None,                  # set to "portable/App/AppInfo/appicon.ico" once available
+    icon="portable/App/AppInfo/appicon.ico",
 )
 
 coll = COLLECT(
@@ -115,5 +115,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="WAGmailSync",         # dist\WAGmailSync\
+    name="WAMailSync",          # dist\WAMailSync\
 )

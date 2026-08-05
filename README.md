@@ -73,8 +73,8 @@ help text), which is most of a typical feature.
 ```
 
 All runtime paths derive from `PROJECT_ROOT` in `src/config.py`
-(`Path(__file__).parent.parent`, or the `WAGMAIL_ROOT` env var when set by the
-portable launcher). There are no hardcoded absolute paths or registry writes.
+(`Path(__file__).parent.parent`, or the `WAMAILSYNC_ROOT` env var when set by
+the portable launcher). There are no hardcoded absolute paths or registry writes.
 
 ---
 
@@ -320,7 +320,7 @@ pip install pyinstaller
 
 | Invocation | Effect |
 |---|---|
-| `.\build_portable.ps1` | Run PyInstaller, then assemble `dist\WAGmailSyncPortable\`. |
+| `.\build_portable.ps1` | Run PyInstaller, then assemble `dist\WAMailSyncPortable\`. |
 | `.\build_portable.ps1 -SkipBuild` | Re-assemble the layout only (skip PyInstaller). |
 | `.\build_portable.ps1 -Sign` | Build, then code-sign the exe with a self-signed dev cert (`sign_exe.ps1`). |
 | `.\build_portable.ps1 -Sign -InstallCert` | Also install the dev cert as trusted (run as admin). |
@@ -330,8 +330,10 @@ Build internals:
 - `wa-chat-sync.spec` — PyInstaller spec. Bundles `customtkinter` and
   `googleapiclient` data files, the `tkinterdnd2` native DLL, and a few hidden
   imports PyInstaller's static analysis misses.
-- The portable launcher (`WAGmailSyncPortable.bat`) sets `WAGMAIL_ROOT` to the
+- The portable launcher (`WAMailSyncPortable.bat`) sets `WAMAILSYNC_ROOT` to the
   bundle's `Data\` folder so the frozen exe resolves `auth/` and `data/` correctly.
+  `WAGMAIL_ROOT` is still honoured as a fallback so portable installs built before
+  the rename keep working.
 - `Data\` is never wiped on rebuild, so OAuth tokens and synced state survive
   updates. Place `credentials.json` in `Data\auth\` before first run.
 ```

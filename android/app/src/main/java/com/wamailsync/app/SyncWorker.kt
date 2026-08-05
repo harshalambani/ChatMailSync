@@ -157,6 +157,18 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 Result.failure(workDataOf(KEY_ERROR to (e.message ?: e.toString())))
             } finally {
                 pollJob.cancel()
+                // Reconcile watched-folder synced_file_policy against
+                // whatever actually made it to processed/ this attempt (or
+                // an earlier one) — a dry run never touches inbox/, so
+                // there's nothing to reconcile. Best-effort: a failure here
+                // must never turn a successful/failed sync result into
+                // something else.
+                if (!dryRun) {
+                    try {
+                        WatchFolderWorker.applyPendingSyncedFilePolicies(applicationContext)
+                    } catch (_: Exception) {
+                    }
+                }
             }
         }
     }
