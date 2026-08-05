@@ -979,6 +979,17 @@ def _full_label_name(display_name: str) -> str:
     return f"{LABEL_PARENT}/{_sanitise_label_name(display_name)}"
 
 
+def mailbox_folder_for(display_name: str) -> str:
+    """The label / IMAP folder a chat's mail is filed under, for showing a user.
+
+    Public wrapper over _full_label_name so the reset confirmation flow can name
+    the exact place to go and delete, rather than saying "your mailbox". Same
+    sanitising as the write path, so what the user is told to look for is what
+    was actually created.
+    """
+    return _full_label_name(display_name)
+
+
 def get_or_create_label(transport: MailTransport, display_name: str) -> str:
     """Return the Gmail label ID for 'WhatsApp/<display_name>', creating if absent.
 

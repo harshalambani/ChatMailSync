@@ -22,6 +22,8 @@ from src.config import (
     STATE_DB_PATH,
 )
 from src.state import (
+    MailboxNotClearedError,
+    count_archived_messages,
     get_recent_runs,
     get_sync_summary,
     init_db,
@@ -205,6 +207,28 @@ def cmd_reset(args: argparse.Namespace) -> int:
     chat_id      = chat["chat_id"]
     display_name = chat["display_name"]
 
+    archived = count_archived_messages(chat_id, STATE_DB_PATH)
+
+    if archived > 0:
+        # Imported here rather than at module scope: cli.py otherwise never
+        # touches mail_client, and this keeps the transport imports off the
+        # startup path of every other subcommand.
+        from src.mail_client import mailbox_folder_for
+
+        folder = mailbox_folder_for(display_name)
+        print(
+            f"WARNING: '{display_name}' has {archived} message(s) already archived "
+            f"in your mailbox, in the folder:\n"
+            f"    {folder}\n\n"
+            f"Resetting does NOT remove them. The next sync files a second copy of "
+            f"all {archived}, in a new thread. This app can never delete mail, so\n"
+            f"nothing here can undo that afterwards.\n\n"
+            f"Before resetting:\n"
+            f"  1. Open your mail client.\n"
+            f"  2. Delete the folder '{folder}' (or all mail inside it).\n"
+            f"  3. Empty the trash, if your provider keeps one.\n"
+        )
+
     if not args.yes:
         answer = input(
             f"Reset all sync state for '{display_name}' (chat_id={chat_id!r})? "
@@ -213,8 +237,30 @@ def cmd_reset(args: argparse.Namespace) -> int:
         if answer != "y":
             print("Aborted.")
             return 0
+        if archived > 0:
+            answer = input(
+                f"Have you already deleted those {archived} message(s) from your "
+                "mailbox? Answering 'y' when you have not will leave you with "
+                "duplicates only you can clean up. [y/N] "
+            ).strip().lower()
+            if answer != "y":
+                print("Aborted. Delete the mail first, then run this again.")
+                return 0
+    elif archived > 0:
+        # --yes is a scripted, non-interactive path. It cannot ask, so it must
+        # not assume: refuse rather than silently duplicating the user's mail.
+        print(
+            "Refusing to reset with --yes while mail is archived. Run without "
+            "--yes so the mailbox-cleared confirmation can be answered.",
+            file=sys.stderr,
+        )
+        return 1
 
-    reset_chat(chat_id, STATE_DB_PATH)
+    try:
+        reset_chat(chat_id, STATE_DB_PATH, confirmed_mailbox_cleared=True)
+    except MailboxNotClearedError as exc:
+        print(f"Reset refused: {exc}", file=sys.stderr)
+        return 1
     print(
         f"Reset complete for '{display_name}'. "
         "The next sync will start from scratch and create a new mail thread."

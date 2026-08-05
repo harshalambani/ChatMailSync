@@ -3,7 +3,13 @@ from pathlib import Path
 
 from src import android_api, config
 from src.mail_client import MailTransport
-from src.state import get_chat, upsert_chat
+from src.state import (
+    compute_message_hash,
+    get_chat,
+    insert_message_hashes,
+    start_sync_run,
+    upsert_chat,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -154,9 +160,75 @@ def test_reset_by_display_name(tmp_root, db_path):
 
     assert result == {
         "ok": True, "chat_id": "chat1", "display_name": "Chat One",
-        "file_restored": False, "error": None,
+        "file_restored": False, "archived_count": 0, "needs_confirmation": False,
+        "error": None,
     }
     assert get_chat("chat1", db_path)["gmail_thread_id"] is None
+
+
+def _archive_one_message(chat_id: str, db_path) -> str:
+    """Record a message as sent, the way a real sync would."""
+    run_id = start_sync_run(chat_id, db_path=db_path)
+    h = compute_message_hash(chat_id, "2025-03-14T09:41:00", "Alice", "Hello")
+    insert_message_hashes([(h, chat_id, "2025-03-14T09:41:00", run_id)], db_path)
+    return h
+
+
+def test_reset_without_confirmation_refuses_when_mail_archived(tmp_root, db_path):
+    """Unconfirmed reset must be refused, and must change nothing.
+
+    The UI is expected to catch this via reset_preview, but the gate lives in
+    the core so a caller that skips the preview cannot duplicate the user's mail.
+    """
+    upsert_chat("chat1", "Chat One", "chat1.txt", gmail_thread_id="t1", db_path=db_path)
+    _archive_one_message("chat1", db_path)
+
+    result = android_api.reset("chat1")
+
+    assert result["ok"] is False
+    assert result["needs_confirmation"] is True
+    assert result["archived_count"] == 1
+    assert "WhatsApp/Chat One" in result["error"]
+    assert get_chat("chat1", db_path)["gmail_thread_id"] == "t1"
+
+
+def test_reset_with_confirmation_proceeds(tmp_root, db_path):
+    upsert_chat("chat1", "Chat One", "chat1.txt", gmail_thread_id="t1", db_path=db_path)
+    _archive_one_message("chat1", db_path)
+
+    result = android_api.reset("chat1", True)
+
+    assert result["ok"] is True
+    assert get_chat("chat1", db_path)["gmail_thread_id"] is None
+
+
+def test_reset_preview_reports_count_and_folder(tmp_root, db_path):
+    upsert_chat("chat1", "Chat One", "chat1.txt", gmail_thread_id="t1", db_path=db_path)
+    _archive_one_message("chat1", db_path)
+
+    preview = android_api.reset_preview("chat1")
+
+    assert preview["ok"] is True
+    assert preview["archived_count"] == 1
+    assert preview["requires_confirmation"] is True
+    # The exact string the user is told to go and delete must be the same one
+    # the write path creates, sanitising included.
+    assert preview["mailbox_folder"] == "WhatsApp/Chat One"
+
+
+def test_reset_preview_on_untouched_chat_needs_no_confirmation(tmp_root, db_path):
+    upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+
+    preview = android_api.reset_preview("chat1")
+
+    assert preview["archived_count"] == 0
+    assert preview["requires_confirmation"] is False
+
+
+def test_reset_preview_unknown_chat_returns_error(tmp_root, db_path):
+    preview = android_api.reset_preview("nonexistent")
+    assert preview["ok"] is False
+    assert preview["error"] is not None
 
 
 def test_reset_unknown_chat_returns_error(tmp_root, db_path):

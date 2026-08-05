@@ -1,3 +1,5 @@
+import pytest
+
 from src import state
 
 
@@ -103,7 +105,7 @@ def test_reset_chat_isolates_other_chats(db_path):
     h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
     state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
 
-    state.reset_chat("chat1", db_path)
+    state.reset_chat("chat1", db_path, confirmed_mailbox_cleared=True)
 
     chat1 = state.get_chat("chat1", db_path)
     assert chat1["gmail_thread_id"] is None
@@ -111,3 +113,39 @@ def test_reset_chat_isolates_other_chats(db_path):
 
     chat2 = state.get_chat("chat2", db_path)
     assert chat2["gmail_thread_id"] == "t2"
+
+
+def test_reset_chat_refuses_while_mail_is_archived(db_path):
+    """The gate: unconfirmed reset of a chat with sent mail must not proceed.
+
+    Resetting clears the hash table, which is the only record that a message was
+    ever sent - so an unconfirmed reset silently sets up a duplicate of every
+    archived message on the next sync. Refusing is the point of the feature.
+    """
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    state.update_chat_gmail_ids("chat1", gmail_thread_id="t1", gmail_label_id="l1", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
+    h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+    state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
+
+    assert state.count_archived_messages("chat1", db_path) == 1
+
+    with pytest.raises(state.MailboxNotClearedError) as excinfo:
+        state.reset_chat("chat1", db_path)
+    assert excinfo.value.archived_count == 1
+
+    # Nothing was touched on the way out - a refused reset must leave the chat
+    # exactly as it was, or the "safe" path would itself cause the duplication.
+    assert state.hash_exists(h, db_path)
+    assert state.get_chat("chat1", db_path)["gmail_thread_id"] == "t1"
+
+
+def test_reset_chat_allows_reset_when_nothing_archived(db_path):
+    """No mail sent means no duplicate possible, so no confirmation is demanded."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    state.update_chat_gmail_ids("chat1", gmail_thread_id="t1", gmail_label_id="l1", db_path=db_path)
+
+    assert state.count_archived_messages("chat1", db_path) == 0
+    state.reset_chat("chat1", db_path)
+
+    assert state.get_chat("chat1", db_path)["gmail_thread_id"] is None

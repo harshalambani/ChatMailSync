@@ -374,13 +374,66 @@ def get_recent_runs(days: int = 90, db_path: Optional[Path] = None) -> list[sqli
 # Reset helper
 # ---------------------------------------------------------------------------
 
-def reset_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
+class MailboxNotClearedError(RuntimeError):
+    """Raised when a chat with archived messages is reset without confirmation.
+
+    Carries the count so callers can put a real number in front of the user
+    instead of a vague warning.
+    """
+
+    def __init__(self, chat_id: str, archived_count: int) -> None:
+        self.chat_id = chat_id
+        self.archived_count = archived_count
+        super().__init__(
+            f"{chat_id!r} has {archived_count} message(s) already archived in the "
+            "mailbox. Delete them there first, then reset with "
+            "confirmed_mailbox_cleared=True."
+        )
+
+
+def count_archived_messages(chat_id: str, db_path: Optional[Path] = None) -> int:
+    """How many of this chat's messages this app has already put in the mailbox.
+
+    One row per message actually appended, so this is the number of duplicates
+    a reset-then-resync would create if the mailbox copy is left in place.
+    """
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM message_hashes WHERE chat_id = ?", (chat_id,)
+        ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def reset_chat(
+    chat_id: str,
+    db_path: Optional[Path] = None,
+    *,
+    confirmed_mailbox_cleared: bool = False,
+) -> None:
     """Delete all sync history for a chat so it will be re-synced from scratch.
 
     The chats row itself is kept (preserving display_name and source_filename)
     but gmail_thread_id and gmail_label_id are cleared so the next run creates
     a fresh thread.
+
+    This is the duplicate-creating operation in the whole app, so it is gated.
+    The local hash table is the only record that these messages were ever sent;
+    clearing it makes the next sync append a second copy of every one of them,
+    into a brand-new thread, and this app has no delete path that could undo
+    that - it is write-only by design and never removes mail.
+
+    So the caller must first have the user delete the chat's existing mail by
+    hand, then pass confirmed_mailbox_cleared=True. Without it, a chat that has
+    anything archived raises MailboxNotClearedError. The flag is keyword-only
+    and defaults to False so that no existing or future caller can arm this by
+    position or by forgetting it; a chat with nothing archived resets freely,
+    since there is nothing to duplicate.
     """
+    if not confirmed_mailbox_cleared:
+        archived = count_archived_messages(chat_id, db_path)
+        if archived > 0:
+            raise MailboxNotClearedError(chat_id, archived)
+
     with _connect(db_path) as conn:
         # Delete hashes first (FK constraint)
         conn.execute("DELETE FROM message_hashes WHERE chat_id = ?", (chat_id,))

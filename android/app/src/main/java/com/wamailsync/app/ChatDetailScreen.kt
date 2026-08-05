@@ -41,9 +41,14 @@ fun ChatDetailScreen(
     syncInProgress: Boolean,
 ) {
     var chat by remember { mutableStateOf<ChatSummary?>(null) }
-    var showResetConfirm by remember { mutableStateOf(false) }
+    // Reset is a two-gate flow when mail already exists for this chat, so it
+    // needs more than a boolean: stage 1 tells the user what to go and delete,
+    // stage 2 makes them confirm they did it. See resetStage below.
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var resetMessage by remember { mutableStateOf<String?>(null) }
+    var resetStage by remember { mutableStateOf(0) }
+    var archivedCount by remember { mutableStateOf(0) }
+    var mailboxFolder by remember { mutableStateOf("") }
     val context = LocalContext.current
     val isGmailBackend = remember {
         AppPrefs.resolveMailBackend(context) == AppPrefs.MAIL_BACKEND_GMAIL_OAUTH
@@ -118,7 +123,18 @@ fun ChatDetailScreen(
                 }
 
                 Button(
-                    onClick = { showResetConfirm = true },
+                    onClick = {
+                        // Ask Python how much mail is already out there before
+                        // showing anything, so the dialog can name a real count
+                        // and the real folder instead of a vague warning.
+                        val preview = Python.getInstance().getModule("src.android_api")
+                            .callAttr("reset_preview", chatId)
+                        archivedCount = preview.callAttr("get", "archived_count")
+                            ?.toString()?.toIntOrNull() ?: 0
+                        mailboxFolder = preview.callAttr("get", "mailbox_folder")
+                            ?.toString() ?: ""
+                        resetStage = 1
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
@@ -140,40 +156,87 @@ fun ChatDetailScreen(
         }
     }
 
-    if (showResetConfirm) {
+    // Shared by both exits from the gate: the no-mail-yet case (stage 1) and
+    // the confirmed case (stage 2). Passes confirmed_mailbox_cleared, which
+    // src.state.reset_chat refuses to proceed without.
+    val performReset = {
+        resetStage = 0
+        val result = Python.getInstance().getModule("src.android_api")
+            .callAttr("reset", chatId, true)
+        val ok = result.callAttr("get", "ok")?.toString() == "True"
+        val fileRestored = result.callAttr("get", "file_restored")?.toString() == "True"
+        resetMessage = when {
+            !ok -> "Reset failed: ${result.callAttr("get", "error")}"
+            fileRestored -> "Reset complete. The export file was moved back to your inbox — it'll be re-synced next time you sync."
+            else -> "Reset complete. Re-import the export to rebuild this chat."
+        }
+        chat = loadChatSummaries().find { it.chatId == chatId }
+    }
+
+    // Gate 1. With nothing archived there is nothing to duplicate, so this is
+    // the whole flow. With mail already out there it becomes the instruction
+    // step, and the confirm button advances to gate 2 rather than resetting.
+    if (resetStage == 1) {
+        val hasMail = archivedCount > 0
         AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset this chat?") },
+            onDismissRequest = { resetStage = 0 },
+            title = { Text(if (hasMail) "Delete the old mail first" else "Reset this chat?") },
             text = {
-                // Previously said "re-importing... will create a new Gmail
-                // thread," implying the user always has to manually re-pick
-                // the file — but android_api.reset() already restores it
-                // from processed/ back to inbox/ automatically when found
-                // (see file_restored below), so the common case just needs
-                // "Sync now" with no re-import step at all.
+                // The old text said mail in your mailbox is "NOT deleted" and
+                // stopped there — true, and exactly backwards as reassurance:
+                // it is precisely because the old copies survive that a re-sync
+                // files a second copy of every message.
                 Text(
-                    "Local sync state will be cleared, and a new mail thread will be " +
-                        "created the next time this chat is synced. Mail already in your " +
-                        "mailbox is NOT deleted."
+                    if (hasMail) {
+                        "$archivedCount message(s) from this chat are already archived in:" +
+                            "\n\n    $mailboxFolder\n\n" +
+                            "Re-syncing does NOT replace them. It adds a second copy of all " +
+                            "$archivedCount, in a new thread. This app can never delete mail, " +
+                            "so nothing here can undo that afterwards.\n\n" +
+                            "Before continuing:\n" +
+                            "1. Open your mail app.\n" +
+                            "2. Delete the folder '$mailboxFolder' (or all mail inside it).\n" +
+                            "3. Empty the trash, if your provider keeps one.\n\n" +
+                            "Have you already deleted that mail?"
+                    } else {
+                        // android_api.reset() restores the export from processed/
+                        // back to inbox/ when it finds it (see file_restored), so
+                        // the common case needs no manual re-import.
+                        "Local sync state will be cleared, and a new mail thread will be " +
+                            "created the next time this chat is synced. Nothing has been " +
+                            "archived for this chat yet, so no duplicate mail can result."
+                    }
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    showResetConfirm = false
-                    val result = Python.getInstance().getModule("src.android_api")
-                        .callAttr("reset", chatId)
-                    val ok = result.callAttr("get", "ok")?.toString() == "True"
-                    val fileRestored = result.callAttr("get", "file_restored")?.toString() == "True"
-                    resetMessage = when {
-                        !ok -> "Reset failed: ${result.callAttr("get", "error")}"
-                        fileRestored -> "Reset complete. The export file was moved back to your inbox — it'll be re-synced next time you sync."
-                        else -> "Reset complete. Re-import the export to rebuild this chat."
-                    }
-                    chat = loadChatSummaries().find { it.chatId == chatId }
-                }) { Text("Reset") }
+                    if (hasMail) resetStage = 2 else performReset()
+                }) { Text(if (hasMail) "Yes, I deleted it" else "Reset") }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { resetStage = 0 }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Gate 2. Deliberately a second tap on a second screen: the cost of being
+    // wrong here is duplicate mail only the user can clean up by hand.
+    if (resetStage == 2) {
+        AlertDialog(
+            onDismissRequest = { resetStage = 0 },
+            title = { Text("Confirm re-archive") },
+            text = {
+                Text(
+                    "Last check. If '$mailboxFolder' still has mail in it, you will end " +
+                        "up with $archivedCount duplicate message(s) that only you can " +
+                        "clean up.\n\nReset and archive this chat again from scratch?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { performReset() }) { Text("Reset and re-archive") }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetStage = 0 }) { Text("Cancel") }
             },
         )
     }
@@ -186,7 +249,10 @@ fun ChatDetailScreen(
                 Text(
                     "This removes the chat from your list entirely — unlike Reset, it " +
                         "won't be kept for re-syncing. Mail already in your mailbox is " +
-                        "NOT deleted."
+                        "NOT deleted.\n\n" +
+                        "It also forgets which messages were already archived, so if you " +
+                        "ever import this export again you will get a second copy of all " +
+                        "of them unless you delete the old mail first."
                 )
             },
             confirmButton = {

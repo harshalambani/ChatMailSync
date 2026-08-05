@@ -17,8 +17,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from src import config
-from src.mail_client import ChunkSize, MailTransport
+from src.mail_client import ChunkSize, MailTransport, mailbox_folder_for
 from src.parser import extract_chat_info, parse_file
+from src.state import MailboxNotClearedError, count_archived_messages
 from src.state import delete_chat as state_delete_chat
 from src.state import get_recent_runs, get_sync_summary, init_db, reset_chat, resolve_chat
 from src.sync_manager import ProgressSyncManager
@@ -239,7 +240,40 @@ def sync_log(days: int = 90) -> list[dict]:
     return [dict(row) for row in get_recent_runs(days, config.STATE_DB_PATH)]
 
 
-def reset(chat_id_or_name: str) -> dict:
+def reset_preview(chat_id_or_name: str) -> dict:
+    """What a reset would cost, for the confirmation screen. Changes nothing.
+
+    Returns the number of this chat's messages already sitting in the mailbox
+    and the folder they are in, so the UI can name both instead of warning in
+    the abstract. requires_confirmation is False only when nothing is archived,
+    in which case reset() will go through without the manual-delete step.
+    """
+    init_db(config.STATE_DB_PATH)
+    chat = resolve_chat(chat_id_or_name, config.STATE_DB_PATH)
+    if chat is None:
+        return {
+            "ok": False,
+            "chat_id": None,
+            "display_name": None,
+            "archived_count": 0,
+            "mailbox_folder": None,
+            "requires_confirmation": False,
+            "error": f"No chat found matching {chat_id_or_name!r}",
+        }
+
+    archived = count_archived_messages(chat["chat_id"], config.STATE_DB_PATH)
+    return {
+        "ok": True,
+        "chat_id": chat["chat_id"],
+        "display_name": chat["display_name"],
+        "archived_count": archived,
+        "mailbox_folder": mailbox_folder_for(chat["display_name"]),
+        "requires_confirmation": archived > 0,
+        "error": None,
+    }
+
+
+def reset(chat_id_or_name: str, confirmed_mailbox_cleared: bool = False) -> dict:
     """Reset sync state for one chat (accepts chat_id or display_name).
 
     Mirrors gui.py's _on_resync_chat: also moves the chat's export file back
@@ -247,8 +281,16 @@ def reset(chat_id_or_name: str) -> dict:
     re-imports it, instead of requiring the user to manually re-pick the
     original file.
 
+    confirmed_mailbox_cleared asserts the user has already deleted this chat's
+    existing mail by hand - see reset_preview() for the count and folder to put
+    in front of them, and state.reset_chat() for why nothing else can undo a
+    duplicate. Passing it when they have not is how duplicates get made, so the
+    caller must only set it from an explicit user action, never a default.
+
     Returns {"ok": bool, "chat_id": str | None, "display_name": str | None,
-    "file_restored": bool, "error": str | None}.
+    "file_restored": bool, "archived_count": int, "needs_confirmation": bool,
+    "error": str | None}. needs_confirmation True means nothing was changed and
+    the manual-delete step is still outstanding.
     """
     init_db(config.STATE_DB_PATH)
     chat = resolve_chat(chat_id_or_name, config.STATE_DB_PATH)
@@ -258,10 +300,31 @@ def reset(chat_id_or_name: str) -> dict:
             "chat_id": None,
             "display_name": None,
             "file_restored": False,
+            "archived_count": 0,
+            "needs_confirmation": False,
             "error": f"No chat found matching {chat_id_or_name!r}",
         }
 
-    reset_chat(chat["chat_id"], config.STATE_DB_PATH)
+    try:
+        reset_chat(
+            chat["chat_id"],
+            config.STATE_DB_PATH,
+            confirmed_mailbox_cleared=confirmed_mailbox_cleared,
+        )
+    except MailboxNotClearedError as exc:
+        return {
+            "ok": False,
+            "chat_id": chat["chat_id"],
+            "display_name": chat["display_name"],
+            "file_restored": False,
+            "archived_count": exc.archived_count,
+            "needs_confirmation": True,
+            "error": (
+                f"{exc.archived_count} message(s) from this chat are already in "
+                f"{mailbox_folder_for(chat['display_name'])}. Delete them there "
+                "first, or resetting will file a second copy of every one."
+            ),
+        }
 
     file_restored = False
     source_filename = chat["source_filename"]
@@ -277,6 +340,8 @@ def reset(chat_id_or_name: str) -> dict:
         "chat_id": chat["chat_id"],
         "display_name": chat["display_name"],
         "file_restored": file_restored,
+        "archived_count": 0,
+        "needs_confirmation": False,
         "error": None,
     }
 

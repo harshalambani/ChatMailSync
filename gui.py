@@ -46,7 +46,15 @@ from src.config import (
     resolve_mail_backend,
 )
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
-from src.state import delete_chat, get_sync_summary, init_db, reset_chat
+from src.mail_client import mailbox_folder_for
+from src.state import (
+    MailboxNotClearedError,
+    count_archived_messages,
+    delete_chat,
+    get_sync_summary,
+    init_db,
+    reset_chat,
+)
 
 # ---------------------------------------------------------------------------
 # Appearance
@@ -917,18 +925,75 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._refresh_chat_list()
 
     def _on_resync_chat(self, chat_id: str, display_name: str, source_filename: str) -> None:
-        """Reset sync history for a chat and move its export file back to inbox."""
-        ok = messagebox.askyesno(
-            "Reset and re-sync?",
-            f"Reset sync history for '{display_name}'?\n\n"
-            "All local sync records will be cleared.\n"
-            "Emails already in your mailbox are not affected.",
-            icon="warning",
-        )
-        if not ok:
-            return
+        """Reset sync history for a chat and move its export file back to inbox.
+
+        Gated, because this is the one action in the app that can duplicate
+        mail. The old dialog said "emails already in your mailbox are not
+        affected", which was true and badly misleading: they are not affected,
+        which is exactly why re-syncing files a second copy of every one of
+        them. The user has to clear the mailbox side by hand first - nothing
+        here can do it for them, since the app never deletes mail.
+        """
+        archived = count_archived_messages(chat_id, STATE_DB_PATH)
+        folder = mailbox_folder_for(display_name)
+
+        if archived == 0:
+            # Nothing has ever been sent for this chat, so there is nothing to
+            # duplicate and no reason to make the user go and check.
+            ok = messagebox.askyesno(
+                "Reset and re-sync?",
+                f"Reset sync history for '{display_name}'?\n\n"
+                "Nothing has been archived for this chat yet, so no duplicate "
+                "mail can result.",
+                icon="warning",
+                default=messagebox.NO,
+            )
+            if not ok:
+                return
+        else:
+            # Gate 1 - the instruction. State the number and the exact folder.
+            ready = messagebox.askyesno(
+                "Delete the old mail first",
+                f"'{display_name}' already has {archived} message(s) archived in "
+                f"your mailbox, in the folder:\n\n    {folder}\n\n"
+                "Re-syncing does NOT replace them. It adds a second copy of all "
+                f"{archived}, in a new thread. This app can never delete mail, so "
+                "nothing here can undo that afterwards.\n\n"
+                "Before continuing:\n"
+                f"  1. Open your mail client.\n"
+                f"  2. Delete the folder '{folder}' (or all mail inside it).\n"
+                "  3. Empty the trash, if your provider keeps one.\n\n"
+                "Have you already deleted that mail?",
+                icon="warning",
+                default=messagebox.NO,
+            )
+            if not ready:
+                self._append_log(
+                    f"Reset cancelled for '{display_name}' - delete '{folder}' in your "
+                    "mail client first, then reset."
+                )
+                return
+
+            # Gate 2 - the commitment, restating the cost of being wrong.
+            confirmed = messagebox.askyesno(
+                "Confirm re-archive",
+                f"Last check. If '{folder}' still has mail in it, you will end up "
+                f"with {archived} duplicate message(s) that only you can clean up.\n\n"
+                f"Reset '{display_name}' and archive it again from scratch?",
+                icon="warning",
+                default=messagebox.NO,
+            )
+            if not confirmed:
+                return
+
         try:
-            reset_chat(chat_id, STATE_DB_PATH)
+            # confirmed_mailbox_cleared is set only on the path where the user
+            # answered both prompts; the archived == 0 path passes it because
+            # there is provably nothing in the mailbox to clear.
+            reset_chat(chat_id, STATE_DB_PATH, confirmed_mailbox_cleared=True)
+        except MailboxNotClearedError as exc:
+            self._append_log(f"Reset refused for '{display_name}': {exc}")
+            return
         except Exception as exc:
             self._append_log(f"Could not reset '{display_name}': {exc}")
             return
