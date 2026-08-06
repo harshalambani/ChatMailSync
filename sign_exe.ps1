@@ -4,7 +4,7 @@
     Sign WAMailSync.exe with a self-signed code-signing certificate.
 
 .DESCRIPTION
-    1. Looks for an existing "CN=WAGmailSync Dev" cert in Cert:\CurrentUser\My.
+    1. Looks for an existing "CN=WAMailSync Dev" cert in Cert:\CurrentUser\My.
     2. Creates one (valid 3 years) if none exists.
     3. Signs the exe in dist\WAMailSyncPortable\App\WAMailSync\ using signtool.
     4. With -InstallCert: installs the cert to LocalMachine\TrustedPublisher so
@@ -45,12 +45,15 @@ if (-not (Test-Path $Signtool)) {
 # Step 1 - Get or create the dev signing certificate
 # ---------------------------------------------------------------------------
 
-# Left as "WAGmailSync Dev" deliberately (NOT renamed to WAMailSync): this is
-# the identity string baked into the self-signed cert. Changing it mints a
-# NEW certificate with a new thumbprint, so anyone who already ran
-# -InstallCert to trust the old one would start seeing SmartScreen warnings
-# again. Treat this as a trusted identity, not a build path.
-$CertSubject = "CN=WAGmailSync Dev"
+# Renamed from "WAGmailSync Dev" on 2026-08-06, deliberately and with the
+# consequence understood: this string is the identity baked into the
+# self-signed cert, so changing it mints a NEW certificate with a new
+# thumbprint. The old cert stays valid where it is already trusted, but this
+# machine must run -InstallCert (elevated) once more before SmartScreen stops
+# warning about builds signed with the new one. That was an acceptable
+# one-off cost here; it would not be if the cert were ever distributed.
+# Treat this as a trusted identity, not a build path - do not churn it.
+$CertSubject = "CN=WAMailSync Dev"
 
 $cert = Get-ChildItem "Cert:\CurrentUser\My" -CodeSigningCert |
     Where-Object { $_.Subject -eq $CertSubject -and $_.NotAfter -gt (Get-Date) } |
