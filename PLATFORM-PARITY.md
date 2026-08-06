@@ -139,7 +139,10 @@ Neither of the following is done, and neither is Windows-first.
    all deliberate: OAuth scopes and the `gmail_oauth` backend value, the
    `imap.gmail.com` provider default and Gmail app-password instructions, the
    Gmail-gated deep-link, Gmail API limits, the `gmail_thread_id` /
-   `gmail_label_id` columns, the frozen `wagmail_prefs` / `wagmail_imap_key` /
-   `WAGmailSync Dev` cert-subject identifiers, and real repository URLs. Two
-   items are deliberately out of scope and still open: `docs/CNAME`
-   (`wagmail.ambani.tech`, needs DNS work) and the repository/folder name.
+   `gmail_label_id` columns, the frozen `wagmail_prefs` / `wagmail_imap_key`
+   identifiers, and real repository URLs.
+
+   Two items were deliberately out of scope at the time. The cert subject is now
+   `CN=WAMailSync Dev` (2026-08-06), and `docs/CNAME` is now
+   `wamailsync.ambani.tech`, cut over once the DNS record existed. The
+   repository and folder name remain open.
