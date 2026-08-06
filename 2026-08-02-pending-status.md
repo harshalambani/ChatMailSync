@@ -90,11 +90,14 @@ upscale (no source exceeds 512), and the arrows are illegible at 16px.
 Still open: the `.bat` launcher cannot carry an icon — a PortableApps.com-style `.exe` launcher
 would be needed for that, which is part of A4 rather than B2.
 
-### B3. Update `WA-Mail-Sync-Password-Storage.docx` §4.1 — **now actively wrong**
-It describes Windows DPAPI as not yet built. DPAPI shipped in v0.2.2-beta, so the statement is no
-longer merely premature. **Blocked on** confirming whether `scratchpad/make_password_doc.py` (the
-generator that produced the `.docx`) still exists — the scratchpad is session-scoped and may be
-gone, in which case the generator has to be rewritten before the doc can be regenerated.
+### B3. ~~Update `WA-Mail-Sync-Password-Storage.docx` §4.1~~ — **done 2026-08-06**
+This entry was itself out of date. The `.docx` was regenerated on 5 Aug, *after* DPAPI shipped, so
+§2.1/§2.3/§4.1 already described DPAPI correctly and the "actively wrong" claim no longer held.
+`scratchpad/make_password_doc.py` is indeed gone with its session, so the doc was edited in place
+with `python-docx` rather than regenerated. What it was genuinely missing was the user-visible
+consequence of both secrets being device-bound: new §2.9 (moving the bundle to another PC) and
+§3.8 (moving to a new phone), a matching "If the device changes" row in the platform comparison
+table, and a version line now reading v1.0.0. Awaiting sign-off.
 
 ### B4. Clear Unaise Urfi's rows from `sync_state.db`
 So that chat can be re-archived. Offered previously, never carried out.
