@@ -66,6 +66,9 @@ Remaining blockers:
   `C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe`.
 - **Open:** actually writing `launcher.ini` and generating `WAMailSync.exe` (decision 1 above).
 - **Open:** obtaining and recording the pinned SHA-256 for the official installer download.
+- **Open:** the splash settings from **B8** go in the same `App\AppInfo\Launcher\` ini this step
+  creates, so fold them in here rather than reopening the file later. Requires timing the frozen exe
+  first.
 
 ### A5. ~~Delete the tag worktree~~ — **resolved 2026-08-05, nothing to delete**
 `scratchpad\wt-v021` no longer exists and `git worktree list` shows only the main checkout, so the
@@ -113,6 +116,48 @@ and say "Gmail" accurately.
 `build_portable.ps1`, `wa-chat-sync.spec` (`name="WAGmailSync"`), the `.bat` launcher, and
 `WAGMAIL_ROOT`. Deferred — ties into the broader package-name / rename decision.
 
+### B8. Splash, startup time and shutdown on the portable build — *opened 2026-08-06*
+Full write-up in [`2026-08-06-splash-and-startup-learnings.md`](2026-08-06-splash-and-startup-learnings.md),
+carried over from PASk 3.3.0-3.4.1 where every number in it was measured on a real frozen build.
+Nothing here is started.
+
+**Sequencing:** the splash items belong **inside A4**, not after it — `splash.jpg` and `SplashTime`
+live in `App\AppInfo\Launcher\WAMailSyncPortable.ini`, which A4 creates. Doing A4 without them means
+opening the same file twice.
+
+The checklist, and why each item is on it:
+
+- **Time the frozen exe** (launcher-start to visible window, warm and cold) before choosing any
+  number. PASk sized its splash against a *source* run and shipped one that cleared with the screen
+  still empty for ~8.6s — source was ~9s, frozen was 14.6s. `python gui.py` is not the program we
+  ship.
+- **Add `splash.jpg` + `SplashTime`** sized just *under* the warm figure, with the warm/cold numbers,
+  the date and the reasoning in a comment above it. There is no splash today, and it is the cheapest
+  perceived-speed win available since it costs zero actual milliseconds. It is a **timed overlay,
+  not a ready signal** — nothing clears it when the window appears, so overshoot parks a topmost
+  image over a usable window. Leave cold starts uncovered.
+- **Do not set `LaunchAppAfterSplash`.** It runs the splash to completion *before* starting the app,
+  adding its duration to start time rather than hiding start behind it. It reads like the obviously
+  correct setting and is the opposite.
+- **Prefer a static image — no version number.** A build-time Pillow render is how PASk shipped a
+  3.4.0 splash reading "Version 3.3.0": the build script ran under the invoking interpreter, which
+  had Pillow locally and not on CI, and a `try/except` shipped the stale committed image. Skipping
+  the render skips the whole trap. Also: a missing `splash.jpg` disables the splash **silently**.
+- **Verify in a CI-built package**, not a local one — a local build proves nothing about the path
+  that breaks.
+- **Audit for network timeouts on the path to the first window.** `gui.py:860` already threads
+  transport construction (`_silent_build_transport`); the risk is anything added later that isn't —
+  a token refresh, a capability probe, a DNS lookup, an update check.
+- **Size worker-filled widgets for their final content** so they don't grow when data lands. Start
+  in the shape you finish in, and don't let a placeholder show a guess styled as a fact.
+- **Comment two shutdown invariants** next to the thread creation in `gui_worker.py`. This bug does
+  *not* bite us today and the reason is worth knowing: `WAMailSyncPortable.ini` sets
+  `SingleAppInstance=false` and never sets `SinglePortableAppInstance`, so no mutex is held during a
+  slow exit; and every worker thread is `daemon=True`, so shutdown never joins them. **Adding
+  `SinglePortableAppInstance=true` — a reasonable thing to want — brings the bug with it**, because
+  `WaitForProgram=true` is already set. In PASk that combination made closing the app block
+  relaunching for 10-17s with no window, no error and no message.
+
 ### B6. Device cleanup
 `/sdcard/Download/wamail-test/` still holds test screenshots.
 
@@ -142,13 +187,30 @@ superseded banner) went in with the v0.2.2-beta merge `381eee2`. Tree is clean; 
   `docs/user-guide.md`, which also gained the missing user-facing note that a DPAPI blob does not
   travel to another PC or Windows account. B3 (the `.docx`) is the one artefact still uncorrected.
 - **"No longer Gmail-only" renaming (P2)** — B5 is a piece of it.
+- **Migration to a new device (P3)** — *opened 2026-08-06.* Both platforms now bind the saved
+  password to one device by design (DPAPI to a Windows account+machine, the Keystore key to the
+  phone's secure hardware), and §2.9 / §3.8 of the password-storage doc record the consequence but
+  only as "re-enter it once". The password is the easy part; nothing yet says what happens to
+  **`sync_state.db`** — the message fingerprints that stop a re-sync duplicating everything already
+  in the mailbox. Moving to a new PC or phone without carrying that database forward means the next
+  sync re-files every chat into fresh threads.
+
+  **Scope decided 2026-08-06:** the password is **deliberately not migrated** — re-entering it once
+  is the correct behaviour and follows from the device-bound design, not a gap to work around. Any
+  migration feature must not weaken that. **`sync_state.db` is the critical payload** and the real
+  subject of this phase. Still to settle: whether the app offers an explicit export/import rather
+  than expecting the user to locate the file, whether settings and the watched-folder path travel
+  with it, and whether cross-platform (Windows to Android or back) is in scope or only like-for-like.
+  Not started; no code written.
 
 ---
 
 ## Suggested order
 
 B1 and B2 are both done. Next: **A1 (install v0.2.2 and exercise the four fixes) → A4 (launcher +
-pinned-hash installer fetch) → B3**. A1 first because everything else is downstream of trusting the
+pinned-hash installer fetch, **with B8's splash settings folded in**) → B3**. B8 is not a separate
+slot: its splash half belongs inside A4's ini, and its startup/shutdown half is an audit that wants
+the frozen exe A4 produces. A1 first because everything else is downstream of trusting the
 current build; A4 because it is the only thing standing between the icon set and a real Windows
 deliverable; B3 because it is the one document that is now actively wrong rather than merely stale.
 
