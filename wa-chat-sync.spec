@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# PyInstaller build spec for WA Chat Sync to Gmail.
+# PyInstaller build spec for WA Mail Sync.
 #
 # Build with:
 #   cd "C:\Users\user\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"

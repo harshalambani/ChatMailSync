@@ -7,7 +7,7 @@ Flow (normal run):
        a. Parse filename → chat_id, display_name.
        b. Upsert chat record; start a pending sync run.
        c. Parse messages; filter out duplicates and re-export overlap.
-       d. Push new messages to Gmail in chunks.
+       d. Push new messages to the mailbox in chunks.
        e. Insert hashes, mark run complete, move file to processed/.
 
 Deduplication:
@@ -274,13 +274,15 @@ class SyncManager:
             stats.messages_synced += len(new_messages)
             return
 
-        # Retrieve cached Gmail IDs.
+        # Retrieve cached mail IDs. The columns are still named gmail_* (renaming
+        # them would need a migration for no functional gain), but on the IMAP
+        # backend they hold that transport's folder and thread identifiers.
         chat_row = get_chat(chat_id, self.db_path)
         label_id = chat_row["gmail_label_id"] if chat_row else None
         thread_id = chat_row["gmail_thread_id"] if chat_row else None
         anchor_mid = chat_row["anchor_message_id"] if chat_row else None
 
-        # Push to Gmail. Hashes are recorded per-chunk as each one is
+        # Push to the mailbox. Hashes are recorded per-chunk as each one is
         # confirmed delivered (see _record_chunk() below) rather than in one
         # bulk insert after push_chat() returns — push_chat sends the file in
         # multiple separate mailbox writes, and if the process dies partway
@@ -318,7 +320,7 @@ class SyncManager:
                 fail_sync_run(run_id, str(exc), self.db_path)
             return
 
-        # Persist Gmail IDs (thread ID and anchor Message-ID from first chunk).
+        # Persist mail IDs (thread ID and anchor Message-ID from first chunk).
         new_anchor_mid = (
             results[0].message_id
             if (anchor_mid is None and results)

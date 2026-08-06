@@ -39,7 +39,12 @@ private val FAQ = listOf(
         "clock. If you export from a different timezone than the chat was recorded in, times may shift.",
     "What does Reset actually do?" to
         "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
-        "anything already in your mailbox. Re-importing the export afterwards starts a brand-new thread.",
+        "anything already in your mailbox — this app can only add mail, never remove it. The next " +
+        "sync therefore files a fresh copy of the whole chat into a brand-new thread, so if the old " +
+        "mail is still there you end up with two copies. That's why Reset asks you to clear the " +
+        "chat's folder first, and to confirm you've done it. On Gmail, deleting the label is not " +
+        "enough: the messages stay in All Mail. Open the label, select every conversation, delete " +
+        "them, then empty the Bin.",
     "Why does it ask me to reconnect every week?" to
         "Only if you're using Google sign-in (OAuth) — the app hasn't gone through Google's app-" +
         "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +

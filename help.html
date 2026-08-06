@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WA Chat Sync to Gmail — Help</title>
+<title>WA Mail Sync — Help</title>
 <style>
   :root {
     --green: #128c4b;
@@ -98,8 +98,8 @@
 <body>
 <header>
   <div class="wrap">
-    <h1>WA Chat Sync to Gmail — Help</h1>
-    <p>A step-by-step guide to backing up your WhatsApp chats into Gmail. No technical knowledge needed.</p>
+    <h1>WA Mail Sync — Help</h1>
+    <p>A step-by-step guide to backing up your WhatsApp chats into your own email. No technical knowledge needed.</p>
   </div>
 </header>
 
@@ -112,7 +112,7 @@
       <li><a href="#export">Exporting a WhatsApp chat to a file</a></li>
       <li><a href="#add">Adding chat files to the app</a></li>
       <li><a href="#sync">Running a sync</a></li>
-      <li><a href="#gmail">Where your messages appear in Gmail</a></li>
+      <li><a href="#gmail">Where your messages appear</a></li>
       <li><a href="#faq">Troubleshooting &amp; FAQ</a></li>
     </ol>
   </nav>
@@ -120,10 +120,10 @@
   <section id="what">
     <h2>1. What this app does</h2>
     <p>WhatsApp lets you <strong>export</strong> a chat to a file. On its own, that file is hard to read and easy to lose.</p>
-    <p>This app takes those exported chat files and copies the conversations into your <strong>Gmail</strong>, where they're:</p>
+    <p>This app takes those exported chat files and copies the conversations into <strong>your own mailbox</strong> &mdash; Gmail, Outlook, Yahoo, iCloud, Fastmail, or any other IMAP provider &mdash; where they're:</p>
     <ul>
       <li>Searchable, like any other email.</li>
-      <li>Organised under labels — one label per chat, all grouped under <strong>WhatsApp</strong>.</li>
+      <li>Organised into one folder per chat, all grouped under <strong>WhatsApp</strong>. (In Gmail these appear as labels rather than folders.)</li>
       <li>Shown as a tidy, WhatsApp-style conversation, with photos and files included (if you exported them).</li>
     </ul>
     <p>It <strong>adds</strong> the messages to your mailbox. It never sends anything, never deletes anything, and never posts anything back to WhatsApp.</p>
@@ -202,7 +202,7 @@
       <li>Make sure the indicator at the top says <strong>Connected</strong> (green).</li>
       <li>Check the options at the bottom-right:
         <ul>
-          <li><strong>Dry run</strong> — a practice run that reports what <em>would</em> happen without changing your Gmail. Great for a first try.</li>
+          <li><strong>Dry run</strong> — a practice run that reports what <em>would</em> happen without changing your mailbox. Great for a first try.</li>
           <li><strong>Chunk size</strong> — how much conversation goes into each email: <strong>day</strong> (default), <strong>hour</strong>, or <strong>week</strong>.</li>
         </ul>
       </li>
@@ -213,21 +213,23 @@
   </section>
 
   <section id="gmail">
-    <h2>6. Where your messages appear in Gmail</h2>
-    <p>Open Gmail and look in the labels list (left side). You'll find:</p>
+    <h2>6. Where your messages appear</h2>
+    <p>Open your email and look in the folder list. You'll find:</p>
     <ul>
-      <li>A <strong>WhatsApp</strong> label.</li>
-      <li>Under it, one label per chat, e.g. <strong>WhatsApp/John Doe</strong>, <strong>WhatsApp/Family Group</strong>.</li>
+      <li>A <strong>WhatsApp</strong> folder.</li>
+      <li>Inside it, one folder per chat, e.g. <strong>WhatsApp/John Doe</strong>, <strong>WhatsApp/Family Group</strong>.</li>
     </ul>
+    <p><strong>On Gmail</strong> these are labels, not folders, and they show in the labels list down the left-hand side. Everything else works the same.</p>
     <p>Each chat is a single <strong>conversation thread</strong>. Opening it shows the messages laid out like WhatsApp, with photos inline and other files attached for download.</p>
-    <div class="note"><strong>Shortcut:</strong> In the app's chat list, click the <strong>↗</strong> icon next to a chat to jump straight to its Gmail thread in your browser.</div>
+    <div class="note"><strong>Shortcut (Google sign-in only):</strong> In the app's chat list, click the <strong>↗</strong> icon next to a chat to jump straight to its Gmail thread in your browser. The button is hidden on IMAP, where there is no web address to open.</div>
   </section>
 
   <section id="faq">
     <h2>7. Troubleshooting &amp; FAQ</h2>
     <dl class="faq">
       <dt>The app says "Not connected" or authorising fails.</dt>
-      <dd>Click <strong>Connect</strong> and complete the Google sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh.</dd>
+      <dd><strong>On IMAP</strong> (the default): open Settings and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
+      <strong>On Google sign-in:</strong> click <strong>Connect</strong> and complete the sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh. Remember Google expires this sign-in about every 7 days (see section 2).</dd>
 
       <dt>My file doesn't show up in the inbox.</dt>
       <dd>Only <code>.txt</code> and <code>.zip</code> files are accepted. Make sure you exported the chat (not a screenshot), and that the file actually copied over. Click the <strong>⟳</strong> refresh button to re-check the inbox folder.</dd>
@@ -236,10 +238,12 @@
       <dd>No. The app remembers what it has already saved and only adds new messages. You can safely re-export a chat later to pick up newer messages — the overlap is skipped automatically.</dd>
 
       <dt>I want to re-do a chat from scratch.</dt>
-      <dd>Click the <strong>↺</strong> (re-sync) icon next to the chat. This clears the app's record of that chat and moves its file back to the inbox so you can sync it again. Emails already in Gmail are not removed — you may end up with two threads, so delete the old one in Gmail if you want a clean result.</dd>
+      <dd>Click the <strong>↺</strong> (re-sync) icon next to the chat. This clears the app's record of that chat and moves its file back to the inbox so you can sync it again.
+      <p><strong>Delete the old mail first.</strong> This app can only add mail, never remove it, so if the earlier messages are still in your mailbox the next sync files a second copy alongside them. If the chat has already been archived, the app tells you which folder to clear and asks you to confirm you have done it before it will reset.</p>
+      <p><strong>On Gmail this needs care.</strong> Gmail has no real folders, only labels &mdash; deleting the label just unlabels the messages and leaves them sitting in All Mail, where the next sync will still find them as duplicates. Open the label, select every conversation, delete them, then empty the Bin.</p></dd>
 
       <dt>I removed a chat from the list by mistake.</dt>
-      <dd>The <strong>✕</strong> button only removes the chat from the app's list — it does <strong>not</strong> delete anything from Gmail. Your emails are safe. Add the export file again to bring it back.</dd>
+      <dd>The <strong>✕</strong> button only removes the chat from the app's list — it does <strong>not</strong> delete anything from your mailbox. Your emails are safe. Add the export file again to bring it back.</dd>
 
       <dt>The times on some messages look off.</dt>
       <dd>WhatsApp exports don't include a timezone. If your phone's timezone changed between exports, some timestamps can appear shifted. This is a limitation of WhatsApp exports, not a bug in the app.</dd>
@@ -254,7 +258,7 @@
 </main>
 
 <footer>
-  WA Chat Sync to Gmail — your messages are added to your own mailbox only. Nothing is sent or shared.
+  WA Mail Sync — your messages are added to your own mailbox only. Nothing is sent or shared.
 </footer>
 </body>
 </html>
