@@ -45,6 +45,17 @@ object SecretStore {
         keyStore.load(null)
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
 
+        // No setKeySize() call, so this is AES-128, AndroidKeyStore's default —
+        // deliberate, not an oversight. 128-bit AES is unbroken and nothing in
+        // the threat model is helped by 256: the attacks that reach this secret
+        // (root executing as our UID, asking the Keystore to decrypt for us) go
+        // around the cipher rather than through it. Raising it is also not free
+        // — a key regenerated at a different size cannot decrypt anything
+        // already saved, so every existing user would silently hit the
+        // "password could not be decrypted" path and have to re-enter it.
+        // Documented in WA-Mail-Sync-Password-Storage.docx §3; if this ever
+        // changes, that comparison table changes with it.
+        //
         // No user-authentication requirement: this password gates access to
         // one email account, not the device itself, and the background
         // SyncWorker/WatchFolderWorker must be able to read it unattended

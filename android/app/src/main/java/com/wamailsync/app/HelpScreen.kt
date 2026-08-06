@@ -63,6 +63,15 @@ private val FAQ = listOf(
     "What can't this app do?" to
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
+    "What stops it reading or deleting my mail?" to
+        "That depends on how you connect. With Google sign-in, Google enforces it: the app is " +
+        "granted permission to add mail and nothing else, so a request to read your mail is " +
+        "refused at Google's end — it would be refused even if the app tried. With an email app " +
+        "password (the default), no provider can give out a limited password: any password that " +
+        "can add mail can technically do anything. There the guarantee is the app's own code, " +
+        "which uses only four mail commands — list folders, create a folder, subscribe to it, and " +
+        "add a message. None of them can open or remove a message, and the source is public for " +
+        "anyone who wants to check.",
 )
 
 @Composable

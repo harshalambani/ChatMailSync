@@ -164,6 +164,19 @@ complete the sign-in in your browser, making sure you pick the right Google
 account and approve the permission request. If it still fails, click **Sign
 Out**, then **Connect** again to start fresh.
 
+**What stops the app reading or deleting my mail?**
+It depends on which connection you use, and the difference is worth knowing.
+With **Google sign-in**, Google enforces it: the app is granted permission to
+insert mail and nothing else, checked on every request at Google's end, so it
+would be refused even if the app asked. With an **email app password** (the
+default), no provider can issue a password limited to one operation — any
+password that can add mail can technically do anything. There the guarantee is
+the app's own code, which uses only four mail commands: list folders, create a
+folder, subscribe to it, and add a message. None of them can open or remove a
+message, and because the app never opens a folder for reading it never reaches
+the state where that would be possible. The source is public if you or anyone
+else wants to verify it.
+
 **Where is my email app password kept?**
 Encrypted at rest, on the machine you entered it on. On Windows it is encrypted
 with Windows DPAPI using a key derived from your Windows login, on top of a file
