@@ -127,6 +127,7 @@
       <li>Shown as a tidy, WhatsApp-style conversation, with photos and files included (if you exported them).</li>
     </ul>
     <p>It <strong>adds</strong> the messages to your mailbox. It never sends anything, never deletes anything, and never posts anything back to WhatsApp.</p>
+    <p>How that is guaranteed depends on how you connect. With <strong>Google sign-in</strong>, Google enforces it &mdash; the app is granted permission to add mail and nothing else, so a request to read your mail would be refused at Google's end. With an <strong>email app password</strong> (the default), no provider offers a limited password: any password that can add mail can technically do anything. There the guarantee is the app's own code, which uses only four mail commands, none of which can open or remove a message. The source is public and anyone can check it.</p>
   </section>
 
   <section id="setup">

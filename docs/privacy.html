@@ -156,15 +156,22 @@
     </li>
     <li>
       That app password is stored <strong>only on your own device</strong> and is
-      sent only to the IMAP server you named. On Android it is encrypted with the
-      Android Keystore. On Windows it is held in the app's own data folder,
-      readable only by your Windows user account.
+      sent only to the IMAP server you named. It is encrypted at rest on both
+      platforms: with the Android Keystore on Android, and with Windows DPAPI on
+      Windows, inside the app's own data folder readable only by your Windows user
+      account. Because both keys are tied to the device, a saved password does not
+      travel to another phone or PC.
     </li>
     <li>
       The app uses the IMAP <code>APPEND</code> command, which adds a message to a
       folder. It creates the folders it needs and lists folder names to check
       whether they already exist. It does not fetch, search, modify or delete any
-      message already in your mailbox, and it never sends mail.
+      message already in your mailbox, and it never sends mail. To be exact about
+      what enforces this: an app password is not something your provider can
+      restrict to a subset of operations, so on this backend the limit is the
+      app's own code, whose entire mail command surface is the four commands just
+      described. On the Google sign-in backend the equivalent limit is enforced by
+      Google, which grants this app permission to insert mail only.
     </li>
   </ul>
   <p>

@@ -310,11 +310,40 @@ encryption out. That judgement was reversed: one re-entry after moving machines
 is a small price for a credential that is useless to anyone reading the disk.
 
 **Mitigations that are actually available to you.** Use an app-specific password,
-never your account password — it is scoped to mail only and can be revoked at the
-provider without touching your account. If you are willing to live with the
-weekly reconnect described above, `gmail_oauth` is still the stronger choice at
-rest: a refresh token is revocable and scope-limited in a way a password is not.
-On a shared machine, use separate Windows accounts.
+never your account password — it reaches only the mail service rather than your
+whole account, and it can be revoked at the provider without changing anything
+else. Note what it is *not*: it is not scoped to a subset of mail operations.
+See *How the write-only guarantee is enforced* below. If you are willing to live
+with the weekly reconnect described above, `gmail_oauth` is still the stronger
+choice at rest: a refresh token is revocable and genuinely scope-limited in a way
+a password is not. On a shared machine, use separate Windows accounts.
+
+### How the write-only guarantee is enforced
+
+The app only ever adds mail — it does not read, delete, move or send. That is
+true on both backends, but **what enforces it differs**, and the difference is
+worth stating rather than glossing.
+
+**On `gmail_oauth`, Google enforces it.** The app requests `gmail.insert` and
+nothing else. The scope is checked server-side on every call, so an attempt to
+read a message would be refused by Google. The guarantee survives even a
+tampered build of this app.
+
+**On `imap` (the default), the app's own code is what enforces it.** An
+app-specific password is a *bearer* credential — no provider lets you restrict
+one to "append only". Anything holding it can, as far as the protocol is
+concerned, read and delete freely. What backs the claim here is structural and
+independently checkable: `ImapTransport` in `src/mail_client.py` issues exactly
+four commands over its whole lifetime — `LIST`, `CREATE`, `SUBSCRIBE`, `APPEND`.
+There is no `SELECT`, `FETCH`, `STORE`, `SEARCH`, `EXPUNGE`, `COPY` or `MOVE`
+anywhere in the file, and without `SELECT` the connection never enters the IMAP
+state in which a message can be read or flagged at all. The protocol itself
+gates it; the source is public and it takes about a minute to verify.
+
+So: on OAuth the guarantee is a promise the provider keeps for you. On IMAP it
+is a promise this code keeps, backed by a command surface small enough to audit.
+Both are honest descriptions of the shipped behaviour; only one holds if you
+stop trusting the app.
 
 ### Other credential handling
 
