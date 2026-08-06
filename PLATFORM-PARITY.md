@@ -99,7 +99,8 @@ Neither of the following is done, and neither is Windows-first.
    Android already uses AndroidKeyStore AES/GCM. Scope a Windows equivalent
    (DPAPI or Credential Manager) and confirm both ends still agree on
    semantics. To be picked up immediately after the Android release.
-2. **P2 - We are no longer a Gmail-only tool. DONE (working tree).** With IMAP
+2. **P2 - We are no longer a Gmail-only tool. DONE and merged (2026-08-06).**
+   The final sweep is described at the end of this section. With IMAP
    as the default backend the app archives into Outlook, Yahoo, iCloud,
    Fastmail or any IMAP server. The product is renamed **WA Mail Sync**
    (Android package `com.wamailsync.app`), the shared core module is
@@ -114,3 +115,31 @@ Neither of the following is done, and neither is Windows-first.
    which are intentionally left alone to avoid orphaning existing installs).
    Repository folder name and remaining historical/dated docs were left as-is
    per the rename task's scope.
+
+   **Closing sweep, 2026-08-06.** Two commits finished it. The only real
+   user-facing defect found was in `WatchFolderWorker.triggerAutoSync`, which
+   returned `"syncing to Gmail..."` from *after* the backend branch, so an IMAP
+   user archiving into Fastmail was told their mail was going to Gmail. The
+   rest were comments, docstrings and help copy.
+
+   `help.html` turned out to matter more than its hit count suggested: it is
+   the file bundled by `wa-chat-sync.spec` and opened by the Help button, and
+   its setup section had already been updated for IMAP while the framing around
+   it still said Gmail - so the shipped help page contradicted itself.
+   `docs/privacy.html` had a genuine gap, not just a stale name: it described
+   only the OAuth path and said nothing about the IMAP app password or the
+   third-party IMAP server, which has been wrong since IMAP became the default.
+   Google-scope text and the registered consent-screen name were left untouched.
+
+   Three help texts (`help.html`, `HelpScreen.kt`, `docs/user-guide.md`) still
+   described the pre-v0.2.4 reset behaviour and were corrected to describe the
+   confirmation gate.
+
+   ~460 case-insensitive "gmail" hits remain outside the historical docs and are
+   all deliberate: OAuth scopes and the `gmail_oauth` backend value, the
+   `imap.gmail.com` provider default and Gmail app-password instructions, the
+   Gmail-gated deep-link, Gmail API limits, the `gmail_thread_id` /
+   `gmail_label_id` columns, the frozen `wagmail_prefs` / `wagmail_imap_key` /
+   `WAGmailSync Dev` cert-subject identifiers, and real repository URLs. Two
+   items are deliberately out of scope and still open: `docs/CNAME`
+   (`wagmail.ambani.tech`, needs DNS work) and the repository/folder name.

@@ -1,7 +1,8 @@
 # "Gmail" / "WAGmail" Naming Sweep — Future To-Do
 
 **Created:** 2026-08-03
-**Status:** NOT STARTED — scoped only.
+**Status:** DONE — 2026-08-06, branch `sweep/gmail-naming-final`. The scoping below is left as
+written, for the record; see §7 at the bottom for what was actually done and what was left alone.
 **Priority:** LOW. Cosmetic/correctness debt, no user-visible breakage. Do it in one deliberate
 pass rather than opportunistically, so the judgement calls get made consistently.
 **Related:** the "no longer Gmail-only" renaming phase (P2), `2026-08-02-pending-status.md` §B5.
@@ -119,3 +120,50 @@ Suggested sequence:
 
 `src/mail_client.py` topping the list is expected and mostly category 1 — it is where the Gmail
 backend actually lives. Do not assume the biggest number is the biggest problem.
+
+---
+
+## 7. What was actually done — 2026-08-06
+
+Executed on branch `sweep/gmail-naming-final`, three commits (code / copy / docs), with the §5
+gates: 171 tests passing and `gradlew.bat assembleRelease` producing an APK.
+
+**Less was outstanding than §6 implied.** `rename/wa-mail-sync` and
+`rename/wamailsync-build-artifacts` had already merged, `WAMAILSYNC_ROOT` was already the live env
+var (with `WAGMAIL_ROOT` kept as a deliberate fallback for portable installs built before the
+rename, `src/config.py:28`), appinfo.ini's `Description` was already fixed, and README and
+`docs/user-guide.md` were already dual-framed. Only `wa-chat-sync.spec:3` still carried the old
+product name.
+
+**One real user-facing defect, and the hit-count table did not surface it.**
+`WatchFolderWorker.triggerAutoSync` returned `"syncing to Gmail..."` from *after* the backend
+if/else, so an IMAP user archiving into Fastmail was told their mail was on its way to Gmail. That
+one line was the whole category-2 harvest in the code; the rest were comments and docstrings.
+
+**Two things §4 got wrong about the copy.** First, the `help.html` that ships is the 13 KB root
+file — bundled by `wa-chat-sync.spec:40`, opened by `gui.py:_help_html_path()` — not
+`portable/help.html`, which is the 5.7 KB PortableApps stub and was already renamed. The shipped
+file contradicted itself: its setup section had been updated for IMAP while its title, framing and
+§6 still said Gmail-only. Second, `docs/privacy.html` was not merely stale wording; it had a real
+gap. It described only the Google path and said nothing about the app password, where that password
+is kept, or that the app talks to a third-party IMAP server at all — wrong since IMAP became the
+default, and it is the policy linked from Google's consent screen. A new IMAP section was added and
+the transport-neutral sections generalised; **every Google-scope description and the registered
+consent-screen name "WhatsApp Chat Sync to Gmail" were left untouched**, the latter because that is
+the string Google actually displays.
+
+**A third staleness class this doc never anticipated.** The reset FAQ in `help.html`,
+`HelpScreen.kt` and `docs/user-guide.md` still described *pre-v0.2.4* behaviour ("you may end up
+with two threads, so delete the old one"), which the shipped confirmation gate now contradicts. All
+three were rewritten, including the Gmail caveat that deleting a label only unlabels the messages
+and leaves them in All Mail.
+
+**On the `gmail_thread_id` / `gmail_label_id` columns:** §3 would have read these as category 2,
+but `PLATFORM-PARITY.md:102-116` had already settled it the other way — keep the columns, no
+migration. They are now self-documenting via a comment in `src/state.py`'s `_DDL` and in the
+docstrings that touch them.
+
+**Deliberately left, and still open:** `docs/CNAME` (`wagmail.ambani.tech`, needs DNS work per §4),
+the GitHub repo name, and the on-disk repo folder name. `sign_exe.ps1`'s `CN=WAGmailSync Dev` cert
+subject is frozen and carries its own in-file comment saying so. The ~460 remaining hits outside the
+historical docs are all category 1 or §2a.
