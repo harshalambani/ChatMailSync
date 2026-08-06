@@ -16,7 +16,7 @@
 
 .EXAMPLE
     # Sign only
-    cd "C:\Users\user\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
+    cd "C:\Users\user\Documents\Cowork Playground\WAMailSync"
     .\sign_exe.ps1
 
     # Sign and mark trusted on this machine (run as administrator)

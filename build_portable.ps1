@@ -15,7 +15,7 @@
     hand to anyone.
 
 .EXAMPLE
-    cd "C:\Users\inabm\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
+    cd "C:\Users\inabm\Documents\Cowork Playground\WAMailSync"
     .\build_portable.ps1
 
     To skip PyInstaller (re-assemble layout only):

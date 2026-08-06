@@ -3,7 +3,7 @@
 # PyInstaller build spec for WA Mail Sync.
 #
 # Build with:
-#   cd "C:\Users\user\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
+#   cd "C:\Users\user\Documents\Cowork Playground\WAMailSync"
 #   pyinstaller wa-chat-sync.spec
 #
 # Output: dist\WAMailSync\  (--onedir bundle)

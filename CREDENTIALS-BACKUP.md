@@ -65,7 +65,7 @@ Then confirm the backup actually works, because an untested backup is a belief
 rather than a fact:
 
 ```
-cd "C:\Users\inabm\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
+cd "C:\Users\inabm\Documents\Cowork Playground\WAMailSync"
 keytool -list -v -keystore android\app\release.jks
 ```
 
