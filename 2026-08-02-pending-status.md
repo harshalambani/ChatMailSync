@@ -132,7 +132,12 @@ superseded banner) went in with the v0.2.2-beta merge `381eee2`. Tree is clean; 
   are mutually exclusive for updates), backing up `release.jks` off-machine, a privacy-policy URL,
   and checking whether Google's developer-verification programme alone meets the goal without any
   listing at all.
-- **Safer credential storage (P1)** — the DPAPI work in §C is this phase, part-delivered.
+- **Safer credential storage (P1)** — ~~the DPAPI work in §C is this phase, part-delivered~~
+  **complete 2026-08-06.** The code half shipped in v0.2.2-beta (§C); the remaining half was
+  documentation that still described the Windows password as plaintext and argued against
+  encrypting it — corrected in `README.md`, `PLATFORM-PARITY.md`, `SecretStore.kt`'s header, and
+  `docs/user-guide.md`, which also gained the missing user-facing note that a DPAPI blob does not
+  travel to another PC or Windows account. B3 (the `.docx`) is the one artefact still uncorrected.
 - **"No longer Gmail-only" renaming (P2)** — B5 is a piece of it.
 
 ---

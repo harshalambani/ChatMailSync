@@ -214,14 +214,16 @@ backend.
 
 | Backend | Secret at rest | File |
 |---|---|---|
-| `imap` (default) | **App-specific password, in plaintext JSON** | `auth/imap_credentials.json` |
+| `imap` (default) | App-specific password, **DPAPI-encrypted** on Windows | `auth/imap_credentials.json` |
 | `gmail_oauth` | OAuth refresh token | `auth/token.json` |
+
+On Android neither file holds a password at all — see *Android* below.
 
 ### Why IMAP is the default
 
-Not because it is more secure — a scoped, revocable refresh token is the better
-secret, and the section below is candid about the plaintext password. It is the
-default because the OAuth path is **practically** limited:
+Not because it is more secure — a scoped, revocable refresh token is still the
+better *kind* of secret, whatever it is encrypted with. IMAP is the default
+because the OAuth path is **practically** limited:
 
 The OAuth client stays in Google's **Testing** publishing status. Publishing it
 would require Google's verification for the restricted `gmail.insert` scope,
@@ -241,59 +243,78 @@ notice explaining the above. **Existing users are not migrated:** a settings fil
 predating the backend setting is pinned back to `gmail_oauth` when an
 `auth/token.json` is present (`config.resolve_mail_backend`).
 
-### The IMAP app password is stored in plaintext
+### How the IMAP app password is protected
 
-This is a deliberate, documented decision, not an oversight.
+Two independent layers, on both platforms.
 
-**Why not encrypt it.** The obvious Windows answers — DPAPI, Windows Credential
-Manager, `keyring` — all bind the secret to one machine and one Windows profile.
-That breaks the two things this app is built to be: a **PortableApps** bundle that
-runs from a USB stick on any machine, and an app whose sync engine is intended to
-run under **Chaquopy on Android**, where none of those APIs exist. Encrypting with
-a key that ships next to the ciphertext would be obfuscation, not protection, and
-would make the security posture harder to reason about rather than better.
+**Windows: DPAPI encryption, on top of an NTFS ACL.**
 
-**This matches how Android IMAP clients solve the same problem.** K-9 Mail /
-Thunderbird for Android store account passwords base64-encoded inside the
-`storeUri`/`transportUri` in app-private storage — encoding, not encryption;
-[the request to move them into the Android KeyStore](https://github.com/k9mail/k-9/issues/1200)
-was closed without being implemented. FairEmail states the position explicitly in
-[its FAQ](https://github.com/M66B/FairEmail/blob/master/FAQ.md): because Android
-already encrypts all user data, it deliberately does not add a keystore layer, and
-it points users on shared devices at OS user profiles instead. The industry norm
-for this exact problem is a plaintext credential in OS-protected private storage,
-with the **operating system** as the control.
+The password is encrypted with Windows DPAPI (`CryptProtectData`, via
+`src/secret_store.py`) *before* it reaches disk, and stored base64-encoded under
+a `password_dpapi` key. DPAPI's key is derived from your Windows login through
+the per-user master key, so the ciphertext is only meaningful to the same
+Windows account on the same machine. Read the raw bytes anywhere else — another
+OS, a restored backup, a VM snapshot, a forensic image — and you get nothing.
 
-**What actually protects the file.** On Windows, `auth/` and the credentials file
-both get an NTFS ACL stripped of inherited entries and granting only the current
-user (`icacls /inheritance:r /grant:r <user>:F`). The directory is hardened
-*before* the file is created, so the file is never briefly world-readable, and if
-the ACL cannot be applied the password is **deleted and not saved**, with a loud
-error — it is never silently left unprotected. On POSIX the file is created via
-`os.open(..., 0o600)` so the mode applies at creation.
+Underneath that, `auth/` and the credentials file both get an NTFS ACL stripped
+of inherited entries and granting only the current user
+(`icacls /inheritance:r /grant:r <user>:F`). The directory is hardened *before*
+the file is created, so it is never briefly world-readable, and if the ACL
+cannot be applied the password is **deleted and not saved**, with a loud error.
+That ACL check is the fail-loud guarantee; DPAPI is defence in depth layered on
+top of it. If DPAPI is ever unavailable (a locked-down Windows image with no
+usable per-user profile), the save still succeeds with a plaintext `password`
+key and a warning in the log, rather than taking away a working feature to
+protect the layer that was never load-bearing.
+
+Upgrading is automatic: a credentials file written by v0.2.1-beta or earlier
+holds a plaintext `password`, and the first time a newer build reads it on a
+DPAPI-capable machine it is silently re-saved encrypted. Nothing to do by hand.
+
+On POSIX there is no DPAPI; the file is created via `os.open(..., 0o600)` so the
+mode applies at creation.
+
+**Android: AndroidKeyStore, and no password in the file at all.**
+
+The Android build never writes the password to `auth/imap_credentials.json`. It
+stays on the Kotlin side, encrypted with an AndroidKeyStore AES/GCM key that
+never leaves secure storage (`SecretStore.kt`), and is handed to the sync engine
+only at call time. It is also never pre-filled back into the password field, so
+it does not sit in Compose's unencrypted UI state.
 
 **What that does and does not defend against.** Be clear-eyed about this:
 
-- ✅ Other **user accounts** on the same machine cannot read the file.
-- ✅ Casual copying of the folder by another user, and inheritance from a
-  permissive parent directory.
-- ❌ **Other software running as you.** An NTFS ACL is a per-*user* boundary, not
-  a per-*application* one. Windows has no app sandbox, so anything running in your
-  session can read the file. This is where Android's guarantee is genuinely
-  stronger than ours — its app-private storage isolates per app.
-- ❌ **Anyone with the disk.** Unless BitLocker (or equivalent) is on — not
-  guaranteed on Windows Home — the file is readable from another OS. FairEmail can
-  rely on mandatory Android user-data encryption here; we cannot.
-- ❌ **Backup and sync tools.** A USB bundle or a folder inside OneDrive/Dropbox
-  carries the plaintext password with it. Keep the portable bundle off synced
-  folders if that matters to you.
+- ✅ Other **user accounts** on the same machine cannot read the file, and could
+  not decrypt it even if they could.
+- ✅ **Anyone with the disk.** An offline read — another OS, a pulled drive, a
+  restored backup — yields ciphertext that DPAPI will not unwrap outside your
+  account. This is the gap an ACL alone could never close, because an ACL is
+  metadata the filesystem driver enforces, not a property of the bytes.
+- ✅ **Backup and sync tools.** A copy inside OneDrive/Dropbox, or on a USB
+  stick, carries only the ciphertext.
+- ❌ **Other software running as you.** DPAPI binds to an *account*, not to an
+  application, so anything in your Windows session can call `CryptUnprotectData`
+  exactly as this app does. Windows has no app sandbox and nothing available to
+  an unsigned portable app changes that. Android's per-app isolation is
+  genuinely stronger here.
+- ❌ **A compromised session generally.** This is at-rest protection, not a
+  defence against malware already running as you.
+
+**The portability cost, stated plainly.** DPAPI being per-user and per-machine
+is the whole point, and it has a price: carry the portable bundle's `auth/`
+folder to a different PC or a different Windows account and the saved password
+**cannot be decrypted there**. The app says so explicitly and asks you to
+re-enter it in Settings; the password itself is not lost, it is still valid at
+your provider. Earlier versions of this document argued that this cost ruled
+encryption out. That judgement was reversed: one re-entry after moving machines
+is a small price for a credential that is useless to anyone reading the disk.
 
 **Mitigations that are actually available to you.** Use an app-specific password,
 never your account password — it is scoped to mail only and can be revoked at the
 provider without touching your account. If you are willing to live with the
-weekly reconnect described above, `gmail_oauth` is the stronger choice at rest: a
-refresh token is revocable and scope-limited in a way a password is not. On a
-shared machine, use separate Windows accounts.
+weekly reconnect described above, `gmail_oauth` is still the stronger choice at
+rest: a refresh token is revocable and scope-limited in a way a password is not.
+On a shared machine, use separate Windows accounts.
 
 ### Other credential handling
 

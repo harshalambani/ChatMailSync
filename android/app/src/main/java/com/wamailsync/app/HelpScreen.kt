@@ -52,6 +52,14 @@ private val FAQ = listOf(
         "unverified apps and can't be extended from within the app. The Email app password (IMAP) " +
         "backend doesn't have this limit — it's the default, and connecting once doesn't expire. You can " +
         "switch to it any time from Settings without losing anything already synced.",
+    "Where is my email app password kept?" to
+        "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
+        "phone's secure hardware. It's never written into the app's settings, never shown in the " +
+        "password box again after you save it, and never included in any log or error message. " +
+        "Because the key is tied to this device, the saved password doesn't travel to a new phone " +
+        "or survive uninstalling the app — enter it again in Settings there. It stays valid at your " +
+        "provider either way. (The Windows edition does the same thing with Windows DPAPI, tied to " +
+        "your Windows account on that PC.)",
     "What can't this app do?" to
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
