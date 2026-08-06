@@ -33,8 +33,8 @@ android {
         applicationId = "com.wamailsync.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.2.4-beta"
+        versionCode = 7
+        versionName = "1.0.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
