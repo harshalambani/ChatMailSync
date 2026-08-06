@@ -164,6 +164,23 @@ complete the sign-in in your browser, making sure you pick the right Google
 account and approve the permission request. If it still fails, click **Sign
 Out**, then **Connect** again to start fresh.
 
+**Where is my email app password kept?**
+Encrypted at rest, on the machine you entered it on. On Windows it is encrypted
+with Windows DPAPI using a key derived from your Windows login, on top of a file
+that only your account can open; on Android it is encrypted with a key held in
+the phone's Android Keystore. Either way it is never written into the app's
+settings file, never shown back to you in the password box after saving, and
+never included in a log line or an error message.
+
+**I moved the app to another PC and it says the saved password can't be
+decrypted.**
+That is expected, not a fault. Windows encrypts the saved app password with a
+key tied to your Windows account on that particular machine, so a copy of the
+app carried to a different PC — or opened under a different Windows user —
+cannot unlock it. Nobody who picks up the folder can read your password either,
+which is the point. Your app password is still valid at your provider: just
+enter it again in Settings on the new machine.
+
 **My file doesn't show up in the inbox.**
 Only `.txt` and `.zip` files are accepted. Make sure you exported the chat (not a
 screenshot or contact card), and that the file actually copied over. Click the

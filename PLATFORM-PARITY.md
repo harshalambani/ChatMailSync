@@ -49,7 +49,7 @@ Not shared - every one of these needs its own change:
 | UI | `gui.py` (Tkinter) | Compose screens (`*Screen.kt`, `MainActivity.kt`) |
 | Background/threading glue | `gui_worker.py` | `SyncWorker.kt`, `WatchFolderWorker.kt` |
 | Settings persistence | `data/.settings.json` | `AppPrefs.kt` (SharedPreferences) |
-| Secret storage | plaintext file + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
+| Secret storage | `src/secret_store.py` (DPAPI) + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
 | Help text | `docs/help.html`, `docs/user-guide.md` | `HelpScreen.kt` |
 | Packaging | `build_portable.ps1` -> portable zip | Gradle -> APK/AAB |
 
@@ -80,25 +80,34 @@ Only these. Anything else is a bug.
 - **Packaging and distribution.** Portable Windows zip vs Android APK/AAB.
   Different artifacts, different release cadence is acceptable; different
   *features* is not.
-- **Secret storage mechanism.** Windows uses a plaintext file restricted by
-  NTFS ACL (an explicitly accepted trade-off, documented in `SECURITY.md`);
-  Android uses AndroidKeyStore AES/GCM. Android has neither NTFS ACLs nor
-  DPAPI, so the file layout/format is what is shared cross-platform and the
-  hardening is layered per OS. See the comment on `IMAP_CREDENTIALS_FILE` in
-  `src/config.py`, which anticipated exactly this.
+- **Secret storage mechanism.** Windows uses DPAPI `CryptProtectData` over a
+  file that is also NTFS-ACL restricted; Android uses AndroidKeyStore AES/GCM.
+  Android has neither NTFS ACLs nor DPAPI, so the file layout/format is what is
+  shared cross-platform and the hardening is layered per OS. See the comment on
+  `IMAP_CREDENTIALS_FILE` in `src/config.py`, which anticipated exactly this,
+  and the *Security and credential storage* section of `README.md` for the
+  threat model both layers are aiming at. What must stay in parity is the
+  *guarantee* - the password is encrypted at rest on both platforms - not the
+  API used to get there.
 - **Watched-folder mechanics.** Android uses SAF document URIs and a
   WorkManager periodic job with a platform-enforced 15-minute floor; Windows
   polls a plain filesystem path. Same feature, unavoidably different plumbing.
 
 ## Queued work - both platforms, both times
 
-Neither of the following is done, and neither is Windows-first.
+Both entries below are now complete; they are kept for the record because the
+reasoning behind each is still the reasoning the code follows.
 
-1. **P1 - Safer credential storage.** Revisit how the IMAP app password is
-   kept at rest. Windows is currently plaintext + ACL by an accepted decision;
-   Android already uses AndroidKeyStore AES/GCM. Scope a Windows equivalent
-   (DPAPI or Credential Manager) and confirm both ends still agree on
-   semantics. To be picked up immediately after the Android release.
+1. **P1 - Safer credential storage. DONE (Windows DPAPI shipped in
+   v0.2.2-beta; docs corrected 2026-08-06).** Both ends now encrypt the IMAP
+   app password at rest: Windows with DPAPI `CryptProtectData`
+   (`src/secret_store.py`, written as `password_dpapi`, ACL retained
+   underneath as the fail-loud layer), Android with AndroidKeyStore AES/GCM
+   (`SecretStore.kt`). Semantics agree - both are per-device and per-user by
+   design, so neither secret survives being copied to another machine or
+   account, and both surface that as a re-enter-the-password message rather
+   than a silent failure. Legacy plaintext Windows files upgrade themselves
+   on first read (`gui_worker.resolve_imap_password`).
 2. **P2 - We are no longer a Gmail-only tool. DONE and merged (2026-08-06).**
    The final sweep is described at the end of this section. With IMAP
    as the default backend the app archives into Outlook, Yahoo, iCloud,
