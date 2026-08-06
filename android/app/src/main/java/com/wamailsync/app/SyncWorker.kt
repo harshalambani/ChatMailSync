@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Phase A4: runs one real (non-dry-run) sync pass — inbox -> parse -> dedup
- * -> Gmail insert -> processed — via the shared Python core, as a foreground
+ * -> mail insert/append -> processed — via the shared Python core, as a foreground
  * service so Android doesn't kill it mid-sync. The access token is handed in
  * as plain WorkManager input data: short-lived (Google access tokens expire
  * in ~1h) and this worker always runs immediately after being enqueued from
@@ -70,7 +70,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         val dryRun = inputData.getBoolean(KEY_DRY_RUN, false)
         val backend = inputData.getString(KEY_MAIL_BACKEND)
             ?: AppPrefs.resolveMailBackend(applicationContext)
-        // A dry run touches no Gmail API, so no credentials are needed at
+        // A dry run touches no mail server on either backend, so no credentials
+        // are needed at
         // all — only a real sync requires them. Previously Home's dry-run
         // button called android_api.sync() directly on the click handler
         // (blocking the UI thread for however long a large export took, no

@@ -308,8 +308,9 @@ ATTACHMENT_PATTERNS = [
 ]
 
 # Maximum total MIME payload per email (bytes).
-# Gmail hard-limits at 25 MB; we stay at 20 MB to leave headroom for
-# MIME headers and base64 encoding overhead (~33% expansion).
+# Applies to both backends. Gmail hard-limits at 25 MB and is the tightest of
+# the providers we target, so it sets the ceiling; we stay at 20 MB to leave
+# headroom for MIME headers and base64 encoding overhead (~33% expansion).
 MAX_EMAIL_SIZE_BYTES = 20 * 1_048_576  # 20 MiB
 
 # Maximum total decompressed bytes allowed from a single ZIP archive.

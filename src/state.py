@@ -26,6 +26,11 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS chats (
     chat_id           TEXT PRIMARY KEY,
     display_name      TEXT NOT NULL,
+    -- gmail_* by history, not by meaning: these predate the IMAP backend and now
+    -- hold whichever transport is active (IMAP stores its folder in the label
+    -- column and its thread anchor in the thread column). Deliberately not
+    -- renamed - it would need a migration on every existing install for a
+    -- cosmetic gain. See PLATFORM-PARITY.md P2.
     gmail_thread_id   TEXT,
     gmail_label_id    TEXT,
     anchor_message_id TEXT,
@@ -129,7 +134,7 @@ def upsert_chat(
     anchor_message_id: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> None:
-    """Insert a new chat row or update gmail IDs and updated_at on conflict."""
+    """Insert a new chat row or update the mail IDs and updated_at on conflict."""
     now = _now()
     with _connect(db_path) as conn:
         conn.execute(
@@ -155,7 +160,11 @@ def update_chat_gmail_ids(
     anchor_message_id: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> None:
-    """Persist Gmail thread ID, label ID, and anchor Message-ID after a successful push."""
+    """Persist the thread ID, label/folder ID, and anchor Message-ID after a successful push.
+
+    Named for the columns, which are gmail_* for historical reasons; the values
+    come from whichever transport ran (see the schema comment in _DDL).
+    """
     now = _now()
     with _connect(db_path) as conn:
         conn.execute(
@@ -413,7 +422,7 @@ def reset_chat(
     """Delete all sync history for a chat so it will be re-synced from scratch.
 
     The chats row itself is kept (preserving display_name and source_filename)
-    but gmail_thread_id and gmail_label_id are cleared so the next run creates
+    but the gmail_thread_id and gmail_label_id columns are cleared so the next run creates
     a fresh thread.
 
     This is the duplicate-creating operation in the whole app, so it is gated.

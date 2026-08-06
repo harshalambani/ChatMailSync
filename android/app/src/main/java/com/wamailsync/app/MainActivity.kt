@@ -734,7 +734,7 @@ fun WaMailApp(
     // inside whichever tab happens to be open. Priority: a manual Home sync
     // in flight, then a watched-folder/scheduled auto-sync, then that
     // auto-sync's own terminal result (so the footer doesn't get stuck
-    // showing the import phase's stale "syncing to Gmail…" forever once the
+    // showing the import phase's stale "syncing to your mailbox…" forever once the
     // chained sync actually finishes), then the watched-folder's own
     // import-phase status, else an idle placeholder.
     val syncStatusRunning = anySyncRunning

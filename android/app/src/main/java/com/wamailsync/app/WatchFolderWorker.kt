@@ -256,8 +256,8 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         )
     }
 
-    /** Imported files sit in the local inbox until actually pushed to Gmail
-     * — Home feedback made clear watched-folder automation should be
+    /** Imported files sit in the local inbox until actually pushed to the
+     * user's mailbox — Home feedback made clear watched-folder automation should be
      * hands-off end to end, not "import automatically, then still have to
      * open the app and tap Sync now." This runs headless (no Activity, and
      * possibly after the app process was killed), so it can't use
@@ -326,7 +326,11 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         // SyncWorker's own foreground-service notification covers the actual
         // sync result ("Sync complete — N synced" / "Sync failed: ...") —
         // no separate notification needed here.
-        return "$lead — syncing to Gmail…"
+        // Not "syncing to Gmail": this line is reached on both branches, so an
+        // IMAP user archiving into Fastmail was being told their mail was on its
+        // way to Gmail. The backend-specific messages above are the place to
+        // name a provider; this one is shared.
+        return "$lead — syncing to your mailbox…"
     }
 
     private fun notify(text: String) {
