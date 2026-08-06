@@ -78,6 +78,11 @@ Either way, `release.jks` becomes unrecoverable infrastructure the moment a stra
 app. It must be backed up off-machine, with its passwords, before first submission. It is gitignored
 and must stay that way.
 
+> **Correction, 2026-08-06:** "before first submission" is too late. The v0.2.x beta APKs on GitHub
+> Releases are already signed with this key, so any sideloaded install already depends on it. The key
+> became load-bearing when the first build left the machine. Backup procedure and the full
+> replaceable/irreplaceable inventory now live in `CREDENTIALS-BACKUP.md`.
+
 `applicationId = com.wamailsync.app` is fixed forever from the first publication anywhere.
 
 ---
