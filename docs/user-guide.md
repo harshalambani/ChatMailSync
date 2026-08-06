@@ -177,8 +177,16 @@ automatically.
 **I want to re-do a chat from scratch.**
 Click the **↺** (re-sync) icon next to the chat in the list. This clears the app's
 record of that chat and moves its file back to the inbox so you can sync it again.
-Emails already in your mailbox are not removed — you may end up with two threads,
-so delete the old one yourself if you want a clean result.
+
+**Delete the old mail first.** This app can only add mail, never remove it, so if
+the earlier messages are still in your mailbox the next sync files a second copy
+alongside them. When a chat has already been archived, the app names the folder to
+clear and asks you to confirm you have cleared it before it will reset.
+
+> **On Gmail this needs care.** Gmail has no real folders, only labels — deleting
+> the label just unlabels the messages and leaves them in All Mail, where the next
+> sync still counts them as duplicates. Open the label, select every conversation,
+> delete them, then empty the Bin.
 
 **I removed a chat from the list by mistake.**
 The **✕** button only removes the chat from the app's list — it does **not** delete
