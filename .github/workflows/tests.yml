@@ -1,0 +1,95 @@
+# Test suite.
+#
+# Added 2026-08-07, after a lock-only Dependabot PR (#3, cryptography 49 -> 50)
+# arrived showing three green checks, none of which knew whether the app still
+# worked: codeql.yml was the repository's only workflow. Validating that PR
+# meant building a venv and running the suite by hand. This removes that step.
+#
+# Two deliberate choices, both about testing what actually ships:
+#
+# 1. It installs requirements-lock.txt with --require-hashes, which is exactly
+#    what build_portable.ps1 does. Testing the loose pins in requirements.txt
+#    would let a lock-only bump pass CI while shipping something untested --
+#    and lock-only PRs are the majority of what Dependabot opens here.
+#
+# 2. Windows is not optional. tests/test_secret_store.py runs against the real
+#    crypt32.dll and skips cleanly when DPAPI is unavailable, so on a Linux
+#    runner the credential-encryption tests would vanish into a skip count and
+#    still report green. The Windows job is the one that proves them.
+#
+# The Linux job pins 3.13 to match the Chaquopy runtime in
+# android/app/build.gradle.kts; the Windows job pins 3.14 to match the desktop
+# build. Both are real shipping targets, which is the only reason for a matrix.
+#
+# Note on failure modes: no step here uses continue-on-error, deliberately.
+# pytest exits non-zero for collection errors (2) and "no tests collected" (5)
+# as well as plain failures (1), so a suite that silently stops existing fails
+# the job instead of passing it.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Matches the desktop build: build_portable.ps1 freezes against
+          # Python 3.14, and DPAPI is only real here.
+          - name: Windows (3.14, ships the desktop app)
+            os: windows-latest
+            python-version: "3.14"
+          # Matches chaquopy { defaultConfig { version = "3.13" } }.
+          - name: Linux (3.13, matches Chaquopy)
+            os: ubuntu-latest
+            python-version: "3.13"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # --require-hashes mirrors build_portable.ps1:164. If a lock entry is
+      # missing a hash, or a hash does not match, this fails rather than
+      # quietly resolving something else.
+      - name: Install pinned dependencies from the lock file
+        run: python -m pip install --require-hashes -r requirements-lock.txt
+
+      # Dev-only, never bundled into the frozen exe, so kept out of the lock.
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Check dependency graph is consistent
+        run: python -m pip check
+
+      # tests/ explicitly: a bare `pytest` from the repo root can also collect
+      # the vendored certifi tests under android/app/build/python/, which are
+      # build output, not this project's tests.
+      #
+      # -rs prints the reason for every skip. On the Windows job the DPAPI
+      # tests must not appear there; if they start skipping, something about
+      # crypt32 availability changed and the log says so instead of hiding it
+      # in a count.
+      - name: Run tests
+        run: python -m pytest tests -q -rs --strict-markers
