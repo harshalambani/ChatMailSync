@@ -5,8 +5,9 @@
 zip. The credential-seeding hazard that once blocked shipping a Windows package was fixed in
 `88ae11c`: packaging never touches `dist\WAMailSyncPortable`, it builds from a separate staging tree
 with an empty `Data\` skeleton and refuses to package if any credential or user-data file is found.
-**Test suite:** 171 passing.
-**Working tree:** clean as of the v1.0.1 tag.
+**Test suite:** 195 passing (171, +13 for the version display, +11 for the progress-output guard).
+**CI:** `.github/workflows/tests.yml` runs the suite on Windows 3.14 and Linux 3.13 (merged as #4);
+`codeql.yml` is no longer the only workflow.
 
 ---
 
@@ -14,7 +15,32 @@ with an empty `Data\` skeleton and refuses to package if any credential or user-
 
 Nothing below moves until you say so.
 
-### A1. ~~Test the Android APK~~ — **installed 2026-08-03, still to be exercised**
+### A1. ~~Test the Android APK~~ — **DONE 2026-08-07, signed off**
+The v1.0.1 APK was verified by SHA-256 against the release before installing, went on over the top
+with `adb install -r`, and the device now reports **versionCode 8 / `1.0.1`** (`lastUpdateTime`
+2026-08-07 16:15:25). Same signing key, so `sync_state.db`, the saved IMAP password and all settings
+survived. A real sync was then run on it and completed cleanly — Bijal Ambani, 451 messages, 67
+chunks, one continuous run (a single stable WorkManager id, not a retry loop), no exception and no
+worker failure. **This clears the gate on the Android store phase in §D.**
+
+Two inefficiencies were found by watching that run in `logcat`, both fixed the same day and neither
+affecting correctness:
+
+1. **`SyncWorker` re-posted unchanged progress ~4×/second.** The poll loop ticks every 250ms whether
+   or not an event arrived and posted the identical payload each time; `setProgress()` is a write
+   into WorkManager's Room database and `notify()` rebuilds a system notification, so one chat
+   sitting on a single chunk for 3.5 minutes cost ~840 disk writes and as many notification updates
+   to say nothing new. Now posted only when the text, fraction or log actually changed.
+2. **`_print_progress` drew a terminal progress bar into logcat.** Chaquopy forwards `sys.stderr` to
+   logcat at *warning* level, where a carriage return means nothing, so every redraw became its own
+   entry — ~67 for that one chat, each carrying the contact's display name into the system log and
+   burying any genuine stderr warning. The existing guard only covered `sys.stderr is None` (the
+   PyInstaller GUI bundle); it now requires `isatty()`, so the bar is drawn on a console and nowhere
+   else. Off-console callers already have `on_chunk`, which the GUI and the Android worker use.
+
+The historical record of what was open, kept for the dates:
+
+**~~Still to be exercised.~~**
 The release-signed build installed cleanly *as an update* (`firstInstallTime` 2026-08-03 14:07:31
 vs `lastUpdateTime` 14:51:02) — `sync_state.db`, the saved IMAP password, the watched folder and all
 settings survived. The earlier data-wipe warning about the debug build no longer applies.
@@ -230,14 +256,15 @@ superseded banner) went in with the v0.2.2-beta merge `381eee2`. Tree is clean; 
 upcoming when both had shipped — the same staleness that sent v1.0.1 out Android-only. Anything
 below that is not measured is marked as such.*
 
-B1, B2, A4 and B3 are done. Next: **A1 (install v1.0.1 and exercise it) → CI test workflow →
-B8 → P2 (B5 + B7) → P3**.
+*Updated again 2026-08-07 (evening): A1 and the CI test workflow are both done.*
 
-A1 first, and it is now the only real gate: the phone is on versionCode 6 / `0.2.4-beta` while the
-release is versionCode 8 / `1.0.1`, and the whole Android store phase in §D is blocked behind
-battle-testing a build that is actually current.
+B1, B2, A4, B3, **A1** and the **CI test workflow** are done. Next: **B8 → P2 (B5 + B7) → P3**.
 
-The **CI test workflow** is new here, added 2026-08-07 as `.github/workflows/tests.yml`. It exists
+Nothing is gating the Android store phase any more — A1 was the last item in front of it, and it
+passed on versionCode 8 with a real 451-message sync. Whether the store phase or B8 goes first is a
+priority call, not a dependency.
+
+The **CI test workflow** landed 2026-08-07 as `.github/workflows/tests.yml`, merged as #4. It exists
 because Dependabot #3 (`cryptography` 49 → 50, lock-only) arrived with three green checks that
 knew nothing about whether the app worked — `codeql.yml` was the repository's only workflow, so
 validating a dependency bump meant building a venv and running the suite by hand. It installs
