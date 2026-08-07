@@ -1,0 +1,112 @@
+# CodeQL - advanced setup.
+#
+# This replaces GitHub's "default setup", which could not work here. Default
+# setup analyses Java/Kotlin with build-mode `none`, extracting source without
+# compiling it. That is fine for Java, but CodeQL's Kotlin extractor is a
+# *compiler plugin*: it only sees Kotlin by riding along on a real kotlinc
+# invocation. android/ is 100% Kotlin with no .java files, so default setup
+# found zero Kotlin ("Could not process Kotlin files without a build"), then
+# zero Java, and exited non-zero on every run from 2026-07-05 onward.
+#
+# Advanced setup is all-or-nothing per repository: enabling it requires
+# default setup to be off, so Python is analysed here too rather than being
+# left behind. Python needs no build; only the Kotlin half pays for a compile.
+#
+# Cost, so it is not a surprise later: the java-kotlin job runs a real Gradle
+# assembleDebug, which makes Chaquopy download a Python runtime and pip-install
+# the pinned dependencies into the APK. That is the slow job. It is scoped to
+# pushes/PRs touching android/ plus a weekly run, rather than every commit.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a new query release is picked up even in a quiet week.
+    - cron: "23 4 * * 1"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # --- Kotlin-only prerequisites -------------------------------------
+      # JDK 17 matches the project's own sourceCompatibility/jvmTarget in
+      # android/app/build.gradle.kts; building on a newer JDK would compile
+      # against a toolchain the release build never uses.
+      - name: Set up JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Chaquopy needs a host ("build") Python matching the version pinned in
+      # chaquopy { defaultConfig { version = "3.13" } }. Without this the
+      # Gradle build fails looking for python3.13 on PATH.
+      - name: Set up Python 3.13 for Chaquopy
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Accept SDK licences and install platform 36
+        if: matrix.language == 'java-kotlin'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+
+      - name: Set up Gradle
+        if: matrix.language == 'java-kotlin'
+        uses: gradle/actions/setup-gradle@v4
+
+      # --- CodeQL --------------------------------------------------------
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Debug variant deliberately: keystore.properties is gitignored and
+      # absent on CI, and app/build.gradle.kts falls back to no signing config
+      # when it is missing — so a release build here would produce an unsigned
+      # APK and buy nothing. CodeQL only needs the Kotlin to be compiled, and
+      # debug compiles the same sources without minification rewriting them.
+      - name: Build Android app
+        if: matrix.language == 'java-kotlin'
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
