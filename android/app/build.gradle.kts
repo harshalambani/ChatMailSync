@@ -81,6 +81,11 @@ android {
 
     buildFeatures {
         compose = true
+        // AGP 8 stopped generating BuildConfig by default. SettingsScreen reads
+        // VERSION_NAME / VERSION_CODE from it so the About line cannot drift
+        // from the APK; without this the class does not exist and the build
+        // fails on an unresolved reference.
+        buildConfig = true
     }
 }
 

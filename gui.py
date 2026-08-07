@@ -47,6 +47,7 @@ from src.config import (
     mailbox_clear_steps,
     resolve_mail_backend,
 )
+from src.app_version import version_label
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.mail_client import mailbox_folder_for
 from src.state import (
@@ -1491,6 +1492,20 @@ class _SettingsWindow(ctk.CTkToplevel):
         if current_backend == MAIL_BACKEND_IMAP:
             self._help_container.pack(fill="x")
 
+        # ── Version ────────────────────────────────────────────────────
+        # Small, last, and non-interactive, so it cannot repeat the
+        # "Save is off-screen" failure the help block above caused --
+        # _sync_window_height's winfo_reqheight() already counts it.
+        #
+        # Here rather than the main window because that is where Android
+        # puts it (SettingsScreen's About / Help section), and because
+        # "which version am I on?" is a question asked once, on purpose.
+        self._version_label = ctk.CTkLabel(
+            self, text=version_label(), font=("", 11),
+            text_color=("gray45", "gray60"), anchor="w",
+        )
+        self._version_label.pack(fill="x", padx=20, pady=(4, 8))
+
         # The 380x200 above is only right for the OAuth backend, where the
         # IMAP form is hidden. IMAP is the default now, so without this the
         # window opens clipped at the Host field with Save below the bottom
@@ -1508,10 +1523,13 @@ class _SettingsWindow(ctk.CTkToplevel):
             # drops a widget out of the packing order entirely, and a later
             # bare pack() *appends* it. So OAuth -> IMAP -> back would have
             # re-packed the IMAP fields below Save/Cancel, leaving the form
-            # underneath its own buttons. The help block genuinely belongs
-            # last, so it can pack bare.
+            # underneath its own buttons. The help block needs the same
+            # treatment for the same reason -- it used to pack bare, which
+            # was correct only while it was genuinely last; the version
+            # label now sits below it and a bare pack() would jump the
+            # help block underneath it on every OAuth -> IMAP round trip.
             self._imap_frame.pack(fill="x", before=self._btn_row)
-            self._help_container.pack(fill="x")
+            self._help_container.pack(fill="x", before=self._version_label)
         else:
             self._imap_frame.pack_forget()
             self._help_container.pack_forget()
