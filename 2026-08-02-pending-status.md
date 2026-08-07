@@ -1,13 +1,12 @@
 # WA Mail Sync — What's Pending
 
-**As of:** 2026-08-05
-**Released:** v0.2.2-beta (prerelease, `main` at `381eee2`) — **Android APK only**. The Windows
-portable zip was deliberately not built for this release: `build_portable.ps1` preserves an existing
-`dist\...\Data\` containing live credentials and real exports, so shipping it requires staging
-`App\` + launcher only and recreating an empty `Data\`. Previous release v0.2.1-beta did carry the
-Windows zip.
-**Test suite:** 158 passing.
-**Working tree:** clean as of the v0.2.2-beta merge.
+**As of:** 2026-08-07 (header refreshed; individual entries below carry their own dates)
+**Released:** v1.0.1 (`main` at `843f00c`) — APK plus the Windows `.paf.exe` installer and portable
+zip. The credential-seeding hazard that once blocked shipping a Windows package was fixed in
+`88ae11c`: packaging never touches `dist\WAMailSyncPortable`, it builds from a separate staging tree
+with an empty `Data\` skeleton and refuses to package if any credential or user-data file is found.
+**Test suite:** 171 passing.
+**Working tree:** clean as of the v1.0.1 tag.
 
 ---
 
@@ -30,7 +29,18 @@ untested on device. Same signing key, so it installs straight over the top.
 
 ### A3. ~~Commit the DPAPI credential encryption~~ — **done**, shipped in v0.2.2-beta.
 
-### A4. Build the `.paf.exe` PortableApps installer
+### A4. ~~Build the `.paf.exe` PortableApps installer~~ — **DONE 2026-08-06**
+
+Shipped in `3cb0157` (compiled launcher + `.paf.exe` installer, both generator tools pinned by
+SHA-256 and verified before execution), `eb4b3b4` (portable zip cut from the same clean staging
+tree), `88ae11c` (stop seeding live credentials into the distributable tree), and released as part
+of **v1.0.0**, which carries `WAMailSyncPortable_1.0.0_English.paf.exe` and
+`WAMailSyncPortable_1.0.0.zip` alongside the APK.
+
+**Correction, 2026-08-07:** this entry sat here marked open for a day after the work landed, and was
+read as a live blocker when deciding what to ship in v1.0.1 — leading to that release going out
+Android-only on a reason that no longer existed. The Windows 1.0.1 package was built and attached
+afterwards. The decisions below are kept as the record of how it was designed.
 
 **Two decisions taken 2026-08-05 — do not re-litigate:**
 
@@ -64,11 +74,12 @@ Remaining blockers:
 - ~~Vendoring `PortableApps.comInstaller.exe` (LFS vs plain git)~~ — **decided 2026-08-05**: neither,
   see decision 2 above. A local copy already exists at
   `C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe`.
-- **Open:** actually writing `launcher.ini` and generating `WAMailSync.exe` (decision 1 above).
-- **Open:** obtaining and recording the pinned SHA-256 for the official installer download.
-- **Open:** the splash settings from **B8** go in the same `App\AppInfo\Launcher\` ini this step
-  creates, so fold them in here rather than reopening the file later. Requires timing the frozen exe
-  first.
+- ~~Writing `launcher.ini` and generating `WAMailSync.exe`~~ — **done** (decision 1 above).
+- ~~Obtaining and recording the pinned SHA-256 for the official installer download~~ — **done**;
+  the pins live at the top of `build_portable.ps1` with the upgrade procedure beside them.
+- **Still open, carried to B8:** the splash settings go in `App\AppInfo\Launcher\WAMailSyncPortable.ini`,
+  which A4 created but did not populate with them. Requires timing the frozen exe first. This is now
+  the only surviving part of A4 and belongs to B8.
 
 ### A5. ~~Delete the tag worktree~~ — **resolved 2026-08-05, nothing to delete**
 `scratchpad\wt-v021` no longer exists and `git worktree list` shows only the main checkout, so the
