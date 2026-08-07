@@ -1320,14 +1320,42 @@ def _prepare_emails(
     return result
 
 
+def _stderr_is_terminal() -> bool:
+    """True only when stderr is a console whose current line we can redraw.
+
+    This guards the ``\\r``-based progress bar below, which has always no-op'd
+    when ``sys.stderr`` is None (PyInstaller GUI bundle, console=False). None
+    is not the only non-terminal, though: on Android, Chaquopy replaces
+    ``sys.stderr`` with a stream that forwards writes to logcat at *warning*
+    level. A carriage return means nothing to a log, so every redraw landed as
+    its own entry -- measured on device 2026-08-07, ~67 of them for a single
+    451-message chat, each carrying the contact's display name into the system
+    log and burying any genuine stderr warning in the noise.
+
+    ``isatty()`` is the distinction that was missing: "a terminal I can
+    overwrite" versus "a sink that keeps everything I send it".
+    """
+    stream = sys.stderr
+    if stream is None:
+        return False
+    try:
+        return bool(stream.isatty())
+    except (AttributeError, ValueError, OSError):
+        # ValueError is a closed stream; AttributeError a stand-in that never
+        # claimed to be a file. Neither is something to draw a progress bar on.
+        return False
+
+
 def _print_progress(
     display_name: str, chunk: int, total_chunks: int, msgs_done: int, total_msgs: int
 ) -> None:
     """Overwrite the current terminal line with a compact progress indicator.
 
-    No-ops silently when sys.stderr is None (PyInstaller GUI bundle, console=False).
+    No-ops silently unless stderr is an interactive terminal -- see
+    :func:`_stderr_is_terminal`. Callers that need progress off a console have
+    ``on_chunk``, which is what the GUI and the Android worker already use.
     """
-    if sys.stderr is None:
+    if not _stderr_is_terminal():
         return
     pct = int(100 * msgs_done / total_msgs) if total_msgs else 0
     bar_filled = pct // 5          # 20-char bar
@@ -1533,7 +1561,10 @@ def push_chunks(
         if current_thread_id is None:
             current_thread_id = thread_id_r
 
-    if not dry_run and email_list and sys.stderr is not None:
+    # Erase the progress bar's line. Same terminal-only guard as the bar
+    # itself -- off a console there is nothing drawn to erase, and writing the
+    # blanking sequence anyway just adds one more empty logcat entry.
+    if not dry_run and email_list and _stderr_is_terminal():
         sys.stderr.write("\r" + " " * 72 + "\r")
         sys.stderr.flush()
 

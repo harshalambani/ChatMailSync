@@ -103,6 +103,22 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             val androidApi = Python.getInstance().getModule("src.android_api")
             var lastFraction = -1f
             var lastText: String? = null
+            // What was last handed to WorkManager/the notification, as
+            // distinct from what the last event said. The poll below runs on a
+            // fixed 250ms tick whether or not any event arrived, and it used
+            // to re-post the identical payload every time: setProgress() is a
+            // Data write into WorkManager's Room database and notify()
+            // rebuilds a system notification, so a single chat sitting on one
+            // chunk for 3.5 minutes cost ~840 disk writes and as many
+            // notification updates to say nothing new. Measured on device
+            // 2026-08-07 via WM-WorkProgressUpdater in logcat.
+            //
+            // NaN rather than -1f as the "nothing posted yet" fraction, so the
+            // first comparison is always unequal (NaN != NaN) without
+            // colliding with a value an event could legitimately produce.
+            var postedText: String? = null
+            var postedFraction = Float.NaN
+            var postedLog: String? = null
             // Milestone lines only (file started/finished, inbox scan
             // result) — not every "chunk" tick, which fires many times per
             // file and would spam a log rather than read like one. Capped
@@ -135,14 +151,23 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                         }
                     }
                     lastText?.let { text ->
-                        notify(text)
-                        setProgress(
-                            workDataOf(
-                                KEY_PROGRESS_TEXT to text,
-                                KEY_PROGRESS_FRACTION to lastFraction,
-                                KEY_LOG_LINES to logLines.joinToString("\n"),
+                        val log = logLines.joinToString("\n")
+                        if (text != postedText ||
+                            lastFraction != postedFraction ||
+                            log != postedLog
+                        ) {
+                            notify(text)
+                            setProgress(
+                                workDataOf(
+                                    KEY_PROGRESS_TEXT to text,
+                                    KEY_PROGRESS_FRACTION to lastFraction,
+                                    KEY_LOG_LINES to log,
+                                )
                             )
-                        )
+                            postedText = text
+                            postedFraction = lastFraction
+                            postedLog = log
+                        }
                     }
                     delay(250)
                 }
