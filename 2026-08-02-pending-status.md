@@ -19,11 +19,17 @@ The release-signed build installed cleanly *as an update* (`firstInstallTime` 20
 vs `lastUpdateTime` 14:51:02) — `sync_state.db`, the saved IMAP password, the watched folder and all
 settings survived. The earlier data-wipe warning about the debug build no longer applies.
 
-**Still open:** the phone is running the pre-bump **versionCode 3** binary. The
-[v0.2.2-beta APK](https://github.com/harshalambani/WAGMailSync/releases/tag/v0.2.2-beta)
-(`WAMailSync-v0.2.2-beta.apk`, 22,067,820 bytes, SHA-256
-`C24AE333…CCC37895`, versionCode 4) has **not** been installed, so the four fixes in it are
-untested on device. Same signing key, so it installs straight over the top.
+**Still open.** ~~The phone is running the pre-bump versionCode 3 binary~~ — **measured on device
+2026-08-07** (`adb shell dumpsys package com.wamailsync.app`, serial `RZCY81Q6WZV`): it is on
+**versionCode 6 / `0.2.4-beta`**, `lastUpdateTime` 2026-08-06. So the "versionCode 3" claim above
+was stale in one direction and the v0.2.2-beta paragraph below it in another; neither was checked
+against the phone before being written down.
+
+The current target is the [v1.0.1 APK](https://github.com/harshalambani/WAMailSync/releases/tag/v1.0.1)
+(`WAMailSync-v1.0.1.apk`, 22,067,840 bytes, SHA-256
+`7d1742bfb5e243d80d984dd00fe8d232fb6ff579eeb18bf9a474dca81f34a708`, **versionCode 8**), which is
+two releases ahead of what is installed. Same signing key, so `adb install -r` goes straight over
+the top and keeps `sync_state.db`, the saved password and settings.
 
 ### A2. ~~Attach the APK to the GitHub release~~ — **done 2026-08-05** (v0.2.2-beta)
 
@@ -111,7 +117,9 @@ This entry was itself out of date. The `.docx` was regenerated on 5 Aug, *after*
 with `python-docx` rather than regenerated. What it was genuinely missing was the user-visible
 consequence of both secrets being device-bound: new §2.9 (moving the bundle to another PC) and
 §3.8 (moving to a new phone), a matching "If the device changes" row in the platform comparison
-table, and a version line now reading v1.0.0. Awaiting sign-off.
+table, and a version line now reading v1.0.0. ~~Awaiting sign-off.~~ **Signed off 2026-08-07.**
+B3 is closed; the AES-128-GCM correction and §2.9/§3.8 stand as written. The pre-correction copy
+kept at `scratchpad/WA-Mail-Sync-Password-Storage.PRE-AESFIX.docx` is now redundant.
 
 ### B4. Clear Unaise Urfi's rows from `sync_state.db`
 So that chat can be re-archived. Offered previously, never carried out.
@@ -218,12 +226,27 @@ superseded banner) went in with the v0.2.2-beta merge `381eee2`. Tree is clean; 
 
 ## Suggested order
 
-B1 and B2 are both done. Next: **A1 (install v0.2.2 and exercise the four fixes) → A4 (launcher +
-pinned-hash installer fetch, **with B8's splash settings folded in**) → B3**. B8 is not a separate
-slot: its splash half belongs inside A4's ini, and its startup/shutdown half is an audit that wants
-the frozen exe A4 produces. A1 first because everything else is downstream of trusting the
-current build; A4 because it is the only thing standing between the icon set and a real Windows
-deliverable; B3 because it is the one document that is now actively wrong rather than merely stale.
+*Rewritten 2026-08-07. The previous order was written around v0.2.2-beta and listed A4 and B3 as
+upcoming when both had shipped — the same staleness that sent v1.0.1 out Android-only. Anything
+below that is not measured is marked as such.*
 
-Also outstanding but not sequenced here: a Windows portable zip for v0.2.2-beta (needs the `Data\`
-sanitization described at the top), and dismissing the GitHub secret alert as a false positive.
+B1, B2, A4 and B3 are done. Next: **A1 (install v1.0.1 and exercise it) → CI test workflow →
+B8 → P2 (B5 + B7) → P3**.
+
+A1 first, and it is now the only real gate: the phone is on versionCode 6 / `0.2.4-beta` while the
+release is versionCode 8 / `1.0.1`, and the whole Android store phase in §D is blocked behind
+battle-testing a build that is actually current.
+
+The **CI test workflow** is new here, added 2026-08-07 as `.github/workflows/tests.yml`. It exists
+because Dependabot #3 (`cryptography` 49 → 50, lock-only) arrived with three green checks that
+knew nothing about whether the app worked — `codeql.yml` was the repository's only workflow, so
+validating a dependency bump meant building a venv and running the suite by hand. It installs
+`requirements-lock.txt` with `--require-hashes`, the way `build_portable.ps1` does, because
+lock-only changes are most of what Dependabot opens here and they do change what ships.
+
+B8 still wants the frozen exe timed before its startup/shutdown half can be judged; its splash
+settings in `App\AppInfo\Launcher\WAMailSyncPortable.ini` are the surviving piece of A4.
+
+Also outstanding but not sequenced here: bumping `github/codeql-action` v3 → v4 before its
+December 2026 deprecation, and exercising Google sign-in once on a real build — `cryptography` 50
+is only reachable on that path and the suite mocks it.
