@@ -211,7 +211,19 @@ fun SettingsScreen(
             HorizontalDivider()
 
             Text("About / Help", style = MaterialTheme.typography.titleMedium)
-            Text("WA Mail Sync — Android (dev build)")
+            // Read from BuildConfig, which gradle generates from versionName /
+            // versionCode, so this cannot drift from the APK. It used to be the
+            // hardcoded string "WA Mail Sync — Android (dev build)", which a
+            // release-signed 1.0.1 went on displaying -- worse than showing
+            // nothing, because it was confidently wrong.
+            //
+            // versionCode is shown alongside the name because it is the number
+            // `adb shell dumpsys package` reports and the one the store orders
+            // by, so it is what actually answers "am I on the current build?".
+            Text(
+                "WA Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
+                    if (BuildConfig.DEBUG) " — debug build" else ""
+            )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
             TextButton(onClick = onOpenSyncLog) { Text("Sync log") }
         }
