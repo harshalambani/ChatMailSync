@@ -228,11 +228,26 @@ if (Test-Path $AppInfoSrc) {
 # package builds cleanly with no splash at all. That failure is invisible
 # until someone launches the shipped build and notices nothing appeared, so
 # check it here rather than trusting the copy above.
-$SplashDest = Join-Path $AppInfoDir "splash.jpg"
-$StagedInis = @(Get-ChildItem (Join-Path $AppInfoDir "Launcher") -Filter *.ini -ErrorAction SilentlyContinue)
+#
+# The path below is not a choice. The launcher generator compiles in a
+# HARDCODED splash location and the built package cannot be told to look
+# anywhere else:
+#
+#   Plugin Command: show $0 0 0 -1 /L $EXEDIR\App\AppInfo\Launcher\splash.jpg
+#
+# v1.1.0 shipped the file one directory up, at App\AppInfo\splash.jpg, and
+# this guard - written specifically to catch a silent splash failure - checked
+# that same wrong directory, so it passed while the splash never once
+# appeared. newadvsplash given a missing file draws nothing and reports no
+# error, so nothing else in the build catches it. If this path is ever edited,
+# it must be edited to match the generator, not to match where the file
+# happens to be.
+$LauncherDir = Join-Path $AppInfoDir "Launcher"
+$SplashDest = Join-Path $LauncherDir "splash.jpg"
+$StagedInis = @(Get-ChildItem $LauncherDir -Filter *.ini -ErrorAction SilentlyContinue)
 if ($StagedInis.Count -gt 0 -and (Select-String -Path $StagedInis.FullName -Pattern '^\s*SplashTime\s*=' -Quiet)) {
     if (-not (Test-Path $SplashDest)) {
-        Write-Error "The launcher .ini sets SplashTime but App\AppInfo\splash.jpg is missing. The generator would silently disable the splash instead of failing. Restore portable\App\AppInfo\splash.jpg (see scratchpad make_splash.py in the 2026-08-08 B8 work, or regenerate it from appicon_1024.png)."
+        Write-Error "The launcher .ini sets SplashTime but App\AppInfo\Launcher\splash.jpg is missing. The generator would silently disable the splash instead of failing. Restore portable\App\AppInfo\Launcher\splash.jpg (regenerate it from appicon_1024.png if it is gone)."
     }
 }
 
@@ -409,6 +424,18 @@ if ($Installer -or $Zip) {
     # Empty Data\ skeleton - structure only, none of the contents.
     foreach ($sub in @("auth", "data\inbox", "data\processed")) {
         New-Item -ItemType Directory -Force (Join-Path $StageDir "Data\$sub") | Out-Null
+    }
+
+    # Editor and tool leftovers must not ride along either. v1.1.0 shipped a
+    # splash.jpg.bak in App\AppInfo\ - untracked, so git never showed it, and
+    # byte-identical to splash.jpg, so nothing looked wrong. Harmless in that
+    # instance, but "an untracked file next to the real one" is also what a
+    # half-edited config or a credential copy looks like, and the package is
+    # the last place to notice.
+    $stray = Get-ChildItem $StageDir -Recurse -File -Include "*.bak", "*.orig", "*.rej", "*~"
+    if ($stray) {
+        $stray | ForEach-Object { Write-Host "   STRAY: $($_.FullName)" -ForegroundColor Red }
+        Write-Error "Refusing to package: editor/tool leftover files are present in the staging tree (listed above). Remove them from portable\ and rebuild."
     }
 
     # Belt and braces: prove nothing secret rode along in App\ before we
