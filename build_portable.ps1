@@ -223,6 +223,19 @@ if (Test-Path $AppInfoSrc) {
     Write-Host "   (No portable\App\AppInfo\ found - skipping icon/ini copy)" -ForegroundColor Yellow
 }
 
+# The launcher .ini sets SplashTime, and a missing splash.jpg does not make
+# that an error - SplashScreen.nsh just sets DisableSplashScreen=true and the
+# package builds cleanly with no splash at all. That failure is invisible
+# until someone launches the shipped build and notices nothing appeared, so
+# check it here rather than trusting the copy above.
+$SplashDest = Join-Path $AppInfoDir "splash.jpg"
+$StagedInis = @(Get-ChildItem (Join-Path $AppInfoDir "Launcher") -Filter *.ini -ErrorAction SilentlyContinue)
+if ($StagedInis.Count -gt 0 -and (Select-String -Path $StagedInis.FullName -Pattern '^\s*SplashTime\s*=' -Quiet)) {
+    if (-not (Test-Path $SplashDest)) {
+        Write-Error "The launcher .ini sets SplashTime but App\AppInfo\splash.jpg is missing. The generator would silently disable the splash instead of failing. Restore portable\App\AppInfo\splash.jpg (see scratchpad make_splash.py in the 2026-08-08 B8 work, or regenerate it from appicon_1024.png)."
+    }
+}
+
 # help.html at the package root - required by the PortableApps.com Format, and
 # the installer refuses to build without it.
 $HelpSrc = Join-Path $ProjectRoot "portable\help.html"

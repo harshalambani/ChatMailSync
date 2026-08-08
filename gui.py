@@ -222,8 +222,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._chunk_var.set(_settings.get("chunk_size", "day"))
         self._update_signout_button_label()
 
-        # Initial data load.
-        self._check_auth()
+        # Initial data load. The auth check is deferred rather than inline --
+        # see _check_auth_deferred(); it is the one step here that can go to
+        # the network, and it ran before mainloop().
+        self._check_auth_deferred()
         self._refresh_chat_list()
         self._refresh_inbox_count()
         self._maybe_show_backend_notice(_had_settings_file, _had_token_file)
@@ -257,9 +259,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self._auth_dot.pack(side="left", padx=(0, 4))
 
+        # Fixed width, like the dot above. This label is filled in by a
+        # background check (_check_auth_deferred) and its text varies a lot --
+        # "Checking…", "Connected", "No credentials.json", "Token invalid —
+        # reconnect". auth_frame is packed to the right, so an auto-sized label
+        # would drag the dot and the Connect button sideways every time the
+        # status changed, most visibly on the settle from "Checking…" at
+        # startup. 180px fits the longest of those at size 12; anchor="w" keeps
+        # the text left-aligned within it rather than jittering about the
+        # centre.
         self._auth_label = ctk.CTkLabel(
             auth_frame, text="Not connected",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=12), width=180, anchor="w",
         )
         self._auth_label.pack(side="left", padx=(0, 10))
 
@@ -851,8 +862,52 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     # Auth
     # ------------------------------------------------------------------
 
+    def _check_auth_deferred(self) -> None:
+        """Run the *startup* auth check off the main thread.
+
+        _check_auth() is synchronous, and under the Gmail backend it can go to
+        the network: _check_gmail_auth_status() refreshes an expired token via
+        ``creds.refresh(Request())``, and google-auth's default timeout there
+        is 120 seconds. Called inline from __init__ -- so, before mainloop() --
+        that put an effectively unbounded round trip on the path to the first
+        window: a user with an expired token and a slow or blocked connection
+        got no window at all until it resolved, which looks like a hung launch
+        rather than a network problem.
+
+        Measured 2026-08-08 on the frozen 1.0.1 portable build, warm start
+        3.0s -- but only on the IMAP backend, which is file-only and never
+        touches the network in this check. The Gmail path had no such bound.
+
+        Same shape as _silent_build_transport() below: do the blocking part on
+        a daemon thread, hand the result back through a queue, and let the
+        widget show an honest interim state until it arrives.
+        """
+        self._auth_label.configure(text="Checking…")
+        auth_q: queue.Queue = queue.Queue()
+
+        def _work() -> None:
+            try:
+                auth_q.put(check_auth_status())
+            except Exception as exc:
+                # Must post something, or the poller below reschedules forever.
+                auth_q.put((False, f"Auth error: {exc}"))
+
+        threading.Thread(target=_work, daemon=True).start()
+        self.after(_AUTH_POLL_MS, lambda: self._poll_startup_auth(auth_q))
+
+    def _poll_startup_auth(self, auth_q: "queue.Queue") -> None:
+        try:
+            valid, text = auth_q.get_nowait()
+        except queue.Empty:
+            self.after(_AUTH_POLL_MS, lambda: self._poll_startup_auth(auth_q))
+            return
+        self._apply_auth_status(valid, text)
+
     def _check_auth(self) -> None:
         valid, text = check_auth_status()
+        self._apply_auth_status(valid, text)
+
+    def _apply_auth_status(self, valid: bool, text: str) -> None:
         self._auth_dot.configure(text_color="#2ecc71" if valid else "#e74c3c")
         self._auth_label.configure(text=text)
         self._auth_btn.configure(text="Reconnect" if valid else "Connect")
