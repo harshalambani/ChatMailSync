@@ -39,11 +39,18 @@ def test_default_root_falls_back_to_project_dir_when_no_override():
     assert config.PROJECT_ROOT == Path(config.__file__).parent.parent
 
 
-def test_env_root_fallback_prefers_new_var_over_legacy(tmp_path, monkeypatch):
-    """WAMAILSYNC_ROOT is the current env var; WAGMAIL_ROOT is kept as a
-    fallback for portable installs built before the WAGmailSync -> WAMailSync
-    rename whose launcher .bat still exports the old name. Covers: old var
-    alone still works, new var alone works, and new wins when both are set."""
+def test_env_root_uses_wamailsync_root_and_ignores_the_legacy_name(
+    tmp_path, monkeypatch
+):
+    """WAMAILSYNC_ROOT is the only env var honoured.
+
+    A WAGMAIL_ROOT fallback lived in _compute_root() until 2026-08-08, for
+    portable installs predating the WAGmailSync -> WAMailSync rename. It was
+    dropped deliberately (see the comment there), so the interesting assertion
+    is now the *negative* one: an install still exporting only the old name
+    must fall through to the __file__-relative default rather than silently
+    reading a stale root.
+    """
     new_root = tmp_path / "new"
     old_root = tmp_path / "old"
     new_root.mkdir()
@@ -57,18 +64,17 @@ def test_env_root_fallback_prefers_new_var_over_legacy(tmp_path, monkeypatch):
     # monkeypatch reverts this automatically at teardown.
     monkeypatch.setattr(config, "_explicit_root", None)
 
-    # Old var alone still works.
-    monkeypatch.delenv("WAMAILSYNC_ROOT", raising=False)
-    monkeypatch.setenv("WAGMAIL_ROOT", str(old_root))
-    assert config._compute_root() == old_root
-
-    # New var alone works.
+    # The current var works.
     monkeypatch.delenv("WAGMAIL_ROOT", raising=False)
     monkeypatch.setenv("WAMAILSYNC_ROOT", str(new_root))
     assert config._compute_root() == new_root
 
-    # New wins when both are set.
+    # The legacy name alone is ignored -- falls through to the default.
+    monkeypatch.delenv("WAMAILSYNC_ROOT", raising=False)
     monkeypatch.setenv("WAGMAIL_ROOT", str(old_root))
+    assert config._compute_root() == Path(config.__file__).parent.parent
+
+    # And it cannot override the current var when both are set.
     monkeypatch.setenv("WAMAILSYNC_ROOT", str(new_root))
     assert config._compute_root() == new_root
 
