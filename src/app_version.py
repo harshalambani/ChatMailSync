@@ -7,7 +7,7 @@ nothing checks is how a UI ends up confidently showing a stale number. That is
 not hypothetical here: the Android settings screen hardcoded "(dev build)" and
 went on saying it on a release-signed 1.0.1.
 
-So this reads appinfo.ini, which build_portable.ps1:410 already calls "the
+So this reads appinfo.ini, which build_portable.ps1 already calls "the
 single source of truth for what this build is" -- it is what names the package
 and what the installer stamps. Nothing to keep in sync, because there is
 nothing new to be out of sync with.
