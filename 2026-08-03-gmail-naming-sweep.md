@@ -26,6 +26,31 @@ needs its own pass.
 
 ### 2a. Frozen runtime identifiers — renaming these destroys user data
 
+> **SUPERSEDED 2026-08-08 — all three were renamed.** The table below is left as
+> written, for the record. Two things changed. First, the premise expired: these
+> protect an *existing* install, and the only install was the test device, which
+> was cleared for a fresh sync with a new app password — there was nothing left
+> to orphan. Second, the "permanently undecryptable" claim in row 2 was simply
+> wrong, and reading the code before acting is what caught it.
+> `SecretStore.getSecret()` wraps its decrypt in a catch that clears the dead
+> blob and returns null, which every caller already reads as "no password
+> saved"; it was written for the Keystore-wiped and restored-to-another-device
+> cases, and an alias rename lands on exactly that path. Nothing throws, nothing
+> is unrecoverable, the user re-enters a password.
+>
+> Row 3 is the one with a real residue, and it is not the one this table warned
+> about: renaming the python root leaves the old `filesDir/wagmail` tree — chat
+> exports, `sync_state.db` — sitting on the device, referenced by nothing. The
+> rename is only finished once app storage is cleared or the app reinstalled.
+>
+> New names: `wamail_prefs`, `wamail_imap_key`, `filesDir/wamail`. The reason it
+> happened now rather than never is timing — after the Galaxy Store listing the
+> same edit would silently wipe every user's settings on update, with no error
+> to explain it. That made the pre-store window the last cheap one. The general
+> caution stands for anything added to this class later: a storage identifier is
+> not a display string, and the cost of renaming one is paid by users who
+> already have data, not by the person doing the sweep.
+
 These contain the string "wagmail" and **must never be renamed**, in any sweep, ever:
 
 | Identifier | Where | What breaks if renamed |
@@ -167,3 +192,16 @@ docstrings that touch them.
 the GitHub repo name, and the on-disk repo folder name. `sign_exe.ps1`'s `CN=WAGmailSync Dev` cert
 subject is frozen and carries its own in-file comment saying so. The ~460 remaining hits outside the
 historical docs are all category 1 or §2a.
+
+**Update 2026-08-08 — most of that paragraph has since closed.** `docs/CNAME` is
+`wamailsync.ambani.tech` and the remote is `WAMailSync.git`; the cert subject was
+changed to `CN=WAMailSync Dev` on 2026-08-06, so only the old
+`CN=WAGmailSync Dev` certificate still sitting in this machine's certificate
+stores keeps the name alive, and it is kept solely so already-shipped v0.2.x
+releases still verify locally. The §2a identifiers were renamed (see the banner
+there). Genuinely still open: the on-disk repo folder name, and `WAGMAIL_ROOT`,
+which is now closed too — the fallback was removed from `src/config.py` on
+2026-08-08 and `WAMAILSYNC_ROOT` is the only name honoured. What remains of
+"wagmail" in the tree is historical records under `Completed/**` and the dated
+`2026-*.md` docs, plus comments that exist specifically to explain these
+renames.

@@ -157,9 +157,23 @@ Not a find-and-replace: two traps documented there — the frozen runtime identi
 password permanently undecryptable, and `Completed/**` + dated docs which are historical records
 and say "Gmail" accurately.
 
+**Status 2026-08-08: DONE.** The sweep itself closed 2026-08-06; the frozen identifiers were
+renamed on 2026-08-08 (`wamail_prefs`, `wamail_imap_key`, `filesDir/wamail`) once a fresh sync with
+a new app password made the "orphaned install" premise moot. The "permanently undecryptable" trap
+above turned out not to exist — `SecretStore.getSecret()` clears an undecryptable blob and returns
+null, so the app just re-prompts; see the superseded banner in §2a of the sweep doc. Only the
+python-root rename leaves anything behind (the old `filesDir/wagmail` tree), which the device
+storage clear handles. No live identifier in the tree still says "wagmail".
+
 ### B5. Rename the Windows build artifacts
 `build_portable.ps1`, `wa-chat-sync.spec` (`name="WAGmailSync"`), the `.bat` launcher, and
 `WAGMAIL_ROOT`. Deferred — ties into the broader package-name / rename decision.
+
+**Status 2026-08-08: DONE.** `WAGMAIL_ROOT` is closed — the fallback was deleted from `src/config.py`
+and `WAMAILSYNC_ROOT` is now the only name honoured, with the test in `tests/test_config.py` inverted
+to assert the old name is *ignored* rather than honoured. `wa-chat-sync.spec` is `name="WAMailSync"`
+in both blocks, and the `.bat` launcher no longer exists — it was replaced by the PortableApps `.ini`
+launcher, which is what made an icon possible. Nothing named here still says "WAGmail".
 
 ### B8. Splash, startup time and shutdown on the portable build — *opened 2026-08-06*
 Full write-up in [`2026-08-06-splash-and-startup-learnings.md`](2026-08-06-splash-and-startup-learnings.md),
