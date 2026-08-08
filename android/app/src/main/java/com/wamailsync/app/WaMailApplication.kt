@@ -27,8 +27,15 @@ class WaMailApplication : Application() {
     companion object {
         /** Root directory handed to config.set_root() — everything else
          * (data/inbox, data/processed, data/sync_state.db, auth/) is
-         * derived from this by config.py's _apply_root(). */
-        fun pythonRoot(context: Context): File = File(context.filesDir, "wagmail")
+         * derived from this by config.py's _apply_root().
+         *
+         * Renamed from "wagmail" on 2026-08-08. Unlike the SharedPreferences
+         * and Keystore renames done alongside it, this one leaves real bytes
+         * behind: the old filesDir/wagmail tree keeps its chat exports and
+         * sync_state.db, and nothing in the app will ever look at them again.
+         * The rename is only complete once the device's app storage is cleared
+         * (or the app reinstalled) — otherwise it is a rename plus an orphan. */
+        fun pythonRoot(context: Context): File = File(context.filesDir, "wamail")
 
         fun inboxDir(context: Context): File =
             File(pythonRoot(context), "data/inbox").apply { mkdirs() }

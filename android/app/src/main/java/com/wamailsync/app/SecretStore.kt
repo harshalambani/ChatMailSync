@@ -32,10 +32,25 @@ import javax.crypto.spec.GCMParameterSpec
  */
 object SecretStore {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
-    private const val KEY_ALIAS = "wagmail_imap_key"
+    // Both names renamed off the pre-rename "wagmail" spelling on 2026-08-08.
+    //
+    // KEY_ALIAS: getOrCreateKey() finds nothing under the new alias and
+    // generates a fresh key, so any password saved under the old one fails its
+    // GCM tag check on the next read. That is recoverable rather than fatal
+    // because getSecret() already treats undecryptable ciphertext as "no
+    // password saved" — it catches, clears the dead blob and returns null (see
+    // its comment below, written for the Keystore-wiped and
+    // restored-to-another-device cases; an alias rename lands on the same
+    // path). The old key itself stays in AndroidKeyStore, orphaned, until the
+    // app is uninstalled or its storage cleared.
+    //
+    // PREFS_NAME: the same file AppPrefs declares independently — keep the two
+    // in step, and see the longer note there on what this rename would cost
+    // once the app is on the Galaxy Store.
+    private const val KEY_ALIAS = "wamail_imap_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val GCM_TAG_LENGTH_BITS = 128
-    private const val PREFS_NAME = "wagmail_prefs"
+    private const val PREFS_NAME = "wamail_prefs"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -75,7 +90,7 @@ object SecretStore {
     }
 
     /** Encrypts [value] with the Keystore key and stores it under [key] in
-     * `wagmail_prefs`. Overwrites any previous value stored under the same
+     * `wamail_prefs`. Overwrites any previous value stored under the same
      * key. */
     fun putSecret(context: Context, key: String, value: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
