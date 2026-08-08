@@ -125,6 +125,25 @@ reasoning behind each is still the reasoning the code follows.
    Repository folder name and remaining historical/dated docs were left as-is
    per the rename task's scope.
 
+   **Superseded 2026-08-08 — the three Android names above were renamed after
+   all.** They are now `wamail_prefs` (`AppPrefs.kt`), `wamail_imap_key`
+   (`SecretStore.kt`) and `filesDir/wamail` (`WaMailApplication.kt`). The
+   "orphaning existing installs" reason was real but had expired: the only
+   install was the test device, and it was being cleared for a fresh sync with a
+   new app password, so there was nothing left to orphan. The stronger claim
+   made elsewhere — that renaming the Keystore alias makes a saved password
+   *permanently undecryptable* — was wrong on inspection. `SecretStore.getSecret()`
+   catches a failed decrypt, clears the dead blob and returns null, which
+   callers already read as "no password saved"; the behaviour was written for
+   the Keystore-wiped and restored-to-another-device cases and an alias rename
+   lands on the same path. Timing drove the decision: once this is on the Galaxy
+   Store the same edit silently wipes every user's settings on update, so the
+   pre-store window was the last cheap one. Note the asymmetry that remains -
+   the prefs and Keystore renames lose nothing recoverable, but the python-root
+   rename leaves the old `filesDir/wagmail` tree with its chat exports and
+   `sync_state.db` on the device. It is only complete once app storage is
+   cleared or the app reinstalled.
+
    **Closing sweep, 2026-08-06.** Two commits finished it. The only real
    user-facing defect found was in `WatchFolderWorker.triggerAutoSync`, which
    returned `"syncing to Gmail..."` from *after* the backend branch, so an IMAP
@@ -148,8 +167,9 @@ reasoning behind each is still the reasoning the code follows.
    all deliberate: OAuth scopes and the `gmail_oauth` backend value, the
    `imap.gmail.com` provider default and Gmail app-password instructions, the
    Gmail-gated deep-link, Gmail API limits, the `gmail_thread_id` /
-   `gmail_label_id` columns, the frozen `wagmail_prefs` / `wagmail_imap_key`
-   identifiers, and real repository URLs.
+   `gmail_label_id` columns, the then-frozen `wagmail_prefs` /
+   `wagmail_imap_key` identifiers (renamed 2026-08-08, see above), and real
+   repository URLs.
 
    Two items were deliberately out of scope at the time. The cert subject is now
    `CN=WAMailSync Dev` (2026-08-06), and `docs/CNAME` is now
