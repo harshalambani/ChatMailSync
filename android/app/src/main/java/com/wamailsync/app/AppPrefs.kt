@@ -5,7 +5,16 @@ import android.content.Context
 /** Small SharedPreferences wrapper for the watched-folder feature (Home
  * feedback: "can we set an input folder to keep looking for changes in"). */
 object AppPrefs {
-    private const val PREFS_NAME = "wagmail_prefs"
+    // Renamed from "wagmail_prefs" on 2026-08-08. This is a storage identifier,
+    // not a display string: changing it makes an existing install read a
+    // different (empty) prefs file and come back at defaults — backend choice,
+    // IMAP host/port/email, watched folder and the encrypted password all gone.
+    // That was acceptable only because the sole install is our own test device,
+    // which is being cleared in the same change. Once this ships on the Galaxy
+    // Store the identical edit would silently wipe every user's settings on
+    // update, with no error to explain it. SecretStore declares the same name
+    // independently against the same file — the two must stay in step.
+    private const val PREFS_NAME = "wamail_prefs"
     private const val KEY_WATCHED_FOLDER_URI = "watched_folder_uri"
     private const val KEY_AUTO_WATCH_ENABLED = "auto_watch_enabled"
     private const val KEY_IMPORTED_DOC_IDS = "imported_doc_ids"

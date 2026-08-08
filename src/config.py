@@ -22,10 +22,13 @@ _explicit_root: Path | None = None
 def _compute_root() -> Path:
     if _explicit_root is not None:
         return _explicit_root
-    # WAMAILSYNC_ROOT is the current name; WAGMAIL_ROOT is kept as a fallback
-    # for portable installs built before the WAGmailSync -> WAMailSync rename
-    # whose launcher .bat still exports the old variable. Not dead code.
-    env_root = os.environ.get("WAMAILSYNC_ROOT") or os.environ.get("WAGMAIL_ROOT")
+    # WAMAILSYNC_ROOT is the only accepted name. A WAGMAIL_ROOT fallback lived
+    # here until 2026-08-08, for portable installs built before the
+    # WAGmailSync -> WAMailSync rename whose launcher still exported the old
+    # variable. Dropped deliberately: a PortableApps upgrade replaces the
+    # launcher .ini along with App\, so the old name only survived a hand-copy
+    # of App\ over a pre-1.0.0 install, and those were prereleases.
+    env_root = os.environ.get("WAMAILSYNC_ROOT")
     return Path(env_root) if env_root else Path(__file__).parent.parent
 
 
@@ -65,7 +68,7 @@ def set_root(path: str | Path) -> None:
     Must be called before any other src.* module imports config's derived
     path constants (AUTH_DIR, DATA_DIR, INBOX_DIR, ...) — see _apply_root()'s
     docstring. Windows never calls this; it keeps using the WAMAILSYNC_ROOT
-    (or legacy WAGMAIL_ROOT) env var / __file__-relative fallback below.
+    env var / __file__-relative fallback below.
     """
     global _explicit_root
     _explicit_root = Path(path)

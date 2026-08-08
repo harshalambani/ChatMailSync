@@ -382,8 +382,8 @@ Build internals:
   imports PyInstaller's static analysis misses.
 - The portable launcher (`WAMailSyncPortable.bat`) sets `WAMAILSYNC_ROOT` to the
   bundle's `Data\` folder so the frozen exe resolves `auth/` and `data/` correctly.
-  `WAGMAIL_ROOT` is still honoured as a fallback so portable installs built before
-  the rename keep working.
+  It is the only variable honoured; the pre-rename `WAGMAIL_ROOT` fallback was
+  removed on 2026-08-08.
 - `Data\` is never wiped on rebuild, so OAuth tokens and synced state survive
   updates. Place `credentials.json` in `Data\auth\` before first run.
 ```
