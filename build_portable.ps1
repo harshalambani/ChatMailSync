@@ -80,8 +80,13 @@ $LauncherGeneratorHash = "66794A62F8BDC8DF8A05FA36B9812FC34CAC02967AB478E2654C64
 $LauncherGeneratorUrl  = "https://portableapps.com/apps/development/portableapps.com_launcher"
 
 $InstallerExe  = "C:\PortableApps\PortableApps.comInstaller\PortableApps.comInstaller.exe"
-$InstallerVer  = "3.9.17"
-$InstallerHash = "6F025B106F65C95BCE8DA20D9638D90059663D402969C9F3DCFA9DBB28A4E30E"
+# Repinned 3.9.17 -> 3.9.18 on 2026-08-09. The PortableApps.com Platform updated
+# this tool in place on 2026-07-20, which is exactly what the pin exists to catch.
+# The replacement was verified before repinning: Authenticode Status=Valid, signed
+# by the genuine publisher (E=contact@rareideas.com, CN="RARE IDEAS, LLC"), and a
+# single-patch version step. Do not repin without repeating that check.
+$InstallerVer  = "3.9.18"
+$InstallerHash = "43BC8F41B90F5F487BA95E89DA94F4F9F7A3B3A9ED164E5B3137EB904E08855D"
 $InstallerUrl  = "https://portableapps.com/apps/development/portableapps.com_installer"
 
 $AppID = "WAMailSyncPortable"   # must match [Details]:AppID in appinfo.ini
