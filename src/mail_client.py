@@ -61,6 +61,11 @@ from src.config import (
     TOKEN_FILE,
 )
 from src.html_renderer import RenderedChunk, render_chunk
+from src.mail_index import (
+    apply_index_headers,
+    build_index_part,
+    estimate_index_bytes,
+)
 from src.media_extractor import MediaExtractor
 from src.parser import ParsedMessage
 
@@ -1162,15 +1167,21 @@ def _build_mime_message(
 ) -> dict:
     """Build the RFC 2822 message and return the base64url-encoded dict for insert().
 
-    Plain-text only — no HTML part needed for archived chat messages.
+    Plain-text body — no HTML part needed for archived chat messages — wrapped
+    in multipart/mixed so the traceability index can ride along beside it.
     """
     body_text = _format_chunk_body(chunk)
-    msg = MIMEText(body_text, "plain", "utf-8")
+
+    msg = MIMEMultipart("mixed")
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    msg.attach(build_index_part(display_name, chunk, chunk_size, message_id))
+
     msg["Subject"] = _chunk_subject(display_name, chunk, chunk_size)
     msg["From"] = _format_sender(display_name)
     msg["To"] = "me"
     msg["Message-ID"] = message_id
     msg["Date"] = chunk[0].timestamp.strftime("%a, %d %b %Y %H:%M:%S +0000")
+    apply_index_headers(msg, chunk)
 
     if in_reply_to:
         msg["In-Reply-To"] = in_reply_to
@@ -1225,21 +1236,25 @@ def _build_html_mime_message(
         img["Content-Disposition"] = "inline"
         related.attach(img)
 
-    # ── Wrap in multipart/mixed if there are file attachments ─────────────
-    if rendered.attachments:
-        root = MIMEMultipart("mixed")
-        root.attach(related)
-        for att in rendered.attachments:
-            main_t, sub_t = att.mime_type.split("/", 1)
-            file_part = MIMEBase(main_t, sub_t)
-            file_part.set_payload(att.data)
-            _encoders.encode_base64(file_part)
-            # Use add_header() so Python's email library applies RFC 2231 encoding,
-            # preventing header injection via embedded quotes, CR, LF, or non-ASCII.
-            file_part.add_header("Content-Disposition", "attachment", filename=att.filename)
-            root.attach(file_part)
-    else:
-        root = related
+    # ── Wrap in multipart/mixed ───────────────────────────────────────────
+    # Always mixed now, not just when the chat had file attachments: the
+    # traceability index is itself an attachment, and attaching it to a
+    # multipart/related (whose parts are meant to be components of one
+    # document) would be the wrong structure for a standalone file.
+    root = MIMEMultipart("mixed")
+    root.attach(related)
+    for att in rendered.attachments:
+        main_t, sub_t = att.mime_type.split("/", 1)
+        file_part = MIMEBase(main_t, sub_t)
+        file_part.set_payload(att.data)
+        _encoders.encode_base64(file_part)
+        # Use add_header() so Python's email library applies RFC 2231 encoding,
+        # preventing header injection via embedded quotes, CR, LF, or non-ASCII.
+        file_part.add_header("Content-Disposition", "attachment", filename=att.filename)
+        root.attach(file_part)
+
+    # Last, so it sorts after the chat's own attachments in a mail client.
+    root.attach(build_index_part(display_name, chunk, chunk_size, message_id))
 
     # ── RFC 2822 headers ──────────────────────────────────────────────────
     subject = _chunk_subject(display_name, chunk, chunk_size, suffix)
@@ -1248,6 +1263,7 @@ def _build_html_mime_message(
     root["To"]         = "me"
     root["Message-ID"] = message_id
     root["Date"]       = chunk[0].timestamp.strftime("%a, %d %b %Y %H:%M:%S +0000")
+    apply_index_headers(root, chunk)
 
     if in_reply_to:
         root["In-Reply-To"] = in_reply_to
@@ -1278,7 +1294,13 @@ def _size_split_cached(
     # Render with no suffix first; suffix is applied later when N is known.
     rendered = render_chunk(messages, display_name, extractor, "")
 
-    if rendered.total_bytes <= MAX_EMAIL_SIZE_BYTES or len(messages) <= 1 or depth >= 5:
+    # The index rides on the finished email but does not exist yet, so its size
+    # has to be estimated here or the split decision is made against a total
+    # that is short by a few hundred bytes per message. That only bites on the
+    # very largest chunks, which is exactly where the ceiling matters.
+    projected = rendered.total_bytes + estimate_index_bytes(len(messages))
+
+    if projected <= MAX_EMAIL_SIZE_BYTES or len(messages) <= 1 or depth >= 5:
         return [(messages, rendered)]
 
     log.debug(
