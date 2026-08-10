@@ -90,6 +90,10 @@ def test_sync_dry_run_returns_stats_dict(tmp_root):
         "messages_skipped": 0,
         "chats_recovered": 0,
         "errors": [],
+        # Files the provider's message-size limit made unsendable. Part of the
+        # Android contract, not just the desktop summary -- both front-ends have
+        # to be able to tell the user which media will never sync.
+        "media_omitted": [],
         "stopped": False,
     }
 

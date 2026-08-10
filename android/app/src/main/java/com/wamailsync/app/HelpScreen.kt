@@ -60,6 +60,28 @@ private val FAQ = listOf(
         "or survive uninstalling the app — enter it again in Settings there. It stays valid at your " +
         "provider either way. (The Windows edition does the same thing with Windows DPAPI, tied to " +
         "your Windows account on that PC.)",
+    "The sync said some media was \"too large to email\". What happened?" to
+        "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
+        "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +
+        "notice. What can't be split is a single file, usually a long video, that's bigger than the " +
+        "whole cap on its own — no email anywhere can carry it. The message itself is still archived " +
+        "(text, sender, time, its place in the conversation) and the email shows a note in the video's " +
+        "place naming the file and its size. The video isn't lost: it's still in the WhatsApp export " +
+        "you imported, and still on your phone. It will be left out on every future sync too, which is " +
+        "why the sync summary names it. One surprise worth knowing: a 20 MB video doesn't make a 20 MB " +
+        "email — email can't carry raw files, so everything is re-encoded on the way out and grows by " +
+        "about a third. The practical ceiling for one file is around 18 MB on a 25 MB provider.",
+    "What is the watched folder for?" to
+        "It saves you importing by hand. Point it at a folder, and anything WhatsApp drops there " +
+        "(.txt or .zip) is picked up and queued for the next sync. Switch on \"Auto-import from " +
+        "this folder\" and it checks on its own on the interval you choose; leave it off and it " +
+        "only looks when you tap \"Sync now\". Only that one folder is looked at — subfolders are " +
+        "left alone — and a file is only ever picked up once, so re-checking costs you nothing. " +
+        "Your original is never touched at import time; the \"After import\" setting only takes " +
+        "effect once the file has actually reached your mailbox, so a sync that fails or that you " +
+        "stop leaves everything where it was. The Windows edition has the same feature with one " +
+        "difference worth knowing: it can only check while the app is open, and its \"delete\" " +
+        "option sends the file to the Recycle Bin rather than erasing it.",
     "What can't this app do?" to
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",

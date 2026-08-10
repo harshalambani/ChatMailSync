@@ -139,6 +139,7 @@
     <ol>
       <li>Create an app password with your provider. For Gmail: Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App passwords. (Most providers require two-factor authentication to be on first.)</li>
       <li>Open the app and click the <strong>gear icon</strong> (top-right) to open Settings.</li>
+      <li>Under <strong>Mail account</strong>, click <strong>Change&hellip;</strong>.</li>
       <li>Leave <strong>Connect via</strong> set to <em>Email app password (IMAP)</em>.</li>
       <li>Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom IMAP server &mdash; host and port fill in automatically for the known ones).</li>
       <li>Enter your email address and the app password, then <strong>Save</strong>.</li>
@@ -229,8 +230,18 @@
     <h2>7. Troubleshooting &amp; FAQ</h2>
     <dl class="faq">
       <dt>The app says "Not connected" or authorising fails.</dt>
-      <dd><strong>On IMAP</strong> (the default): open Settings and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
+      <dd><strong>On IMAP</strong> (the default): open <strong>Settings &rarr; Mail account &rarr; Change&hellip;</strong> and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
       <strong>On Google sign-in:</strong> click <strong>Connect</strong> and complete the sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh. Remember Google expires this sign-in about every 7 days (see section 2).</dd>
+
+      <dt>What is the watched folder for?</dt>
+      <dd>It saves you copying files in by hand. Point it at a folder in <strong>Settings</strong> &mdash; wherever you save WhatsApp exports &mdash; and any <code>.txt</code> or <code>.zip</code> that appears there is copied into the inbox and queued for the next sync. Tick <strong>Check it automatically</strong> and it looks on its own on the interval you choose; leave it unticked and it only looks when you click <strong>Check watched folder</strong>.
+      <p>Only that one folder is looked at &mdash; subfolders are left alone &mdash; and each file is picked up only once, so leaving it switched on costs you nothing. Your original is never touched at import time: the <strong>After syncing</strong> setting takes effect only once a file has actually reached your mailbox, so a sync that fails, or one you stop, leaves everything exactly where it was. The delete option sends the original to the Recycle Bin, never a permanent delete; where it cannot do that (a network drive, say) it leaves the file alone and says so in the log.</p>
+      <p><strong>One limitation:</strong> the check only runs while this app is open &mdash; a closed app has nothing running to do the looking. The Android edition uses the phone's own job scheduler and does keep checking in the background; its shortest interval is 15 minutes, a rule Android imposes, where this edition can go down to 5.</p></dd>
+
+      <dt>The sync said some media was "too large to email".</dt>
+      <dd>Every email provider caps how big a single email can be &mdash; 25 MB at Gmail, Outlook and Yahoo, 20 MB at iCloud, more at some others. The app stays under that cap by splitting a busy day across several emails, so in almost every case you will never notice it. One case cannot be split: a <em>single</em> file, usually a long video, larger than the whole cap on its own. No email anywhere can carry it.
+      <p>When that happens the message is still archived &mdash; the text, the sender, the time, its place in the conversation &mdash; and the email carries a note where the video would have been, naming the file and its size. Only the file itself is left out, and it will be left out on every future sync too, which is why the sync summary lists it by name rather than letting you discover it years later. <strong>The video is not lost:</strong> it is still in the WhatsApp export you imported, and still on your phone. If you want it in your mailbox, send it to yourself separately, or shrink it first.</p>
+      <p>One thing that surprises people: a 20 MB video does not make a 20 MB email. Email cannot carry raw files, so everything is re-encoded on the way out, which adds about a third &mdash; a 20 MB video arrives as a roughly 27 MB email. That is why the practical ceiling for a single file is around 18 MB on a 25 MB provider.</p></dd>
 
       <dt>My file doesn't show up in the inbox.</dt>
       <dd>Only <code>.txt</code> and <code>.zip</code> files are accepted. Make sure you exported the chat (not a screenshot), and that the file actually copied over. Click the <strong>⟳</strong> refresh button to re-check the inbox folder.</dd>

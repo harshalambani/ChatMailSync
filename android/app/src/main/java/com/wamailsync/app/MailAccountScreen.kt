@@ -55,9 +55,17 @@ data class ImapProviderInfo(val key: String, val label: String, val host: String
 // Matches gui.py's _BACKEND_LABELS exactly, so the two apps describe the
 // same choice with the same words. Moved here with the rest of the account
 // UI it labels; MainActivity.kt uses it too (mail-account summary line).
+//
+// Both labels name the SCOPE of the choice, not just its mechanism. The old
+// pair ("Google sign-in (OAuth)" / "Email app password (IMAP)") described how
+// you authenticate but left the thing that actually decides the choice unsaid:
+// the OAuth path can only ever reach a Gmail mailbox. It is built on Gmail API
+// scopes (gmail.insert / gmail.labels, see MainActivity.kt's scope list), so
+// picking it with an Outlook or Fastmail address in mind is a dead end the UI
+// used to let you walk into.
 val BACKEND_LABELS = mapOf(
-    AppPrefs.MAIL_BACKEND_IMAP to "Email app password (IMAP)",
-    AppPrefs.MAIL_BACKEND_GMAIL_OAUTH to "Google sign-in (OAuth)",
+    AppPrefs.MAIL_BACKEND_IMAP to "Any provider (IMAP app password)",
+    AppPrefs.MAIL_BACKEND_GMAIL_OAUTH to "Gmail only (Google sign-in)",
 )
 
 // Official, human-verified "create an app password" pages, one per

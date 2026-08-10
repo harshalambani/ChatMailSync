@@ -39,11 +39,12 @@ your real password.
    Account → Security → 2-Step Verification → App passwords. (Most providers
    require two-factor authentication to be on before they will issue one.)
 2. Open the app, click the **gear icon** (top-right) to open Settings.
-3. Leave **Connect via** set to *Email app password (IMAP)*.
-4. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
+3. Under **Mail account**, click **Change…**.
+4. Leave **Connect via** set to *Email app password (IMAP)*.
+5. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
-5. Enter your email address and the app password, then **Save**.
-6. The indicator turns **green** and says **Connected**.
+6. Enter your email address and the app password, then **Save**.
+7. The indicator turns **green** and says **Connected**.
 
 This does not expire. To disconnect later, click **Forget saved password**.
 
@@ -115,6 +116,35 @@ Once the export file is on your computer:
 Added files appear in the **Files in inbox** list, with a count like
 "2 files ready to sync". You can add several chats at once.
 
+### Letting the app fetch them for you — the watched folder
+
+If your exports always land in the same place (your Downloads folder, or a folder
+your phone syncs to), you can have the app collect them itself.
+
+1. Open **Settings** and click **Choose…** next to **Watched folder**.
+2. Pick the folder. Nothing else is required — click **Check watched folder** on
+   the main window whenever you want it to look.
+3. To have it look on its own, tick **Check it automatically** and pick an
+   interval (every 5 minutes up to once a day). Newly found files are imported
+   and, if you are connected, synced straight away.
+4. **After syncing** decides what happens to the *original* in the watched
+   folder: leave it in place (the default), move it into a `synced` subfolder, or
+   send it to the Recycle Bin.
+
+Worth knowing:
+
+- Only that one folder is looked at. Subfolders are ignored, so the `synced`
+  subfolder never gets re-imported.
+- Each file is picked up only once, however often the check runs.
+- The **After syncing** rule applies only after a file has genuinely reached your
+  mailbox. A sync that fails, or that you stop, leaves your originals untouched.
+- The Recycle Bin option is exactly that — recoverable. If the app cannot recycle
+  a file (on a network drive, for instance) it leaves it alone and says so in the
+  log rather than deleting it for good.
+- **The check only runs while the app is open.** There is no background service.
+  The Android edition does check in the background, but its shortest interval is
+  15 minutes because Android requires it.
+
 ---
 
 ## 5. Running a sync
@@ -158,8 +188,8 @@ attached for download.
 
 **The app says "Not connected" or authorising fails.**
 If you're using **Email app password (IMAP)**, double-check the email address
-and app password in Settings, and that the app password hasn't been revoked by
-your provider. If you're using **Google sign-in**, click **Connect** and
+and app password under **Settings → Mail account → Change…**, and that the app
+password hasn't been revoked by your provider. If you're using **Google sign-in**, click **Connect** and
 complete the sign-in in your browser, making sure you pick the right Google
 account and approve the permission request. If it still fails, click **Sign
 Out**, then **Connect** again to start fresh.
@@ -192,7 +222,29 @@ key tied to your Windows account on that particular machine, so a copy of the
 app carried to a different PC — or opened under a different Windows user —
 cannot unlock it. Nobody who picks up the folder can read your password either,
 which is the point. Your app password is still valid at your provider: just
-enter it again in Settings on the new machine.
+enter it again under **Settings → Mail account** on the new machine.
+
+**The sync said some media was "too large to email".**
+Every email provider caps how big a single email can be — 25 MB at Gmail,
+Outlook and Yahoo, 20 MB at iCloud, more at some others. The app works within
+that cap by splitting a busy day across several emails, so in almost every case
+you will never notice it. One case cannot be split: a *single* file, usually a
+long video, larger than the whole cap on its own. No email anywhere can carry
+it.
+
+When that happens the message is still archived — the text, the sender, the
+time, its place in the conversation — and the email carries a note where the
+video would have been, naming the file and its size. Only the file itself is
+left out, and it will be left out on every future sync too, which is why the
+sync summary lists it by name rather than letting you discover it years later.
+**The video is not lost**: it is still in the WhatsApp export you imported, and
+still on your phone. If you want it in your mailbox, send it to yourself
+separately, or shrink it first.
+
+One thing that surprises people: a 20 MB video does not make a 20 MB email.
+Email cannot carry raw files, so everything is re-encoded on the way out, which
+adds about a third — a 20 MB video arrives as a roughly 27 MB email. That is why
+the practical ceiling for a single file is around 18 MB on a 25 MB provider.
 
 **My file doesn't show up in the inbox.**
 Only `.txt` and `.zip` files are accepted. Make sure you exported the chat (not a

@@ -91,7 +91,30 @@ Only these. Anything else is a bug.
   API used to get there.
 - **Watched-folder mechanics.** Android uses SAF document URIs and a
   WorkManager periodic job with a platform-enforced 15-minute floor; Windows
-  polls a plain filesystem path. Same feature, unavoidably different plumbing.
+  (`src/watch_folder.py`, wired up in `gui.py`) picks a plain filesystem path
+  and polls it from the GUI's Tk `after()` timer. Same feature, unavoidably
+  different plumbing - and two consequences the user does see, which is why
+  they are written down rather than left to be discovered:
+  - **Windows only checks while the app is open.** A Tk timer cannot run
+    otherwise, and the alternative - a Windows service or a Task Scheduler
+    entry - is a much larger thing to install, own and uninstall than this
+    product currently is. Said in the Settings note and in the help on both
+    platforms. Android, being a scheduled job, does check with the app closed.
+  - **Windows offers a 5-minute interval, Android's shortest is 15.** The floor
+    is WorkManager's and cannot be lowered; a timer has no such rule. Every
+    other interval, and every label, is the same list on both.
+
+  Everything the user is promised *is* the same on both: the scan is
+  non-recursive, a source is imported only once, the synced-file rule is
+  applied only after delivery is confirmed, and the settings keys are the same
+  names in the same shapes. The one wording difference is deliberate - Android
+  says "Delete after import" where Windows says "Delete after import (Recycle
+  Bin)", because the Windows build recycles rather than erasing and it would be
+  wrong to hide that behind matched wording.
+
+  > Recorded honestly: this entry described the Windows half in the present
+  > tense before the Windows half existed. It is true as of the build that
+  > added `src/watch_folder.py`; earlier releases had the Android side only.
 
 ## Queued work - both platforms, both times
 

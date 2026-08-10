@@ -310,11 +310,56 @@ ATTACHMENT_PATTERNS = [
     r"^<attached:\s*(.+?)>\s*$",
 ]
 
-# Maximum total MIME payload per email (bytes).
-# Applies to both backends. Gmail hard-limits at 25 MB and is the tightest of
-# the providers we target, so it sets the ceiling; we stay at 20 MB to leave
-# headroom for MIME headers and base64 encoding overhead (~33% expansion).
-MAX_EMAIL_SIZE_BYTES = 20 * 1_048_576  # 20 MiB
+# ---------------------------------------------------------------------------
+# Message size limits
+# ---------------------------------------------------------------------------
+#
+# Every number below is a WIRE size: the length of the finished RFC 2822
+# message as the provider receives it, base64 and all. That distinction is the
+# whole point of this block.
+#
+# It replaces MAX_EMAIL_SIZE_BYTES = 20 MiB, which was compared against the sum
+# of *raw* media bytes while carrying the comment "we stay at 20 MB to leave
+# headroom for ... base64 encoding overhead (~33% expansion)". The arithmetic
+# ran the wrong way: base64 is a multiplier applied to the payload AFTER the
+# check, not an allowance you subtract before it. 20 MiB of raw media leaves as
+# ~28.7 MB on the wire, so any chunk between roughly 17.4 MiB and 20 MiB passed
+# the budget and was then rejected by Gmail with
+# "[TOOBIG] Message too large" - observed live on 2026-08-10, where one
+# oversized day took a whole 1,505-message chat down with it.
+#
+# So: measure encoded bytes (html_renderer.encoded_part_bytes), compare against
+# these, and the constant means what it says.
+
+# Fallback ceiling for a server that neither advertises RFC 7889 APPENDLIMIT
+# nor appears in the table below. Deliberately the tightest common limit rather
+# than an average - guessing high produces the exact failure described above,
+# guessing low only costs an extra email.
+DEFAULT_MAX_MESSAGE_BYTES = 25_000_000
+
+# Per-provider wire limits, keyed to match IMAP_PROVIDERS above. Only consulted
+# when the server does not advertise APPENDLIMIT (Gmail, for one, does not).
+# These are the providers' documented attachment/message ceilings; where a
+# provider states a limit for "attachments" the true message limit is usually a
+# little higher, which is headroom in our favour, not against us.
+PROVIDER_MAX_MESSAGE_BYTES = {
+    "gmail":    25_000_000,
+    "outlook":  25_000_000,
+    "yahoo":    25_000_000,
+    "icloud":   20_000_000,
+    "fastmail": 70_000_000,
+}
+
+# Fraction of the provider limit we will actually fill. The remainder absorbs
+# what the projection does not model exactly: MIME boundary strings, per-part
+# headers, the Subject/From/References block, and the traceability index. 0.90
+# is generous, and generosity here is cheap - the cost of being 5% under is one
+# more email, the cost of being 1% over is a hard failure that blocks the chat.
+MESSAGE_SIZE_SAFETY_FACTOR = 0.90
+
+# Kept as an alias so nothing that imported the old name breaks silently at
+# import time. It is NOT the same quantity - do not use it for new code.
+MAX_EMAIL_SIZE_BYTES = DEFAULT_MAX_MESSAGE_BYTES
 
 # Maximum total decompressed bytes allowed from a single ZIP archive.
 # Guards against zip-bomb attacks where a small .zip expands to enormous content.

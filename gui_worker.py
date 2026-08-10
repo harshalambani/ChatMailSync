@@ -27,6 +27,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
@@ -288,7 +289,14 @@ def _check_gmail_auth_status() -> tuple[bool, str]:
                 except OSError:
                     pass
             return True, "Connected"
-        return False, "Token invalid — reconnect"
+        return False, "Sign-in expired — reconnect"
+    except RefreshError:
+        # Google revoked the grant (the unverified-app 7-day expiry, most
+        # often). Reported as the plain fact rather than as
+        # "('invalid_grant: Bad Request', {...})", which told the user nothing
+        # and read like a fault in the app. Clicking Connect fixes it:
+        # get_credentials() falls back to the browser flow for exactly this.
+        return False, "Sign-in expired — reconnect"
     except Exception as exc:
         return False, f"Auth error: {exc}"
 

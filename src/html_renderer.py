@@ -53,12 +53,78 @@ class AttachmentPart:
 
 
 @dataclass
+class MediaOmission:
+    """One media file left out because no single email could ever carry it.
+
+    Not an error and not a silent drop: the message itself is archived, the
+    body text survives, and the HTML carries a visible placeholder in the
+    file's place. This record exists so the omission is also reported back to
+    the user rather than only being visible to whoever opens that email.
+    """
+    filename: str
+    size_bytes: int
+    limit_bytes: int
+
+
+@dataclass
 class RenderedChunk:
     """Complete render output for one email."""
     html_body: str
     inline_parts: list[InlinePart] = field(default_factory=list)
     attachments: list[AttachmentPart] = field(default_factory=list)
-    total_bytes: int = 0   # HTML + all media — used for size-budget checking
+    total_bytes: int = 0   # HTML + all media, RAW — for logs and diagnostics
+    wire_bytes: int = 0    # what the provider will actually receive — see below
+    omissions: list[MediaOmission] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Wire-size projection
+# ---------------------------------------------------------------------------
+#
+# total_bytes above counts raw payload. Nothing is sent raw: inline images and
+# attachments are base64-encoded by _build_html_mime_message(), and so is the
+# HTML body, because MIMEText(..., charset="utf-8") uses base64 as its
+# transfer encoding. Comparing raw bytes against a provider's limit therefore
+# understates the real size by ~37% - see the long note in config.py for the
+# failure that produced.
+
+_B64_LINE_LENGTH = 76   # chars per line, per RFC 2045
+_B64_LINE_ENDING = 2    # CRLF
+
+# Rough per-part cost of a MIME boundary plus Content-Type/Transfer-Encoding/
+# Disposition headers. Approximate on purpose; MESSAGE_SIZE_SAFETY_FACTOR is
+# what actually covers modelling error, this just keeps the estimate honest
+# for chunks made of many small media files.
+_PART_HEADER_BYTES = 220
+
+
+def encoded_part_bytes(raw_length: int) -> int:
+    """Bytes one payload of `raw_length` occupies once base64-encoded.
+
+    4 chars per 3 bytes, rounded up, plus a CRLF every 76 chars, plus the
+    part's own headers and boundary.
+    """
+    if raw_length <= 0:
+        return _PART_HEADER_BYTES
+    b64_chars = ((raw_length + 2) // 3) * 4
+    line_breaks = (b64_chars // _B64_LINE_LENGTH) * _B64_LINE_ENDING
+    return b64_chars + line_breaks + _PART_HEADER_BYTES
+
+
+def max_raw_bytes_for(wire_budget: int) -> int:
+    """Largest raw payload that still fits inside `wire_budget` once encoded.
+
+    The inverse of encoded_part_bytes(), used to decide whether a single media
+    file can ever be delivered - a question splitting cannot answer, because a
+    message with one 40 MB video does not get smaller when you halve the chunk
+    around it.
+    """
+    usable = wire_budget - _PART_HEADER_BYTES
+    if usable <= 0:
+        return 0
+    # Undo the CRLF padding first, then the 4/3 expansion.
+    b64_chars = int(usable / (1 + _B64_LINE_ENDING / _B64_LINE_LENGTH))
+    return max(0, (b64_chars // 4) * 3)
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +237,7 @@ def render_chunk(
     display_name: str,
     extractor: Optional["MediaExtractor"],
     label: str = "",
+    max_media_bytes: Optional[int] = None,
 ) -> RenderedChunk:
     """Render messages into a WhatsApp-light HTML email.
 
@@ -179,6 +246,14 @@ def render_chunk(
         display_name:  Chat name, shown in the day-separator pill.
         extractor:     Open MediaExtractor for this chat's source file, or None.
         label:         Optional suffix added to the separator (e.g. "Part 2/3").
+        max_media_bytes: Largest single media file that can be carried, raw. A
+                       file over this is replaced by a visible placeholder and
+                       recorded in `omissions`. This is the one size problem
+                       splitting cannot solve - halving a chunk around a 40 MB
+                       video still leaves the 40 MB video - so it has to be
+                       decided here, at render time, per file. None disables
+                       the check entirely (the default, for callers that are
+                       not building a real email).
 
     Returns:
         RenderedChunk — caller is responsible for building the MIME message from it.
@@ -188,6 +263,7 @@ def render_chunk(
 
     inline_parts: list[InlinePart]     = []
     attachments:  list[AttachmentPart] = []
+    omissions:    list[MediaOmission]  = []
     body_parts:   list[str]            = []
 
     # Day-separator pill.
@@ -203,7 +279,10 @@ def render_chunk(
     for msg in messages:
         outgoing = msg.sender.strip().lower() == "you"
         body_parts.append(
-            _render_bubble(msg, outgoing, extractor, inline_parts, attachments)
+            _render_bubble(
+                msg, outgoing, extractor, inline_parts, attachments,
+                max_media_bytes, omissions,
+            )
         )
 
     html_body = (
@@ -217,10 +296,22 @@ def render_chunk(
         + '</div></body></html>'
     )
 
+    html_bytes = len(html_body.encode("utf-8"))
+
     total_bytes = (
-        len(html_body.encode("utf-8"))
+        html_bytes
         + sum(len(p.data) for p in inline_parts)
         + sum(len(a.data) for a in attachments)
+    )
+
+    # What the provider will actually be handed. Every one of these parts is
+    # base64-encoded on the way out - including the HTML, because MIMEText with
+    # a utf-8 charset uses base64 as its transfer encoding - so this runs about
+    # 37% above total_bytes. Size decisions must use this one.
+    wire_bytes = (
+        encoded_part_bytes(html_bytes)
+        + sum(encoded_part_bytes(len(p.data)) for p in inline_parts)
+        + sum(encoded_part_bytes(len(a.data)) for a in attachments)
     )
 
     return RenderedChunk(
@@ -228,6 +319,8 @@ def render_chunk(
         inline_parts=inline_parts,
         attachments=attachments,
         total_bytes=total_bytes,
+        wire_bytes=wire_bytes,
+        omissions=omissions,
     )
 
 
@@ -241,6 +334,8 @@ def _render_bubble(
     extractor: Optional["MediaExtractor"],
     inline_parts: list[InlinePart],
     attachments: list[AttachmentPart],
+    max_media_bytes: Optional[int] = None,
+    omissions: Optional[list[MediaOmission]] = None,
 ) -> str:
     time_str = msg.timestamp.strftime("%H:%M")
 
@@ -257,7 +352,8 @@ def _render_bubble(
     media_html = ""
     if msg.attachment_filename:
         media_html = _render_media(
-            msg.attachment_filename, extractor, inline_parts, attachments
+            msg.attachment_filename, extractor, inline_parts, attachments,
+            max_media_bytes, omissions,
         )
 
     # ── Text body (strip the attachment marker for display) ────────────────
@@ -278,11 +374,18 @@ def _render_bubble(
     )
 
 
+def _format_size(num_bytes: int) -> str:
+    mb = num_bytes / 1_000_000
+    return f"{mb:.1f} MB" if mb >= 1 else f"{num_bytes / 1000:.0f} KB"
+
+
 def _render_media(
     filename: str,
     extractor: Optional["MediaExtractor"],
     inline_parts: list[InlinePart],
     attachments: list[AttachmentPart],
+    max_media_bytes: Optional[int] = None,
+    omissions: Optional[list[MediaOmission]] = None,
 ) -> str:
     """Return the HTML fragment for one media item, and populate the part lists."""
 
@@ -302,6 +405,29 @@ def _render_media(
         )
 
     data, mime_type = result
+
+    # One file too big for any single email. Splitting cannot help here: a
+    # ParsedMessage carries at most one attachment, so this file is already
+    # alone in the smallest email we could ever build. The message, its text
+    # and its place in the thread are all still archived - only the bytes are
+    # left behind, and the placeholder plus the MediaOmission record make sure
+    # that is visible both in the email and in the sync report.
+    if max_media_bytes is not None and len(data) > max_media_bytes:
+        if omissions is not None:
+            omissions.append(
+                MediaOmission(
+                    filename=filename,
+                    size_bytes=len(data),
+                    limit_bytes=max_media_bytes,
+                )
+            )
+        return (
+            f'<div style="{_PLACEHOLDER}">'
+            f'📎 {_html.escape(filename)} — {_format_size(len(data))}, '
+            f'too large to email (limit {_format_size(max_media_bytes)}). '
+            f'Not included; it stays in your WhatsApp export.'
+            f'</div>'
+        )
 
     if _is_inline_image(mime_type):
         cid = f"img-{uuid.uuid4().hex[:12]}"
