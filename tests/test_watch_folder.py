@@ -6,6 +6,7 @@ than the Tk plumbing: nothing here imports gui.py, and no folder outside
 tmp_path is ever touched.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -88,9 +89,13 @@ def test_a_source_is_never_imported_twice(folders):
     assert second.imported == []
 
 
-def test_case_differences_in_the_path_do_not_defeat_the_ledger(folders):
-    """Windows reaches the same folder under several spellings; comparing raw
-    strings would let one export import twice."""
+def test_case_differences_in_the_path_follow_the_filesystem(folders):
+    """Windows reaches the same folder under several spellings, so comparing
+    raw strings there would let one export import twice. On Linux the same two
+    spellings are two genuinely different files, and folding case would do the
+    opposite damage -- silently refusing to import a real export. The ledger
+    therefore follows the platform (os.path.normcase), and so does this test;
+    asserting the Windows answer everywhere is what made it fail on CI."""
     watched, inbox = folders
     source = _export(watched, "Chat.txt")
 
@@ -98,7 +103,11 @@ def test_case_differences_in_the_path_do_not_defeat_the_ledger(folders):
     (inbox / "Chat.txt").unlink()
     shouty = [str(source).upper()]
 
-    assert scan_watch_folder(watched, inbox, shouty).imported == []
+    again = scan_watch_folder(watched, inbox, shouty).imported
+    if os.path.normcase("A") == "a":       # case-insensitive: Windows, macOS
+        assert again == []
+    else:
+        assert again == ["Chat.txt"]
     assert first.ledger  # and the normal path really did ledger something
 
 
