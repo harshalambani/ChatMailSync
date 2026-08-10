@@ -140,7 +140,15 @@ re-measure is what makes this recoverable by whoever touches it next.
 ## 1b. Stop tuning the number - dismiss the splash on ready
 
 **Added 2026-08-09. Supersedes Trap 1 and the sizing recipe above.** Shipped in
-PA Skills 3.6.0 (PR #169). WA Mail Sync has **not** got this yet.
+PA Skills 3.6.0 (PR #169). **WA Mail Sync has this as of v1.2.1** - `_splash.py`
+plus a one-shot `<Map>` binding in `gui.py`, with `SplashTime` raised 2500 ->
+15000 to bound the failure case instead of estimating the start time.
+
+The `/NOCANCEL` check below was re-run here rather than inherited: PA Skills
+verified generator **2.2.4**, this repo pins **2.2.9** (`build_portable.ps1`),
+and 2.2.9's `SplashScreen.nsh` line 24 still passes neither `/NOCANCEL` nor
+`/PASSIVE`. Two versions apart, same result - but keep re-checking it, because
+the day it changes the symptom is "nothing happens", not an error.
 
 Everything above accepts the premise that `SplashTime` is a duration you estimate.
 That premise is what forces the choice between a gap (splash clears over a blank
