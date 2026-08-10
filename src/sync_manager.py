@@ -56,6 +56,27 @@ _FS_PATH_RE = re.compile(
 )
 
 
+def _collect_omissions(stats: "SyncStats", display_name: str, results: list) -> None:
+    """Fold any too-large media reported by a push into the run's summary.
+
+    Deduplicated on the file's own name: a chat re-synced after new messages
+    arrive re-renders the same day, and the same video would otherwise be
+    announced again on every run.
+    """
+    seen = set(stats.media_omitted)
+    for result in results:
+        for om in getattr(result, "omissions", ()) or ():
+            mb = om.size_bytes / 1_000_000
+            limit_mb = om.limit_bytes / 1_000_000
+            line = (
+                f"{display_name}: {om.filename} ({mb:.1f} MB) exceeds the "
+                f"{limit_mb:.0f} MB per-email limit"
+            )
+            if line not in seen:
+                seen.add(line)
+                stats.media_omitted.append(line)
+
+
 def _scrub_paths(text: str) -> str:
     """Replace absolute filesystem paths in error text with their basename only.
 
@@ -96,6 +117,13 @@ class SyncStats:
     messages_skipped: int = 0  # deduped or filtered
     chats_recovered: int = 0
     errors: list[str] = field(default_factory=list)
+    # Media that no email could ever carry -- a single file larger than the
+    # provider's whole message limit. Kept apart from `errors` because nothing
+    # failed: the message, its text and its place in the thread were all
+    # archived. Only the file itself stayed behind, and it will stay behind on
+    # every future run too, so the user needs to be told once and plainly
+    # rather than left to find a placeholder inside an email years from now.
+    media_omitted: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         lines = [
@@ -106,6 +134,13 @@ class SyncStats:
         ]
         if self.chats_recovered:
             lines.append(f"Recovered {self.chats_recovered} interrupted run(s)")
+        if self.media_omitted:
+            lines.append(
+                "Media too large to email (archived without the file - it stays "
+                "in your WhatsApp export):"
+            )
+            for m in self.media_omitted:
+                lines.append(f"  - {m}")
         if self.errors:
             lines.append("Errors:")
             for e in self.errors:
@@ -320,6 +355,8 @@ class SyncManager:
                 fail_sync_run(run_id, str(exc), self.db_path)
             return
 
+        _collect_omissions(stats, display_name, results)
+
         # Persist mail IDs (thread ID and anchor Message-ID from first chunk).
         new_anchor_mid = (
             results[0].message_id
@@ -532,6 +569,8 @@ class SyncManager:
             fail_sync_run(run_id, f"recovery push failed: {exc}", self.db_path)
             stats.files_failed += 1
             return False
+
+        _collect_omissions(stats, chat["display_name"], results)
 
         # Persist.
         new_anchor_mid = (

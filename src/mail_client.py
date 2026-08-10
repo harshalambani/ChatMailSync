@@ -53,14 +53,23 @@ from src.config import (
     BACKOFF_BASE_DELAY,
     BACKOFF_MAX_ATTEMPTS,
     CREDENTIALS_FILE,
+    DEFAULT_MAX_MESSAGE_BYTES,
     GMAIL_SCOPES,
     GMAIL_SOCKET_TIMEOUT,
+    IMAP_PROVIDERS,
     LABEL_MAX_LENGTH,
     LABEL_PARENT,
-    MAX_EMAIL_SIZE_BYTES,
+    MESSAGE_SIZE_SAFETY_FACTOR,
+    PROVIDER_MAX_MESSAGE_BYTES,
     TOKEN_FILE,
 )
-from src.html_renderer import RenderedChunk, render_chunk
+from src.html_renderer import (
+    MediaOmission,
+    RenderedChunk,
+    encoded_part_bytes,
+    max_raw_bytes_for,
+    render_chunk,
+)
 from src.mail_index import (
     apply_index_headers,
     build_index_part,
@@ -181,6 +190,7 @@ def get_credentials(
     Raises:
         FileNotFoundError: if credentials_file doesn't exist.
     """
+    from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -197,10 +207,34 @@ def get_credentials(
         creds = Credentials.from_authorized_user_file(str(token_file), GMAIL_SCOPES)
 
     if not creds or not creds.valid:
+        refreshed = False
         if creds and creds.expired and creds.refresh_token:
             log.debug("Refreshing expired OAuth2 token")
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+                refreshed = True
+            except RefreshError as refresh_err:
+                # The grant is gone at Google's end, not merely expired: the
+                # refresh token was revoked, the app's OAuth client is still
+                # unverified and hit the ~7-day "Testing" expiry, or the user
+                # removed access from their Google account. Google answers all
+                # of these with "invalid_grant".
+                #
+                # Letting this propagate is what made the app unrecoverable:
+                # the stored token satisfies `expired and refresh_token`
+                # forever, so every Connect took this branch, raised, and never
+                # reached the browser flow below. The only escape was deleting
+                # token.json by hand -- for the one expiry the app's own help
+                # tells users to expect roughly every week.
+                #
+                # A dead refresh token has exactly one meaning, "sign in
+                # again", so do that rather than reporting a library error.
+                log.info(
+                    "Stored token could not be refreshed (%s); re-authorising",
+                    refresh_err,
+                )
+                creds = None
+        if not refreshed:
             log.info("Opening browser for OAuth2 authorisation…")
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(credentials_file), GMAIL_SCOPES
@@ -278,6 +312,64 @@ class MailTransportError(Exception):
     def __init__(self, message: str, status: Optional[int] = None) -> None:
         super().__init__(message)
         self.status = status
+
+
+class MessageTooLargeError(MailTransportError):
+    """The provider refused this message for its size, and only its size.
+
+    Split out from the general error because it is the one failure the pusher
+    can genuinely recover from in flight: the message was rejected at
+    submission, so nothing landed, nothing was recorded, and the same messages
+    re-sent as two smaller emails will succeed. Everything else that reaches
+    push_chunks() is either retried by _insert_with_backoff() or fatal.
+
+    Kept deliberately narrow (see _is_size_rejection). Treating an ambiguous
+    failure as "too big" would re-send messages that may already be in the
+    mailbox; the cost of missing a genuine size rejection is one failed chat,
+    the cost of a false positive is duplicates in the user's archive.
+    """
+
+    def __init__(self, message: str, status: Optional[int] = 413) -> None:
+        super().__init__(message, status=status)
+
+
+# Phrases that mean "too big" and cannot plausibly mean anything else. TOOBIG
+# is the response code Gmail returns; the rest cover servers that answer with
+# prose instead. No bare "exceeds" or "limit" - both appear in quota and rate
+# messages, which retrying at a smaller size will not fix.
+_SIZE_REJECTION_MARKERS = (
+    "TOOBIG",
+    "MESSAGE TOO LARGE",
+    "MESSAGE TOO BIG",
+    "MESSAGE SIZE EXCEEDS",
+    "SIZE LIMIT EXCEEDED",
+    "MAXIMUM MESSAGE SIZE",
+)
+
+
+def _is_size_rejection(text: str) -> bool:
+    t = (text or "").upper()
+    return any(marker in t for marker in _SIZE_REJECTION_MARKERS)
+
+
+def _transport_error(message: str, status: Optional[int]) -> MailTransportError:
+    """Build the right error class for a status, so callers can catch by type."""
+    if status == 413:
+        return MessageTooLargeError(message)
+    return MailTransportError(message, status=status)
+
+
+def is_too_large(exc: BaseException) -> bool:
+    """True when `exc` is a provider refusing a message purely for its size.
+
+    Covers both shapes this can arrive in: an IMAP [TOOBIG] response mapped to
+    413 by _status_for_imap_text(), and the Gmail API's HTTP 413.
+    """
+    if isinstance(exc, MessageTooLargeError):
+        return True
+    if isinstance(exc, MailTransportError):
+        return exc.status == 413 or _is_size_rejection(str(exc))
+    return False
 
 
 class DiscoveryTransport:
@@ -438,6 +530,12 @@ def _status_for_imap_text(text: str) -> int:
     transient — a stuck permanent error retried 5x just delays the failure.
     """
     t = text.upper()
+    # Size first: [TOOBIG] is permanent for THIS message but says nothing about
+    # the next one, so it gets its own status rather than joining the generic
+    # 400s. push_chunks() keys off 413 to split and re-send instead of failing
+    # the whole chat (see MessageTooLargeError).
+    if _is_size_rejection(t):
+        return 413
     if any(code in t for code in ("SERVERBUG", "UNAVAILABLE", "INUSE")):
         return 503
     if "OVERQUOTA" in t:
@@ -766,6 +864,63 @@ class ImapTransport:
             self._conn = factory()
         return self._conn
 
+    # -- size limit --------------------------------------------------------
+
+    @property
+    def max_message_bytes(self) -> int:
+        """Largest message this server will accept, best available answer.
+
+        Three sources, most authoritative first:
+
+        1. RFC 7889 APPENDLIMIT in the CAPABILITY response. A server that
+           advertises this is stating its exact maximum, which beats anything
+           we could hardcode and stays right when the provider changes it.
+        2. PROVIDER_MAX_MESSAGE_BYTES, matched on hostname - for the servers
+           that do not advertise. Gmail is one of them, which is why the table
+           still has to exist.
+        3. DEFAULT_MAX_MESSAGE_BYTES for anything unrecognised.
+
+        None of the three is trusted absolutely: push_chunks() lowers the
+        ceiling further if the server actually rejects something, so a wrong
+        guess here costs one wasted upload per run, not a failed chat.
+        """
+        advertised = self._appendlimit()
+        if advertised:
+            return advertised
+        host = (self._host or "").lower()
+        for key, preset in IMAP_PROVIDERS.items():
+            preset_host = (preset.get("host") or "").lower()
+            if preset_host and preset_host == host:
+                limit = PROVIDER_MAX_MESSAGE_BYTES.get(key)
+                if limit:
+                    return limit
+        return DEFAULT_MAX_MESSAGE_BYTES
+
+    def _appendlimit(self) -> Optional[int]:
+        """Parse APPENDLIMIT=<n> out of the live connection's capabilities.
+
+        Never opens a connection just to ask: if we are not connected yet the
+        answer is simply "unknown", and the caller falls back. Capabilities are
+        whatever imaplib captured at greeting/login time, so this is free.
+        """
+        conn = self._conn
+        if conn is None:
+            return None
+        try:
+            caps = getattr(conn, "capabilities", ()) or ()
+        except Exception:  # noqa: BLE001 - a capability read must never break a push
+            return None
+        for cap in caps:
+            text = cap.decode("ascii", "replace") if isinstance(cap, bytes) else str(cap)
+            if not text.upper().startswith("APPENDLIMIT"):
+                continue
+            _, _, value = text.partition("=")
+            # Bare "APPENDLIMIT" with no value means per-mailbox limits that
+            # only a STATUS call can reveal - not a number we can use here.
+            if value.strip().isdigit():
+                return int(value.strip())
+        return None
+
     def close(self) -> None:
         if self._conn is not None:
             try:
@@ -861,13 +1016,13 @@ class ImapTransport:
             # BAD/other self-raised imaplib errors. Deliberately NOT treated
             # as retryable by default (plan §9.2: don't blanket-retry bare
             # imaplib.IMAP4.error) — only abort/OSError above are.
-            return MailTransportError(f"{context}: {text}", status=_status_for_imap_text(text))
+            return _transport_error(f"{context}: {text}", _status_for_imap_text(text))
         return MailTransportError(f"{context}: {text}", status=400)
 
     def _map_response(self, typ: str, data, context: str) -> MailTransportError:
         text = _join_imap_response(data)
-        return MailTransportError(
-            f"{context} failed ({typ}): {text}", status=_status_for_imap_text(text)
+        return _transport_error(
+            f"{context} failed ({typ}): {text}", _status_for_imap_text(text)
         )
 
     # -- MailTransport protocol -------------------------------------------
@@ -1277,40 +1432,88 @@ def _build_html_mime_message(
 # Size-aware chunk splitting (Phase 2.5)
 # ---------------------------------------------------------------------------
 
+def effective_budget(limit_bytes: int) -> int:
+    """The wire size we will actually aim for, given a provider limit.
+
+    The safety factor absorbs everything the projection does not model exactly:
+    MIME boundaries, the header block, per-part headers we approximate rather
+    than compute. Being under costs one extra email; being over costs the whole
+    chat, so the asymmetry decides the direction to round.
+    """
+    return int(limit_bytes * MESSAGE_SIZE_SAFETY_FACTOR)
+
+
+def media_budget(limit_bytes: int) -> int:
+    """Largest single raw media file that can still fit in one email.
+
+    Reserved against the effective budget rather than the raw limit, and after
+    backing out base64 expansion -- this is the number a file has to exceed
+    before no amount of splitting can rescue it, which is what makes it the
+    threshold for omitting the file outright.
+    """
+    return max_raw_bytes_for(effective_budget(limit_bytes) - _RENDER_OVERHEAD_BYTES)
+
+
+# Rough allowance for the HTML body, headers and index riding alongside a lone
+# media file. Only used to decide the point at which a single file can never fit
+# -- generous, because a wrong answer here drops media that could have been sent.
+_RENDER_OVERHEAD_BYTES = 512_000
+
+
 def _size_split_cached(
     messages: list[ParsedMessage],
     display_name: str,
     extractor: Optional[MediaExtractor],
+    limit_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     depth: int = 0,
 ) -> list[tuple[list[ParsedMessage], RenderedChunk]]:
-    """Recursively split messages so each piece renders under MAX_EMAIL_SIZE_BYTES.
+    """Recursively split messages so each piece fits inside `limit_bytes` on the wire.
 
     Renders once per call and caches the result to avoid redundant work.
     Returns a list of (sub_messages, rendered_with_no_label_suffix).
+
+    Two things here used to be wrong and are worth naming, because both produced
+    the same live failure ("[TOOBIG] Message too large", 2026-08-10):
+
+    * The comparison was against `total_bytes` -- RAW bytes -- while the server
+      measures the base64-encoded message, about 37% larger. `wire_bytes` is the
+      encoded projection, so the budget now means what it says.
+    * A `depth >= 5` cap silently returned an oversized piece after 32 splits.
+      Splitting now terminates on its own: `media_budget` guarantees every single
+      message fits, so recursion always reaches a legal piece. The recursion
+      depth of a halving split is log2(n), which no realistic chat approaches.
     """
     if not messages:
         return []
 
+    budget = effective_budget(limit_bytes)
+
     # Render with no suffix first; suffix is applied later when N is known.
-    rendered = render_chunk(messages, display_name, extractor, "")
+    rendered = render_chunk(
+        messages, display_name, extractor, "",
+        max_media_bytes=media_budget(limit_bytes),
+    )
 
     # The index rides on the finished email but does not exist yet, so its size
     # has to be estimated here or the split decision is made against a total
     # that is short by a few hundred bytes per message. That only bites on the
     # very largest chunks, which is exactly where the ceiling matters.
-    projected = rendered.total_bytes + estimate_index_bytes(len(messages))
+    projected = rendered.wire_bytes + encoded_part_bytes(
+        estimate_index_bytes(len(messages))
+    )
 
-    if projected <= MAX_EMAIL_SIZE_BYTES or len(messages) <= 1 or depth >= 5:
+    if projected <= budget or len(messages) <= 1:
         return [(messages, rendered)]
 
     log.debug(
-        "_size_split_cached: chunk of %d msgs is %d bytes — splitting (depth=%d)",
-        len(messages), rendered.total_bytes, depth,
+        "_size_split_cached: chunk of %d msgs projects to %d wire bytes "
+        "against a %d budget — splitting (depth=%d)",
+        len(messages), projected, budget, depth,
     )
     mid = len(messages) // 2
     return (
-        _size_split_cached(messages[:mid], display_name, extractor, depth + 1)
-        + _size_split_cached(messages[mid:], display_name, extractor, depth + 1)
+        _size_split_cached(messages[:mid], display_name, extractor, limit_bytes, depth + 1)
+        + _size_split_cached(messages[mid:], display_name, extractor, limit_bytes, depth + 1)
     )
 
 
@@ -1319,6 +1522,7 @@ def _prepare_emails(
     display_name: str,
     extractor: Optional[MediaExtractor],
     chunk_size: ChunkSize,
+    limit_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
 ) -> list[tuple[list[ParsedMessage], RenderedChunk]]:
     """Flatten all chunks into a final list of (sub_chunk, RenderedChunk).
 
@@ -1327,14 +1531,17 @@ def _prepare_emails(
     """
     result: list[tuple[list[ParsedMessage], RenderedChunk]] = []
     for chunk in chunks:
-        sub_pairs = _size_split_cached(chunk, display_name, extractor)
+        sub_pairs = _size_split_cached(chunk, display_name, extractor, limit_bytes)
         n = len(sub_pairs)
         for k, (msgs, cached_render) in enumerate(sub_pairs):
             if n > 1:
                 # This specific day/period chunk was too large and got split —
                 # label only these parts (e.g. "Part 1/3").
                 suffix   = f"Part {k + 1}/{n}"
-                rendered = render_chunk(msgs, display_name, extractor, suffix)
+                rendered = render_chunk(
+                    msgs, display_name, extractor, suffix,
+                    max_media_bytes=media_budget(limit_bytes),
+                )
             else:
                 # Normal single email for this period — no suffix.
                 rendered = cached_render
@@ -1453,12 +1660,22 @@ def _insert_with_backoff(
 
 class PushResult:
     """Outcome of pushing one chunk to Gmail."""
-    __slots__ = ("message_id", "gmail_message_id", "thread_id")
+    __slots__ = ("message_id", "gmail_message_id", "thread_id", "omissions")
 
-    def __init__(self, message_id: str, gmail_message_id: str, thread_id: str) -> None:
+    def __init__(
+        self,
+        message_id: str,
+        gmail_message_id: str,
+        thread_id: str,
+        omissions: Optional[list[MediaOmission]] = None,
+    ) -> None:
         self.message_id = message_id          # RFC 2822 Message-ID we generated
         self.gmail_message_id = gmail_message_id  # Gmail's internal message ID
         self.thread_id = thread_id            # Gmail thread ID
+        # Media this email could not carry. Empty for almost every email; when
+        # it is not, the caller surfaces it to the user rather than letting the
+        # omission live only inside the archived message.
+        self.omissions: list[MediaOmission] = omissions or []
 
 
 def push_chunks(
@@ -1515,73 +1732,180 @@ def push_chunks(
     current_anchor_mid = anchor_message_id
     current_thread_id  = gmail_thread_id
 
+    # The server's own answer where it gives one, our table where it does not.
+    # A plain int, not a constant, because the run is allowed to lower it: see
+    # the rejection handler below.
+    limit_bytes = getattr(transport, "max_message_bytes", DEFAULT_MAX_MESSAGE_BYTES)
+
     # ── Build and render all emails upfront (includes size-based splitting) ──
+    # The extractor stays open for the whole push, not just the render: a size
+    # rejection mid-flight has to re-render the offending email, and that needs
+    # the media back.
     extractor: Optional[MediaExtractor] = (
         MediaExtractor(source_path) if source_path else None
     )
     try:
-        email_list = _prepare_emails(chunks, display_name, extractor, chunk_size)
+        email_list = _prepare_emails(
+            chunks, display_name, extractor, chunk_size, limit_bytes
+        )
+
+        total_emails = len(email_list)
+        total_msgs   = sum(len(sc) for sc, _ in email_list)
+        msgs_done    = 0
+
+        # A worklist rather than a plain iteration, because a rejected email is
+        # replaced in place by the two smaller emails it splits into.
+        worklist: list[tuple[list[ParsedMessage], RenderedChunk]] = list(email_list)
+        i = 0
+
+        while i < len(worklist):
+            sub_chunk, rendered = worklist[i]
+            new_mid     = _new_message_id()
+            in_reply_to = current_anchor_mid
+
+            if dry_run:
+                subject = _chunk_subject(display_name, sub_chunk, chunk_size)
+                log.info(
+                    "[dry-run] Would push email %d/%d: %d messages → subject=%r thread=%s",
+                    i + 1, total_emails, len(sub_chunk), subject,
+                    current_thread_id or "(new)",
+                )
+                results.append(
+                    PushResult(
+                        new_mid, f"dry-run-{i}", current_thread_id or "dry-run-thread",
+                        rendered.omissions,
+                    )
+                )
+                if current_anchor_mid is None:
+                    current_anchor_mid = new_mid
+                    current_thread_id  = "dry-run-thread"
+                i += 1
+                continue
+
+            _print_progress(display_name, i + 1, total_emails, msgs_done, total_msgs)
+
+            body = _build_html_mime_message(
+                display_name   = display_name,
+                chunk          = sub_chunk,
+                chunk_size     = chunk_size,
+                rendered       = rendered,
+                label_id       = label_id,
+                message_id     = new_mid,
+                in_reply_to    = in_reply_to,
+                references     = current_anchor_mid,
+            )
+
+            try:
+                response = _insert_with_backoff(
+                    transport, body, thread_id=current_thread_id
+                )
+            except Exception as exc:  # noqa: BLE001 - re-raised unless it is a size refusal
+                if not is_too_large(exc):
+                    raise
+
+                # Rejected for size alone. Nothing was stored -- the append
+                # never completed -- so re-sending the same messages as smaller
+                # emails cannot duplicate anything.
+                #
+                # Two things happen here. First the run's ceiling ratchets down
+                # below whatever we just tried, so one rejection teaches the
+                # whole rest of the chat instead of being re-discovered on every
+                # oversized day. Then the offending email is replaced by
+                # smaller ones: halved while it still holds more than one
+                # message (lossless -- every message still gets archived), and
+                # only when a single message is on its own does the media get
+                # dropped for a placeholder (lossy, and reported to the user).
+                # Measured as our own projection, not len(body["raw"]): the
+                # "raw" field is base64 of the whole MIME message for the Gmail
+                # API's benefit and is a third larger than what any provider
+                # actually receives. Mixing the two units would ratchet the
+                # ceiling to a number in the wrong scale.
+                attempted = rendered.wire_bytes
+                limit_bytes = min(limit_bytes, int(attempted * 0.9))
+                log.warning(
+                    "Provider refused a %d-byte email as too large; "
+                    "lowering this run's ceiling to %d bytes and re-splitting",
+                    attempted, limit_bytes,
+                )
+
+                if len(sub_chunk) > 1:
+                    mid = len(sub_chunk) // 2
+                    replacement = _size_split_cached(
+                        sub_chunk[:mid], display_name, extractor, limit_bytes
+                    ) + _size_split_cached(
+                        sub_chunk[mid:], display_name, extractor, limit_bytes
+                    )
+                else:
+                    # One message, still too big: its media cannot travel.
+                    retry = render_chunk(
+                        sub_chunk, display_name, extractor, "",
+                        max_media_bytes=media_budget(limit_bytes),
+                    )
+                    if len(retry.omissions) <= len(rendered.omissions):
+                        # Dropping media changed nothing, so there is nothing
+                        # left to drop -- a single message whose *text* the
+                        # server will not take. Retrying would rebuild the same
+                        # email forever, so this one is a genuine failure and
+                        # goes to the caller as one.
+                        log.error(
+                            "A single message is too large for the provider and "
+                            "cannot be split or reduced further; giving up on it"
+                        )
+                        raise
+                    replacement = [(sub_chunk, retry)]
+
+                worklist[i:i + 1] = replacement
+
+                # The lesson applies to the whole rest of the run, not just the
+                # email that taught it. Everything still pending was rendered
+                # against the old, too-generous ceiling; re-splitting it now
+                # means one refusal instead of one per oversized day. Already
+                # sent emails are untouched -- they were accepted.
+                pending_start = i + len(replacement)
+                budget = effective_budget(limit_bytes)
+                resplit: list[tuple[list[ParsedMessage], RenderedChunk]] = []
+                for pending_msgs, pending_render in worklist[pending_start:]:
+                    if pending_render.wire_bytes <= budget:
+                        resplit.append((pending_msgs, pending_render))
+                    else:
+                        resplit.extend(
+                            _size_split_cached(
+                                pending_msgs, display_name, extractor, limit_bytes
+                            )
+                        )
+                worklist[pending_start:] = resplit
+
+                total_emails = len(worklist)
+                continue
+
+            thread_id_r: str = response["threadId"]
+            gmail_msg_id: str = response["id"]
+
+            msgs_done += len(sub_chunk)
+            results.append(
+                PushResult(new_mid, gmail_msg_id, thread_id_r, rendered.omissions)
+            )
+            log.debug(
+                "Pushed email %d/%d (%d msgs, %d wire bytes) → gmail_id=%s thread=%s",
+                i + 1, total_emails, len(sub_chunk), rendered.wire_bytes,
+                gmail_msg_id, thread_id_r,
+            )
+            if on_chunk is not None:
+                # sub_chunk is the exact set of messages this email just carried,
+                # and this call happens strictly after _insert_with_backoff()
+                # returned successfully above — so by the time a caller sees this,
+                # the messages are durably in the mailbox, not merely attempted.
+                on_chunk(i + 1, total_emails, msgs_done, total_msgs, sub_chunk)
+
+            if current_anchor_mid is None:
+                current_anchor_mid = new_mid
+            if current_thread_id is None:
+                current_thread_id = thread_id_r
+
+            i += 1
     finally:
         if extractor:
             extractor.close()
-
-    total_emails = len(email_list)
-    total_msgs   = sum(len(sc) for sc, _ in email_list)
-    msgs_done    = 0
-
-    for i, (sub_chunk, rendered) in enumerate(email_list):
-        new_mid     = _new_message_id()
-        in_reply_to = current_anchor_mid
-
-        if dry_run:
-            subject = _chunk_subject(display_name, sub_chunk, chunk_size)
-            log.info(
-                "[dry-run] Would push email %d/%d: %d messages → subject=%r thread=%s",
-                i + 1, total_emails, len(sub_chunk), subject, current_thread_id or "(new)",
-            )
-            results.append(
-                PushResult(new_mid, f"dry-run-{i}", current_thread_id or "dry-run-thread")
-            )
-            if current_anchor_mid is None:
-                current_anchor_mid = new_mid
-                current_thread_id  = "dry-run-thread"
-            continue
-
-        _print_progress(display_name, i + 1, total_emails, msgs_done, total_msgs)
-
-        body = _build_html_mime_message(
-            display_name   = display_name,
-            chunk          = sub_chunk,
-            chunk_size     = chunk_size,
-            rendered       = rendered,
-            label_id       = label_id,
-            message_id     = new_mid,
-            in_reply_to    = in_reply_to,
-            references     = current_anchor_mid,
-        )
-
-        response     = _insert_with_backoff(transport, body, thread_id=current_thread_id)
-        thread_id_r: str = response["threadId"]
-        gmail_msg_id: str = response["id"]
-
-        msgs_done += len(sub_chunk)
-        results.append(PushResult(new_mid, gmail_msg_id, thread_id_r))
-        log.debug(
-            "Pushed email %d/%d (%d msgs, %d bytes) → gmail_id=%s thread=%s",
-            i + 1, total_emails, len(sub_chunk), rendered.total_bytes,
-            gmail_msg_id, thread_id_r,
-        )
-        if on_chunk is not None:
-            # sub_chunk is the exact set of messages this email just carried,
-            # and this call happens strictly after _insert_with_backoff()
-            # returned successfully above — so by the time a caller sees this,
-            # the messages are durably in the mailbox, not merely attempted.
-            on_chunk(i + 1, total_emails, msgs_done, total_msgs, sub_chunk)
-
-        if current_anchor_mid is None:
-            current_anchor_mid = new_mid
-        if current_thread_id is None:
-            current_thread_id = thread_id_r
 
     # Erase the progress bar's line. Same terminal-only guard as the bar
     # itself -- off a console there is nothing drawn to erase, and writing the

@@ -366,6 +366,11 @@ private data class SyncStatsResult(
     val messagesSkipped: Int,
     val chatsRecovered: Int,
     val errors: List<String>,
+    // Files a single email could never carry. Deliberately separate from
+    // `errors`: nothing failed, the message and its text were archived, and
+    // only the media stayed behind -- permanently, on this and every future
+    // run. Mirrors SyncStats.media_omitted.
+    val mediaOmitted: List<String>,
     val stopped: Boolean,
 ) {
     fun format(): String {
@@ -375,6 +380,10 @@ private data class SyncStatsResult(
             "Messages: parsed=$messagesParsed  synced=$messagesSynced  skipped=$messagesSkipped",
         )
         if (chatsRecovered > 0) lines.add("Recovered $chatsRecovered interrupted run(s)")
+        if (mediaOmitted.isNotEmpty()) {
+            lines.add("Media too large to email (archived without the file - it stays in your WhatsApp export):")
+            mediaOmitted.forEach { lines.add("  - $it") }
+        }
         if (errors.isNotEmpty()) {
             lines.add("Errors:")
             errors.forEach { lines.add("  - $it") }
@@ -387,12 +396,20 @@ private data class SyncStatsResult(
             fun intOf(key: String): Int =
                 try { result.callAttr("get", key)?.toString()?.toIntOrNull() ?: 0 } catch (_: Exception) { 0 }
 
-            val errorsObj = try { result.callAttr("get", "errors") } catch (_: Exception) { null }
-            val errors = try {
-                errorsObj?.asList()?.map { it.toString() } ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
+            fun stringsOf(key: String): List<String> {
+                val obj = try { result.callAttr("get", key) } catch (_: Exception) { null }
+                return try {
+                    obj?.asList()?.map { it.toString() } ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
             }
+
+            val errors = stringsOf("errors")
+            // Older Python side, or a dry run, simply has no such key -- and
+            // stringsOf answers with an empty list rather than throwing, so an
+            // app paired with a build that predates media_omitted still works.
+            val mediaOmitted = stringsOf("media_omitted")
 
             return SyncStatsResult(
                 filesFound = intOf("files_found"),
@@ -405,6 +422,7 @@ private data class SyncStatsResult(
                 stopped = try { result.callAttr("get", "stopped")?.toString() == "True" } catch (_: Exception) { false },
                 chatsRecovered = intOf("chats_recovered"),
                 errors = errors,
+                mediaOmitted = mediaOmitted,
             )
         }
     }
