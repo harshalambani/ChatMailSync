@@ -51,6 +51,12 @@ from src.config import (
 from src.app_version import version_label
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.mail_client import mailbox_folder_for
+from src.watch_folder import (
+    DEFAULT_WATCH_INTERVAL_MINUTES,
+    MIN_WATCH_INTERVAL_MINUTES,
+    apply_pending_synced_file_policies,
+    scan_watch_folder,
+)
 from src.state import (
     MailboxNotClearedError,
     count_archived_messages,
@@ -108,7 +114,43 @@ _DEFAULT_SETTINGS = {
     # intentionally NOT in this dict; it only ever lives in
     # IMAP_CREDENTIALS_FILE (see gui_worker._save_imap_credentials).
     "backend_notice_shown": False,
+    # Watched folder -- the desktop half of Android's WatchFolderWorker. Key
+    # names deliberately match AppPrefs' so the two platforms' state is
+    # readable side by side. See src/watch_folder.py for the rules; the two
+    # ledgers below are bookkeeping, not preferences, and are never shown in
+    # the Settings dialog.
+    "watched_folder_path":     "",
+    "auto_watch_enabled":      False,
+    "watch_interval_minutes":  DEFAULT_WATCH_INTERVAL_MINUTES,
+    "synced_file_policy":      "leave",
+    "imported_source_paths":   [],
+    "pending_synced_files":    {},
 }
+
+# Android's WATCH_INTERVAL_LABELS, labels and all, plus one shorter option:
+# WorkManager's 15-minute floor is a platform rule Android cannot go under,
+# while a Tk timer can, and someone dropping exports into a folder on this same
+# PC reasonably wants them picked up sooner than a quarter of an hour. The
+# default matches Android's, so both products behave the same untouched.
+_WATCH_INTERVAL_OPTIONS = {
+    "Every 5 min":    5,
+    "Every 15 min":   15,
+    "Every 30 min":   30,
+    "Every hour":     60,
+    "Every 3 hours":  180,
+    "Every 6 hours":  360,
+    "Every 12 hours": 720,
+    "Once a day":     1440,
+}
+# Android's labels verbatim, except that its "Delete after import" would be a
+# lie here: this build recycles rather than erasing, and someone deciding
+# whether to switch the option on deserves to know that beforehand.
+_SYNCED_FILE_POLICY_LABELS = {
+    "leave":  "Leave in place",
+    "move":   'Move to a "synced" subfolder',
+    "delete": "Delete after import (Recycle Bin)",
+}
+_SYNCED_FILE_POLICY_LABELS_REV = {v: k for k, v in _SYNCED_FILE_POLICY_LABELS.items()}
 
 
 def _load_settings() -> dict:
@@ -162,6 +204,24 @@ def _should_show_backend_notice(
     return settings_file_exists or token_file_exists
 
 
+def _inbox_has_files() -> bool:
+    """Whether anything is still queued in inbox/.
+
+    The watcher needs this for the case Android hit first: a previous pass
+    imported files and ledgered them, but they were never delivered (no mail
+    account configured yet, say). Without it, every later check would report
+    "no new files found" forever while a backlog sat in the inbox, because the
+    ledger legitimately skips those sources.
+    """
+    try:
+        return any(
+            f.is_file() and f.suffix.lower() in (".txt", ".zip")
+            for f in INBOX_DIR.iterdir()
+        )
+    except Exception:
+        return False
+
+
 def _help_html_path() -> "Path | None":
     """Locate help.html for both source runs and the frozen PyInstaller bundle."""
     candidates = []
@@ -213,6 +273,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._worker: SyncWorker | None = None
         self._log_lines: list[str] = []
         self._theme_mode    = _saved_theme
+        # Watched folder: a scan runs on a daemon thread (the folder can be a
+        # slow network or cloud-synced path) and reports back through this
+        # queue, so a poll never freezes the window.
+        self._watch_q: queue.Queue = queue.Queue()
+        self._watch_scanning = False
+        self._watch_after_id = None
+        self._last_run_dry_run = False
 
         # Build UI — footer must be packed before main so it pins to bottom.
         self._build_header()
@@ -239,6 +306,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Schedule periodic inbox refresh (0 = Off).
         if self._auto_refresh_ms > 0:
             self.after(self._auto_refresh_ms, self._auto_refresh_inbox)
+
+        # Watched folder. Reconcile the pending ledger first: the app may have
+        # been closed between a sync finishing and its synced-file rule being
+        # applied, and inbox/ still holds the answer.
+        self._apply_synced_file_policies()
+        self._update_watch_ui()
+        self._schedule_watch_timer()
 
     # ------------------------------------------------------------------
     # Launcher splash
@@ -482,6 +556,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=("gray10", "gray90"),
             command=lambda: os.startfile(str(INBOX_DIR)),
         ).pack(side="left", padx=6)
+
+        # "Check now" for the watched folder -- Android puts the same button in
+        # Settings; here it belongs beside the other two ways of getting files
+        # in. Hidden entirely until a folder is chosen, so nobody meets a
+        # permanently dead button. Like Android's, it runs whether or not the
+        # periodic watch is switched on: choosing a folder is enough.
+        self._watch_now_btn = ctk.CTkButton(
+            btn_row, text="Check watched folder", width=168, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_check_watch_now,
+        )
 
         # File list — shows filenames currently sitting in the inbox folder.
         self._file_list_frame = ctk.CTkScrollableFrame(
@@ -796,19 +882,183 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._refresh_inbox_count()
 
     # ------------------------------------------------------------------
+    # Watched folder
+    #
+    # The desktop half of Android's WatchFolderWorker. The rules the two share
+    # live in src/watch_folder.py; what is platform-specific is only how the
+    # poll is driven -- a Tk after() timer here, a WorkManager periodic job
+    # there -- and the consequence that this one runs only while the app is
+    # open. See PLATFORM-PARITY.md.
+    # ------------------------------------------------------------------
+
+    def _watched_folder(self) -> "Path | None":
+        raw = str(self._settings.get("watched_folder_path") or "").strip()
+        return Path(raw) if raw else None
+
+    def _update_watch_ui(self) -> None:
+        """Show "Check watched folder" only once a folder has been chosen."""
+        if self._watched_folder() is not None:
+            self._watch_now_btn.pack(side="left", padx=6)
+        else:
+            self._watch_now_btn.pack_forget()
+
+    def _schedule_watch_timer(self) -> None:
+        """(Re)arm the periodic scan. Cancels any timer already pending, so
+        changing the interval in Settings takes effect on the existing
+        schedule rather than running two timers at once -- the same reason
+        Android's enqueue() uses UPDATE and not KEEP."""
+        if self._watch_after_id is not None:
+            try:
+                self.after_cancel(self._watch_after_id)
+            except Exception:
+                pass
+            self._watch_after_id = None
+
+        if not self._settings.get("auto_watch_enabled") or self._watched_folder() is None:
+            return
+        minutes = max(
+            int(self._settings.get("watch_interval_minutes", DEFAULT_WATCH_INTERVAL_MINUTES)),
+            MIN_WATCH_INTERVAL_MINUTES,
+        )
+        self._watch_after_id = self.after(minutes * 60_000, self._watch_tick)
+
+    def _watch_tick(self) -> None:
+        self._watch_after_id = None
+        self._run_watch_scan(manual=False)
+        self._schedule_watch_timer()
+
+    def _on_check_watch_now(self) -> None:
+        """"Check now": runs immediately regardless of the periodic schedule,
+        or of whether the periodic watch is even switched on."""
+        self._run_watch_scan(manual=True)
+
+    def _run_watch_scan(self, manual: bool) -> None:
+        folder = self._watched_folder()
+        if folder is None or self._watch_scanning:
+            return
+
+        self._watch_scanning = True
+        self._watch_now_btn.configure(state="disabled", text="Checking…")
+
+        # Copied out of settings before the thread starts; the thread must not
+        # touch self._settings, which the main thread may be rewriting.
+        already = list(self._settings.get("imported_source_paths", []))
+        pending = dict(self._settings.get("pending_synced_files", {}))
+
+        def _work() -> None:
+            try:
+                result = scan_watch_folder(folder, INBOX_DIR, already, pending)
+            except Exception as exc:  # never let a scan take the app down
+                self._watch_q.put({"error": str(exc)})
+                return
+            self._watch_q.put({"result": result, "pending": pending, "manual": manual})
+
+        threading.Thread(target=_work, daemon=True).start()
+        self.after(_POLL_MS, self._poll_watch_queue)
+
+    def _poll_watch_queue(self) -> None:
+        try:
+            event = self._watch_q.get_nowait()
+        except queue.Empty:
+            self.after(_POLL_MS, self._poll_watch_queue)
+            return
+
+        self._watch_scanning = False
+        self._watch_now_btn.configure(state="normal", text="Check watched folder")
+
+        if "error" in event:
+            self._append_log(f"Watched folder: {event['error']}")
+            return
+
+        result = event["result"]
+        for msg in result.errors:
+            self._append_log(f"Watched folder: {msg}")
+
+        # Ledger every source this pass accounted for, so the next tick does
+        # not re-examine it. Sources that failed to copy are deliberately not
+        # in there -- scan_watch_folder leaves those out to be retried.
+        self._settings["imported_source_paths"] = result.ledger
+        self._settings["pending_synced_files"] = event["pending"]
+        _save_settings(self._settings)
+
+        if result.imported:
+            self._append_log(
+                f"Watched folder: imported {result.imported_count} new "
+                f"file{'s' if result.imported_count != 1 else ''}."
+            )
+            self._refresh_inbox_count()
+        elif event["manual"]:
+            # Only say so when the user asked; a silent periodic tick that
+            # found nothing should stay silent.
+            self._append_log("Watched folder: no new files found.")
+
+        self._maybe_auto_sync(found_new=bool(result.imported), manual=event["manual"])
+
+    def _maybe_auto_sync(self, found_new: bool, manual: bool) -> None:
+        """Sync what the watcher just imported, without the user opening
+        anything. Android made this call first, for the same reason: watched
+        folders are meant to be hands-off end to end, not "import
+        automatically, then still come back and press Sync"."""
+        if not found_new and not _inbox_has_files():
+            return
+        if self._worker is not None:
+            return  # a sync is already running; it will pick these up
+        if self._transport is None:
+            # Same shape as WatchFolderWorker's "connect in the app to sync"
+            # branch -- say it plainly rather than starting a run that is
+            # certain to fail. The files stay in the inbox for the next try.
+            if found_new or manual:
+                self._append_log(
+                    "Watched folder: files are waiting in the inbox — connect "
+                    "to your mailbox to sync them."
+                )
+            return
+        self._begin_sync(dry_run=False, chunk_size=self._chunk_var.get())
+
+    def _apply_synced_file_policies(self) -> None:
+        """Act on sources whose inbox copy has since been delivered.
+
+        Called after every real sync, and once at startup in case the app was
+        closed in between. Never after a dry run: nothing was delivered, so
+        moving or recycling the user's original would be plainly wrong.
+        """
+        pending = dict(self._settings.get("pending_synced_files", {}))
+        if not pending:
+            return
+        remaining, messages = apply_pending_synced_file_policies(
+            pending,
+            INBOX_DIR,
+            str(self._settings.get("synced_file_policy", "leave")),
+        )
+        for msg in messages:
+            self._append_log(f"Watched folder: {msg}")
+        if remaining != pending:
+            self._settings["pending_synced_files"] = remaining
+            _save_settings(self._settings)
+
+    # ------------------------------------------------------------------
     # Sync
     # ------------------------------------------------------------------
 
     def _on_sync_click(self) -> None:
+        self._begin_sync(
+            dry_run=self._dry_run_var.get(),
+            chunk_size=self._chunk_var.get(),
+        )
+
+    def _begin_sync(self, dry_run: bool, chunk_size: str) -> None:
+        """Start a sync. Split out of the button handler so the watched folder
+        can start a real sync of its own without faking a click (and without
+        inheriting whatever the Dry run box happens to be set to -- an
+        automatic run that quietly did nothing would be worse than useless)."""
         if self._worker is not None:
             return  # already running
-
-        dry_run    = self._dry_run_var.get()
-        chunk_size = self._chunk_var.get()
 
         if not dry_run and self._transport is None:
             self._append_log("Not connected.  Connect first or enable Dry run.")
             return
+
+        self._last_run_dry_run = dry_run
 
         # Reset UI state.
         self._sync_btn.configure(state="disabled", text="Syncing…")
@@ -878,6 +1128,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._worker = None
             self._refresh_chat_list()
             self._refresh_inbox_count()
+            if not self._last_run_dry_run:
+                self._apply_synced_file_policies()
 
         elif t == "error":
             self._append_log(f"ERROR: {event['msg']}")
@@ -886,6 +1138,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._progress_label.configure(text="Failed — see log")
             self._worker = None
             self._refresh_chat_list()
+            # After a failure too: some files in the run may still have been
+            # delivered before it broke, and inbox/ is what says which.
+            if not self._last_run_dry_run:
+                self._apply_synced_file_policies()
 
     # ------------------------------------------------------------------
     # Auth
@@ -940,9 +1196,24 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._auth_dot.configure(text_color="#2ecc71" if valid else "#e74c3c")
         self._auth_label.configure(text=text)
         self._auth_btn.configure(text="Reconnect" if valid else "Connect")
-        self._signout_btn.configure(state="normal" if valid else "disabled")
+        self._signout_btn.configure(state=self._signout_state())
         if valid and self._transport is None:
             threading.Thread(target=self._silent_build_transport, daemon=True).start()
+
+    def _signout_state(self) -> str:
+        """"normal" if there is anything stored to sign out of.
+
+        Not "normal only while the connection is valid", which is what this
+        used to be and which had it backwards: Sign Out is the *repair* for a
+        broken connection -- it revokes and deletes the stored token -- so
+        greying it out whenever auth failed removed the one control that could
+        clear a bad credential. Neither branch of the sign-out path needs a
+        working connection: the revoke call already treats a network failure as
+        non-fatal, and deleting a local file needs nothing at all.
+        """
+        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+            return "normal" if IMAP_CREDENTIALS_FILE.exists() else "disabled"
+        return "normal" if TOKEN_FILE.exists() else "disabled"
 
     def _silent_build_transport(self) -> None:
         """Build the transport object in the background after a valid auth-status check."""
@@ -990,7 +1261,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._auth_dot.configure(text_color="#e74c3c")
             self._auth_label.configure(text="Auth failed")
             self._auth_btn.configure(state="normal", text="Connect")
-            self._signout_btn.configure(state="disabled")
+            # Same reasoning as _signout_state(): a failed connect is when a
+            # stored token most needs clearing out, not when the button for
+            # doing it should disappear.
+            self._signout_btn.configure(state=self._signout_state())
             self._append_log(f"Auth error: {event['msg']}")
 
     def _on_delete_chat(self, chat_id: str, display_name: str, synced: bool) -> None:
@@ -1243,6 +1517,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if self._auto_refresh_ms != old_refresh_ms and self._auto_refresh_ms > 0:
             self.after(self._auto_refresh_ms, self._auto_refresh_inbox)
 
+        # Unconditional: the folder, the interval or the on/off switch may all
+        # have changed, and _schedule_watch_timer cancels before re-arming, so
+        # calling it when nothing changed is harmless.
+        self._update_watch_ui()
+        self._schedule_watch_timer()
+
         self._update_signout_button_label()
         if new_settings.get("mail_backend") != old_backend:
             # Switching backends invalidates whatever transport we had cached.
@@ -1324,9 +1604,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 # Settings modal
 # ---------------------------------------------------------------------------
 
+# Both labels name the SCOPE of the choice, not just its mechanism. The old
+# pair ("Google sign-in (OAuth)" / "Email app password (IMAP)") described how
+# you authenticate but left the thing that actually decides the choice unsaid:
+# the OAuth path can only ever reach a Gmail mailbox. It is built on Gmail API
+# scopes (gmail.insert / gmail.labels, see src/config.py), so picking it with an
+# Outlook or Fastmail address in mind is a dead end the UI used to let you walk
+# into. Kept in step with android/.../MailAccountScreen.kt's BACKEND_LABELS --
+# see PLATFORM-PARITY.md, do not edit one side without the other.
 _BACKEND_LABELS = {
-    MAIL_BACKEND_GMAIL_OAUTH: "Google sign-in (OAuth)",
-    MAIL_BACKEND_IMAP:        "Email app password (IMAP)",
+    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
+    MAIL_BACKEND_IMAP:        "Any provider (IMAP app password)",
 }
 _BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
 
@@ -1423,15 +1711,37 @@ def _build_app_password_prompt(provider_key: str, provider_label: str, host: str
 
 
 class _SettingsWindow(ctk.CTkToplevel):
-    """Modal settings panel — chunk size, auto-refresh interval, and mail
-    backend (Gmail OAuth vs IMAP app password)."""
+    """Modal settings panel — chunk size, auto-refresh interval, watched
+    folder, and a way in to the mail account.
+
+    Laid out in the same compartments as Android's SettingsScreen: a titled
+    section per topic, separated by a rule, inside one scrolling body, with the
+    mail account on its own screen (_MailAccountWindow, mirroring Android's
+    MailAccountScreen). Android scrolls its settings column too
+    (`verticalScroll(rememberScrollState())`), and adopting that here removes
+    the reason this window used to resize itself -- see _SETTINGS_HEIGHT.
+    """
+
+    # Fixed, and deliberately so. This window used to recompute its own
+    # geometry every time the IMAP form was shown or hidden, feeding
+    # winfo_width() back into geometry() -- so the width it read was the width
+    # it had just set, and each round trip nudged it again. Switching backends,
+    # or re-picking the backend already selected, visibly resized the window
+    # every time. A scrolling body means the content no longer has to fit the
+    # window at all, so nothing needs to move.
+    #
+    # 470 wide: 380 originally, 430 for the widened "Connect via" menu, and
+    # 470 for the watched-folder row, whose label plus Choose…/Clear buttons
+    # clip at 430.
+    _SETTINGS_WIDTH = 470
+    _SETTINGS_HEIGHT = 480
 
     def __init__(self, app: "App") -> None:
         super().__init__(app)
         self._app = app
 
         self.title("Settings")
-        self.geometry("380x200")
+        self.geometry(f"{self._SETTINGS_WIDTH}x{self._SETTINGS_HEIGHT}")
         self.resizable(False, True)
         self.grab_set()          # modal: block input to main window
         self.lift()
@@ -1440,8 +1750,56 @@ class _SettingsWindow(ctk.CTkToplevel):
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
 
-        # ── Chunk size ───────────────────────────────────────────────
-        row1 = ctk.CTkFrame(self, fg_color="transparent")
+        # ── Buttons ──────────────────────────────────────────────────
+        # Packed first, against the bottom, and outside the scrolling body:
+        # that is what makes "Save is off-screen" structurally impossible
+        # rather than something the window has to keep measuring for.
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
+
+        self._save_btn = ctk.CTkButton(
+            btn_row, text="Save", width=100, height=32,
+            command=self._on_save,
+        )
+        self._save_btn.pack(side="right", padx=(6, 0))
+
+        ctk.CTkButton(
+            btn_row, text="Cancel", width=80, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self.destroy,
+        ).pack(side="right")
+
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True)
+
+        # ── Mail account ─────────────────────────────────────────────
+        # First, and a way in rather than the thing itself, exactly as on
+        # Android: the account form is the longest block here and the one
+        # revisited least once it works, so making everyone scroll past it to
+        # reach the watched folder was the wrong trade. What stays behind is a
+        # one-line status, so "am I connected, and as whom?" is still answered
+        # without opening anything.
+        self._section(body, "Mail account", first=True)
+        acc_row = ctk.CTkFrame(body, fg_color="transparent")
+        acc_row.pack(fill="x", padx=20, pady=(6, 0))
+        self._account_summary = ctk.CTkLabel(
+            acc_row, text="", anchor="w", font=("", 11),
+            text_color=("gray40", "gray60"),
+        )
+        self._account_summary.pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(
+            acc_row, text="Change…", width=90, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._open_mail_account,
+        ).pack(side="right")
+        self._render_account_summary()
+
+        # ── Syncing ──────────────────────────────────────────────────
+        self._section(body, "Syncing")
+
+        row1 = ctk.CTkFrame(body, fg_color="transparent")
         row1.pack(fill="x", **pad)
         ctk.CTkLabel(row1, text="Chunk size:", width=130, anchor="w").pack(side="left")
         self._chunk_var = ctk.StringVar(value=settings.get("chunk_size", "day"))
@@ -1451,7 +1809,7 @@ class _SettingsWindow(ctk.CTkToplevel):
         ).pack(side="left")
 
         # ── Auto-refresh interval ────────────────────────────────────
-        row2 = ctk.CTkFrame(self, fg_color="transparent")
+        row2 = ctk.CTkFrame(body, fg_color="transparent")
         row2.pack(fill="x", **pad)
         ctk.CTkLabel(row2, text="Auto-refresh:", width=130, anchor="w").pack(side="left")
         self._refresh_var = ctk.StringVar(value=settings.get("auto_refresh_label", "30 s"))
@@ -1460,22 +1818,305 @@ class _SettingsWindow(ctk.CTkToplevel):
             variable=self._refresh_var, width=120, height=30,
         ).pack(side="left")
 
-        # ── Mail backend ─────────────────────────────────────────────
-        row3 = ctk.CTkFrame(self, fg_color="transparent")
+        # ── Watched folder ───────────────────────────────────────────
+        # Off by default and opt-in, exactly as on Android: polling a folder
+        # in the background is the user's call to make, not ours.
+        self._section(body, "Watched folder")
+
+        wrow = ctk.CTkFrame(body, fg_color="transparent")
+        wrow.pack(fill="x", **pad)
+        ctk.CTkLabel(wrow, text="Watched folder:", width=130, anchor="w").pack(side="left")
+        self._watch_path_label = ctk.CTkLabel(
+            wrow, text="", anchor="w", font=("", 11),
+            text_color=("gray40", "gray60"), width=160,
+        )
+        self._watch_path_label.pack(side="left")
+        ctk.CTkButton(
+            wrow, text="Choose…", width=76, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_choose_watch_folder,
+        ).pack(side="left", padx=(4, 0))
+        ctk.CTkButton(
+            wrow, text="Clear", width=54, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_clear_watch_folder,
+        ).pack(side="left", padx=(4, 0))
+
+        self._watched_path = str(settings.get("watched_folder_path", "") or "")
+        # Set when the folder is changed or cleared: the "already imported"
+        # ledger describes the old folder and would silently suppress files in
+        # the new one. The pending-delivery ledger is *not* reset with it --
+        # those entries hold absolute source paths and still deserve their
+        # synced-file rule wherever they came from.
+        self._reset_watch_ledgers = False
+        self._render_watch_path()
+
+        wrow2 = ctk.CTkFrame(body, fg_color="transparent")
+        wrow2.pack(fill="x", **pad)
+        self._auto_watch_var = ctk.BooleanVar(value=bool(settings.get("auto_watch_enabled", False)))
+        ctk.CTkCheckBox(
+            wrow2, text="Check it automatically", height=28,
+            variable=self._auto_watch_var,
+        ).pack(side="left")
+        current_minutes = int(
+            settings.get("watch_interval_minutes", DEFAULT_WATCH_INTERVAL_MINUTES)
+        )
+        self._watch_interval_var = ctk.StringVar(
+            value=next(
+                (k for k, v in _WATCH_INTERVAL_OPTIONS.items() if v == current_minutes),
+                "Every 15 min",
+            )
+        )
+        ctk.CTkOptionMenu(
+            wrow2, values=list(_WATCH_INTERVAL_OPTIONS.keys()),
+            variable=self._watch_interval_var, width=130, height=30,
+        ).pack(side="left", padx=(8, 0))
+
+        wrow3 = ctk.CTkFrame(body, fg_color="transparent")
+        wrow3.pack(fill="x", **pad)
+        ctk.CTkLabel(wrow3, text="After syncing:", width=130, anchor="w").pack(side="left")
+        current_policy = str(settings.get("synced_file_policy", "leave"))
+        self._synced_policy_var = ctk.StringVar(
+            value=_SYNCED_FILE_POLICY_LABELS.get(
+                current_policy, _SYNCED_FILE_POLICY_LABELS["leave"]
+            )
+        )
+        ctk.CTkOptionMenu(
+            wrow3, values=list(_SYNCED_FILE_POLICY_LABELS.values()),
+            variable=self._synced_policy_var, width=250, height=30,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            body,
+            text=(
+                "Only applies to files that came from the watched folder, and "
+                "only once they have actually reached your mailbox. The check "
+                "runs while the app is open."
+            ),
+            wraplength=380, justify="left", anchor="w",
+            text_color=("gray40", "gray60"), font=("", 11),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
+        # ── About / Help ───────────────────────────────────────────────
+        # Named and placed to match Android's last section. The version is
+        # here rather than in the main window because that is where Android
+        # puts it, and because "which version am I on?" is a question asked
+        # once, on purpose.
+        self._section(body, "About / Help")
+        self._version_label = ctk.CTkLabel(
+            body, text=version_label(), font=("", 11),
+            text_color=("gray45", "gray60"), anchor="w",
+        )
+        self._version_label.pack(fill="x", padx=20, pady=(4, 8))
+
+    # ------------------------------------------------------------------
+    # Mail account (its own window -- Android's MailAccountScreen)
+    # ------------------------------------------------------------------
+
+    def _render_account_summary(self) -> None:
+        """One backend-neutral line: who we are connected as, or that we are
+        not. Mirrors the summary Android computes for its "Mail account" nav
+        row -- the email when there is a usable credential, "Not connected"
+        otherwise."""
+        settings = self._app._settings
+        if settings.get("mail_backend") == MAIL_BACKEND_IMAP:
+            email = str(settings.get("imap_email") or "").strip()
+            text = email if (email and IMAP_CREDENTIALS_FILE.exists()) else "Not connected"
+        elif TOKEN_FILE.exists():
+            # The main window's auth label is the desktop's authority on the
+            # Google side -- it already distinguishes "Connected" from
+            # "Sign-in expired — reconnect", and duplicating that judgement
+            # here is how the two would drift.
+            text = str(self._app._auth_label.cget("text"))
+        else:
+            text = "Not connected"
+        self._account_summary.configure(text=text)
+
+    def _open_mail_account(self) -> None:
+        # grab_set() in this window's __init__ makes it modal; the child needs
+        # the grab while it is up, and this window needs it back afterwards,
+        # or the settings panel would be left unresponsive behind a closed
+        # dialog.
+        win = _MailAccountWindow(self._app, on_close=self._on_mail_account_closed)
+        self.wait_window(win)
+
+    def _on_mail_account_closed(self) -> None:
+        try:
+            self.grab_set()
+        except Exception:
+            pass
+        self._render_account_summary()
+
+    # ------------------------------------------------------------------
+    # Section headings
+    # ------------------------------------------------------------------
+
+    def _section(self, parent, title: str, first: bool = False) -> None:
+        """A titled compartment, one per topic, as on Android -- where the
+        same job is done by a `Text(style = titleMedium)` and a
+        HorizontalDivider between sections."""
+        if not first:
+            ctk.CTkFrame(
+                parent, height=1, fg_color=("gray78", "gray30"),
+            ).pack(fill="x", padx=20, pady=(14, 0))
+        ctk.CTkLabel(
+            parent, text=title, anchor="w", font=("", 13, "bold"),
+        ).pack(fill="x", padx=20, pady=(10, 0))
+
+    # ------------------------------------------------------------------
+    # Watched folder
+    # ------------------------------------------------------------------
+
+    def _render_watch_path(self) -> None:
+        """Show the chosen folder, tail-first. A full path does not fit this
+        dialog, and the leaf folder is the part that identifies it."""
+        if not self._watched_path:
+            self._watch_path_label.configure(text="None chosen")
+            return
+        text = self._watched_path
+        if len(text) > 26:
+            text = "…" + text[-25:]
+        self._watch_path_label.configure(text=text)
+
+    def _on_choose_watch_folder(self) -> None:
+        chosen = filedialog.askdirectory(
+            title="Choose a folder to watch for WhatsApp exports",
+            initialdir=self._watched_path or None,
+        )
+        if not chosen:
+            return
+        # A previous folder's ledger says nothing about a new one, and keeping
+        # it would only mean stale entries accumulating in the settings file.
+        if self._watched_path and Path(chosen) != Path(self._watched_path):
+            self._reset_watch_ledgers = True
+        self._watched_path = str(Path(chosen))
+        self._render_watch_path()
+
+    def _on_clear_watch_folder(self) -> None:
+        self._watched_path = ""
+        self._auto_watch_var.set(False)
+        self._reset_watch_ledgers = True
+        self._render_watch_path()
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
+
+    def _on_save(self) -> None:
+        # Start from a full copy of the existing settings so keys this dialog
+        # doesn't manage -- the mail account's own, backend_notice_shown, and
+        # so on -- are preserved rather than dropped on save.
+        new_settings = dict(self._app._settings)
+        new_settings["chunk_size"] = self._chunk_var.get()
+        new_settings["auto_refresh_label"] = self._refresh_var.get()
+
+        new_settings["watched_folder_path"] = self._watched_path
+        new_settings["auto_watch_enabled"] = bool(
+            self._auto_watch_var.get() and self._watched_path
+        )
+        new_settings["watch_interval_minutes"] = _WATCH_INTERVAL_OPTIONS.get(
+            self._watch_interval_var.get(), DEFAULT_WATCH_INTERVAL_MINUTES
+        )
+        new_settings["synced_file_policy"] = _SYNCED_FILE_POLICY_LABELS_REV.get(
+            self._synced_policy_var.get(), "leave"
+        )
+        if self._reset_watch_ledgers:
+            new_settings["imported_source_paths"] = []
+
+        self._app._apply_settings(new_settings)
+        self.destroy()
+
+
+class _MailAccountWindow(ctk.CTkToplevel):
+    """The mail account on its own, as Android's MailAccountScreen.
+
+    It owns everything about how mail is sent -- backend, IMAP server details,
+    app password, and the app-password help -- and saves them itself, so the
+    Settings window it opens from never has to know about any of it.
+    """
+
+    _WIDTH = 470
+    _HEIGHT = 520
+
+    def __init__(self, app: "App", on_close=None) -> None:
+        super().__init__(app)
+        self._app = app
+        self._on_close = on_close
+
+        self.title("Mail account")
+        self.geometry(f"{self._WIDTH}x{self._HEIGHT}")
+        self.resizable(False, True)
+        self.grab_set()
+        self.lift()
+        self.focus()
+        # Closing with the window's X has to run the same restore as Cancel,
+        # or the Settings window behind this one keeps a summary that no
+        # longer matches and, worse, never gets its grab back.
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Destroy>", self._on_destroy)
+
+        pad = {"padx": 20, "pady": 8}
+        settings = app._settings
+
+        # Same arrangement as the Settings window and for the same reason:
+        # Save and Cancel live outside the scrolling body, so the expanded
+        # app-password help -- which runs to more text than this whole window
+        # -- cannot push them out of reach. That failure is why the help block
+        # was moved behind a toggle in the first place.
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
+
+        self._save_btn = ctk.CTkButton(
+            btn_row, text="Save", width=100, height=32,
+            command=self._on_save,
+        )
+        self._save_btn.pack(side="right", padx=(6, 0))
+
+        ctk.CTkButton(
+            btn_row, text="Cancel", width=80, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self.destroy,
+        ).pack(side="right")
+
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True)
+
+        # Backend menu, IMAP form and help all live in _mail_frame with
+        # nothing packed after them. That is load-bearing: pack_forget drops a
+        # widget out of the packing order and a later bare pack() appends it at
+        # the end of its parent, so while these shared a parent with Save/Cancel
+        # every OAuth -> IMAP round trip re-packed the form underneath its own
+        # buttons. Their own container makes the order true by construction.
+        self._mail_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self._mail_frame.pack(fill="x")
+
+        row3 = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
         row3.pack(fill="x", **pad)
         ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")
         current_backend = settings.get("mail_backend", DEFAULT_MAIL_BACKEND)
         self._backend_var = ctk.StringVar(
             value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
         )
+        # 240, not the 190 the provider menu below uses: the backend labels
+        # now carry the Gmail-only/any-provider distinction and the longer of
+        # them clips at 190.
         ctk.CTkOptionMenu(
             row3, values=list(_BACKEND_LABELS.values()),
-            variable=self._backend_var, width=190, height=30,
+            variable=self._backend_var, width=240, height=30,
             command=lambda _v: self._on_backend_changed(),
         ).pack(side="left")
+        # A CTkOptionMenu fires its command on every pick, including picking
+        # the value already selected. Without something to compare against,
+        # re-choosing the current backend tore the IMAP form down and built it
+        # back up for no change at all -- the other half of the resizing the
+        # user saw. _on_backend_changed compares against this.
+        self._last_backend = self._backend_var.get()
 
         # ── IMAP fields (shown only when backend == imap) ──────────────
-        self._imap_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self._imap_frame = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
 
         prow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
         prow.pack(fill="x", padx=20, pady=(0, 8))
@@ -1533,37 +2174,18 @@ class _SettingsWindow(ctk.CTkToplevel):
         if current_backend == MAIL_BACKEND_IMAP:
             self._imap_frame.pack(fill="x")
 
-        # ── Buttons ──────────────────────────────────────────────────
-        # Kept on self because _on_backend_changed re-packs _imap_frame
-        # against it -- see the `before=` note there.
-        btn_row = self._btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.pack(fill="x", padx=20, pady=(12, 8))
-
-        self._save_btn = ctk.CTkButton(
-            btn_row, text="Save", width=100, height=32,
-            command=self._on_save,
-        )
-        self._save_btn.pack(side="right", padx=(6, 0))
-
-        ctk.CTkButton(
-            btn_row, text="Cancel", width=80, height=32,
-            fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
-            command=self.destroy,
-        ).pack(side="right")
-
         # ── App-password help (collapsed by default) ───────────────────
         # This used to sit inside _imap_frame, between the password field
         # and the Save/Cancel row -- and got rejected for exactly the
         # problem Android hit first: expanded, it runs to more text than
         # this whole window, and it pushed the one control every user
-        # needs (Save) off the bottom. It now lives below btn_row instead,
-        # behind a toggle, mirroring where Android ended up after the same
-        # correction. See _on_backend_changed for how it shows/hides with
-        # _imap_frame, and _toggle_help/_sync_window_height for how the
-        # window grows to fit it without ever hiding Save/Cancel.
+        # needs (Save) off the bottom. It stays behind a toggle, mirroring
+        # where Android ended up after the same correction; Save/Cancel now
+        # sit outside the scrolling body, so no amount of help text can
+        # reach them. See _on_backend_changed for how it shows and hides
+        # along with _imap_frame.
         self._help_expanded = False
-        self._help_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._help_container = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
 
         self._help_toggle_btn = ctk.CTkButton(
             self._help_container, text="Not sure how to get an app password?",
@@ -1583,52 +2205,41 @@ class _SettingsWindow(ctk.CTkToplevel):
         if current_backend == MAIL_BACKEND_IMAP:
             self._help_container.pack(fill="x")
 
-        # ── Version ────────────────────────────────────────────────────
-        # Small, last, and non-interactive, so it cannot repeat the
-        # "Save is off-screen" failure the help block above caused --
-        # _sync_window_height's winfo_reqheight() already counts it.
-        #
-        # Here rather than the main window because that is where Android
-        # puts it (SettingsScreen's About / Help section), and because
-        # "which version am I on?" is a question asked once, on purpose.
-        self._version_label = ctk.CTkLabel(
-            self, text=version_label(), font=("", 11),
-            text_color=("gray45", "gray60"), anchor="w",
-        )
-        self._version_label.pack(fill="x", padx=20, pady=(4, 8))
-
-        # The 380x200 above is only right for the OAuth backend, where the
-        # IMAP form is hidden. IMAP is the default now, so without this the
-        # window opens clipped at the Host field with Save below the bottom
-        # edge -- the same "Save is off-screen" failure that got the help
-        # block moved down here in the first place.
-        self._sync_window_height()
+    def _on_destroy(self, event) -> None:
+        # <Destroy> fires for every descendant widget as the window tears
+        # down, so act only on the window's own.
+        if event.widget is self and self._on_close is not None:
+            callback, self._on_close = self._on_close, None
+            callback()
 
     # ------------------------------------------------------------------
     # IMAP field show/hide + provider-driven host/port autofill
     # ------------------------------------------------------------------
 
     def _on_backend_changed(self) -> None:
-        if self._backend_var.get() == _BACKEND_LABELS[MAIL_BACKEND_IMAP]:
-            # before=self._btn_row is load-bearing, not tidiness: pack_forget
-            # drops a widget out of the packing order entirely, and a later
-            # bare pack() *appends* it. So OAuth -> IMAP -> back would have
-            # re-packed the IMAP fields below Save/Cancel, leaving the form
-            # underneath its own buttons. The help block needs the same
-            # treatment for the same reason -- it used to pack bare, which
-            # was correct only while it was genuinely last; the version
-            # label now sits below it and a bare pack() would jump the
-            # help block underneath it on every OAuth -> IMAP round trip.
-            self._imap_frame.pack(fill="x", before=self._btn_row)
-            self._help_container.pack(fill="x", before=self._version_label)
+        # Re-picking the backend that is already selected is not a change, and
+        # treating it as one meant tearing the form down and rebuilding it --
+        # visible as the window resizing under the user's cursor for no reason.
+        chosen = self._backend_var.get()
+        if chosen == self._last_backend:
+            return
+        self._last_backend = chosen
+
+        if chosen == _BACKEND_LABELS[MAIL_BACKEND_IMAP]:
+            # Order matters and is guaranteed here only because _mail_frame
+            # holds these two and nothing else: pack_forget drops a widget out
+            # of the packing order, and a bare pack() appends it, so re-packing
+            # the form before the help block restores exactly the original
+            # arrangement. See the _mail_frame comment in __init__.
+            self._imap_frame.pack(fill="x")
+            self._help_container.pack(fill="x")
         else:
             self._imap_frame.pack_forget()
             self._help_container.pack_forget()
             self._warn_oauth_is_limited()
-        self._sync_window_height()
 
     def _warn_oauth_is_limited(self) -> None:
-        """Warn, once per Settings window, that the OAuth path is limited.
+        """Warn, once per Mail account window, that the OAuth path is limited.
 
         The Google Cloud project this app's OAuth client lives in is in
         "Testing" publishing status and is staying there: publishing it would
@@ -1671,7 +2282,6 @@ class _SettingsWindow(ctk.CTkToplevel):
             # Steps/notes/links are all keyed off the provider, so re-render
             # rather than leaving the previous provider's help on screen.
             self._render_help_content()
-            self._sync_window_height()
 
     def _apply_host_field_state(self) -> None:
         provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
@@ -1693,7 +2303,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             self._port_entry.insert(0, str(info["port"]))
 
     # ------------------------------------------------------------------
-    # App-password help (collapsible, below Save/Cancel)
+    # App-password help (collapsible, under the IMAP form)
     # ------------------------------------------------------------------
 
     def _toggle_help(self) -> None:
@@ -1705,7 +2315,6 @@ class _SettingsWindow(ctk.CTkToplevel):
         else:
             self._help_toggle_btn.configure(text="Not sure how to get an app password?")
             self._help_frame.pack_forget()
-        self._sync_window_height()
 
     def _render_help_content(self) -> None:
         """Rebuild _help_frame's children for the currently selected
@@ -1820,30 +2429,19 @@ class _SettingsWindow(ctk.CTkToplevel):
         prompt = _build_app_password_prompt(provider_key, provider_label, host)
         webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote_plus(prompt))
 
-    def _sync_window_height(self) -> None:
-        """Grow/shrink the window to fit the help block instead of letting
-        it clip content or, worse, push Save/Cancel out of reach -- the
-        exact failure this whole feature was moved below the button row to
-        fix. Relies on pack's default propagate behaviour: winfo_reqheight()
-        reports the height the currently packed children actually need,
-        whether that's the collapsed 380x200 footprint or the expanded help
-        block, so this works for both toggling and provider changes."""
-        self.update_idletasks()
-        self.geometry(f"{self.winfo_width()}x{self.winfo_reqheight()}")
-
     # ------------------------------------------------------------------
     # Save
     # ------------------------------------------------------------------
 
     def _on_save(self) -> None:
-        # Start from a full copy of the existing settings so keys this
-        # dialog doesn't manage (backend_notice_shown, etc.) are preserved
-        # rather than dropped on save.
+        # Start from a full copy of the existing settings so the keys this
+        # window doesn't manage -- everything the Settings window owns, plus
+        # backend_notice_shown and friends -- survive rather than being
+        # dropped. Settings can be open behind this one, but it only writes on
+        # its own Save, so neither can silently revert the other.
         new_settings = dict(self._app._settings)
-        new_settings["chunk_size"] = self._chunk_var.get()
-        new_settings["auto_refresh_label"] = self._refresh_var.get()
 
-        backend = _BACKEND_LABELS_REV.get(self._backend_var.get(), MAIL_BACKEND_GMAIL_OAUTH)
+        backend =_BACKEND_LABELS_REV.get(self._backend_var.get(), MAIL_BACKEND_GMAIL_OAUTH)
         new_settings["mail_backend"] = backend
 
         password = self._password_entry.get()
@@ -1859,10 +2457,10 @@ class _SettingsWindow(ctk.CTkToplevel):
             email = self._email_entry.get().strip()
 
             if provider_key == "custom" and not host:
-                messagebox.showerror("Settings", "Enter a host for a custom IMAP server.")
+                messagebox.showerror("Mail account", "Enter a host for a custom IMAP server.")
                 return
             if not email:
-                messagebox.showerror("Settings", "Enter the email address to connect with.")
+                messagebox.showerror("Mail account", "Enter the email address to connect with.")
                 return
 
             new_settings["imap_provider"] = provider_key

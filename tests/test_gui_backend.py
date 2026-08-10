@@ -729,6 +729,29 @@ def settings_window(settings_file, tk_root):
     win.destroy()
 
 
+@pytest.fixture
+def mail_account_window(settings_file, tk_root):
+    """The mail account lives in its own window now, as it does on Android --
+    Settings only shows a summary line and a way in. Everything about the
+    backend, the IMAP form and the app-password help is asserted against this
+    window rather than the Settings one."""
+    root = tk_root
+    root._settings = {
+        "mail_backend": MAIL_BACKEND_IMAP,
+        "imap_provider": "gmail",
+        "imap_host": IMAP_PROVIDERS["gmail"]["host"],
+        "imap_port": 993,
+        "imap_email": "you@example.com",
+    }
+    win = gui._MailAccountWindow(root)
+    yield win
+    try:
+        win.grab_release()
+    except Exception:
+        pass
+    win.destroy()
+
+
 def _select(win, provider_key):
     win._provider_var.set(gui._PROVIDER_LABELS[provider_key])
     win._on_provider_changed()
@@ -738,46 +761,142 @@ def _select(win, provider_key):
     "provider_key", [k for k in IMAP_PROVIDERS if k != "custom"]
 )
 def test_provider_change_updates_host_even_when_field_is_disabled(
-    settings_window, provider_key
+    mail_account_window, provider_key
 ):
     # Start on gmail (the fixture's saved provider) so every non-gmail case
     # arrives with the host entry already disabled -- the failing path.
-    _select(settings_window, "gmail")
-    _select(settings_window, provider_key)
-    assert settings_window._host_entry.get() == IMAP_PROVIDERS[provider_key]["host"]
-    assert settings_window._port_entry.get() == str(IMAP_PROVIDERS[provider_key]["port"])
+    _select(mail_account_window, "gmail")
+    _select(mail_account_window, provider_key)
+    assert mail_account_window._host_entry.get() == IMAP_PROVIDERS[provider_key]["host"]
+    assert mail_account_window._port_entry.get() == str(IMAP_PROVIDERS[provider_key]["port"])
 
 
-def test_custom_provider_leaves_host_editable(settings_window):
-    _select(settings_window, "fastmail")
-    _select(settings_window, "custom")
-    assert str(settings_window._host_entry.cget("state")) == "normal"
+def test_custom_provider_leaves_host_editable(mail_account_window):
+    _select(mail_account_window, "fastmail")
+    _select(mail_account_window, "custom")
+    assert str(mail_account_window._host_entry.cget("state")) == "normal"
 
 
-def test_help_stays_below_the_save_row_across_a_backend_round_trip(settings_window):
-    win = settings_window
-    order = lambda: [str(c) for c in win.pack_slaves()]
+def test_the_imap_form_keeps_its_place_across_a_backend_round_trip(mail_account_window):
+    win = mail_account_window
+    order = lambda: [str(c) for c in win._mail_frame.pack_slaves()]
     assert win._help_expanded is False
-    assert order().index(str(win._help_container)) > order().index(str(win._btn_row))
+    before = order()
 
     win._warn_oauth_is_limited = lambda: None
     win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
     win._on_backend_changed()
+    # OAuth needs neither the IMAP form nor the app-password help, so both go.
+    assert str(win._imap_frame) not in order()
     assert str(win._help_container) not in order()
 
     win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_IMAP])
     win._on_backend_changed()
-    # pack_forget drops a widget from the packing order; a bare re-pack would
-    # append it, leaving the IMAP form below its own Save button.
-    assert order().index(str(win._imap_frame)) < order().index(str(win._btn_row))
-    assert order().index(str(win._help_container)) > order().index(str(win._btn_row))
+    # pack_forget drops a widget from the packing order and a bare re-pack
+    # appends it, so coming back has to restore the arrangement exactly --
+    # form under the backend menu, help under the form, not the other way up.
+    assert order() == before
+
+
+def _has_save(frame):
+    return any(
+        getattr(g, "cget", None) and str(g.cget("text")) == "Save"
+        for g in frame.winfo_children()
+    )
+
+
+def test_save_is_not_inside_the_scrolling_body(mail_account_window):
+    """Save and Cancel are children of the window itself rather than of the
+    scroll area, so no amount of expanded help text can push them out of
+    reach -- the failure that got the help block moved in the first place."""
+    win = mail_account_window
+    win._toggle_help()
+
+    assert any(_has_save(c) for c in win.pack_slaves()), \
+        "Save row is not packed directly in the mail account window"
+
+
+def test_settings_save_is_not_inside_the_scrolling_body(settings_window):
+    """Same guarantee on the Settings side, which scrolls for the same reason."""
+    assert any(_has_save(c) for c in settings_window.pack_slaves()), \
+        "Save row is not packed directly in the settings window"
+
+
+def test_the_window_does_not_resize_itself(mail_account_window):
+    """Reported live: the window changed size on every backend switch, and
+    again on re-picking the option already selected. It sized itself from
+    winfo_width() -- the width it had just set -- so each round trip nudged it
+    further. The size is fixed now and the content scrolls instead."""
+    win = mail_account_window
+    win.update_idletasks()
+    original = win.geometry()
+
+    win._warn_oauth_is_limited = lambda: None
+    win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
+    win._on_backend_changed()
+    win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_IMAP])
+    win._on_backend_changed()
+    win._toggle_help()
+    win.update_idletasks()
+
+    assert win.geometry() == original
+
+
+def test_re_picking_the_current_backend_changes_nothing(mail_account_window):
+    """A CTkOptionMenu fires its command even when the value picked is the one
+    already showing. Treating that as a change rebuilt the form for nothing."""
+    win = mail_account_window
+    before = [str(c) for c in win._mail_frame.pack_slaves()]
+    for _ in range(3):
+        win._on_backend_changed()
+    assert [str(c) for c in win._mail_frame.pack_slaves()] == before
+
+
+def test_settings_shows_the_account_summary_not_the_form(settings_window):
+    """The split is the point: Settings answers "connected as whom?" in one
+    line and owns none of the mail widgets. Android's SettingsScreen does
+    exactly this -- a nav row with a summary, and MailAccountScreen behind it."""
+    win = settings_window
+    assert not hasattr(win, "_imap_frame")
+    assert not hasattr(win, "_backend_var")
+    # imap_email with no saved credentials file is "not connected" on both
+    # platforms -- see MainActivity's mailAccountSummary.
+    assert win._account_summary.cget("text") == "Not connected"
+
+
+def test_settings_save_keeps_the_mail_account_keys(settings_window, monkeypatch):
+    """Each window saves its own half onto a fresh copy of the whole settings
+    dict, so neither can drop the other's keys on the way past."""
+    win = settings_window
+    saved = {}
+    monkeypatch.setattr(win._app, "_apply_settings", saved.update, raising=False)
+    # Leave the real destroy in place for the fixture's teardown.
+    monkeypatch.setattr(win, "destroy", lambda: None)
+    win._on_save()
+
+    assert saved["imap_email"] == "you@example.com"
+    assert saved["mail_backend"] == MAIL_BACKEND_IMAP
+    assert saved["chunk_size"] == "day"
+
+
+def test_mail_account_save_keeps_the_settings_keys(mail_account_window, monkeypatch):
+    win = mail_account_window
+    win._app._settings["chunk_size"] = "week"
+    saved = {}
+    monkeypatch.setattr(win._app, "_apply_settings", saved.update, raising=False)
+    # Leave the real destroy in place for the fixture's teardown.
+    monkeypatch.setattr(win, "destroy", lambda: None)
+    win._on_save()
+
+    assert saved["chunk_size"] == "week"
+    assert saved["imap_email"] == "you@example.com"
 
 
 @pytest.mark.parametrize("provider_key", list(IMAP_PROVIDERS))
 def test_app_password_prompt_never_contains_email_or_password(
-    settings_window, provider_key
+    mail_account_window, provider_key
 ):
-    win = settings_window
+    win = mail_account_window
     win._password_entry.insert(0, "hunter2-app-password")
     _select(win, provider_key)
     win._toggle_help()

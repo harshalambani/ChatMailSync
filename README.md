@@ -29,6 +29,24 @@ data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (Gmail API / IMAP)
 - Per-chat sync state lives in `data/sync_state.db`; re-running a sync only pushes
   new messages.
 - Files move from `inbox/` to `processed/` only after a fully successful sync.
+- Every provider caps the size of a single message (25 MB at Gmail/Outlook/Yahoo,
+  20 MB at iCloud; RFC 7889 `APPENDLIMIT` is honoured when advertised, and a
+  refusal in flight lowers the ceiling for the rest of the run). A chunk that
+  would exceed it is split; MIME encoding inflates raw bytes by roughly ×1.37, so
+  the projection is done on encoded size, not raw. One case cannot be split — a
+  *single* media file larger than the cap on its own. That message is still
+  archived, with a placeholder naming the file and its size in place of the
+  media, and the file is reported in the sync summary under **media omitted** on
+  both front-ends. The original stays in the WhatsApp export; nothing is lost,
+  but it will never sync.
+- An optional **watched folder** (`src/watch_folder.py` on Windows,
+  `WatchFolderWorker.kt` on Android) copies new exports into `inbox/` on its own.
+  The scan is non-recursive, each source is imported once and ledgered by path,
+  and the *synced-file policy* — leave, move to `synced/`, or delete — is applied
+  only once delivery is confirmed, never at import time. On Windows "delete"
+  means the Recycle Bin, and refuses rather than falling back to a permanent
+  delete. Windows polls from the GUI timer, so it only runs while the app is
+  open; Android uses a WorkManager job with a 15-minute floor.
 
 For the full design — date-parsing engine, state schema, dedup logic, HTML/media
 email format, and packaging — see
