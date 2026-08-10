@@ -41,10 +41,14 @@ duration you set in `App\AppInfo\Launcher\<AppID>.ini`:
 SplashTime=13000
 ```
 
-WA Mail Sync has **no splash today** - there is no `splash.jpg` under
-`portable\App\AppInfo\Launcher\` and no `SplashTime` in
-`WAMailSyncPortable.ini`. Adding one is the single cheapest perceived-speed win
-available, because it costs zero actual milliseconds.
+**UPDATE 2026-08-09 - this paragraph is stale.** It used to read "WA Mail Sync has
+no splash today". It has one now: `portable\App\AppInfo\Launcher\splash.jpg` is
+committed and `WAMailSyncPortable.ini` sets `SplashTime=2500`, sized against
+measured warm starts of 2,808-3,005 ms with the 8,135 ms cold start deliberately
+left uncovered. That was the right call **under the timed-splash model described
+below**. That model has since been replaced - see **§1b**, which supersedes Trap 1
+and the sizing recipe in this section. Read §1 for the mechanics and the traps,
+which all still hold; take the *sizing advice* from §1b instead.
 
 ### The three traps, in the order they bit
 
@@ -130,6 +134,77 @@ After later startup work, PASk's warm start dropped to **11.77s** against a
 `SplashTime` of 13000 - now overhanging a usable window by ~1s. Tuned constants
 drift as the code gets faster, and nothing tells you. The comment instructing a
 re-measure is what makes this recoverable by whoever touches it next.
+
+---
+
+## 1b. Stop tuning the number - dismiss the splash on ready
+
+**Added 2026-08-09. Supersedes Trap 1 and the sizing recipe above.** Shipped in
+PA Skills 3.6.0 (PR #169). WA Mail Sync has **not** got this yet.
+
+Everything above accepts the premise that `SplashTime` is a duration you estimate.
+That premise is what forces the choice between a gap (splash clears over a blank
+desktop) and an overlap (a topmost image parked over a window the user could
+already be using), and it is what makes every tuned value hardware-specific and
+prone to drift. The premise is wrong: **the app can dismiss the splash itself,
+the moment its window is up.**
+
+**Why it is possible.** PAL's `SplashScreen.nsh` calls `newadvsplash::show`
+**without `/NOCANCEL`**, and that plugin's documented default is "exit on user
+click". So the splash is already listening for a click - nothing needs patching in
+the launcher. Verify this holds for the launcher generator version in use before
+relying on it; it is a one-line check in the generated `SplashScreen.nsh`.
+
+**What actually works, measured - three of the four obvious approaches do not:**
+
+- The splash is a visible top-level window of **class `_sp`**, owned by the
+  **launcher** process (`PASkillsPortable.exe` / `WAMailSyncPortable.exe`) - *not*
+  by the app process. Enumerate top-level windows, match the class, then confirm
+  the owning PID via `GetWindowThreadProcessId` + `QueryFullProcessImageName`.
+- `PostMessage(WM_CLOSE)` to it is **ignored**.
+- `PostMessage(WM_LBUTTONDOWN, wParam=1)` followed by `WM_LBUTTONUP` **works**.
+  This is not a hack around the launcher; it is the exit path the plugin was told
+  to offer.
+- The same finding transfers to PAL's *"did not close properly last time"* modal
+  (class `#32770`): `BM_CLICK` and `WM_COMMAND`/IDOK are both ignored by it, and
+  only a synthesized mouse click on its `Button` child dismisses it.
+
+**Then `SplashTime` becomes a maximum, not an estimate.** Once dismissal is
+event-driven, the number's only job is to bound the failure case where dismissal
+never happens - so set it *above* the worst cold start rather than under the warm
+one. PA Skills raised it 11000 -> 45000 to finally cover its 44s cold start. For
+WA Mail Sync that means `SplashTime=2500` (chosen under the old model, deliberately
+leaving the 8,135 ms cold start uncovered) should go **up**, not be re-tuned down.
+
+**Shape of the module.** Windows-gated, never-raising (wrap the whole body and
+return `False` on any exception - splash cosmetics must never affect startup),
+time-capped (~2s budget, 0.1s poll, because the app window can be up before the
+splash paints), stdlib `ctypes` only.
+
+**Wiring is framework-specific.** PA Skills is pywebview and hooks
+`window.events.shown`, which is *non-locking* there (unlike `closing`), so the
+search runs off the GUI thread. **WA Mail Sync is Tk/CustomTkinter and has no such
+event** - the analogue is a one-shot `<Map>` binding on the root window, and the
+2s search must not run inline on the Tk main loop. Also hook any fallback path
+where the normal ready event never fires (PA Skills does this on its
+browser-fallback branch), or the splash sits there for the full maximum.
+
+**Test hazard this introduced.** A `sys.platform != "win32"` gate at the top of the
+function silently converts every negative assertion below it into a test of the
+gate. On Linux CI, 3 of 5 PA Skills splash tests asserted `False` and passed
+without executing a line of the logic they name. Pin the platform in an autouse
+fixture: `monkeypatch.setattr(_splash.sys, "platform", "win32")`.
+
+**Measurement trap, learned expensively.** Never `Kill()` the app or the launcher
+between timed runs. PAL then decides the app did not close properly, and every
+*later* launch shows the cleanup modal and **never starts the app** - which
+presents as a measurement timeout, not an error, so one kill silently invalidates
+every run after it. Close with `CloseMainWindow()` and wait; if that fails, abort
+rather than escalate.
+
+**One more correction to §1: the splash does not start at t=0.** The launcher does
+~1.3s of its own work first. Every value ever tuned as if the clock started at zero
+has been ~1.3s more generous than intended.
 
 ---
 
@@ -336,9 +411,15 @@ information, not a setback.
 - [ ] Time the **frozen** exe, launcher-start to visible window, warm and cold.
 - [ ] Close-then-immediately-reopen. Confirm it works (it should, given
       `SingleAppInstance=false`) and note the invariant.
-- [ ] Add `splash.jpg` + `SplashTime` sized just under the warm figure, with the
+- [x] Add `splash.jpg` + `SplashTime` sized just under the warm figure, with the
       reasoning in a comment. Prefer a **static** image - no version number, no
-      build-time render, no Pillow trap.
+      build-time render, no Pillow trap. **Done 2026-08-08** (`SplashTime=2500`,
+      warm 2,808-3,005 ms, cold 8,135 ms uncovered).
+- [ ] **Now supersede it (§1b): dismiss the splash on window-ready** via a
+      synthesized click on the class `_sp` window owned by
+      `WAMailSyncPortable.exe`, hooked to a one-shot Tk `<Map>` on the root, and
+      raise `SplashTime` to a maximum that covers the 8,135 ms cold start
+      (~15000) instead of a duration sized under the warm one.
 - [ ] Do **not** set `LaunchAppAfterSplash`.
 - [ ] Verify the splash appears in a package built by **CI**, not just locally.
 - [ ] Audit for anything with a network timeout on the path to the first window;
