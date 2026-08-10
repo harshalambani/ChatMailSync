@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
+from _splash import dismiss_launcher_splash
 from gui_worker import (
     SyncWorker,
     check_auth_status,
@@ -222,6 +223,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._chunk_var.set(_settings.get("chunk_size", "day"))
         self._update_signout_button_label()
 
+        # Dismiss the PortableApps launcher splash as soon as this window is
+        # actually on screen, rather than letting it run out its timer. See
+        # _dismiss_splash_when_mapped().
+        self.bind("<Map>", self._dismiss_splash_when_mapped)
+
         # Initial data load. The auth check is deferred rather than inline --
         # see _check_auth_deferred(); it is the one step here that can go to
         # the network, and it ran before mainloop().
@@ -233,6 +239,29 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Schedule periodic inbox refresh (0 = Off).
         if self._auto_refresh_ms > 0:
             self.after(self._auto_refresh_ms, self._auto_refresh_inbox)
+
+    # ------------------------------------------------------------------
+    # Launcher splash
+    # ------------------------------------------------------------------
+
+    def _dismiss_splash_when_mapped(self, _event=None) -> None:
+        """End the PortableApps splash now that this window is on screen.
+
+        Bound to <Map>, and unbinds itself on the first fire: <Map> is emitted
+        again on restore from minimise and on some monitor changes, and there
+        is nothing to dismiss by then.
+
+        The search runs on a daemon thread rather than inline. It polls for up
+        to ~2 s (our window can be mapped before the splash has painted), and
+        two seconds of polling inside a <Map> handler would freeze the window
+        at the exact moment it becomes visible -- trading a cosmetic problem
+        for a real one. Same shape as _check_auth_deferred() below.
+
+        Nothing consumes the result: a False return is the normal outcome from
+        source, on non-Windows, or whenever the launcher is not involved.
+        """
+        self.unbind("<Map>")
+        threading.Thread(target=dismiss_launcher_splash, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Header
@@ -1239,6 +1268,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         """
         if not _should_show_backend_notice(self._settings, had_settings_file, had_token_file):
             return
+        # This modal is raised from __init__, i.e. before mainloop() and
+        # without waiting for <Map>, so the splash may still be up -- and it is
+        # topmost, which would park it over a dialog the user has to read and
+        # dismiss. That is the worst version of the overlap this whole change
+        # exists to remove, so dismiss here too. Whichever call happens second
+        # finds no splash window and returns harmlessly.
+        dismiss_launcher_splash()
         messagebox.showinfo(
             "New: IMAP / app-password option",
             "You can now optionally connect using an email provider's IMAP "
