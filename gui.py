@@ -2271,6 +2271,49 @@ class _MailAccountPanel(_Panel):
         self._mail_frame = ctk.CTkFrame(body, fg_color="transparent")
         self._mail_frame.pack(fill="x")
 
+        # One instance per mailbox.
+        #
+        # Stated here, and stated first, because this screen is where a second
+        # instance gets pointed at a mailbox the first one is already archiving
+        # into -- which is the exact moment the mistake is made. The record of
+        # what has been sent lives in this instance's own sync_state.db, not in
+        # the mailbox, so the second one starts from zero knowledge and re-files
+        # every chat it is given. Nothing downstream can catch that: the
+        # de-duplication the rest of the app does is per-instance by
+        # construction, and this app can add mail but never remove it, so the
+        # user is the only one who can clean up afterwards.
+        #
+        # "Instance", not "device" or "platform": two PCs, two phones, and two
+        # copies of the portable app in different folders on one PC are all the
+        # same failure, since each copy carries its own Data\. Naming
+        # Windows-vs-Android would read as an exhaustive list and quietly bless
+        # the other cases.
+        #
+        # Packed before row3 and never pack_forget'd, so it survives the
+        # OAuth <-> IMAP re-packing that the comment above describes, and it is
+        # deliberately outside _imap_frame: the limitation is a property of the
+        # local state file, not of either backend.
+        #
+        # Weighting, decided deliberately: this is ONE quiet line on a screen
+        # the user visits perhaps twice, in the same muted style as every other
+        # note in the app -- not a dialog, not a banner, not a warning colour,
+        # and not repeated on the sync screen. A caveat that interrupts work it
+        # does not apply to gets dismissed unread, and then it is not protecting
+        # anyone. It carries its weight by being in the right place at the right
+        # moment; the full explanation lives in the user guide and help.
+        ctk.CTkLabel(
+            self._mail_frame,
+            text=(
+                "One instance per mailbox. What has already been archived is "
+                "remembered by this copy of the app, not by your mailbox, so "
+                "any second instance using the same account — another PC, "
+                "a phone, or a second copy here — will archive the same "
+                "chats again."
+            ),
+            wraplength=360, justify="left", anchor="w",
+            text_color=("gray40", "gray60"), font=("", 11),
+        ).pack(fill="x", padx=20, pady=(8, 0))
+
         row3 = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
         row3.pack(fill="x", **pad)
         ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")

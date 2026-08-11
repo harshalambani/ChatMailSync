@@ -229,6 +229,36 @@ fun MailAccountScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // One instance per mailbox. Parity with gui.py's mail-account panel,
+            // which carries the same sentence in the same position -- first, above
+            // the backend picker -- because this screen is where a second instance
+            // gets pointed at a mailbox the first one is already archiving into,
+            // which is the exact moment the mistake is made. The record of what
+            // has been sent lives in this instance's own sync_state.db, not in the
+            // mailbox, so a second one starts from zero knowledge and re-files
+            // every chat it is given. Nothing downstream can catch that: the
+            // de-duplication is per-instance by construction, and the app can add
+            // mail but never remove it.
+            //
+            // "Instance", not "device" or "platform": two phones, two PCs and two
+            // copies of the portable app in different folders on one PC are all
+            // the same failure. Naming Windows-vs-Android would read as an
+            // exhaustive list and quietly bless the other cases.
+            //
+            // Weighting, decided deliberately: ONE quiet line in the same muted
+            // caption style as every other note here -- no dialog, no banner, no
+            // error colour, and not repeated on the sync screen. A caveat that
+            // interrupts work it does not apply to gets dismissed unread. The
+            // full explanation lives in Help and the user guide.
+            Text(
+                "One instance per mailbox. What has already been archived is " +
+                    "remembered by this copy of the app, not by your mailbox, so any " +
+                    "second instance using the same account — another phone, a PC, or " +
+                    "a reinstall — will archive the same chats again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Text("Mail backend", style = MaterialTheme.typography.titleMedium)
             Box {
                 OutlinedButton(onClick = { backendMenuOpen = true }) {
