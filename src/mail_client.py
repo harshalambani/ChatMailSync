@@ -325,6 +325,34 @@ class MailTransport(Protocol):
     def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict: ...
 
 
+def _label_id_is_usable(
+    transport: "MailTransport", label_id: Optional[str], display_name: str
+) -> bool:
+    """Can this stored label ID still be handed straight to `transport`?
+
+    Label IDs are persisted per chat (chats.gmail_label_id) and reused on every
+    later run to skip a labels_list() round trip. But an ID's *meaning* belongs
+    to the backend that minted it: Gmail's REST API returns an opaque handle
+    ("Label_5928374..."), while for IMAP the ID is literally the folder name.
+    Switching a chat's backend therefore leaves behind a stored ID the new
+    transport cannot resolve -- and because push_chat() re-resolved only when
+    the ID was None, an OAuth-era handle went to IMAP APPEND as a mailbox name,
+    producing exactly the reported "APPEND failed (NO): [TRYCREATE] Folder
+    doesn't exist." on every chat that had ever synced under OAuth. Chats with
+    no stored ID were unaffected, which is why others in the same run succeeded.
+
+    Transports that can tell answer via an owns_label_id() method; the REST ones
+    cannot inspect an opaque handle, so absence of the method means "assume yes"
+    and keeps their existing behaviour (no extra API call per chat).
+    """
+    if not label_id:
+        return False
+    checker = getattr(transport, "owns_label_id", None)
+    if checker is None:
+        return True
+    return bool(checker(label_id, display_name))
+
+
 class MailTransportError(Exception):
     """Normalized transport error, raised by every MailTransport implementation.
 
@@ -1071,6 +1099,17 @@ class ImapTransport:
             canonical_name = self._mailbox_from_wire(wire_name)
             labels.append({"name": canonical_name, "id": canonical_name})
         return {"labels": labels}
+
+    def owns_label_id(self, label_id: str, display_name: str) -> bool:
+        """See _label_id_is_usable(). Here a label ID is the folder name itself.
+
+        get_or_create_label() only ever returns _full_label_name(display_name)
+        for this transport -- both when it creates the folder and when it finds
+        one already listed -- so anything else in the stored column was minted
+        by a different backend (or under a different LABEL_PARENT) and must be
+        re-resolved rather than sent to the server as a mailbox argument.
+        """
+        return label_id == _full_label_name(display_name)
 
     def labels_create(self, body: dict) -> dict:
         name = body["name"]
@@ -1970,7 +2009,10 @@ def push_chat(
     if not messages:
         return [], label_id or "", gmail_thread_id or ""
 
-    if label_id is None and not dry_run:
+    # Not just "is it None": a stored ID from another backend is worse than no
+    # ID at all, because it is passed through as if it were valid. See
+    # _label_id_is_usable().
+    if not dry_run and not _label_id_is_usable(transport, label_id, display_name):
         label_id = get_or_create_label(transport, display_name)
 
     label_id = label_id or "dry-run-label"

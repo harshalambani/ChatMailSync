@@ -57,6 +57,16 @@ def token_file(tmp_path, monkeypatch):
 def settings_file(tmp_path, monkeypatch, token_file):
     path = tmp_path / "data" / ".settings.json"
     monkeypatch.setattr(gui, "_SETTINGS_FILE", path)
+    # Same isolation as token_file, and for the same reason on the IMAP side:
+    # _render_account_summary() and _signout_state() both ask whether the saved
+    # app-password file exists, so without this the answer came from the
+    # developer's real auth/imap_credentials.json. Not hypothetical --
+    # test_settings_shows_the_account_summary_not_the_form began failing the
+    # moment a real IMAP account was connected on the machine running the
+    # suite, while CI (which has no credentials at all) stayed green.
+    monkeypatch.setattr(
+        gui, "IMAP_CREDENTIALS_FILE", tmp_path / "auth" / "imap_credentials.json"
+    )
     return path
 
 
@@ -1073,3 +1083,44 @@ def test_the_backend_choice_never_falls_back_to_the_gmail_only_path():
     # ...and the backend an unrecognised label saves as.
     assert gui._BACKEND_LABELS_REV.get("something we never rendered",
                                        DEFAULT_MAIL_BACKEND) == MAIL_BACKEND_IMAP
+
+
+def test_the_poll_loop_survives_the_worker_clearing_itself_mid_drain():
+    """Reported live: the bar froze mid-run and the log stopped updating.
+
+    _handle_sync_event() sets self._worker = None on "done"/"error", and the
+    drain loop re-read self._worker on every iteration -- so the next
+    get_nowait() raised "AttributeError: 'NoneType' object has no attribute
+    'q'". That escaped the Tk callback, killing the poll while the sync thread
+    carried on working. The loop now holds its worker in a local and stops the
+    moment the run it was polling is over.
+    """
+    class _Worker:
+        def __init__(self, events):
+            self.q = queue.Queue()
+            for e in events:
+                self.q.put(e)
+
+    class _App:
+        def __init__(self, worker):
+            self._worker = worker
+            self.scheduled = 0
+            self.seen = []
+
+        def after(self, _ms, _cb):
+            self.scheduled += 1
+
+        def _handle_sync_event(self, event):
+            self.seen.append(event["type"])
+            # Stand-in for the real "done"/"error" branches.
+            if event["type"] in ("done", "error"):
+                self._worker = None
+
+    # A second event sits behind the terminal one, which is what used to blow up.
+    worker = _Worker([{"type": "log", "msg": "x"},
+                      {"type": "error", "msg": "boom"},
+                      {"type": "log", "msg": "never read"}])
+    app = _App(worker)
+    gui.App._poll_sync_queue(app)          # must not raise
+    assert app.seen == ["log", "error"]
+    assert app.scheduled == 0              # run is over: no further timer chain

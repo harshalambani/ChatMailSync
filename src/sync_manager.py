@@ -718,9 +718,24 @@ class ProgressSyncManager(SyncManager):
         if self._stop_event.is_set():
             return
         self._pq.put({"type": "syncing", "name": display_name})
+        # Read before super() runs: _parse_and_filter() pops the entry.
+        cached = self._prescan_cache.get(str(filepath))
+        planned = len(cached[1]) if cached else 0
         super()._sync_file(filepath, chat_id, display_name, stats)
         self._files_done += 1
-        self._prior_msgs_done = stats.messages_synced
+        # Messages *accounted for*, not messages delivered. A file that failed
+        # its push (or had messages omitted) adds nothing to
+        # stats.messages_synced, yet its share of _total_new_messages was
+        # counted in the pre-scan -- so keying the whole-sync fraction off
+        # messages_synced alone left the bar permanently short of where the run
+        # actually was, by the size of every failed chat. Reported live as the
+        # bar reading ~72% while the last of four files was already in flight,
+        # three of the four having failed with APPEND errors. max() rather than
+        # a plain add, so a file that delivered more than the pre-scan planned
+        # still moves the bar forward instead of dragging it back.
+        self._prior_msgs_done = max(
+            stats.messages_synced, self._prior_msgs_done + planned
+        )
         self._pq.put({
             "type": "file_done",
             "done": self._files_done,

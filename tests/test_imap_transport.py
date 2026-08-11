@@ -529,3 +529,62 @@ def test_get_or_create_label_returns_existing_without_recreating():
 
     assert label_id == "WhatsApp/Alice Smith"
     assert not any(c[0] == "create" for c in conn.calls)
+
+
+# ---------------------------------------------------------------------------
+# Stale label IDs across a backend switch
+# ---------------------------------------------------------------------------
+
+def test_a_stored_oauth_label_id_is_not_sent_to_imap_as_a_folder_name():
+    """Reported live: three chats failed a real sync with
+
+        APPEND failed (NO): [TRYCREATE] Folder doesn't exist. (Failure)
+
+    while others in the same run succeeded. The failures were exactly the chats
+    that had synced before under Gmail OAuth: chats.gmail_label_id still held
+    an opaque REST handle ("Label_5928374..."), push_chat() re-resolved the
+    label only when the stored ID was None, and so that handle went straight
+    out as the APPEND mailbox argument. Chats with no stored ID resolved
+    normally, which is what made the failure look chat-specific.
+    """
+    from src.mail_client import _full_label_name, push_chat
+
+    transport, conn = _make_transport()
+
+    # A handle only Gmail's REST API could have minted.
+    assert transport.owns_label_id("Label_5928374102938", "Bijal Ambani") is False
+    # What this transport itself hands back is, of course, usable.
+    assert transport.owns_label_id(_full_label_name("Bijal Ambani"), "Bijal Ambani")
+
+    results, label_id, _ = push_chat(
+        transport=transport,
+        display_name="Bijal Ambani",
+        messages=_sample_chunk(),
+        label_id="Label_5928374102938",
+        chunk_size="day",
+    )
+
+    # Re-resolved to a real folder name, and that is what APPEND targeted.
+    assert label_id == _full_label_name("Bijal Ambani")
+    appends = [c for c in conn.calls if c[0] == "append"]
+    assert appends, "expected the chat to be pushed"
+    for call in appends:
+        assert "Label_" not in call[1]
+        assert call[1] == transport._mailbox_to_wire(label_id)
+
+
+def test_a_transport_with_opaque_label_ids_keeps_reusing_its_stored_id():
+    """The other half: REST transports cannot inspect their own handles, so
+    they must not be forced into an extra labels_list() on every chat just
+    because the IMAP one can. No owns_label_id() means "assume usable"."""
+    from src.mail_client import _label_id_is_usable
+
+    class _Opaque:
+        def labels_list(self): raise AssertionError("must not be called")
+        def labels_create(self, body): raise AssertionError("must not be called")
+        def messages_insert(self, body, thread_id=None): return {}
+
+    assert _label_id_is_usable(_Opaque(), "Label_5928374102938", "Bijal Ambani")
+    # ...but an absent ID still forces resolution, as it always did.
+    assert not _label_id_is_usable(_Opaque(), None, "Bijal Ambani")
+    assert not _label_id_is_usable(_Opaque(), "", "Bijal Ambani")

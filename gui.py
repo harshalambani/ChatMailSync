@@ -1103,14 +1103,23 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.after(_POLL_MS, self._poll_sync_queue)
 
     def _poll_sync_queue(self) -> None:
-        if self._worker is None:
+        # Bound to a local: _handle_sync_event() clears self._worker the moment
+        # it sees "done" or "error", and the drain loop below re-read it on
+        # every iteration -- so the very next get_nowait() raised
+        # "AttributeError: 'NoneType' object has no attribute 'q'". That escaped
+        # the Tk callback and killed the poll, which is what showed up as a
+        # progress bar frozen mid-run over a log that had stopped updating.
+        worker = self._worker
+        if worker is None:
             return
         try:
-            while True:
-                self._handle_sync_event(self._worker.q.get_nowait())
+            while self._worker is worker:
+                self._handle_sync_event(worker.q.get_nowait())
         except queue.Empty:
             pass
-        if self._worker is not None:
+        # Only keep polling if this call still owns the run: a finished or
+        # replaced worker must not leave a second timer chain running.
+        if self._worker is worker:
             self.after(_POLL_MS, self._poll_sync_queue)
 
     def _advance_progress(self, fraction: float) -> None:
