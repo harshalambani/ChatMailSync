@@ -85,7 +85,11 @@ private val APP_PASSWORD_HELP_URLS = mapOf(
 
 private val APP_PASSWORD_HELP_TEXT = mapOf(
     "gmail" to "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
-    "outlook" to "Outlook / Microsoft app passwords are generated from your Microsoft account's security settings (requires two-step verification to be on).",
+    // Personal Microsoft accounts only. Work and school (Microsoft 365)
+    // mailboxes have basic authentication switched off, so an app password is
+    // refused there whatever host is entered -- see src/config.py's
+    // IMAP_PROVIDERS note.
+    "outlook" to "Outlook.com app passwords are generated from your personal Microsoft account's security settings (requires two-step verification to be on). Work or school Microsoft 365 accounts can't use an app password at all.",
     "yahoo" to "Yahoo app passwords are generated from your Yahoo Account security page.",
     "icloud" to "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
     "fastmail" to "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",

@@ -145,7 +145,15 @@ def resolve_mail_backend(saved: dict) -> str:
 
 IMAP_PROVIDERS = {
     "gmail":    {"label": "Gmail",          "host": "imap.gmail.com",        "port": 993},
-    "outlook":  {"label": "Outlook / 365",  "host": "outlook.office365.com", "port": 993},
+    # "Outlook / 365" promised something this app cannot deliver: Microsoft
+    # turned off basic authentication for work and school (Microsoft 365)
+    # mailboxes, so an app password there is refused no matter what host is
+    # typed in -- those accounts need OAuth, which we only implement for Google.
+    # The label now names the account type that can actually sign in, rather
+    # than inviting a work address into a dead end. The host is unchanged and
+    # deliberate: consumer Outlook.com mailboxes live on the office365.com IMAP
+    # front end too.
+    "outlook":  {"label": "Outlook.com",    "host": "outlook.office365.com", "port": 993},
     "yahoo":    {"label": "Yahoo",          "host": "imap.mail.yahoo.com",   "port": 993},
     "icloud":   {"label": "iCloud",         "host": "imap.mail.me.com",      "port": 993},
     "fastmail": {"label": "Fastmail",       "host": "imap.fastmail.com",     "port": 993},
