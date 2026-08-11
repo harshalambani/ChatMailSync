@@ -23,6 +23,7 @@ using the tmp_root fixture from conftest.py.
 """
 
 import json
+import types
 import queue
 
 import pytest
@@ -706,10 +707,21 @@ def tk_root():
     root.destroy()
 
 
+def _as_host(root, settings):
+    """Lend the bare Tk root the three things a panel needs from App, using
+    App's own implementations rather than stand-ins -- the panel stack is what
+    replaced the pop-up windows, so the tests should be running the real one."""
+    root._settings = settings
+    root._panels = []
+    root._HEADER_HEIGHT = gui.App._HEADER_HEIGHT
+    root._push_panel = types.MethodType(gui.App._push_panel, root)
+    root._pop_panel = types.MethodType(gui.App._pop_panel, root)
+    return root
+
+
 @pytest.fixture
 def settings_window(settings_file, tk_root):
-    root = tk_root
-    root._settings = {
+    root = _as_host(tk_root, {
         "mail_backend": MAIL_BACKEND_IMAP,
         "imap_provider": "gmail",
         "imap_host": IMAP_PROVIDERS["gmail"]["host"],
@@ -717,39 +729,30 @@ def settings_window(settings_file, tk_root):
         "imap_email": "you@example.com",
         "chunk_size": "day",
         "auto_refresh_label": "30 s",
-    }
-    win = gui._SettingsWindow(root)
-    yield win
-    # grab_set() in __init__ makes this window modal; release it explicitly so
-    # a failed assertion can't leave the shared root grabbed for later tests.
-    try:
-        win.grab_release()
-    except Exception:
-        pass
-    win.destroy()
+    })
+    root._push_panel(gui._SettingsPanel)
+    yield root._panels[-1]
+    while root._panels:
+        root._pop_panel()
 
 
 @pytest.fixture
 def mail_account_window(settings_file, tk_root):
-    """The mail account lives in its own window now, as it does on Android --
-    Settings only shows a summary line and a way in. Everything about the
-    backend, the IMAP form and the app-password help is asserted against this
-    window rather than the Settings one."""
-    root = tk_root
-    root._settings = {
+    """The mail account is its own screen, as it is on Android -- Settings only
+    shows a summary line and a way in. Everything about the backend, the IMAP
+    form and the app-password help is asserted against this screen rather than
+    the Settings one."""
+    root = _as_host(tk_root, {
         "mail_backend": MAIL_BACKEND_IMAP,
         "imap_provider": "gmail",
         "imap_host": IMAP_PROVIDERS["gmail"]["host"],
         "imap_port": 993,
         "imap_email": "you@example.com",
-    }
-    win = gui._MailAccountWindow(root)
-    yield win
-    try:
-        win.grab_release()
-    except Exception:
-        pass
-    win.destroy()
+    })
+    root._push_panel(gui._MailAccountPanel)
+    yield root._panels[-1]
+    while root._panels:
+        root._pop_panel()
 
 
 def _select(win, provider_key):
@@ -826,10 +829,14 @@ def test_the_window_does_not_resize_itself(mail_account_window):
     """Reported live: the window changed size on every backend switch, and
     again on re-picking the option already selected. It sized itself from
     winfo_width() -- the width it had just set -- so each round trip nudged it
-    further. The size is fixed now and the content scrolls instead."""
+    further. The size is fixed now and the content scrolls instead.
+
+    The screen is no longer a Toplevel, so it has no geometry of its own to
+    creep; what it must not do is push the window it now lives inside around,
+    which is what this asserts."""
     win = mail_account_window
     win.update_idletasks()
-    original = win.geometry()
+    original = win.winfo_toplevel().geometry()
 
     win._warn_oauth_is_limited = lambda: None
     win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
@@ -839,7 +846,7 @@ def test_the_window_does_not_resize_itself(mail_account_window):
     win._toggle_help()
     win.update_idletasks()
 
-    assert win.geometry() == original
+    assert win.winfo_toplevel().geometry() == original
 
 
 def test_re_picking_the_current_backend_changes_nothing(mail_account_window):
@@ -850,6 +857,35 @@ def test_re_picking_the_current_backend_changes_nothing(mail_account_window):
     for _ in range(3):
         win._on_backend_changed()
     assert [str(c) for c in win._mail_frame.pack_slaves()] == before
+
+
+def test_screens_stack_in_the_window_instead_of_opening_pop_ups(settings_window):
+    """The complaint was "too many pop-ups": settings over the main window,
+    mail account over settings. Both are frames inside the main window now, and
+    they stack the way Android's nav stack does -- so going into the mail
+    account and back leaves the settings screen exactly as it was, unsaved
+    edits included, rather than rebuilding it."""
+    settings = settings_window
+    app = settings._app
+    settings._chunk_var.set("week")          # an edit that has not been saved
+
+    settings._open_mail_account()
+    assert len(app._panels) == 2
+    assert isinstance(app._panels[-1], gui._MailAccountPanel)
+    assert not isinstance(app._panels[-1], gui.ctk.CTkToplevel)
+
+    app._pop_panel()
+    assert app._panels == [settings]
+    assert settings.winfo_exists()
+    assert settings._chunk_var.get() == "week"
+
+
+def test_going_back_from_settings_leaves_nothing_over_the_sync_view(settings_window):
+    settings = settings_window
+    app = settings._app
+    settings._close()
+    assert app._panels == []
+    assert not settings.winfo_exists()
 
 
 def test_settings_shows_the_account_summary_not_the_form(settings_window):

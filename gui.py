@@ -16,6 +16,7 @@ import re
 import shutil
 import sys
 import threading
+import tkinter
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -242,6 +243,10 @@ def _help_html_path() -> "Path | None":
 
 class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
+    # The header is a fixed-height strip with pack_propagate off, and in-window
+    # screens are placed directly below it -- see _push_panel().
+    _HEADER_HEIGHT = 52
+
     def __init__(self) -> None:
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
@@ -280,6 +285,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_scanning = False
         self._watch_after_id = None
         self._last_run_dry_run = False
+        # In-window screens, innermost last. Android pushes SettingsScreen and
+        # MailAccountScreen onto a nav stack rather than opening dialogs, and
+        # this is the same idea: settings stays alive underneath while the mail
+        # account is open, so coming back does not lose unsaved edits.
+        self._panels: list = []
 
         # Build UI — footer must be packed before main so it pins to bottom.
         self._build_header()
@@ -1516,14 +1526,51 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
 
     def _open_settings(self) -> None:
-        """Open the settings modal. Only one instance allowed at a time."""
-        if hasattr(self, "_settings_win") and self._settings_win.winfo_exists():
-            self._settings_win.focus()
+        """Show settings in this window rather than as a pop-up."""
+        if self._panels:
+            self._panels[-1].focus_set()
             return
-        self._settings_win = _SettingsWindow(self)
+        self._push_panel(_SettingsPanel)
+
+    def _push_panel(self, factory) -> None:
+        """Put an in-window screen over the sync view.
+
+        Placed rather than packed, covering everything below the header: the
+        sync view and the footer keep their pack order untouched underneath,
+        so going back is a destroy() and nothing else has to be rebuilt or
+        re-ordered. The header stays put, as Android's top bar does.
+        """
+        # The geometry lives on a bare tk.Frame holder rather than on the panel
+        # itself: customtkinter refuses width/height in place() (it wants them
+        # on the constructor), and without the negative height a relheight of
+        # 1.0 would push the panel's bottom -- where Save and Cancel sit -- off
+        # the window by exactly the header's height.
+        holder = tkinter.Frame(self, bd=0, highlightthickness=0)
+        holder.place(
+            x=0, y=self._HEADER_HEIGHT,
+            relwidth=1.0, relheight=1.0, height=-self._HEADER_HEIGHT,
+        )
+        panel = factory(self, holder)
+        panel.pack(fill="both", expand=True)
+        holder.lift()
+        self._panels.append(panel)
+
+    def _pop_panel(self) -> None:
+        """Close the innermost screen and hand control back to what it covered."""
+        if not self._panels:
+            return
+        # Destroying the holder takes the panel with it -- see _push_panel.
+        self._panels.pop().master.destroy()
+        if self._panels:
+            revealed = self._panels[-1]
+            revealed.master.lift()
+            # Settings shows a one-line account summary that the mail account
+            # screen may just have changed.
+            if hasattr(revealed, "on_reveal"):
+                revealed.on_reveal()
 
     def _apply_settings(self, new_settings: dict) -> None:
-        """Called by _SettingsWindow on Save."""
+        """Called by the settings screen on Save."""
         old_refresh_ms = self._auto_refresh_ms
         old_backend = self._settings.get("mail_backend")
         self._settings = new_settings
@@ -1730,50 +1777,64 @@ def _build_app_password_prompt(provider_key: str, provider_label: str, host: str
     )
 
 
-class _SettingsWindow(ctk.CTkToplevel):
-    """Modal settings panel — chunk size, auto-refresh interval, watched
-    folder, and a way in to the mail account.
+class _Panel(ctk.CTkFrame):
+    """An in-window screen: a titled bar with a way back, then the content.
+
+    These were separate Toplevels until the stack of pop-ups they produced --
+    settings over the main window, mail account over settings -- became the
+    complaint. Android never had them: SettingsScreen and MailAccountScreen are
+    pushed onto a nav stack with a back arrow in the top bar, and this is the
+    same arrangement. The App owns the stack (_push_panel/_pop_panel); a panel
+    only knows how to close itself.
+    """
+
+    def __init__(self, app: "App", master, title: str) -> None:
+        # Two parents, deliberately: `master` is the placed holder this panel
+        # fills, `app` is who it talks to (settings, the panel stack). They are
+        # different objects -- see App._push_panel.
+        super().__init__(master, corner_radius=0)
+        self._app = app
+
+        bar = ctk.CTkFrame(self, height=44, corner_radius=0)
+        bar.pack(fill="x", side="top")
+        bar.pack_propagate(False)
+        ctk.CTkButton(
+            bar, text="←", width=36, height=30,
+            font=ctk.CTkFont(size=16),
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._close,
+        ).pack(side="left", padx=(14, 8))
+        ctk.CTkLabel(
+            bar, text=title, anchor="w", font=ctk.CTkFont(size=15, weight="bold"),
+        ).pack(side="left")
+
+    def _close(self) -> None:
+        self._app._pop_panel()
+
+
+class _SettingsPanel(_Panel):
+    """Settings — chunk size, auto-refresh interval, watched folder, and a way
+    in to the mail account.
 
     Laid out in the same compartments as Android's SettingsScreen: a titled
     section per topic, separated by a rule, inside one scrolling body, with the
-    mail account on its own screen (_MailAccountWindow, mirroring Android's
+    mail account on its own screen (_MailAccountPanel, mirroring Android's
     MailAccountScreen). Android scrolls its settings column too
-    (`verticalScroll(rememberScrollState())`), and adopting that here removes
-    the reason this window used to resize itself -- see _SETTINGS_HEIGHT.
+    (`verticalScroll(rememberScrollState())`), and this does the same, so the
+    content never has to fit the space it is given.
     """
 
-    # Fixed, and deliberately so. This window used to recompute its own
-    # geometry every time the IMAP form was shown or hidden, feeding
-    # winfo_width() back into geometry() -- so the width it read was the width
-    # it had just set, and each round trip nudged it again. Switching backends,
-    # or re-picking the backend already selected, visibly resized the window
-    # every time. A scrolling body means the content no longer has to fit the
-    # window at all, so nothing needs to move.
-    #
-    # 470 wide: 380 originally, 430 for the widened "Connect via" menu, and
-    # 470 for the watched-folder row, whose label plus Choose…/Clear buttons
-    # clip at 430.
-    _SETTINGS_WIDTH = 470
-    _SETTINGS_HEIGHT = 480
-
-    def __init__(self, app: "App") -> None:
-        super().__init__(app)
-        self._app = app
-
-        self.title("Settings")
-        self.geometry(f"{self._SETTINGS_WIDTH}x{self._SETTINGS_HEIGHT}")
-        self.resizable(False, True)
-        self.grab_set()          # modal: block input to main window
-        self.lift()
-        self.focus()
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Settings")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
 
         # ── Buttons ──────────────────────────────────────────────────
-        # Packed first, against the bottom, and outside the scrolling body:
-        # that is what makes "Save is off-screen" structurally impossible
-        # rather than something the window has to keep measuring for.
+        # Packed against the bottom and outside the scrolling body: that is
+        # what makes "Save is off-screen" structurally impossible rather than
+        # something the layout has to keep measuring for.
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
 
@@ -1787,7 +1848,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
-            command=self.destroy,
+            command=self._close,
         ).pack(side="right")
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -1955,18 +2016,13 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._account_summary.configure(text=text)
 
     def _open_mail_account(self) -> None:
-        # grab_set() in this window's __init__ makes it modal; the child needs
-        # the grab while it is up, and this window needs it back afterwards,
-        # or the settings panel would be left unresponsive behind a closed
-        # dialog.
-        win = _MailAccountWindow(self._app, on_close=self._on_mail_account_closed)
-        self.wait_window(win)
+        # Pushed over this screen, which stays alive underneath: any settings
+        # edits made before coming here are still there on the way back.
+        self._app._push_panel(_MailAccountPanel)
 
-    def _on_mail_account_closed(self) -> None:
-        try:
-            self.grab_set()
-        except Exception:
-            pass
+    def on_reveal(self) -> None:
+        """Called by App._pop_panel when the mail account screen closes over
+        this one -- the summary line it shows may have just changed."""
         self._render_account_summary()
 
     # ------------------------------------------------------------------
@@ -2046,45 +2102,28 @@ class _SettingsWindow(ctk.CTkToplevel):
             new_settings["imported_source_paths"] = []
 
         self._app._apply_settings(new_settings)
-        self.destroy()
+        self._close()
 
 
-class _MailAccountWindow(ctk.CTkToplevel):
-    """The mail account on its own, as Android's MailAccountScreen.
+class _MailAccountPanel(_Panel):
+    """The mail account on its own screen, as Android's MailAccountScreen.
 
     It owns everything about how mail is sent -- backend, IMAP server details,
     app password, and the app-password help -- and saves them itself, so the
-    Settings window it opens from never has to know about any of it.
+    settings screen it opens from never has to know about any of it.
     """
 
-    _WIDTH = 470
-    _HEIGHT = 520
-
-    def __init__(self, app: "App", on_close=None) -> None:
-        super().__init__(app)
-        self._app = app
-        self._on_close = on_close
-
-        self.title("Mail account")
-        self.geometry(f"{self._WIDTH}x{self._HEIGHT}")
-        self.resizable(False, True)
-        self.grab_set()
-        self.lift()
-        self.focus()
-        # Closing with the window's X has to run the same restore as Cancel,
-        # or the Settings window behind this one keeps a summary that no
-        # longer matches and, worse, never gets its grab back.
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Destroy>", self._on_destroy)
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Mail account")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
 
-        # Same arrangement as the Settings window and for the same reason:
+        # Same arrangement as the settings screen and for the same reason:
         # Save and Cancel live outside the scrolling body, so the expanded
-        # app-password help -- which runs to more text than this whole window
-        # -- cannot push them out of reach. That failure is why the help block
-        # was moved behind a toggle in the first place.
+        # app-password help -- which runs to more text than fits here -- cannot
+        # push them out of reach. That failure is why the help block was moved
+        # behind a toggle in the first place.
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
 
@@ -2098,7 +2137,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
-            command=self.destroy,
+            command=self._close,
         ).pack(side="right")
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -2224,13 +2263,6 @@ class _MailAccountWindow(ctk.CTkToplevel):
 
         if current_backend == MAIL_BACKEND_IMAP:
             self._help_container.pack(fill="x")
-
-    def _on_destroy(self, event) -> None:
-        # <Destroy> fires for every descendant widget as the window tears
-        # down, so act only on the window's own.
-        if event.widget is self and self._on_close is not None:
-            callback, self._on_close = self._on_close, None
-            callback()
 
     # ------------------------------------------------------------------
     # IMAP field show/hide + provider-driven host/port autofill
@@ -2507,7 +2539,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             # exists (if any) and just persist the non-secret fields.
 
         self._app._apply_settings(new_settings)
-        self.destroy()
+        self._close()
 
     def _poll_imap_test(self, result_q: "queue.Queue", new_settings: dict) -> None:
         try:
@@ -2521,7 +2553,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             self._app._transport = event["transport"]
             self._app._apply_settings(new_settings)
             self._app._check_auth()
-            self.destroy()
+            self._close()
         else:
             self._save_btn.configure(state="normal")
             self._status_label.configure(text="")
