@@ -61,6 +61,15 @@
   <li>Run the sync. Processed exports are moved to <code>Data\data\processed\</code>, and a
       local record of what has already been sent keeps repeat runs from duplicating messages.</li>
 </ol>
+<p><strong>One instance per mailbox.</strong> That record of what has been sent belongs to
+   this copy of the app, not to your mailbox. Any second instance signed in to the same
+   account knows nothing about what this one has sent, so it will archive the same chats
+   again. That means <em>any</em> second instance &mdash; another PC, a phone, or a second
+   copy of this portable app in another folder, since each copy carries its own
+   <code>Data\</code>. The app can add mail but never remove it, so clearing those
+   duplicates is manual work. Replacing an instance is fine: carry
+   <code>Data\data\sync_state.db</code> across and the new one continues where this one
+   stopped.</p>
 
 <h2>Where your data is kept</h2>
 <p>Everything stays inside this package's <code>Data\</code> folder. Nothing is written to

@@ -27,7 +27,14 @@ data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (Gmail API / IMAP)
   `send()`); on IMAP, with `APPEND`. Either way nothing leaves your mailbox and
   no sending quota is consumed.
 - Per-chat sync state lives in `data/sync_state.db`; re-running a sync only pushes
-  new messages.
+  new messages. **That state is per-instance, not per-mailbox** — it sits next to
+  the instance that wrote it, and nothing about it reaches the mailbox. Use one
+  instance per mailbox: any second instance pointed at the same account knows
+  nothing about what the first sent and re-archives the same chats. That is *any*
+  second instance — another PC, a phone, or a second copy of the portable app in
+  another folder, since each copy carries its own `data/`. The app can add mail but
+  never remove it, so the cleanup is manual. Replacing an instance is fine — carry
+  `sync_state.db` across.
 - Files move from `inbox/` to `processed/` only after a fully successful sync.
 - Every provider caps the size of a single message (25 MB at Gmail/Outlook/Yahoo,
   20 MB at iCloud; RFC 7889 `APPENDLIMIT` is honoured when advertised, and a

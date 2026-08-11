@@ -255,9 +255,28 @@ screenshot or contact card), and that the file actually copied over. Click the
 **⟳** refresh button to re-check the inbox folder.
 
 **Will I get duplicate messages if I export and sync the same chat again?**
-No. The app remembers what it has already saved and only adds new messages. You can
-safely re-export a chat later to pick up newer messages — the overlap is skipped
-automatically.
+Not on the same device. The app remembers what it has already saved and only adds
+new messages, so you can safely re-export a chat later to pick up newer messages —
+the overlap is skipped automatically. That memory belongs to this instance of the
+app, though, not to your mailbox; see the next question.
+
+**Can two instances of the app archive into the same mailbox?**
+They can, but they will not know about each other, and you will get duplicates.
+This is not about Windows versus Android — **any** two instances behave this way:
+two PCs, two phones, one of each, or even two copies of the portable app on the
+same PC, since each copy carries its own `Data\` folder.
+
+The record of what has already been archived lives in that instance's own
+`sync_state.db` — nothing about it is stored in the mailbox. A second instance
+signed in to the same account therefore starts from zero knowledge and re-files
+every chat you give it, even chats the first one archived months ago. The app can
+add mail but never remove it, so clearing the duplicates afterwards is manual work
+only you can do.
+
+> **Use one instance per mailbox.** If you want to archive from more than one place,
+> give each instance its own mailbox or its own account. Replacing an instance is a
+> different case — carry `sync_state.db` across and the new one picks up exactly
+> where the old one stopped.
 
 **I want to re-do a chat from scratch.**
 Click the **↺** (re-sync) icon next to the chat in the list. This clears the app's

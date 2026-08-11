@@ -33,7 +33,19 @@ private val FAQ = listOf(
         "anything. Nobody else receives these emails — they only appear in your mailbox.",
     "What happens if I sync the same export twice?" to
         "Every message is fingerprinted (hashed). Re-syncing the same file, or a fresh export that " +
-        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your mailbox.",
+        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your " +
+        "mailbox. That record belongs to this instance of the app, though, not to your mailbox — " +
+        "see the next answer.",
+    "Can two instances of the app use the same mailbox?" to
+        "They can, but they will not know about each other and you will get duplicates. This is not " +
+        "about Android versus Windows: any two instances behave this way — two phones, two PCs, one " +
+        "of each, or two copies of the portable Windows app in different folders. The record of what " +
+        "has been archived belongs to the instance that did the archiving; nothing about it is stored " +
+        "in the mailbox. A second instance signed in to the same account starts from zero knowledge " +
+        "and re-files every chat you give it. This app can add mail but never remove it, so clearing " +
+        "the duplicates afterwards is manual work. Use one instance per mailbox, or give each its own " +
+        "account. Replacing an instance is a different case: carry the sync state across and the new " +
+        "one continues where the old one stopped.",
     "Why do message times look off by a few hours?" to
         "WhatsApp exports don't include a timezone — the app assumes the exporting phone's local " +
         "clock. If you export from a different timezone than the chat was recorded in, times may shift.",

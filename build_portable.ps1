@@ -254,6 +254,89 @@ if ($StagedInis.Count -gt 0 -and (Select-String -Path $StagedInis.FullName -Patt
     if (-not (Test-Path $SplashDest)) {
         Write-Error "The launcher .ini sets SplashTime but App\AppInfo\Launcher\splash.jpg is missing. The generator would silently disable the splash instead of failing. Restore portable\App\AppInfo\Launcher\splash.jpg (regenerate it from appicon_1024.png if it is gone)."
     }
+
+    # Stamp the version onto the STAGED splash only.
+    #
+    # portable\App\AppInfo\Launcher\splash.jpg stays version-free in git, and
+    # the number is drawn here from the appinfo.ini this same build is about to
+    # package. That ordering is the whole design. The alternative - committing a
+    # pre-rendered image with the version baked in - is how PA Skills shipped a
+    # 3.4.0 build whose splash read "Version 3.3.0": the render was a build-time
+    # step that could silently no-op (its imaging library was present locally and
+    # absent on CI) and a try/except then shipped the stale committed image. A
+    # splash that states the wrong version is worse than one that states none,
+    # because it is read as fact.
+    #
+    # Two rules follow, and neither is optional:
+    #   1. NO fallback. Every failure below is terminal. There is no path that
+    #      packages an unstamped or half-stamped splash and carries on.
+    #   2. NO new dependency. This uses System.Drawing from the .NET Framework
+    #      that ships with Windows PowerShell 5.1, so there is no library that
+    #      can be missing on one machine and present on another - which is the
+    #      condition that made the PA Skills failure possible in the first place.
+    $stagedInfoIni = Join-Path $AppInfoDir "appinfo.ini"
+    if (-not (Test-Path $stagedInfoIni)) {
+        Write-Error "Cannot stamp the splash: appinfo.ini was not staged at '$stagedInfoIni'."
+    }
+    $stagedInfoText = Get-Content $stagedInfoIni -Raw
+    if ($stagedInfoText -notmatch "(?m)^\s*DisplayVersion\s*=\s*(\S+)") {
+        Write-Error "Cannot stamp the splash: appinfo.ini has no DisplayVersion."
+    }
+    $splashVersion = "v" + $Matches[1]
+
+    $beforeHash = (Get-FileHash $SplashDest -Algorithm SHA256).Hash
+
+    Add-Type -AssemblyName System.Drawing
+    $bmp = $null; $gfx = $null; $font = $null; $brush = $null; $src = $null
+    try {
+        # Copy into a new bitmap rather than drawing on the loaded image: Image
+        # .FromFile keeps the file locked for the object's lifetime, and we are
+        # about to overwrite that exact path.
+        $src = [System.Drawing.Image]::FromFile($SplashDest)
+        $bmp = New-Object System.Drawing.Bitmap $src.Width, $src.Height
+        $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+        $gfx.DrawImage($src, 0, 0, $src.Width, $src.Height)
+        $gfx.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+
+        # Bottom-right, clear of the icon and of the "Starting..." line. The grey
+        # matches that line's weight so the version reads as a caption, not as a
+        # second message competing with it.
+        $font  = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)
+        $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 139, 148, 161))
+        $size  = $gfx.MeasureString($splashVersion, $font)
+        $gfx.DrawString($splashVersion, $font, $brush,
+                        ($bmp.Width - $size.Width - 10),
+                        ($bmp.Height - $size.Height - 7))
+        $gfx.Flush()
+
+        $src.Dispose(); $src = $null   # release the lock before overwriting
+
+        # Explicit JPEG quality: the default encoder setting visibly muddies
+        # 9pt text on a dark background.
+        $codec  = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |
+                  Where-Object { $_.MimeType -eq 'image/jpeg' }
+        if (-not $codec) { throw "No JPEG encoder available." }
+        $params = New-Object System.Drawing.Imaging.EncoderParameters 1
+        $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter (
+            [System.Drawing.Imaging.Encoder]::Quality, [int64]95)
+        $bmp.Save($SplashDest, $codec, $params)
+    } catch {
+        Write-Error "Failed to stamp $splashVersion onto the splash image: $($_.Exception.Message)"
+    } finally {
+        if ($brush) { $brush.Dispose() }
+        if ($font)  { $font.Dispose() }
+        if ($gfx)   { $gfx.Dispose() }
+        if ($bmp)   { $bmp.Dispose() }
+        if ($src)   { $src.Dispose() }
+    }
+
+    # Prove the render happened. A silent no-op here is precisely the failure
+    # this whole block is built to prevent, so the check is on the bytes, not
+    # on whether the code above threw.
+    if ((Get-FileHash $SplashDest -Algorithm SHA256).Hash -eq $beforeHash) {
+        Write-Error "The splash image is byte-identical after stamping - the version was not drawn. Refusing to package a splash that may state the wrong version."
+    }
+    Write-Host "   Splash stamped $splashVersion" -ForegroundColor DarkGray
 }
 
 # help.html at the package root - required by the PortableApps.com Format, and

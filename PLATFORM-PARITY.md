@@ -50,7 +50,7 @@ Not shared - every one of these needs its own change:
 | Background/threading glue | `gui_worker.py` | `SyncWorker.kt`, `WatchFolderWorker.kt` |
 | Settings persistence | `data/.settings.json` | `AppPrefs.kt` (SharedPreferences) |
 | Secret storage | `src/secret_store.py` (DPAPI) + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
-| Help text | `docs/help.html`, `docs/user-guide.md` | `HelpScreen.kt` |
+| Help text | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` |
 | Packaging | `build_portable.ps1` -> portable zip | Gradle -> APK/AAB |
 
 Note the third and fourth rows especially: **settings and secrets are stored
@@ -115,6 +115,44 @@ Only these. Anything else is a bug.
   > Recorded honestly: this entry described the Windows half in the present
   > tense before the Windows half existed. It is true as of the build that
   > added `src/watch_folder.py`; earlier releases had the Android side only.
+
+## Parity does not mean the two clients cooperate
+
+Worth stating here because the rest of this document reads as "the two clients
+are the same product", and a user can reasonably extend that to "so they share
+what they have done". They do not.
+
+`sync_state.db` is **per-instance, not per-mailbox**. It sits next to the
+instance that wrote it and nothing about it reaches the mailbox, so two instances
+pointed at the same account have no knowledge of each other. The second one
+starts from zero and re-files every chat it is given. The de-duplication the
+whole product rests on is local by construction, and the app can add mail but
+never remove it, so the cleanup falls entirely on the user.
+
+The word is **instance**, deliberately - not "device" and not "platform". The
+cross-platform pairing is only the most visible case; two Android phones, two
+Windows PCs, and two copies of the portable app in different folders on a single
+PC are all the same failure, because each portable copy carries its own `Data\`.
+Wording that names Windows-and-Android reads as an exhaustive list and quietly
+blesses the rest, so no user-facing copy anywhere states it that way.
+
+The rule for users is therefore **one instance per mailbox**, and it is stated in
+the same words, in the same position, on both clients (2026-08-11):
+
+| | Windows | Android |
+| --- | --- | --- |
+| In-app | `gui.py`, mail-account panel, above the backend picker | `MailAccountScreen.kt`, same position |
+| Help | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` FAQ |
+
+Weighting was decided deliberately and should not be escalated without a
+reason: one quiet caption line in the standard muted style on the one screen
+where the mistake is actually made - no dialog, no banner, no warning colour,
+not repeated on the sync screen. The full explanation lives in the help. A
+caveat that interrupts work it does not apply to gets dismissed unread.
+
+This is the same root cause as the queued **P3 - migration to a new device**
+work: replacing an instance is the *supported* case and is exactly the one that
+needs `sync_state.db` carried across.
 
 ## Queued work - both platforms, both times
 
