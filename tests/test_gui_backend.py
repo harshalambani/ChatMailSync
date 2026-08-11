@@ -918,3 +918,78 @@ def test_app_password_prompt_never_contains_email_or_password(
     blob = " ".join(texts) + " " + prompt
     assert "you@example.com" not in blob
     assert "hunter2-app-password" not in blob
+
+
+# ---------------------------------------------------------------------------
+# Live progress
+#
+# The engine emits the same events to both front-ends. Android's SyncWorker
+# (eventFraction / progressText) drives its bar from the "chunk" event, which
+# carries the whole-sync message counts; the desktop used to ignore "chunk"
+# entirely and move only on "file_done", so a one-file inbox sat at 0% for the
+# whole run and jumped to 100% at the end. These pin the desktop to Android's
+# reading of the same payload. No Tk needed -- the handler only touches two
+# widgets, so stubs stand in for them.
+# ---------------------------------------------------------------------------
+
+class _FakeBar:
+    def __init__(self):
+        self.value = None
+
+    def set(self, value):
+        self.value = value
+
+
+class _FakeLabel:
+    def __init__(self):
+        self.text = None
+
+    def configure(self, text):
+        self.text = text
+
+
+class _FakeApp:
+    def __init__(self):
+        self._progress_bar = _FakeBar()
+        self._progress_label = _FakeLabel()
+
+    def handle(self, event):
+        gui.App._handle_sync_event(self, event)
+        return self
+
+
+def _chunk(**over):
+    event = {
+        "type": "chunk", "name": "Kartik Patel",
+        "chunk": 2, "total_chunks": 9,
+        "msgs_done": 120, "total_msgs": 540,
+        "global_done": 120, "global_total": 900,
+    }
+    event.update(over)
+    return event
+
+
+def test_chunk_moves_the_bar_by_whole_sync_message_count():
+    app = _FakeApp().handle(_chunk())
+    assert app._progress_bar.value == pytest.approx(120 / 900)
+    assert app._progress_label.text == "Syncing: Kartik Patel — 120 / 540 messages"
+
+
+def test_chunk_with_nothing_to_send_does_not_divide_by_zero():
+    app = _FakeApp().handle(_chunk(global_done=0, global_total=0, msgs_done=0, total_msgs=0))
+    assert app._progress_bar.value is None  # left where it was, not crashed
+
+
+def test_file_count_still_drives_the_bar_when_no_chunks_arrive():
+    """A run that is all dedup-skips pushes nothing, so "chunk" never fires.
+    Android falls back to the file count there and so does this."""
+    app = _FakeApp().handle({"type": "file_done", "done": 1, "total": 2})
+    assert app._progress_bar.value == pytest.approx(0.5)
+    assert app._progress_label.text == "1 / 2 files"
+
+
+def test_file_total_is_reported_before_the_first_file():
+    assert _FakeApp().handle({"type": "files_total", "n": 3})._progress_label.text \
+        == "Found 3 file(s)…"
+    assert _FakeApp().handle({"type": "files_total", "n": 0})._progress_label.text \
+        == "Inbox is empty"

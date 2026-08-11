@@ -454,7 +454,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self._progress_label = ctk.CTkLabel(
             ctrl, text="", font=ctk.CTkFont(size=11),
-            width=160, anchor="w",
+            # Wide enough for the longest live line -- "Syncing: <chat> --
+            # 1234 / 56789 messages". At the old 160px that was clipped down
+            # to roughly the chat name and nothing else.
+            width=300, anchor="w",
         )
         self._progress_label.pack(side="left", padx=(8, 0))
 
@@ -1099,11 +1102,28 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         elif t == "files_total":
             n = event["n"]
-            if n == 0:
-                self._progress_label.configure(text="Inbox is empty")
+            self._progress_label.configure(
+                text="Inbox is empty" if n == 0 else f"Found {n} file(s)…"
+            )
 
         elif t == "syncing":
             self._progress_label.configure(text=f"Syncing: {event['name']}")
+
+        elif t == "chunk":
+            # The whole-sync percentage, as on Android (SyncWorker's
+            # eventFraction/progressText). The engine counts every *new*
+            # message in a parse+dedup pre-scan before the first network
+            # call, so this advances continuously while one large chat is
+            # still being pushed, instead of the bar sitting at a file-count
+            # fraction -- 0/1 for the entire run, when the inbox holds a
+            # single file -- and only jumping at the end.
+            total = event["global_total"]
+            if total:
+                self._progress_bar.set(event["global_done"] / total)
+            self._progress_label.configure(
+                text=f"Syncing: {event['name']} — "
+                     f"{event['msgs_done']} / {event['total_msgs']} messages"
+            )
 
         elif t == "file_done":
             done, total = event["done"], event["total"]
