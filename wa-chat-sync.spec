@@ -39,6 +39,13 @@ added_data += collect_data_files("googleapiclient")
 # Ship the user help page next to the exe so the in-app Help button works
 added_data += [("help.html", ".")]
 
+# Ship the icon as DATA as well as embedding it in the exe (see icon= below).
+# The embedded copy is what Explorer and the Start menu read; a Tk window
+# cannot use it and needs a file on disk to hand to iconbitmap(). Same source
+# file, two different consumers - and without this one the title bar and
+# taskbar fall back to Tk's generic placeholder.
+added_data += [("portable/App/AppInfo/appicon.ico", ".")]
+
 # ---------------------------------------------------------------------------
 # Binary files (native shared libraries / DLLs)
 # ---------------------------------------------------------------------------

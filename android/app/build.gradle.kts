@@ -33,8 +33,15 @@ android {
         applicationId = "com.wamailsync.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.4.0"
+        // Moves with DisplayVersion/PackageVersion in
+        // portable/App/AppInfo/appinfo.ini, in the same commit, and every
+        // release publishes an APK alongside the Windows assets. See
+        // PLATFORM-PARITY.md, "Every release ships both platforms" - v1.2.1,
+        // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
+        // only, so the phone build was stamped as released without ever being
+        // published. v1.4.1 is the first release to carry both.
+        versionCode = 13
+        versionName = "1.4.1"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back

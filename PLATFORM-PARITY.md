@@ -50,7 +50,7 @@ Not shared - every one of these needs its own change:
 | Background/threading glue | `gui_worker.py` | `SyncWorker.kt`, `WatchFolderWorker.kt` |
 | Settings persistence | `data/.settings.json` | `AppPrefs.kt` (SharedPreferences) |
 | Secret storage | `src/secret_store.py` (DPAPI) + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
-| Help text | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` |
+| Help text | `help.html` (in-app), `portable/help.html` (package), `docs/user-guide.md` | `HelpScreen.kt` |
 | Packaging | `build_portable.ps1` -> portable zip | Gradle -> APK/AAB |
 
 Note the third and fourth rows especially: **settings and secrets are stored
@@ -72,14 +72,47 @@ those changes, the other is now wrong.
    written to WorkManager's on-disk database.)
 5. Is the help text updated on both?
 6. Do the release notes describe one product, not two?
+7. **Does the release carry an asset for both platforms, at the same version
+   number?** See the next section - this one is not negotiable.
+
+## Every release ships both platforms
+
+**Standing rule as of 2026-08-11.** A GitHub release must carry Windows assets
+*and* a signed Android APK, built from the same commit and stamped with the same
+version. A release with only one of them is not a release of this product; it is
+a fork of it that the user has to reconcile later.
+
+This rule exists because the project did the opposite three times in a row.
+v1.2.1, v1.3.0 and v1.4.0 all shipped Windows assets only, while the Android
+`versionName` was bumped in lockstep to 1.4.0 in the repo - so the phone build
+was *stamped* as shipped without ever being published. The user's verdict:
+
+> "this is a major gap. we have to be always in sync in releases - lets not
+> repeat this error in future"
+
+Note how this failed. It is the same shape as the failure at the top of this
+document: the change genuinely landed on both platforms in the source, so the
+work *felt* finished, and only the publishing step - which is not shared - was
+one-sided. Parity in the tree is not parity in the user's hands.
+
+Consequences that follow, and are not optional:
+
+- `versionCode` **and** `versionName` in `android/app/build.gradle.kts` move with
+  `DisplayVersion`/`PackageVersion` in `portable/App/AppInfo/appinfo.ini`, in the
+  same commit. A version bump that touches one file is incomplete.
+- If the Android build cannot be produced for a given release - signing material
+  unavailable, a store submission in flight - **the release waits**. It does not
+  go out Windows-only with a note. Should that ever genuinely be unavoidable, it
+  is written down here, with the reason and the date it was made good.
 
 ## Deliberate, accepted divergences
 
 Only these. Anything else is a bug.
 
-- **Packaging and distribution.** Portable Windows zip vs Android APK/AAB.
-  Different artifacts, different release cadence is acceptable; different
-  *features* is not.
+- **Packaging format.** Portable Windows installer/zip vs Android APK/AAB.
+  Different *artifacts* is unavoidable. Different **cadence is not** - see the
+  rule immediately below, which replaced an earlier version of this bullet that
+  did allow it.
 - **Secret storage mechanism.** Windows uses DPAPI `CryptProtectData` over a
   file that is also NTFS-ACL restricted; Android uses AndroidKeyStore AES/GCM.
   Android has neither NTFS ACLs nor DPAPI, so the file layout/format is what is
@@ -142,7 +175,7 @@ the same words, in the same position, on both clients (2026-08-11):
 | | Windows | Android |
 | --- | --- | --- |
 | In-app | `gui.py`, mail-account panel, above the backend picker | `MailAccountScreen.kt`, same position |
-| Help | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` FAQ |
+| Help | `help.html`, `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` FAQ |
 
 Weighting was decided deliberately and should not be escalated without a
 reason: one quiet caption line in the standard muted style on the one screen
