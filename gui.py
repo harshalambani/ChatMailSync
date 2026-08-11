@@ -1970,13 +1970,21 @@ class _SettingsPanel(_Panel):
             acc_row, text="", anchor="w", font=("", 11),
             text_color=("gray40", "gray60"),
         )
-        self._account_summary.pack(side="left", fill="x", expand=True)
+        # Left-aligned and adjacent, not expand-then-pin-right. As a pop-up this
+        # row was only ever as wide as the dialog, so a right-pinned button sat
+        # close to its label; in the main window the same code threw it to the
+        # far edge, a whole screen away from the status it acts on -- and out of
+        # line with every other control here, which starts at the left margin.
+        # The fixed label width keeps it from wandering as the summary text
+        # changes length between "Not connected" and a full address.
+        self._account_summary.configure(width=320)
+        self._account_summary.pack(side="left")
         ctk.CTkButton(
             acc_row, text="Change…", width=90, height=30,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
             command=self._open_mail_account,
-        ).pack(side="right")
+        ).pack(side="left", padx=(12, 0))
         self._render_account_summary()
 
         # ── Syncing ──────────────────────────────────────────────────
