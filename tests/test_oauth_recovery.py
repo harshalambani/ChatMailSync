@@ -47,7 +47,11 @@ def auth_files(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _stub_google(monkeypatch, stored, flow_result):
-    """Patch get_credentials' three lazily-imported google symbols."""
+    """Patch get_credentials' three lazily-imported google symbols.
+
+    `flow_result` is returned from run_local_server(); an exception instance
+    is raised from it instead, for the abandoned-sign-in case.
+    """
     import google.oauth2.credentials as creds_mod
     import google_auth_oauthlib.flow as flow_mod
 
@@ -56,15 +60,18 @@ def _stub_google(monkeypatch, stored, flow_result):
         classmethod(lambda _cls, *_a, **_k: stored),
     )
 
-    opened = {"count": 0}
+    opened = {"count": 0, "kwargs": None}
 
     class _FakeFlow:
         @classmethod
         def from_client_secrets_file(cls, *_a, **_k):
             return cls()
 
-        def run_local_server(self, **_k):
+        def run_local_server(self, **kwargs):
             opened["count"] += 1
+            opened["kwargs"] = kwargs
+            if isinstance(flow_result, BaseException):
+                raise flow_result
             return flow_result
 
     monkeypatch.setattr(flow_mod, "InstalledAppFlow", _FakeFlow)
@@ -107,6 +114,30 @@ def test_no_token_at_all_opens_the_browser(auth_files, monkeypatch):
 
     assert mail_client.get_credentials(credentials_file, token_file) is fresh
     assert opened["count"] == 1
+
+
+def test_an_abandoned_browser_sign_in_gives_up_instead_of_waiting_forever(
+    auth_files, monkeypatch
+):
+    """Reported live: the browser was opened and closed again seconds later,
+    and the app sat on "Connecting…" indefinitely. run_local_server() defaults
+    to timeout_seconds=None -- an unbounded wait on a redirect that closing the
+    browser guarantees will never arrive. Bounded, the caller gets a TimeoutError
+    it can show, and the Connect button comes back."""
+    from google_auth_oauthlib.flow import WSGITimeoutError
+
+    credentials_file, token_file = auth_files
+    opened = _stub_google(monkeypatch, None, WSGITimeoutError("no response"))
+
+    with pytest.raises(TimeoutError) as err:
+        mail_client.get_credentials(credentials_file, token_file)
+
+    assert "Connect" in str(err.value)      # says how to get out of it
+    assert opened["kwargs"]["timeout_seconds"] == (
+        mail_client.OAUTH_BROWSER_TIMEOUT_SECONDS
+    )
+    # Nothing half-written: no token file from a sign-in that never happened.
+    assert not token_file.exists()
 
 
 def test_missing_credentials_json_is_still_a_hard_error(tmp_path, monkeypatch):

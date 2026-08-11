@@ -317,6 +317,10 @@ def connect_gmail(result_queue: queue.Queue) -> None:
     try:
         service = build_service()
         result_queue.put({"type": "auth_ok", "transport": DiscoveryTransport(service)})
+    except TimeoutError as exc:
+        # An abandoned browser sign-in, not a failure of anything -- flagged so
+        # the UI can say "not completed" rather than "auth failed".
+        result_queue.put({"type": "auth_error", "msg": str(exc), "timeout": True})
     except Exception as exc:
         result_queue.put({"type": "auth_error", "msg": str(exc)})
 

@@ -285,6 +285,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_scanning = False
         self._watch_after_id = None
         self._last_run_dry_run = False
+        self._auth_wait_after = None
+        # The bar only moves forwards within a run -- see _advance_progress().
+        self._progress_fraction = 0.0
         # In-window screens, innermost last. Android pushes SettingsScreen and
         # MailAccountScreen onto a nav stack rather than opening dialogs, and
         # this is the same idea: settings stays alive underneath while the mail
@@ -1080,6 +1083,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Reset UI state.
         self._sync_btn.configure(state="disabled", text="Syncing…")
         self._stop_btn.configure(state="normal")
+        self._progress_fraction = 0.0
         self._progress_bar.set(0)
         self._progress_label.configure(text="Starting…")
         self._log_lines.clear()
@@ -1108,6 +1112,22 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if self._worker is not None:
             self.after(_POLL_MS, self._poll_sync_queue)
 
+    def _advance_progress(self, fraction: float) -> None:
+        """Move the bar to `fraction`, but never backwards within a run.
+
+        Two sources drive it and they disagree in scale: `chunk` counts
+        messages across the whole sync, `file_done` counts files. Finishing
+        the first of three files is 1/3, but if that file was most of the
+        work the message count may already have been past half -- so taking
+        each event at face value made the bar visibly retreat at every file
+        boundary. Whichever source is further along is the honest answer; a
+        bar that goes backwards just reads as a bug. Reset per run in
+        _begin_sync().
+        """
+        if fraction > self._progress_fraction:
+            self._progress_fraction = fraction
+            self._progress_bar.set(fraction)
+
     def _handle_sync_event(self, event: dict) -> None:
         t = event["type"]
 
@@ -1133,7 +1153,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             # single file -- and only jumping at the end.
             total = event["global_total"]
             if total:
-                self._progress_bar.set(event["global_done"] / total)
+                self._advance_progress(event["global_done"] / total)
             self._progress_label.configure(
                 text=f"Syncing: {event['name']} — "
                      f"{event['msgs_done']} / {event['total_msgs']} messages"
@@ -1142,7 +1162,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         elif t == "file_done":
             done, total = event["done"], event["total"]
             if total:
-                self._progress_bar.set(done / total)
+                self._advance_progress(done / total)
             self._progress_label.configure(text=f"{done} / {total} files")
 
         elif t == "done":
@@ -1273,6 +1293,14 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         self._auth_btn.configure(state="disabled", text="Connecting…")
         self._auth_label.configure(text="Opening browser…")
+        # "Opening browser…" stops being true the moment the browser is up, and
+        # what follows is a wait on the user, not on the app. Saying so is the
+        # difference between "it is working" and "it is stuck" -- which is how
+        # an abandoned sign-in read before.
+        self._auth_wait_after = self.after(
+            6000,
+            lambda: self._auth_label.configure(text="Waiting for sign-in…"),
+        )
         auth_q: queue.Queue = queue.Queue()
         threading.Thread(target=connect_gmail, args=(auth_q,), daemon=True).start()
         self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
@@ -1284,6 +1312,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
             return
 
+        if self._auth_wait_after is not None:
+            self.after_cancel(self._auth_wait_after)
+            self._auth_wait_after = None
+
         if event["type"] == "auth_ok":
             self._transport = event["transport"]
             self._auth_dot.configure(text_color="#2ecc71")
@@ -1292,8 +1324,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._signout_btn.configure(state="normal")
             self._append_log("Gmail authentication successful.")
         else:
+            timed_out = event.get("timeout", False)
             self._auth_dot.configure(text_color="#e74c3c")
-            self._auth_label.configure(text="Auth failed")
+            self._auth_label.configure(
+                text="Sign-in not completed" if timed_out else "Auth failed"
+            )
             self._auth_btn.configure(state="normal", text="Connect")
             # Same reasoning as _signout_state(): a failed connect is when a
             # stored token most needs clearing out, not when the button for

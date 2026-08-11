@@ -80,6 +80,13 @@ from src.parser import ParsedMessage
 
 log = logging.getLogger(__name__)
 
+# How long the local redirect server waits for the browser to come back before
+# giving up. Long enough to find the right Google account, pick it, and read a
+# consent screen without being rushed; short enough that an abandoned sign-in
+# does not strand the UI. Without it the wait is unbounded -- see
+# get_credentials().
+OAUTH_BROWSER_TIMEOUT_SECONDS = 180
+
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
@@ -189,11 +196,13 @@ def get_credentials(
 
     Raises:
         FileNotFoundError: if credentials_file doesn't exist.
+        TimeoutError: if the browser flow is abandoned -- see
+            OAUTH_BROWSER_TIMEOUT_SECONDS.
     """
     from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
 
     if not credentials_file.exists():
         raise FileNotFoundError(
@@ -239,7 +248,23 @@ def get_credentials(
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(credentials_file), GMAIL_SCOPES
             )
-            creds = flow.run_local_server(port=0)
+            try:
+                creds = flow.run_local_server(
+                    port=0, timeout_seconds=OAUTH_BROWSER_TIMEOUT_SECONDS
+                )
+            except WSGITimeoutError:
+                # Reported live: the browser was opened and closed again a few
+                # seconds later, and the app sat on "Connecting…" for good.
+                # run_local_server() defaults to timeout_seconds=None, which
+                # waits on the redirect forever -- and nothing about closing
+                # the browser tells the local server anything, so "forever" is
+                # exactly what an abandoned sign-in costs. Bounded, the caller
+                # gets an error it can show and the Connect button comes back.
+                raise TimeoutError(
+                    "Browser sign-in wasn't completed within "
+                    f"{OAUTH_BROWSER_TIMEOUT_SECONDS // 60} minutes. "
+                    "Click Connect to try again."
+                ) from None
 
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(creds.to_json())

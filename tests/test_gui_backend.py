@@ -988,10 +988,14 @@ class _FakeApp:
     def __init__(self):
         self._progress_bar = _FakeBar()
         self._progress_label = _FakeLabel()
+        self._progress_fraction = 0.0
 
     def handle(self, event):
         gui.App._handle_sync_event(self, event)
         return self
+
+    def _advance_progress(self, fraction):
+        gui.App._advance_progress(self, fraction)
 
 
 def _chunk(**over):
@@ -1022,6 +1026,25 @@ def test_file_count_still_drives_the_bar_when_no_chunks_arrive():
     app = _FakeApp().handle({"type": "file_done", "done": 1, "total": 2})
     assert app._progress_bar.value == pytest.approx(0.5)
     assert app._progress_label.text == "1 / 2 files"
+
+
+def test_the_bar_never_goes_backwards_at_a_file_boundary():
+    """Two sources drive the bar on different scales: chunk counts messages
+    across the whole sync, file_done counts files. Finishing the first of three
+    files is 1/3 -- but if that file was most of the work, the message count is
+    already past half, so taking file_done at face value made the bar retreat.
+    Whichever is further along wins; the text still reports what just
+    happened."""
+    app = _FakeApp().handle(_chunk(global_done=600, global_total=900))
+    assert app._progress_bar.value == pytest.approx(600 / 900)
+
+    app.handle({"type": "file_done", "done": 1, "total": 3})
+    assert app._progress_bar.value == pytest.approx(600 / 900)
+    assert app._progress_label.text == "1 / 3 files"
+
+    # ...and a genuinely further-along file count still moves it.
+    app.handle({"type": "file_done", "done": 3, "total": 3})
+    assert app._progress_bar.value == pytest.approx(1.0)
 
 
 def test_file_total_is_reported_before_the_first_file():

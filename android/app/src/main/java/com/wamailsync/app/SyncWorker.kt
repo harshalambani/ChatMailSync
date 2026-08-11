@@ -143,7 +143,17 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                         emptyList()
                     }
                     for (event in events) {
-                        eventFraction(event)?.let { lastFraction = it }
+                        // Only ever forwards within a run. chunk counts
+                        // messages across the whole sync and file_done counts
+                        // files, so the two disagree on scale: finishing the
+                        // first of three files is 1/3, but if that file was
+                        // most of the work the message count is already past
+                        // half, and taking each at face value made the bar
+                        // retreat at every file boundary. Whichever source is
+                        // further along is the honest answer.
+                        eventFraction(event)?.let {
+                            if (it > lastFraction) lastFraction = it
+                        }
                         progressText(event)?.let { lastText = it }
                         milestoneText(event)?.let { line ->
                             logLines.addLast(line)
