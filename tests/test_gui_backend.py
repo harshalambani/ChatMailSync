@@ -23,6 +23,7 @@ using the tmp_root fixture from conftest.py.
 """
 
 import json
+import types
 import queue
 
 import pytest
@@ -56,6 +57,16 @@ def token_file(tmp_path, monkeypatch):
 def settings_file(tmp_path, monkeypatch, token_file):
     path = tmp_path / "data" / ".settings.json"
     monkeypatch.setattr(gui, "_SETTINGS_FILE", path)
+    # Same isolation as token_file, and for the same reason on the IMAP side:
+    # _render_account_summary() and _signout_state() both ask whether the saved
+    # app-password file exists, so without this the answer came from the
+    # developer's real auth/imap_credentials.json. Not hypothetical --
+    # test_settings_shows_the_account_summary_not_the_form began failing the
+    # moment a real IMAP account was connected on the machine running the
+    # suite, while CI (which has no credentials at all) stayed green.
+    monkeypatch.setattr(
+        gui, "IMAP_CREDENTIALS_FILE", tmp_path / "auth" / "imap_credentials.json"
+    )
     return path
 
 
@@ -706,10 +717,21 @@ def tk_root():
     root.destroy()
 
 
+def _as_host(root, settings):
+    """Lend the bare Tk root the three things a panel needs from App, using
+    App's own implementations rather than stand-ins -- the panel stack is what
+    replaced the pop-up windows, so the tests should be running the real one."""
+    root._settings = settings
+    root._panels = []
+    root._HEADER_HEIGHT = gui.App._HEADER_HEIGHT
+    root._push_panel = types.MethodType(gui.App._push_panel, root)
+    root._pop_panel = types.MethodType(gui.App._pop_panel, root)
+    return root
+
+
 @pytest.fixture
 def settings_window(settings_file, tk_root):
-    root = tk_root
-    root._settings = {
+    root = _as_host(tk_root, {
         "mail_backend": MAIL_BACKEND_IMAP,
         "imap_provider": "gmail",
         "imap_host": IMAP_PROVIDERS["gmail"]["host"],
@@ -717,39 +739,30 @@ def settings_window(settings_file, tk_root):
         "imap_email": "you@example.com",
         "chunk_size": "day",
         "auto_refresh_label": "30 s",
-    }
-    win = gui._SettingsWindow(root)
-    yield win
-    # grab_set() in __init__ makes this window modal; release it explicitly so
-    # a failed assertion can't leave the shared root grabbed for later tests.
-    try:
-        win.grab_release()
-    except Exception:
-        pass
-    win.destroy()
+    })
+    root._push_panel(gui._SettingsPanel)
+    yield root._panels[-1]
+    while root._panels:
+        root._pop_panel()
 
 
 @pytest.fixture
 def mail_account_window(settings_file, tk_root):
-    """The mail account lives in its own window now, as it does on Android --
-    Settings only shows a summary line and a way in. Everything about the
-    backend, the IMAP form and the app-password help is asserted against this
-    window rather than the Settings one."""
-    root = tk_root
-    root._settings = {
+    """The mail account is its own screen, as it is on Android -- Settings only
+    shows a summary line and a way in. Everything about the backend, the IMAP
+    form and the app-password help is asserted against this screen rather than
+    the Settings one."""
+    root = _as_host(tk_root, {
         "mail_backend": MAIL_BACKEND_IMAP,
         "imap_provider": "gmail",
         "imap_host": IMAP_PROVIDERS["gmail"]["host"],
         "imap_port": 993,
         "imap_email": "you@example.com",
-    }
-    win = gui._MailAccountWindow(root)
-    yield win
-    try:
-        win.grab_release()
-    except Exception:
-        pass
-    win.destroy()
+    })
+    root._push_panel(gui._MailAccountPanel)
+    yield root._panels[-1]
+    while root._panels:
+        root._pop_panel()
 
 
 def _select(win, provider_key):
@@ -826,10 +839,14 @@ def test_the_window_does_not_resize_itself(mail_account_window):
     """Reported live: the window changed size on every backend switch, and
     again on re-picking the option already selected. It sized itself from
     winfo_width() -- the width it had just set -- so each round trip nudged it
-    further. The size is fixed now and the content scrolls instead."""
+    further. The size is fixed now and the content scrolls instead.
+
+    The screen is no longer a Toplevel, so it has no geometry of its own to
+    creep; what it must not do is push the window it now lives inside around,
+    which is what this asserts."""
     win = mail_account_window
     win.update_idletasks()
-    original = win.geometry()
+    original = win.winfo_toplevel().geometry()
 
     win._warn_oauth_is_limited = lambda: None
     win._backend_var.set(gui._BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
@@ -839,7 +856,7 @@ def test_the_window_does_not_resize_itself(mail_account_window):
     win._toggle_help()
     win.update_idletasks()
 
-    assert win.geometry() == original
+    assert win.winfo_toplevel().geometry() == original
 
 
 def test_re_picking_the_current_backend_changes_nothing(mail_account_window):
@@ -850,6 +867,35 @@ def test_re_picking_the_current_backend_changes_nothing(mail_account_window):
     for _ in range(3):
         win._on_backend_changed()
     assert [str(c) for c in win._mail_frame.pack_slaves()] == before
+
+
+def test_screens_stack_in_the_window_instead_of_opening_pop_ups(settings_window):
+    """The complaint was "too many pop-ups": settings over the main window,
+    mail account over settings. Both are frames inside the main window now, and
+    they stack the way Android's nav stack does -- so going into the mail
+    account and back leaves the settings screen exactly as it was, unsaved
+    edits included, rather than rebuilding it."""
+    settings = settings_window
+    app = settings._app
+    settings._chunk_var.set("week")          # an edit that has not been saved
+
+    settings._open_mail_account()
+    assert len(app._panels) == 2
+    assert isinstance(app._panels[-1], gui._MailAccountPanel)
+    assert not isinstance(app._panels[-1], gui.ctk.CTkToplevel)
+
+    app._pop_panel()
+    assert app._panels == [settings]
+    assert settings.winfo_exists()
+    assert settings._chunk_var.get() == "week"
+
+
+def test_going_back_from_settings_leaves_nothing_over_the_sync_view(settings_window):
+    settings = settings_window
+    app = settings._app
+    settings._close()
+    assert app._panels == []
+    assert not settings.winfo_exists()
 
 
 def test_settings_shows_the_account_summary_not_the_form(settings_window):
@@ -918,3 +964,163 @@ def test_app_password_prompt_never_contains_email_or_password(
     blob = " ".join(texts) + " " + prompt
     assert "you@example.com" not in blob
     assert "hunter2-app-password" not in blob
+
+
+# ---------------------------------------------------------------------------
+# Live progress
+#
+# The engine emits the same events to both front-ends. Android's SyncWorker
+# (eventFraction / progressText) drives its bar from the "chunk" event, which
+# carries the whole-sync message counts; the desktop used to ignore "chunk"
+# entirely and move only on "file_done", so a one-file inbox sat at 0% for the
+# whole run and jumped to 100% at the end. These pin the desktop to Android's
+# reading of the same payload. No Tk needed -- the handler only touches two
+# widgets, so stubs stand in for them.
+# ---------------------------------------------------------------------------
+
+class _FakeBar:
+    def __init__(self):
+        self.value = None
+
+    def set(self, value):
+        self.value = value
+
+
+class _FakeLabel:
+    def __init__(self):
+        self.text = None
+
+    def configure(self, text):
+        self.text = text
+
+
+class _FakeApp:
+    def __init__(self):
+        self._progress_bar = _FakeBar()
+        self._progress_label = _FakeLabel()
+        self._progress_fraction = 0.0
+
+    def handle(self, event):
+        gui.App._handle_sync_event(self, event)
+        return self
+
+    def _advance_progress(self, fraction):
+        gui.App._advance_progress(self, fraction)
+
+
+def _chunk(**over):
+    event = {
+        "type": "chunk", "name": "Kartik Patel",
+        "chunk": 2, "total_chunks": 9,
+        "msgs_done": 120, "total_msgs": 540,
+        "global_done": 120, "global_total": 900,
+    }
+    event.update(over)
+    return event
+
+
+def test_chunk_moves_the_bar_by_whole_sync_message_count():
+    app = _FakeApp().handle(_chunk())
+    assert app._progress_bar.value == pytest.approx(120 / 900)
+    assert app._progress_label.text == "Syncing: Kartik Patel — 120 / 540 messages"
+
+
+def test_chunk_with_nothing_to_send_does_not_divide_by_zero():
+    app = _FakeApp().handle(_chunk(global_done=0, global_total=0, msgs_done=0, total_msgs=0))
+    assert app._progress_bar.value is None  # left where it was, not crashed
+
+
+def test_file_count_still_drives_the_bar_when_no_chunks_arrive():
+    """A run that is all dedup-skips pushes nothing, so "chunk" never fires.
+    Android falls back to the file count there and so does this."""
+    app = _FakeApp().handle({"type": "file_done", "done": 1, "total": 2})
+    assert app._progress_bar.value == pytest.approx(0.5)
+    assert app._progress_label.text == "1 / 2 files"
+
+
+def test_the_bar_never_goes_backwards_at_a_file_boundary():
+    """Two sources drive the bar on different scales: chunk counts messages
+    across the whole sync, file_done counts files. Finishing the first of three
+    files is 1/3 -- but if that file was most of the work, the message count is
+    already past half, so taking file_done at face value made the bar retreat.
+    Whichever is further along wins; the text still reports what just
+    happened."""
+    app = _FakeApp().handle(_chunk(global_done=600, global_total=900))
+    assert app._progress_bar.value == pytest.approx(600 / 900)
+
+    app.handle({"type": "file_done", "done": 1, "total": 3})
+    assert app._progress_bar.value == pytest.approx(600 / 900)
+    assert app._progress_label.text == "1 / 3 files"
+
+    # ...and a genuinely further-along file count still moves it.
+    app.handle({"type": "file_done", "done": 3, "total": 3})
+    assert app._progress_bar.value == pytest.approx(1.0)
+
+
+def test_file_total_is_reported_before_the_first_file():
+    assert _FakeApp().handle({"type": "files_total", "n": 3})._progress_label.text \
+        == "Found 3 file(s)…"
+    assert _FakeApp().handle({"type": "files_total", "n": 0})._progress_label.text \
+        == "Inbox is empty"
+
+
+def test_the_backend_choice_never_falls_back_to_the_gmail_only_path():
+    """Reported live: Connect opened a browser OAuth flow on a machine whose
+    settings had imap_host, imap_email and imap_provider all filled in and no
+    token.json at all -- mail_backend had been stamped "gmail_oauth" underneath.
+
+    Two fallbacks did it, both hard-coded to the Gmail-only backend: the one
+    that seeds the dropdown when the saved value is unrecognised, and the one
+    that reads the dropdown back on Save. Neither case is evidence of what the
+    user wants, so both now defer to DEFAULT_MAIL_BACKEND. The dropdown lists
+    IMAP first for the same reason, and to match Android's BACKEND_LABELS.
+    """
+    from src.config import DEFAULT_MAIL_BACKEND, MAIL_BACKEND_IMAP
+
+    assert list(gui._BACKEND_LABELS)[0] == MAIL_BACKEND_IMAP
+    # The label a missing/garbled setting seeds the menu with...
+    assert gui._BACKEND_LABELS[DEFAULT_MAIL_BACKEND] == gui._BACKEND_LABELS[MAIL_BACKEND_IMAP]
+    # ...and the backend an unrecognised label saves as.
+    assert gui._BACKEND_LABELS_REV.get("something we never rendered",
+                                       DEFAULT_MAIL_BACKEND) == MAIL_BACKEND_IMAP
+
+
+def test_the_poll_loop_survives_the_worker_clearing_itself_mid_drain():
+    """Reported live: the bar froze mid-run and the log stopped updating.
+
+    _handle_sync_event() sets self._worker = None on "done"/"error", and the
+    drain loop re-read self._worker on every iteration -- so the next
+    get_nowait() raised "AttributeError: 'NoneType' object has no attribute
+    'q'". That escaped the Tk callback, killing the poll while the sync thread
+    carried on working. The loop now holds its worker in a local and stops the
+    moment the run it was polling is over.
+    """
+    class _Worker:
+        def __init__(self, events):
+            self.q = queue.Queue()
+            for e in events:
+                self.q.put(e)
+
+    class _App:
+        def __init__(self, worker):
+            self._worker = worker
+            self.scheduled = 0
+            self.seen = []
+
+        def after(self, _ms, _cb):
+            self.scheduled += 1
+
+        def _handle_sync_event(self, event):
+            self.seen.append(event["type"])
+            # Stand-in for the real "done"/"error" branches.
+            if event["type"] in ("done", "error"):
+                self._worker = None
+
+    # A second event sits behind the terminal one, which is what used to blow up.
+    worker = _Worker([{"type": "log", "msg": "x"},
+                      {"type": "error", "msg": "boom"},
+                      {"type": "log", "msg": "never read"}])
+    app = _App(worker)
+    gui.App._poll_sync_queue(app)          # must not raise
+    assert app.seen == ["log", "error"]
+    assert app.scheduled == 0              # run is over: no further timer chain

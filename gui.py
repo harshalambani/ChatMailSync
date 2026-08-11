@@ -16,6 +16,7 @@ import re
 import shutil
 import sys
 import threading
+import tkinter
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -242,6 +243,10 @@ def _help_html_path() -> "Path | None":
 
 class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
+    # The header is a fixed-height strip with pack_propagate off, and in-window
+    # screens are placed directly below it -- see _push_panel().
+    _HEADER_HEIGHT = 52
+
     def __init__(self) -> None:
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
@@ -280,6 +285,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_scanning = False
         self._watch_after_id = None
         self._last_run_dry_run = False
+        self._auth_wait_after = None
+        self._auth_cancelled = False
+        # The bar only moves forwards within a run -- see _advance_progress().
+        self._progress_fraction = 0.0
+        # In-window screens, innermost last. Android pushes SettingsScreen and
+        # MailAccountScreen onto a nav stack rather than opening dialogs, and
+        # this is the same idea: settings stays alive underneath while the mail
+        # account is open, so coming back does not lose unsaved edits.
+        self._panels: list = []
 
         # Build UI — footer must be packed before main so it pins to bottom.
         self._build_header()
@@ -294,6 +308,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # actually on screen, rather than letting it run out its timer. See
         # _dismiss_splash_when_mapped().
         self.bind("<Map>", self._dismiss_splash_when_mapped)
+
+        # Escape closes the innermost in-window screen -- what it used to do
+        # when these were pop-up windows, and the habit outlives the pop-ups.
+        self.bind("<Escape>", lambda _e: self._pop_panel())
 
         # Initial data load. The auth check is deferred rather than inline --
         # see _check_auth_deferred(); it is the one step here that can go to
@@ -454,7 +472,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self._progress_label = ctk.CTkLabel(
             ctrl, text="", font=ctk.CTkFont(size=11),
-            width=160, anchor="w",
+            # Wide enough for the longest live line -- "Syncing: <chat> --
+            # 1234 / 56789 messages". At the old 160px that was clipped down
+            # to roughly the chat name and nothing else.
+            width=300, anchor="w",
         )
         self._progress_label.pack(side="left", padx=(8, 0))
 
@@ -1063,6 +1084,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Reset UI state.
         self._sync_btn.configure(state="disabled", text="Syncing…")
         self._stop_btn.configure(state="normal")
+        self._progress_fraction = 0.0
         self._progress_bar.set(0)
         self._progress_label.configure(text="Starting…")
         self._log_lines.clear()
@@ -1081,15 +1103,40 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.after(_POLL_MS, self._poll_sync_queue)
 
     def _poll_sync_queue(self) -> None:
-        if self._worker is None:
+        # Bound to a local: _handle_sync_event() clears self._worker the moment
+        # it sees "done" or "error", and the drain loop below re-read it on
+        # every iteration -- so the very next get_nowait() raised
+        # "AttributeError: 'NoneType' object has no attribute 'q'". That escaped
+        # the Tk callback and killed the poll, which is what showed up as a
+        # progress bar frozen mid-run over a log that had stopped updating.
+        worker = self._worker
+        if worker is None:
             return
         try:
-            while True:
-                self._handle_sync_event(self._worker.q.get_nowait())
+            while self._worker is worker:
+                self._handle_sync_event(worker.q.get_nowait())
         except queue.Empty:
             pass
-        if self._worker is not None:
+        # Only keep polling if this call still owns the run: a finished or
+        # replaced worker must not leave a second timer chain running.
+        if self._worker is worker:
             self.after(_POLL_MS, self._poll_sync_queue)
+
+    def _advance_progress(self, fraction: float) -> None:
+        """Move the bar to `fraction`, but never backwards within a run.
+
+        Two sources drive it and they disagree in scale: `chunk` counts
+        messages across the whole sync, `file_done` counts files. Finishing
+        the first of three files is 1/3, but if that file was most of the
+        work the message count may already have been past half -- so taking
+        each event at face value made the bar visibly retreat at every file
+        boundary. Whichever source is further along is the honest answer; a
+        bar that goes backwards just reads as a bug. Reset per run in
+        _begin_sync().
+        """
+        if fraction > self._progress_fraction:
+            self._progress_fraction = fraction
+            self._progress_bar.set(fraction)
 
     def _handle_sync_event(self, event: dict) -> None:
         t = event["type"]
@@ -1099,16 +1146,33 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         elif t == "files_total":
             n = event["n"]
-            if n == 0:
-                self._progress_label.configure(text="Inbox is empty")
+            self._progress_label.configure(
+                text="Inbox is empty" if n == 0 else f"Found {n} file(s)…"
+            )
 
         elif t == "syncing":
             self._progress_label.configure(text=f"Syncing: {event['name']}")
 
+        elif t == "chunk":
+            # The whole-sync percentage, as on Android (SyncWorker's
+            # eventFraction/progressText). The engine counts every *new*
+            # message in a parse+dedup pre-scan before the first network
+            # call, so this advances continuously while one large chat is
+            # still being pushed, instead of the bar sitting at a file-count
+            # fraction -- 0/1 for the entire run, when the inbox holds a
+            # single file -- and only jumping at the end.
+            total = event["global_total"]
+            if total:
+                self._advance_progress(event["global_done"] / total)
+            self._progress_label.configure(
+                text=f"Syncing: {event['name']} — "
+                     f"{event['msgs_done']} / {event['total_msgs']} messages"
+            )
+
         elif t == "file_done":
             done, total = event["done"], event["total"]
             if total:
-                self._progress_bar.set(done / total)
+                self._advance_progress(done / total)
             self._progress_label.configure(text=f"{done} / {total} files")
 
         elif t == "done":
@@ -1195,7 +1259,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _apply_auth_status(self, valid: bool, text: str) -> None:
         self._auth_dot.configure(text_color="#2ecc71" if valid else "#e74c3c")
         self._auth_label.configure(text=text)
-        self._auth_btn.configure(text="Reconnect" if valid else "Connect")
+        # command restored alongside the text: while a browser sign-in is
+        # outstanding the button is "Cancel" and points at _cancel_connect, and
+        # anything that relabels it must take that pairing back with it or the
+        # button ends up saying one thing and doing another.
+        self._auth_btn.configure(
+            text="Reconnect" if valid else "Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state=self._signout_state())
         if valid and self._transport is None:
             threading.Thread(target=self._silent_build_transport, daemon=True).start()
@@ -1237,30 +1307,82 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             # live, rather than trying to run the OAuth dance.
             self._open_settings()
             return
-        self._auth_btn.configure(state="disabled", text="Connecting…")
+        self._auth_cancelled = False
+        # Stays enabled and becomes the way out. Reported live: an abandoned
+        # sign-in left the header on "Connecting…" for the full three-minute
+        # bound, which reads exactly like a hang no matter what the label says.
+        # The wait itself is inside the OAuth library and can't be interrupted,
+        # but the UI can be handed back the instant the user gives up.
+        self._auth_btn.configure(
+            state="normal", text="Cancel", command=self._cancel_connect
+        )
         self._auth_label.configure(text="Opening browser…")
+        # "Opening browser…" stops being true the moment the browser is up, and
+        # what follows is a wait on the user, not on the app. Saying so is the
+        # difference between "it is working" and "it is stuck" -- which is how
+        # an abandoned sign-in read before.
+        self._auth_wait_after = self.after(
+            6000,
+            lambda: self._auth_label.configure(text="Waiting for sign-in…"),
+        )
         auth_q: queue.Queue = queue.Queue()
         threading.Thread(target=connect_gmail, args=(auth_q,), daemon=True).start()
         self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
 
+    def _cancel_connect(self) -> None:
+        """Give up on a browser sign-in without waiting out the timeout.
+
+        The blocking wait lives in a daemon thread inside the OAuth library, so
+        it can't be stopped from here -- it ends on its own bound and posts to a
+        queue nobody reads any more. What can be returned immediately is the
+        UI, which is the entire complaint.
+        """
+        self._auth_cancelled = True
+        if self._auth_wait_after is not None:
+            self.after_cancel(self._auth_wait_after)
+            self._auth_wait_after = None
+        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_label.configure(text="Sign-in cancelled")
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
+        self._signout_btn.configure(state=self._signout_state())
+
     def _poll_auth_queue(self, auth_q: queue.Queue) -> None:
+        # Cancelled: stop polling and leave the header as _cancel_connect left
+        # it, rather than overwriting it minutes later when the bound expires.
+        if self._auth_cancelled:
+            return
         try:
             event = auth_q.get_nowait()
         except queue.Empty:
             self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
             return
 
+        if self._auth_wait_after is not None:
+            self.after_cancel(self._auth_wait_after)
+            self._auth_wait_after = None
+
         if event["type"] == "auth_ok":
             self._transport = event["transport"]
             self._auth_dot.configure(text_color="#2ecc71")
             self._auth_label.configure(text="Connected")
-            self._auth_btn.configure(state="normal", text="Reconnect")
+            # command restored: it was pointing at _cancel_connect for the
+            # duration of the wait.
+            self._auth_btn.configure(
+                state="normal", text="Reconnect", command=self._on_connect_click
+            )
             self._signout_btn.configure(state="normal")
             self._append_log("Gmail authentication successful.")
         else:
+            timed_out = event.get("timeout", False)
             self._auth_dot.configure(text_color="#e74c3c")
-            self._auth_label.configure(text="Auth failed")
-            self._auth_btn.configure(state="normal", text="Connect")
+            self._auth_label.configure(
+                text="Sign-in not completed" if timed_out else "Auth failed"
+            )
+            self._auth_btn.configure(
+                state="normal", text="Connect", command=self._on_connect_click
+            )
             # Same reasoning as _signout_state(): a failed connect is when a
             # stored token most needs clearing out, not when the button for
             # doing it should disappear.
@@ -1439,7 +1561,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._transport = None
         self._auth_dot.configure(text_color="#e74c3c")
         self._auth_label.configure(text="Not connected")
-        self._auth_btn.configure(state="normal", text="Connect")
+        # See _apply_auth_status: relabelling must restore the command too.
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state="disabled")
         self._append_log("Signed out. Token revoked and deleted — connect again to re-authorise.")
 
@@ -1475,7 +1600,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._transport = None
         self._auth_dot.configure(text_color="#e74c3c")
         self._auth_label.configure(text="Not connected")
-        self._auth_btn.configure(state="normal", text="Connect")
+        # See _apply_auth_status: relabelling must restore the command too.
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state="disabled")
         self._append_log("Forgot saved app password. Connect again to reconnect.")
 
@@ -1496,14 +1624,51 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
 
     def _open_settings(self) -> None:
-        """Open the settings modal. Only one instance allowed at a time."""
-        if hasattr(self, "_settings_win") and self._settings_win.winfo_exists():
-            self._settings_win.focus()
+        """Show settings in this window rather than as a pop-up."""
+        if self._panels:
+            self._panels[-1].focus_set()
             return
-        self._settings_win = _SettingsWindow(self)
+        self._push_panel(_SettingsPanel)
+
+    def _push_panel(self, factory) -> None:
+        """Put an in-window screen over the sync view.
+
+        Placed rather than packed, covering everything below the header: the
+        sync view and the footer keep their pack order untouched underneath,
+        so going back is a destroy() and nothing else has to be rebuilt or
+        re-ordered. The header stays put, as Android's top bar does.
+        """
+        # The geometry lives on a bare tk.Frame holder rather than on the panel
+        # itself: customtkinter refuses width/height in place() (it wants them
+        # on the constructor), and without the negative height a relheight of
+        # 1.0 would push the panel's bottom -- where Save and Cancel sit -- off
+        # the window by exactly the header's height.
+        holder = tkinter.Frame(self, bd=0, highlightthickness=0)
+        holder.place(
+            x=0, y=self._HEADER_HEIGHT,
+            relwidth=1.0, relheight=1.0, height=-self._HEADER_HEIGHT,
+        )
+        panel = factory(self, holder)
+        panel.pack(fill="both", expand=True)
+        holder.lift()
+        self._panels.append(panel)
+
+    def _pop_panel(self) -> None:
+        """Close the innermost screen and hand control back to what it covered."""
+        if not self._panels:
+            return
+        # Destroying the holder takes the panel with it -- see _push_panel.
+        self._panels.pop().master.destroy()
+        if self._panels:
+            revealed = self._panels[-1]
+            revealed.master.lift()
+            # Settings shows a one-line account summary that the mail account
+            # screen may just have changed.
+            if hasattr(revealed, "on_reveal"):
+                revealed.on_reveal()
 
     def _apply_settings(self, new_settings: dict) -> None:
-        """Called by _SettingsWindow on Save."""
+        """Called by the settings screen on Save."""
         old_refresh_ms = self._auto_refresh_ms
         old_backend = self._settings.get("mail_backend")
         self._settings = new_settings
@@ -1612,9 +1777,16 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 # Outlook or Fastmail address in mind is a dead end the UI used to let you walk
 # into. Kept in step with android/.../MailAccountScreen.kt's BACKEND_LABELS --
 # see PLATFORM-PARITY.md, do not edit one side without the other.
+#
+# IMAP first, deliberately: it is DEFAULT_MAIL_BACKEND, it is what Android
+# lists first, and it is the path that reaches any mailbox. Listing the
+# Gmail-only path at the top made it the thing a user's eye and a stray Save
+# both landed on -- which is how a settings file with imap_host, imap_email and
+# imap_provider all filled in still ended up stamped mail_backend=gmail_oauth,
+# sending Connect into a browser flow the account was never set up for.
 _BACKEND_LABELS = {
-    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
     MAIL_BACKEND_IMAP:        "Any provider (IMAP app password)",
+    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
 }
 _BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
 
@@ -1645,7 +1817,10 @@ APP_PASSWORD_HELP_URLS = {
 
 APP_PASSWORD_HELP_TEXT = {
     "gmail": "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
-    "outlook": "Outlook / Microsoft app passwords are generated from your Microsoft account's security settings (requires two-step verification to be on).",
+    # Personal Microsoft accounts only. Work and school (Microsoft 365) mailboxes
+    # have basic authentication switched off, so an app password is refused there
+    # whatever host is entered -- see src/config.py's IMAP_PROVIDERS note.
+    "outlook": "Outlook.com app passwords are generated from your personal Microsoft account's security settings (requires two-step verification to be on). Work or school Microsoft 365 accounts can't use an app password at all.",
     "yahoo": "Yahoo app passwords are generated from your Yahoo Account security page.",
     "icloud": "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
     "fastmail": "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
@@ -1710,50 +1885,67 @@ def _build_app_password_prompt(provider_key: str, provider_label: str, host: str
     )
 
 
-class _SettingsWindow(ctk.CTkToplevel):
-    """Modal settings panel — chunk size, auto-refresh interval, watched
-    folder, and a way in to the mail account.
+class _Panel(ctk.CTkFrame):
+    """An in-window screen: a titled bar with a way back, then the content.
+
+    These were separate Toplevels until the stack of pop-ups they produced --
+    settings over the main window, mail account over settings -- became the
+    complaint. Android never had them: SettingsScreen and MailAccountScreen are
+    pushed onto a nav stack with a back arrow in the top bar, and this is the
+    same arrangement. The App owns the stack (_push_panel/_pop_panel); a panel
+    only knows how to close itself.
+    """
+
+    def __init__(self, app: "App", master, title: str, back_to: str) -> None:
+        # Two parents, deliberately: `master` is the placed holder this panel
+        # fills, `app` is who it talks to (settings, the panel stack). They are
+        # different objects -- see App._push_panel.
+        super().__init__(master, corner_radius=0)
+        self._app = app
+
+        bar = ctk.CTkFrame(self, height=44, corner_radius=0)
+        bar.pack(fill="x", side="top")
+        bar.pack_propagate(False)
+        # A bare arrow was reported as neither intuitive nor obvious: on Android
+        # the arrow is read in the context of a system-wide back gesture that
+        # the desktop has no equivalent of. So the button says where it lands
+        # -- "Back to sync", "Back to settings" -- and looks like a button
+        # rather than a glyph. Escape does the same thing (see App.__init__).
+        ctk.CTkButton(
+            bar, text=f"←  {back_to}", height=30,
+            font=ctk.CTkFont(size=13),
+            command=self._close,
+        ).pack(side="left", padx=(14, 12))
+        ctk.CTkLabel(
+            bar, text=title, anchor="w", font=ctk.CTkFont(size=15, weight="bold"),
+        ).pack(side="left")
+
+    def _close(self) -> None:
+        self._app._pop_panel()
+
+
+class _SettingsPanel(_Panel):
+    """Settings — chunk size, auto-refresh interval, watched folder, and a way
+    in to the mail account.
 
     Laid out in the same compartments as Android's SettingsScreen: a titled
     section per topic, separated by a rule, inside one scrolling body, with the
-    mail account on its own screen (_MailAccountWindow, mirroring Android's
+    mail account on its own screen (_MailAccountPanel, mirroring Android's
     MailAccountScreen). Android scrolls its settings column too
-    (`verticalScroll(rememberScrollState())`), and adopting that here removes
-    the reason this window used to resize itself -- see _SETTINGS_HEIGHT.
+    (`verticalScroll(rememberScrollState())`), and this does the same, so the
+    content never has to fit the space it is given.
     """
 
-    # Fixed, and deliberately so. This window used to recompute its own
-    # geometry every time the IMAP form was shown or hidden, feeding
-    # winfo_width() back into geometry() -- so the width it read was the width
-    # it had just set, and each round trip nudged it again. Switching backends,
-    # or re-picking the backend already selected, visibly resized the window
-    # every time. A scrolling body means the content no longer has to fit the
-    # window at all, so nothing needs to move.
-    #
-    # 470 wide: 380 originally, 430 for the widened "Connect via" menu, and
-    # 470 for the watched-folder row, whose label plus Choose…/Clear buttons
-    # clip at 430.
-    _SETTINGS_WIDTH = 470
-    _SETTINGS_HEIGHT = 480
-
-    def __init__(self, app: "App") -> None:
-        super().__init__(app)
-        self._app = app
-
-        self.title("Settings")
-        self.geometry(f"{self._SETTINGS_WIDTH}x{self._SETTINGS_HEIGHT}")
-        self.resizable(False, True)
-        self.grab_set()          # modal: block input to main window
-        self.lift()
-        self.focus()
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Settings", "Back to sync")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
 
         # ── Buttons ──────────────────────────────────────────────────
-        # Packed first, against the bottom, and outside the scrolling body:
-        # that is what makes "Save is off-screen" structurally impossible
-        # rather than something the window has to keep measuring for.
+        # Packed against the bottom and outside the scrolling body: that is
+        # what makes "Save is off-screen" structurally impossible rather than
+        # something the layout has to keep measuring for.
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
 
@@ -1767,7 +1959,7 @@ class _SettingsWindow(ctk.CTkToplevel):
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
-            command=self.destroy,
+            command=self._close,
         ).pack(side="right")
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -1787,13 +1979,21 @@ class _SettingsWindow(ctk.CTkToplevel):
             acc_row, text="", anchor="w", font=("", 11),
             text_color=("gray40", "gray60"),
         )
-        self._account_summary.pack(side="left", fill="x", expand=True)
+        # Left-aligned and adjacent, not expand-then-pin-right. As a pop-up this
+        # row was only ever as wide as the dialog, so a right-pinned button sat
+        # close to its label; in the main window the same code threw it to the
+        # far edge, a whole screen away from the status it acts on -- and out of
+        # line with every other control here, which starts at the left margin.
+        # The fixed label width keeps it from wandering as the summary text
+        # changes length between "Not connected" and a full address.
+        self._account_summary.configure(width=320)
+        self._account_summary.pack(side="left")
         ctk.CTkButton(
             acc_row, text="Change…", width=90, height=30,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
             command=self._open_mail_account,
-        ).pack(side="right")
+        ).pack(side="left", padx=(12, 0))
         self._render_account_summary()
 
         # ── Syncing ──────────────────────────────────────────────────
@@ -1935,18 +2135,13 @@ class _SettingsWindow(ctk.CTkToplevel):
         self._account_summary.configure(text=text)
 
     def _open_mail_account(self) -> None:
-        # grab_set() in this window's __init__ makes it modal; the child needs
-        # the grab while it is up, and this window needs it back afterwards,
-        # or the settings panel would be left unresponsive behind a closed
-        # dialog.
-        win = _MailAccountWindow(self._app, on_close=self._on_mail_account_closed)
-        self.wait_window(win)
+        # Pushed over this screen, which stays alive underneath: any settings
+        # edits made before coming here are still there on the way back.
+        self._app._push_panel(_MailAccountPanel)
 
-    def _on_mail_account_closed(self) -> None:
-        try:
-            self.grab_set()
-        except Exception:
-            pass
+    def on_reveal(self) -> None:
+        """Called by App._pop_panel when the mail account screen closes over
+        this one -- the summary line it shows may have just changed."""
         self._render_account_summary()
 
     # ------------------------------------------------------------------
@@ -2026,45 +2221,28 @@ class _SettingsWindow(ctk.CTkToplevel):
             new_settings["imported_source_paths"] = []
 
         self._app._apply_settings(new_settings)
-        self.destroy()
+        self._close()
 
 
-class _MailAccountWindow(ctk.CTkToplevel):
-    """The mail account on its own, as Android's MailAccountScreen.
+class _MailAccountPanel(_Panel):
+    """The mail account on its own screen, as Android's MailAccountScreen.
 
     It owns everything about how mail is sent -- backend, IMAP server details,
     app password, and the app-password help -- and saves them itself, so the
-    Settings window it opens from never has to know about any of it.
+    settings screen it opens from never has to know about any of it.
     """
 
-    _WIDTH = 470
-    _HEIGHT = 520
-
-    def __init__(self, app: "App", on_close=None) -> None:
-        super().__init__(app)
-        self._app = app
-        self._on_close = on_close
-
-        self.title("Mail account")
-        self.geometry(f"{self._WIDTH}x{self._HEIGHT}")
-        self.resizable(False, True)
-        self.grab_set()
-        self.lift()
-        self.focus()
-        # Closing with the window's X has to run the same restore as Cancel,
-        # or the Settings window behind this one keeps a summary that no
-        # longer matches and, worse, never gets its grab back.
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Destroy>", self._on_destroy)
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Mail account", "Back to settings")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
 
-        # Same arrangement as the Settings window and for the same reason:
+        # Same arrangement as the settings screen and for the same reason:
         # Save and Cancel live outside the scrolling body, so the expanded
-        # app-password help -- which runs to more text than this whole window
-        # -- cannot push them out of reach. That failure is why the help block
-        # was moved behind a toggle in the first place.
+        # app-password help -- which runs to more text than fits here -- cannot
+        # push them out of reach. That failure is why the help block was moved
+        # behind a toggle in the first place.
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
 
@@ -2078,7 +2256,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
             text_color=("gray10", "gray90"),
-            command=self.destroy,
+            command=self._close,
         ).pack(side="right")
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -2098,7 +2276,10 @@ class _MailAccountWindow(ctk.CTkToplevel):
         ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")
         current_backend = settings.get("mail_backend", DEFAULT_MAIL_BACKEND)
         self._backend_var = ctk.StringVar(
-            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
+            # Falls back to the configured default, not to OAuth. An unreadable
+            # or absent setting is not evidence that the user wants the
+            # Gmail-only path -- and this fallback is what silently wrote it.
+            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[DEFAULT_MAIL_BACKEND])
         )
         # 240, not the 190 the provider menu below uses: the backend labels
         # now carry the Gmail-only/any-provider distinction and the longer of
@@ -2204,13 +2385,6 @@ class _MailAccountWindow(ctk.CTkToplevel):
 
         if current_backend == MAIL_BACKEND_IMAP:
             self._help_container.pack(fill="x")
-
-    def _on_destroy(self, event) -> None:
-        # <Destroy> fires for every descendant widget as the window tears
-        # down, so act only on the window's own.
-        if event.widget is self and self._on_close is not None:
-            callback, self._on_close = self._on_close, None
-            callback()
 
     # ------------------------------------------------------------------
     # IMAP field show/hide + provider-driven host/port autofill
@@ -2441,7 +2615,10 @@ class _MailAccountWindow(ctk.CTkToplevel):
         # its own Save, so neither can silently revert the other.
         new_settings = dict(self._app._settings)
 
-        backend =_BACKEND_LABELS_REV.get(self._backend_var.get(), MAIL_BACKEND_GMAIL_OAUTH)
+        # Same reasoning as the StringVar above: an unrecognised label means we
+        # do not know what was chosen, and writing gmail_oauth on that basis is
+        # how mail_backend flipped under a Save that touched something else.
+        backend = _BACKEND_LABELS_REV.get(self._backend_var.get(), DEFAULT_MAIL_BACKEND)
         new_settings["mail_backend"] = backend
 
         password = self._password_entry.get()
@@ -2487,7 +2664,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             # exists (if any) and just persist the non-secret fields.
 
         self._app._apply_settings(new_settings)
-        self.destroy()
+        self._close()
 
     def _poll_imap_test(self, result_q: "queue.Queue", new_settings: dict) -> None:
         try:
@@ -2501,7 +2678,7 @@ class _MailAccountWindow(ctk.CTkToplevel):
             self._app._transport = event["transport"]
             self._app._apply_settings(new_settings)
             self._app._check_auth()
-            self.destroy()
+            self._close()
         else:
             self._save_btn.configure(state="normal")
             self._status_label.configure(text="")

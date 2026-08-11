@@ -31,3 +31,7 @@ build/
 
 # Kotlin incremental-compile cache, emitted next to the Gradle build dir
 android/.kotlin/
+
+# Local convenience launcher. Hardcodes one machine's absolute path, so it is
+# deliberately per-developer rather than shared.
+RunApp.bat
