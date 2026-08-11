@@ -1250,7 +1250,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _apply_auth_status(self, valid: bool, text: str) -> None:
         self._auth_dot.configure(text_color="#2ecc71" if valid else "#e74c3c")
         self._auth_label.configure(text=text)
-        self._auth_btn.configure(text="Reconnect" if valid else "Connect")
+        # command restored alongside the text: while a browser sign-in is
+        # outstanding the button is "Cancel" and points at _cancel_connect, and
+        # anything that relabels it must take that pairing back with it or the
+        # button ends up saying one thing and doing another.
+        self._auth_btn.configure(
+            text="Reconnect" if valid else "Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state=self._signout_state())
         if valid and self._transport is None:
             threading.Thread(target=self._silent_build_transport, daemon=True).start()
@@ -1546,7 +1552,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._transport = None
         self._auth_dot.configure(text_color="#e74c3c")
         self._auth_label.configure(text="Not connected")
-        self._auth_btn.configure(state="normal", text="Connect")
+        # See _apply_auth_status: relabelling must restore the command too.
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state="disabled")
         self._append_log("Signed out. Token revoked and deleted — connect again to re-authorise.")
 
@@ -1582,7 +1591,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._transport = None
         self._auth_dot.configure(text_color="#e74c3c")
         self._auth_label.configure(text="Not connected")
-        self._auth_btn.configure(state="normal", text="Connect")
+        # See _apply_auth_status: relabelling must restore the command too.
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
         self._signout_btn.configure(state="disabled")
         self._append_log("Forgot saved app password. Connect again to reconnect.")
 
