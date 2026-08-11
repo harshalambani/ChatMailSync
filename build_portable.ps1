@@ -599,15 +599,24 @@ if ($Zip) {
     # Compress-Archive on a directory (no \*) keeps it as the root entry, but
     # names that entry after the source directory - which here is
     # "<AppID>-stage", a build-internal name the user should never see after
-    # extracting. So copy the staged tree to a correctly named sibling and zip
+    # extracting. So copy the staged tree to a correctly named copy and zip
     # that, rather than shipping the wrong folder name.
-    $ZipRoot = Join-Path $DistDir $AppID
-    if (Test-Path $ZipRoot) {
-        Remove-Item $ZipRoot -Recurse -Force
+    #
+    # That correctly named copy MUST live in its own scratch directory, not
+    # directly under dist\. Join-Path $DistDir $AppID is character-for-character
+    # $PortableDir, so the earlier version of this block created the zip root
+    # ON TOP OF the live portable folder and then deleted it - taking Data\
+    # and its real credentials with it. That is what silently removed
+    # dist\WAMailSyncPortable after every -Zip build.
+    $ZipTemp = Join-Path $DistDir "zip-root"
+    if (Test-Path $ZipTemp) {
+        Remove-Item $ZipTemp -Recurse -Force
     }
+    New-Item -ItemType Directory -Force $ZipTemp | Out-Null
+    $ZipRoot = Join-Path $ZipTemp $AppID
     Copy-Item $StageDir $ZipRoot -Recurse
     Compress-Archive -Path $ZipRoot -DestinationPath $ZipPath -CompressionLevel Optimal
-    Remove-Item $ZipRoot -Recurse -Force
+    Remove-Item $ZipTemp -Recurse -Force
 
     $zipItem = Get-Item $ZipPath
     Write-Host "   Built $($zipItem.Name) ($($zipItem.Length) bytes)" -ForegroundColor Green

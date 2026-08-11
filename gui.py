@@ -223,6 +223,31 @@ def _inbox_has_files() -> bool:
         return False
 
 
+def _app_icon_path() -> "Path | None":
+    """Locate appicon.ico for both source runs and the frozen bundle.
+
+    The exe already embeds this icon (see `icon=` in wa-chat-sync.spec), which
+    is why Explorer and the Start menu have always shown it -- but a Tk window
+    does not inherit its process's exe icon. It uses its own window class icon,
+    which defaults to Tk's, so the title bar and taskbar showed a generic
+    placeholder while every other surface showed the real logo. Nothing was
+    wrong with the icon set; nobody had ever pointed the window at it.
+    """
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:                                   # PyInstaller onedir bundle
+        candidates.append(Path(meipass) / "appicon.ico")
+        candidates.append(Path(sys.executable).parent / "appicon.ico")
+        # Packaged portable layout: App\WAMailSync\WAMailSync.exe with the
+        # icon set one level up in App\AppInfo\.
+        candidates.append(Path(sys.executable).parent.parent / "AppInfo" / "appicon.ico")
+    candidates.append(Path(__file__).parent / "portable" / "App" / "AppInfo" / "appicon.ico")
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
+
+
 def _help_html_path() -> "Path | None":
     """Locate help.html for both source runs and the frozen PyInstaller bundle."""
     candidates = []
@@ -252,6 +277,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.TkdndVersion = TkinterDnD._require(self)
 
         self.title("WA Mail Sync")
+        # Title bar, taskbar and Alt-Tab. Best-effort on purpose: a missing or
+        # unreadable icon is a cosmetic defect and must never stop the app from
+        # starting. iconbitmap() is the Windows path (it takes a real .ico, so
+        # Windows picks the right size per surface); on other platforms it
+        # raises TclError and the window simply keeps the default.
+        _icon = _app_icon_path()
+        if _icon:
+            try:
+                self.iconbitmap(default=str(_icon))
+            except Exception:
+                pass
         self.geometry("800x580")
         self.minsize(700, 500)
 

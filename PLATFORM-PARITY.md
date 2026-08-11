@@ -50,7 +50,7 @@ Not shared - every one of these needs its own change:
 | Background/threading glue | `gui_worker.py` | `SyncWorker.kt`, `WatchFolderWorker.kt` |
 | Settings persistence | `data/.settings.json` | `AppPrefs.kt` (SharedPreferences) |
 | Secret storage | `src/secret_store.py` (DPAPI) + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
-| Help text | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` |
+| Help text | `help.html` (in-app), `portable/help.html` (package), `docs/user-guide.md` | `HelpScreen.kt` |
 | Packaging | `build_portable.ps1` -> portable zip | Gradle -> APK/AAB |
 
 Note the third and fourth rows especially: **settings and secrets are stored
@@ -175,7 +175,7 @@ the same words, in the same position, on both clients (2026-08-11):
 | | Windows | Android |
 | --- | --- | --- |
 | In-app | `gui.py`, mail-account panel, above the backend picker | `MailAccountScreen.kt`, same position |
-| Help | `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` FAQ |
+| Help | `help.html`, `portable/help.html`, `docs/user-guide.md` | `HelpScreen.kt` FAQ |
 
 Weighting was decided deliberately and should not be escalated without a
 reason: one quiet caption line in the standard muted style on the one screen
