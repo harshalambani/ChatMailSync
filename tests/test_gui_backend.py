@@ -1052,3 +1052,24 @@ def test_file_total_is_reported_before_the_first_file():
         == "Found 3 file(s)…"
     assert _FakeApp().handle({"type": "files_total", "n": 0})._progress_label.text \
         == "Inbox is empty"
+
+
+def test_the_backend_choice_never_falls_back_to_the_gmail_only_path():
+    """Reported live: Connect opened a browser OAuth flow on a machine whose
+    settings had imap_host, imap_email and imap_provider all filled in and no
+    token.json at all -- mail_backend had been stamped "gmail_oauth" underneath.
+
+    Two fallbacks did it, both hard-coded to the Gmail-only backend: the one
+    that seeds the dropdown when the saved value is unrecognised, and the one
+    that reads the dropdown back on Save. Neither case is evidence of what the
+    user wants, so both now defer to DEFAULT_MAIL_BACKEND. The dropdown lists
+    IMAP first for the same reason, and to match Android's BACKEND_LABELS.
+    """
+    from src.config import DEFAULT_MAIL_BACKEND, MAIL_BACKEND_IMAP
+
+    assert list(gui._BACKEND_LABELS)[0] == MAIL_BACKEND_IMAP
+    # The label a missing/garbled setting seeds the menu with...
+    assert gui._BACKEND_LABELS[DEFAULT_MAIL_BACKEND] == gui._BACKEND_LABELS[MAIL_BACKEND_IMAP]
+    # ...and the backend an unrecognised label saves as.
+    assert gui._BACKEND_LABELS_REV.get("something we never rendered",
+                                       DEFAULT_MAIL_BACKEND) == MAIL_BACKEND_IMAP

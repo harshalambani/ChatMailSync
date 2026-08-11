@@ -286,6 +286,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_after_id = None
         self._last_run_dry_run = False
         self._auth_wait_after = None
+        self._auth_cancelled = False
         # The bar only moves forwards within a run -- see _advance_progress().
         self._progress_fraction = 0.0
         # In-window screens, innermost last. Android pushes SettingsScreen and
@@ -1291,7 +1292,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             # live, rather than trying to run the OAuth dance.
             self._open_settings()
             return
-        self._auth_btn.configure(state="disabled", text="Connecting…")
+        self._auth_cancelled = False
+        # Stays enabled and becomes the way out. Reported live: an abandoned
+        # sign-in left the header on "Connecting…" for the full three-minute
+        # bound, which reads exactly like a hang no matter what the label says.
+        # The wait itself is inside the OAuth library and can't be interrupted,
+        # but the UI can be handed back the instant the user gives up.
+        self._auth_btn.configure(
+            state="normal", text="Cancel", command=self._cancel_connect
+        )
         self._auth_label.configure(text="Opening browser…")
         # "Opening browser…" stops being true the moment the browser is up, and
         # what follows is a wait on the user, not on the app. Saying so is the
@@ -1305,7 +1314,30 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         threading.Thread(target=connect_gmail, args=(auth_q,), daemon=True).start()
         self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
 
+    def _cancel_connect(self) -> None:
+        """Give up on a browser sign-in without waiting out the timeout.
+
+        The blocking wait lives in a daemon thread inside the OAuth library, so
+        it can't be stopped from here -- it ends on its own bound and posts to a
+        queue nobody reads any more. What can be returned immediately is the
+        UI, which is the entire complaint.
+        """
+        self._auth_cancelled = True
+        if self._auth_wait_after is not None:
+            self.after_cancel(self._auth_wait_after)
+            self._auth_wait_after = None
+        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_label.configure(text="Sign-in cancelled")
+        self._auth_btn.configure(
+            state="normal", text="Connect", command=self._on_connect_click
+        )
+        self._signout_btn.configure(state=self._signout_state())
+
     def _poll_auth_queue(self, auth_q: queue.Queue) -> None:
+        # Cancelled: stop polling and leave the header as _cancel_connect left
+        # it, rather than overwriting it minutes later when the bound expires.
+        if self._auth_cancelled:
+            return
         try:
             event = auth_q.get_nowait()
         except queue.Empty:
@@ -1320,7 +1352,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._transport = event["transport"]
             self._auth_dot.configure(text_color="#2ecc71")
             self._auth_label.configure(text="Connected")
-            self._auth_btn.configure(state="normal", text="Reconnect")
+            # command restored: it was pointing at _cancel_connect for the
+            # duration of the wait.
+            self._auth_btn.configure(
+                state="normal", text="Reconnect", command=self._on_connect_click
+            )
             self._signout_btn.configure(state="normal")
             self._append_log("Gmail authentication successful.")
         else:
@@ -1329,7 +1365,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._auth_label.configure(
                 text="Sign-in not completed" if timed_out else "Auth failed"
             )
-            self._auth_btn.configure(state="normal", text="Connect")
+            self._auth_btn.configure(
+                state="normal", text="Connect", command=self._on_connect_click
+            )
             # Same reasoning as _signout_state(): a failed connect is when a
             # stored token most needs clearing out, not when the button for
             # doing it should disappear.
@@ -1718,9 +1756,16 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 # Outlook or Fastmail address in mind is a dead end the UI used to let you walk
 # into. Kept in step with android/.../MailAccountScreen.kt's BACKEND_LABELS --
 # see PLATFORM-PARITY.md, do not edit one side without the other.
+#
+# IMAP first, deliberately: it is DEFAULT_MAIL_BACKEND, it is what Android
+# lists first, and it is the path that reaches any mailbox. Listing the
+# Gmail-only path at the top made it the thing a user's eye and a stray Save
+# both landed on -- which is how a settings file with imap_host, imap_email and
+# imap_provider all filled in still ended up stamped mail_backend=gmail_oauth,
+# sending Connect into a browser flow the account was never set up for.
 _BACKEND_LABELS = {
-    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
     MAIL_BACKEND_IMAP:        "Any provider (IMAP app password)",
+    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
 }
 _BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
 
@@ -2202,7 +2247,10 @@ class _MailAccountPanel(_Panel):
         ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")
         current_backend = settings.get("mail_backend", DEFAULT_MAIL_BACKEND)
         self._backend_var = ctk.StringVar(
-            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[MAIL_BACKEND_GMAIL_OAUTH])
+            # Falls back to the configured default, not to OAuth. An unreadable
+            # or absent setting is not evidence that the user wants the
+            # Gmail-only path -- and this fallback is what silently wrote it.
+            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[DEFAULT_MAIL_BACKEND])
         )
         # 240, not the 190 the provider menu below uses: the backend labels
         # now carry the Gmail-only/any-provider distinction and the longer of
@@ -2538,7 +2586,10 @@ class _MailAccountPanel(_Panel):
         # its own Save, so neither can silently revert the other.
         new_settings = dict(self._app._settings)
 
-        backend =_BACKEND_LABELS_REV.get(self._backend_var.get(), MAIL_BACKEND_GMAIL_OAUTH)
+        # Same reasoning as the StringVar above: an unrecognised label means we
+        # do not know what was chosen, and writing gmail_oauth on that basis is
+        # how mail_backend flipped under a Save that touched something else.
+        backend = _BACKEND_LABELS_REV.get(self._backend_var.get(), DEFAULT_MAIL_BACKEND)
         new_settings["mail_backend"] = backend
 
         password = self._password_entry.get()
