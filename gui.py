@@ -305,6 +305,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # _dismiss_splash_when_mapped().
         self.bind("<Map>", self._dismiss_splash_when_mapped)
 
+        # Escape closes the innermost in-window screen -- what it used to do
+        # when these were pop-up windows, and the habit outlives the pop-ups.
+        self.bind("<Escape>", lambda _e: self._pop_panel())
+
         # Initial data load. The auth check is deferred rather than inline --
         # see _check_auth_deferred(); it is the one step here that can go to
         # the network, and it ran before mainloop().
@@ -1788,7 +1792,7 @@ class _Panel(ctk.CTkFrame):
     only knows how to close itself.
     """
 
-    def __init__(self, app: "App", master, title: str) -> None:
+    def __init__(self, app: "App", master, title: str, back_to: str) -> None:
         # Two parents, deliberately: `master` is the placed holder this panel
         # fills, `app` is who it talks to (settings, the panel stack). They are
         # different objects -- see App._push_panel.
@@ -1798,13 +1802,16 @@ class _Panel(ctk.CTkFrame):
         bar = ctk.CTkFrame(self, height=44, corner_radius=0)
         bar.pack(fill="x", side="top")
         bar.pack_propagate(False)
+        # A bare arrow was reported as neither intuitive nor obvious: on Android
+        # the arrow is read in the context of a system-wide back gesture that
+        # the desktop has no equivalent of. So the button says where it lands
+        # -- "Back to sync", "Back to settings" -- and looks like a button
+        # rather than a glyph. Escape does the same thing (see App.__init__).
         ctk.CTkButton(
-            bar, text="←", width=36, height=30,
-            font=ctk.CTkFont(size=16),
-            fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            bar, text=f"←  {back_to}", height=30,
+            font=ctk.CTkFont(size=13),
             command=self._close,
-        ).pack(side="left", padx=(14, 8))
+        ).pack(side="left", padx=(14, 12))
         ctk.CTkLabel(
             bar, text=title, anchor="w", font=ctk.CTkFont(size=15, weight="bold"),
         ).pack(side="left")
@@ -1826,7 +1833,7 @@ class _SettingsPanel(_Panel):
     """
 
     def __init__(self, app: "App", master) -> None:
-        super().__init__(app, master, "Settings")
+        super().__init__(app, master, "Settings", "Back to sync")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings
@@ -2114,7 +2121,7 @@ class _MailAccountPanel(_Panel):
     """
 
     def __init__(self, app: "App", master) -> None:
-        super().__init__(app, master, "Mail account")
+        super().__init__(app, master, "Mail account", "Back to settings")
 
         pad = {"padx": 20, "pady": 8}
         settings = app._settings

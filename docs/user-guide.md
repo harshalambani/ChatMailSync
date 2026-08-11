@@ -38,8 +38,11 @@ your real password.
 1. Create an app password with your provider. For Gmail, go to your Google
    Account → Security → 2-Step Verification → App passwords. (Most providers
    require two-factor authentication to be on before they will issue one.)
-2. Open the app, click the **gear icon** (top-right) to open Settings.
-3. Under **Mail account**, click **Change…**.
+2. Open the app, click the **gear icon** (top-right) to open Settings. Settings
+   opens inside the main window rather than in a separate one — **Back to sync**
+   (top-left), or the Escape key, returns you to the sync view.
+3. Under **Mail account**, click **Change…**. That opens the Mail account screen
+   the same way, with **Back to settings** to come out of it.
 4. Leave **Connect via** set to *Email app password (IMAP)*.
 5. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
