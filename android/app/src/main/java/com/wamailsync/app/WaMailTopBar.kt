@@ -25,11 +25,19 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The masthead bar: a postmark-blue banner rather than a flat
- * surface-colored bar, with the app's mark (the same envelope/chat-bubble/
- * sync-arrows glyph as the launcher icon, drawable/ic_launcher_foreground)
- * to the left of a serif wordmark. [subtitle] is the small-caps eyebrow
- * line under the title — reserved for top-level tabs (Home/Chats/Settings);
- * detail screens pass null and just get mark+title.
+ * surface-colored bar, with the app's mark to the left of a serif wordmark.
+ * [subtitle] is the small-caps eyebrow line under the title — reserved for
+ * top-level tabs (Home/Chats/Settings); detail screens pass null and just get
+ * mark+title.
+ *
+ * The mark is drawable/ic_masthead, NOT ic_launcher_foreground. It used to be
+ * the latter, which is the adaptive-icon foreground layer and is groundless by
+ * design because a launcher composites it over its own background. Painted
+ * straight onto this navy band there was nothing beneath it: the chevron and
+ * the envelope notch showed band colour through, and the mark had no container,
+ * so it read as unfinished. ic_masthead is the ringed badge cut for this one
+ * surface. Everywhere else — launcher, taskbar, splash — the mark stands alone
+ * with no ring, so do not reuse ic_masthead outside the banner.
  */
 private val MastheadHeight = 88.dp
 
@@ -57,9 +65,14 @@ fun WaMailTopBar(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        painter = painterResource(R.drawable.ic_masthead),
                         contentDescription = null,
-                        modifier = androidx.compose.ui.Modifier.size(72.dp),
+                        // 56dp, not the old 72dp. The adaptive foreground drew
+                        // its mark at 72/108 of its canvas, so a 72dp box put
+                        // ~48dp of ink on screen. ic_masthead is a full-bleed
+                        // badge, so the same box would render half again as
+                        // large and crowd an 88dp band.
+                        modifier = androidx.compose.ui.Modifier.size(56.dp),
                     )
                     Column {
                         Text(

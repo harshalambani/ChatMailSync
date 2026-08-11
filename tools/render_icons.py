@@ -70,6 +70,16 @@ ENVELOPE_BODY = (84, 296, 428, 428)
 ENVELOPE_RADIUS = 40
 ENVELOPE_NOTCH = [(84, 296), (428, 296), (256, 400)]
 
+# The masthead ring. ONLY the in-app masthead gets this - everywhere else the
+# mark stands alone, unbordered. The masthead is the one surface that paints
+# the mark onto a mid-blue band, where a navy tile has almost no edge against
+# the band and a groundless mark has nothing containing it at all. A thin white
+# ring gives it a boundary without inverting the colours. Do not propagate it
+# to the launcher icon or the .ico: on a wallpaper or a taskbar the mark has
+# its own ground and a ring there is just noise.
+MASTHEAD_RING = 14
+MASTHEAD_INSET = 34
+
 # Adaptive icons reserve the outer third: 72dp visible out of a 108dp canvas.
 # Anything outside this shrinks or gets cropped depending on the launcher's
 # mask, so the foreground layer is drawn at this scale about the centre.
@@ -103,8 +113,9 @@ class Canvas:
         c, d = self._p(x1, y1)
         return [a, b, c, d]
 
-    def rounded_rect(self, box, radius, fill):
-        self.d.rounded_rectangle(self._box(box), radius=radius * self.k, fill=fill)
+    def rounded_rect(self, box, radius, fill=None, outline=None, width=0):
+        self.d.rounded_rectangle(self._box(box), radius=radius * self.k, fill=fill,
+                                 outline=outline, width=int(round(width * self.k)))
 
     def ellipse(self, box, fill):
         self.d.ellipse(self._box(box), fill=fill)
@@ -160,6 +171,34 @@ def draw_logo(size: int, ground: str = "rounded", scale: float = 1.0) -> Image.I
     c.polygon(ENVELOPE_NOTCH, cut)
 
     return c.finish()
+
+
+def draw_masthead(size: int) -> Image.Image:
+    """The in-app masthead badge: navy tile, white ring, white mark.
+
+    Built as two supersampled layers composited before the downsample, because
+    the tile is drawn at full canvas scale while the mark is inset - one
+    Canvas has a single scale and cannot do both. Compositing at 8x and
+    resizing once keeps a single antialiasing pass; resizing each layer first
+    and then compositing would soften the ring.
+    """
+    tile = Canvas(size)
+    tile.rounded_rect((0, 0, CANVAS, CANVAS), GROUND_RADIUS, fill=NAVY)
+    tile.rounded_rect(
+        (MASTHEAD_RING / 2, MASTHEAD_RING / 2,
+         CANVAS - MASTHEAD_RING / 2, CANVAS - MASTHEAD_RING / 2),
+        GROUND_RADIUS, outline=WHITE, width=MASTHEAD_RING)
+
+    mark = Canvas(size, (CANVAS - 2 * MASTHEAD_INSET) / CANVAS)
+    mark.rounded_rect(BUBBLE, BUBBLE_RADIUS, fill=WHITE)
+    mark.polyline(CHEVRON, CHEVRON_WIDTH, CLEAR)
+    mark.polygon(TAIL, WHITE)
+    mark.rounded_rect(ENVELOPE_BODY, ENVELOPE_RADIUS, fill=WHITE)
+    mark.polygon(ENVELOPE_NOTCH, CLEAR)
+
+    # The mark's cut-outs are transparent, so the navy tile shows through them
+    # once composited - same figure/ground as the launcher icon.
+    return Image.alpha_composite(tile.img, mark.img).resize((size, size), Image.LANCZOS)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +326,14 @@ def main() -> int:
     save(bg, android_res / "drawable-nodpi" / "ic_launcher_background.png")
     save(draw_logo(512, ground="none", scale=ADAPTIVE_SAFE),
          android_res / "drawable-nodpi" / "ic_launcher_foreground.png")
+
+    # The masthead needs its own asset. It used to borrow
+    # ic_launcher_foreground, which is the ADAPTIVE layer and is groundless by
+    # design because the launcher paints a background under it - on the navy
+    # masthead band there is nothing under it, so the mark's cut-outs showed
+    # band colour through and the shape had no container. Borrowing the
+    # adaptive layer for a second purpose is the bug; this is the fix.
+    save(draw_masthead(512), android_res / "drawable-nodpi" / "ic_masthead.png")
 
     for p in written:
         print(f"  {p.relative_to(root).as_posix():<62} {p.stat().st_size:>8} bytes")
