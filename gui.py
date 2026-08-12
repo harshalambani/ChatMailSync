@@ -115,6 +115,11 @@ _DEFAULT_SETTINGS = {
     # intentionally NOT in this dict; it only ever lives in
     # IMAP_CREDENTIALS_FILE (see gui_worker._save_imap_credentials).
     "backend_notice_shown": False,
+    # Advanced unlock for the demoted Gmail OAuth option (v1.6.0). False on
+    # every fresh install, which is the entire point: a new user is never
+    # offered a sign-in Google expires 7 days after granting it. Latched to
+    # True the first time OAuth is seen in use -- see config.should_latch_oauth.
+    "oauth_unlocked":      False,
     # Watched folder -- the desktop half of Android's WatchFolderWorker. Key
     # names deliberately match AppPrefs' so the two platforms' state is
     # readable side by side. See src/watch_folder.py for the rules; the two
