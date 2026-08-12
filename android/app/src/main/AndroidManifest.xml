@@ -8,19 +8,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
-        android:name=".WaMailApplication"
+        android:name=".ChatMailApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="WA Mail Sync"
-        android:theme="@style/Theme.WaMailSync"
+        android:label="Chat Mail Sync"
+        android:theme="@style/Theme.ChatMailSync"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.WaMailSync">
+            android:theme="@style/Theme.ChatMailSync">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -44,7 +44,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.wamailsync.app.fileprovider"
+            android:authorities="com.chatmailsync.app.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

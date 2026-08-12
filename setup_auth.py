@@ -20,7 +20,7 @@ from src.mail_client import get_credentials
 
 
 def main() -> None:
-    print("WA Mail Sync — OAuth2 Setup")
+    print("Chat Mail Sync — OAuth2 Setup")
     print("=" * 40)
 
     if not CREDENTIALS_FILE.exists():

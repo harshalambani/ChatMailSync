@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

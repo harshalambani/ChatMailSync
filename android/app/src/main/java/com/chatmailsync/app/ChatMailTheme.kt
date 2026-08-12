@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -174,7 +174,7 @@ private val QuietArchiveTypography = Typography().let { base ->
 }
 
 @Composable
-fun WaMailTheme(
+fun ChatMailTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

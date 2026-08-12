@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -334,7 +334,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
     private fun buildNotification(text: String) =
         NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WA Mail Sync")
+            .setContentTitle("Chat Mail Sync")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)

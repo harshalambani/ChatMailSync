@@ -2,7 +2,7 @@
 
 Why this exists
 ---------------
-`SplashTime` in portable/App/AppInfo/Launcher/WAMailSyncPortable.ini is a
+`SplashTime` in portable/App/AppInfo/Launcher/ChatMailSyncPortable.ini is a
 TIMER, not a ready signal. The launcher shows the image for exactly that long
 and nothing tells it the app has appeared - so any fixed number encodes one
 machine's hardware and drifts as startup changes. Worse, the splash is topmost:
@@ -20,7 +20,7 @@ rather than under the best warm one.
 How dismissal works
 -------------------
 The splash is a separate visible top-level window of class `_sp`, owned by the
-LAUNCHER process (WAMailSyncPortable.exe), not by this app's process. Two things
+LAUNCHER process (ChatMailSyncPortable.exe), not by this app's process. Two things
 were measured against the live window before this was written:
 
   * PostMessage(hwnd, WM_CLOSE, ...) is IGNORED. The window does not close.
@@ -74,7 +74,7 @@ import time
 WM_LBUTTONDOWN = 0x0201
 WM_LBUTTONUP = 0x0202
 
-_LAUNCHER_EXE_NAME = "WAMailSyncPortable.exe"
+_LAUNCHER_EXE_NAME = "ChatMailSyncPortable.exe"
 _SPLASH_CLASS_NAME = "_sp"
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 

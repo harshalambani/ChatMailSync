@@ -36,7 +36,7 @@ def _install_windows(monkeypatch, windows, clicked=None):
     *windows* maps hwnd -> (visible, class_name, pid), and pids are resolved
     to exe names through *procs* below. Nothing here touches a real window.
     """
-    procs = {1: "WAMailSyncPortable.exe", 2: "explorer.exe"}
+    procs = {1: "ChatMailSyncPortable.exe", 2: "explorer.exe"}
 
     monkeypatch.setattr(_splash, "_enum_top_level_windows", lambda: list(windows))
     monkeypatch.setattr(_splash, "_window_is_visible", lambda h: windows[h][0])

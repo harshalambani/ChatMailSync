@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Build WAMailSync as a PortableApps-compatible folder.
+    Build ChatMailSync as a PortableApps-compatible folder.
 
 .DESCRIPTION
-    1. Runs PyInstaller with wa-chat-sync.spec  ->  dist\WAMailSync\
-    2. Assembles the PortableApps directory layout under dist\WAMailSyncPortable\
-    3. Generates the compiled PortableApps.com launcher (WAMailSyncPortable.exe)
+    1. Runs PyInstaller with chat-mail-sync.spec  ->  dist\ChatMailSync\
+    2. Assembles the PortableApps directory layout under dist\ChatMailSyncPortable\
+    3. Generates the compiled PortableApps.com launcher (ChatMailSyncPortable.exe)
     4. Optionally packages a distributable: the .paf.exe PortableApps.com
        installer (-Installer) and/or a plain portable zip (-Zip). Both are cut
        from the same clean staging tree, never from the live working copy.
@@ -15,7 +15,7 @@
     hand to anyone.
 
 .EXAMPLE
-    cd "C:\Users\inabm\Documents\Cowork Playground\WAMailSync"
+    cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
     .\build_portable.ps1
 
     To skip PyInstaller (re-assemble layout only):
@@ -53,9 +53,9 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot   = $PSScriptRoot
 $DistDir       = Join-Path $ProjectRoot "dist"
-$BundleDir     = Join-Path $DistDir "WAMailSync"          # PyInstaller output
-$PortableDir   = Join-Path $DistDir "WAMailSyncPortable"
-$AppDir        = Join-Path $PortableDir "App\WAMailSync"
+$BundleDir     = Join-Path $DistDir "ChatMailSync"          # PyInstaller output
+$PortableDir   = Join-Path $DistDir "ChatMailSyncPortable"
+$AppDir        = Join-Path $PortableDir "App\ChatMailSync"
 $DataDir       = Join-Path $PortableDir "Data"
 $AppInfoDir    = Join-Path $PortableDir "App\AppInfo"
 
@@ -89,7 +89,7 @@ $InstallerVer  = "3.9.18"
 $InstallerHash = "43BC8F41B90F5F487BA95E89DA94F4F9F7A3B3A9ED164E5B3137EB904E08855D"
 $InstallerUrl  = "https://portableapps.com/apps/development/portableapps.com_installer"
 
-$AppID = "WAMailSyncPortable"   # must match [Details]:AppID in appinfo.ini
+$AppID = "ChatMailSyncPortable"   # must match [Details]:AppID in appinfo.ini
 
 function Resolve-PortableAppsTool {
     <#
@@ -185,7 +185,7 @@ if (-not $SkipBuild) {
     # as a matter of course, so its exit code is the only reliable signal.
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & $PyInstaller "$ProjectRoot\wa-chat-sync.spec" --clean --noconfirm
+    & $PyInstaller "$ProjectRoot\chat-mail-sync.spec" --clean --noconfirm
     $paExit = $LASTEXITCODE
     $ErrorActionPreference = $prevEAP
     if ($paExit -ne 0) {
@@ -213,7 +213,7 @@ if (Test-Path $AppDir) {
     Remove-Item $AppDir -Recurse -Force
 }
 
-# App\WAMailSync\ - the frozen exe + all its DLLs / data
+# App\ChatMailSync\ - the frozen exe + all its DLLs / data
 New-Item -ItemType Directory -Force $AppDir | Out-Null
 Copy-Item "$BundleDir\*" $AppDir -Recurse
 
@@ -361,10 +361,10 @@ foreach ($sub in @("auth", "data\inbox", "data\processed")) {
 # it. -SeedCredentials makes it a deliberate act instead of the default.
 #
 # For local smoke-testing prefer running the app from the repo with
-# WAMAILSYNC_ROOT pointed at the project root - it reads the same auth\ folder
+# CHATMAILSYNC_ROOT pointed at the project root - it reads the same auth\ folder
 # without ever copying it. Note that the PortableApps launcher always sets
-# WAMAILSYNC_ROOT to its own Data\, so this applies to running the app
-# directly, not to launching WAMailSyncPortable.exe.
+# CHATMAILSYNC_ROOT to its own Data\, so this applies to running the app
+# directly, not to launching ChatMailSyncPortable.exe.
 if ($SeedCredentials) {
     Write-Host "   -SeedCredentials: copying LIVE credentials into dist\ - do not distribute this folder." -ForegroundColor Yellow
     foreach ($authFile in @("credentials.json", "token.json")) {
@@ -396,7 +396,7 @@ if ($stale -and -not $SeedCredentials) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 3 - Compiled launcher  (WAMailSyncPortable.exe)
+# Step 3 - Compiled launcher  (ChatMailSyncPortable.exe)
 #
 # Replaces the hand-written WAMailSyncPortable.bat. A .bat cannot carry an
 # icon, which is why the icon set generated in B2 did nothing for the portable
@@ -607,7 +607,7 @@ if ($Zip) {
     # $PortableDir, so the earlier version of this block created the zip root
     # ON TOP OF the live portable folder and then deleted it - taking Data\
     # and its real credentials with it. That is what silently removed
-    # dist\WAMailSyncPortable after every -Zip build.
+    # dist\ChatMailSyncPortable after every -Zip build.
     $ZipTemp = Join-Path $DistDir "zip-root"
     if (Test-Path $ZipTemp) {
         Remove-Item $ZipTemp -Recurse -Force

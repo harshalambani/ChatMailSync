@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.Context
 
@@ -14,7 +14,7 @@ object AppPrefs {
     // Store the identical edit would silently wipe every user's settings on
     // update, with no error to explain it. SecretStore declares the same name
     // independently against the same file — the two must stay in step.
-    private const val PREFS_NAME = "wamail_prefs"
+    private const val PREFS_NAME = "chatmail_prefs"
     private const val KEY_WATCHED_FOLDER_URI = "watched_folder_uri"
     private const val KEY_AUTO_WATCH_ENABLED = "auto_watch_enabled"
     private const val KEY_IMPORTED_DOC_IDS = "imported_doc_ids"
@@ -192,7 +192,7 @@ object AppPrefs {
      * the version row in SettingsScreen; there is deliberately no re-lock UI,
      * because clearing app data is the reset and that is proportionate for a
      * maintainer-facing switch. Android has no user-settable environment
-     * variable, which is why the desktop's WAMAILSYNC_ENABLE_OAUTH has no twin
+     * variable, which is why the desktop's CHATMAILSYNC_ENABLE_OAUTH has no twin
      * here and the gesture had to be the primary mechanism on both. */
     fun isOauthUnlocked(context: Context): Boolean =
         prefs(context).getBoolean(KEY_OAUTH_UNLOCKED, false)

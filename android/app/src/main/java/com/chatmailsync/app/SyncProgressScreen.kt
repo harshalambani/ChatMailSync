@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,7 +69,7 @@ fun SyncProgressScreen(
     }
 
     Scaffold(
-        topBar = { WaMailTopBar(title = "Sync progress") },
+        topBar = { ChatMailTopBar(title = "Sync progress") },
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),

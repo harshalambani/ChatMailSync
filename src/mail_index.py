@@ -49,7 +49,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checke
 # not recognise the value should refuse the file rather than guess at it.
 INDEX_SCHEMA = 1
 
-INDEX_FILENAME = "wamailsync-index.json"
+INDEX_FILENAME = "chatmailsync-index.json"
 INDEX_MIME_TYPE = ("application", "json")
 
 # Small, fixed-size facts also go on headers, so a future reader can identify
@@ -60,10 +60,10 @@ INDEX_MIME_TYPE = ("application", "json")
 # silently truncate on exactly the largest chats - and a truncated index that
 # looks complete is worse than none, because a rebuild would conclude those
 # messages were never archived and send them a second time.
-HEADER_VERSION = "X-WAMailSync-Version"
-HEADER_CHAT = "X-WAMailSync-Chat"
-HEADER_COUNT = "X-WAMailSync-Count"
-HEADER_INDEX = "X-WAMailSync-Index"
+HEADER_VERSION = "X-ChatMailSync-Version"
+HEADER_CHAT = "X-ChatMailSync-Chat"
+HEADER_COUNT = "X-ChatMailSync-Count"
+HEADER_INDEX = "X-ChatMailSync-Index"
 
 # Upper bound on one serialised entry after base64 transfer encoding. Used only
 # to keep size-based chunk splitting honest - see estimate_index_bytes(). A

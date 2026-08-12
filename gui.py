@@ -1,5 +1,5 @@
 """
-GUI entry point for WA Mail Sync.
+GUI entry point for Chat Mail Sync.
 
 Run with:
     python gui.py
@@ -243,7 +243,7 @@ def _inbox_has_files() -> bool:
 def _app_icon_path() -> "Path | None":
     """Locate appicon.ico for both source runs and the frozen bundle.
 
-    The exe already embeds this icon (see `icon=` in wa-chat-sync.spec), which
+    The exe already embeds this icon (see `icon=` in chat-mail-sync.spec), which
     is why Explorer and the Start menu have always shown it -- but a Tk window
     does not inherit its process's exe icon. It uses its own window class icon,
     which defaults to Tk's, so the title bar and taskbar showed a generic
@@ -255,7 +255,7 @@ def _app_icon_path() -> "Path | None":
     if meipass:                                   # PyInstaller onedir bundle
         candidates.append(Path(meipass) / "appicon.ico")
         candidates.append(Path(sys.executable).parent / "appicon.ico")
-        # Packaged portable layout: App\WAMailSync\WAMailSync.exe with the
+        # Packaged portable layout: App\ChatMailSync\ChatMailSync.exe with the
         # icon set one level up in App\AppInfo\.
         candidates.append(Path(sys.executable).parent.parent / "AppInfo" / "appicon.ico")
     candidates.append(Path(__file__).parent / "portable" / "App" / "AppInfo" / "appicon.ico")
@@ -293,7 +293,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title("WA Mail Sync")
+        self.title("Chat Mail Sync")
         # Title bar, taskbar and Alt-Tab. Best-effort on purpose: a missing or
         # unreadable icon is a cosmetic defect and must never stop the app from
         # starting. iconbitmap() is the Windows path (it takes a real .ico, so
@@ -419,7 +419,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         ctk.CTkLabel(
             hdr,
-            text="WA Mail Sync",
+            text="Chat Mail Sync",
             font=ctk.CTkFont(size=16, weight="bold"),
         ).pack(side="left", padx=16)
 
@@ -701,7 +701,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             title="Save chat list as CSV",
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            initialfile="wa_chat_sync_export.csv",
+            initialfile="chat_mail_sync_export.csv",
         )
         if not dest:
             return  # user cancelled

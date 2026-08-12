@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -113,7 +113,7 @@ private val FAQ = listOf(
 fun HelpScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
-            WaMailTopBar(
+            ChatMailTopBar(
                 title = "Help & FAQ",
                 navigationIcon = {
                     IconButton(onClick = onBack) {

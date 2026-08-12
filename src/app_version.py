@@ -54,7 +54,7 @@ def _candidate_ini_paths() -> list[Path]:
     """Where appinfo.ini can be, most authoritative first.
 
     In a built package the layout is fixed by the PortableApps.com Format and
-    by build_portable.ps1:58-60 -- the frozen exe sits in App\\WAMailSync\\ and
+    by build_portable.ps1:58-60 -- the frozen exe sits in App\\ChatMailSync\\ and
     the metadata in App\\AppInfo\\ -- so it is one hop up and across from
     sys.executable.
 
@@ -66,7 +66,7 @@ def _candidate_ini_paths() -> list[Path]:
     """
     if not getattr(sys, "frozen", False):
         return []
-    exe_dir = Path(sys.executable).parent              # App\WAMailSync\
+    exe_dir = Path(sys.executable).parent              # App\ChatMailSync\
     return [
         exe_dir.parent / "AppInfo" / "appinfo.ini",
         # A onedir bundle run outside the PortableApps wrapper.
@@ -87,5 +87,5 @@ def version_label() -> str:
     """One line for an About section, on either side of the frozen/source split."""
     version = app_version()
     if version == FALLBACK:
-        return "WA Mail Sync - development build"
-    return f"WA Mail Sync {version}"
+        return "Chat Mail Sync - development build"
+    return f"Chat Mail Sync {version}"

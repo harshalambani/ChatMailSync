@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose owns all real theming (see WaMailTheme.kt) - this parent
+    <!-- Compose owns all real theming (see ChatMailTheme.kt) - this parent
          just gives the Activity a splash-free Material3 base before Compose
          takes over, per the plan's "no hardcoded colors, single theme
          source" rule (2026-07-04-android-feasibility-and-transposition-plan.md §5.3). -->
-    <style name="Theme.WaMailSync" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.ChatMailSync" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

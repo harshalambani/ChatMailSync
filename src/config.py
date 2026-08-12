@@ -1,5 +1,5 @@
 """
-Constants, defaults, and configurable parameters for WA Chat Sync.
+Constants, defaults, and configurable parameters for Chat Mail Sync.
 """
 
 import os
@@ -11,7 +11,7 @@ from pathlib import Path
 
 # When running as a PyInstaller bundle, __file__ points inside the frozen
 # binary and relative paths break.  The PortableApps launcher sets
-# WAMAILSYNC_ROOT to the App/WAMailSync/ directory before starting the exe.
+# CHATMAILSYNC_ROOT to the App/ChatMailSync/ directory before starting the exe.
 #
 # An Android/Chaquopy caller has no env var to set and no __file__-relative
 # layout to fall back to (app-private storage lives under
@@ -22,13 +22,13 @@ _explicit_root: Path | None = None
 def _compute_root() -> Path:
     if _explicit_root is not None:
         return _explicit_root
-    # WAMAILSYNC_ROOT is the only accepted name. A WAGMAIL_ROOT fallback lived
+    # CHATMAILSYNC_ROOT is the only accepted name. A WAGMAIL_ROOT fallback lived
     # here until 2026-08-08, for portable installs built before the
-    # WAGmailSync -> WAMailSync rename whose launcher still exported the old
+    # WAGmailSync -> WA Mail Sync rename whose launcher still exported the old
     # variable. Dropped deliberately: a PortableApps upgrade replaces the
     # launcher .ini along with App\, so the old name only survived a hand-copy
     # of App\ over a pre-1.0.0 install, and those were prereleases.
-    env_root = os.environ.get("WAMAILSYNC_ROOT")
+    env_root = os.environ.get("CHATMAILSYNC_ROOT")
     return Path(env_root) if env_root else Path(__file__).parent.parent
 
 
@@ -67,7 +67,7 @@ def set_root(path: str | Path) -> None:
 
     Must be called before any other src.* module imports config's derived
     path constants (AUTH_DIR, DATA_DIR, INBOX_DIR, ...) — see _apply_root()'s
-    docstring. Windows never calls this; it keeps using the WAMAILSYNC_ROOT
+    docstring. Windows never calls this; it keeps using the CHATMAILSYNC_ROOT
     env var / __file__-relative fallback below.
     """
     global _explicit_root
@@ -124,7 +124,7 @@ def resolve_mail_backend(saved: dict) -> str:
     new default.
 
     TOKEN_FILE is read from the module globals at call time rather than
-    captured at import, because _apply_root() rebinds it when WAMAILSYNC_ROOT
+    captured at import, because _apply_root() rebinds it when CHATMAILSYNC_ROOT
     moves the storage root out from under us.
     """
     backend = saved.get("mail_backend")
@@ -152,11 +152,11 @@ def resolve_mail_backend(saved: dict) -> str:
 # would be offered to a fresh user.
 # ---------------------------------------------------------------------------
 
-OAUTH_UNLOCK_ENV = "WAMAILSYNC_ENABLE_OAUTH"
+OAUTH_UNLOCK_ENV = "CHATMAILSYNC_ENABLE_OAUTH"
 SETTING_OAUTH_UNLOCKED = "oauth_unlocked"
 
 # Accepted truthy spellings for OAUTH_UNLOCK_ENV. Deliberately a small closed
-# set rather than "any non-empty string": `WAMAILSYNC_ENABLE_OAUTH=0` and
+# set rather than "any non-empty string": `CHATMAILSYNC_ENABLE_OAUTH=0` and
 # `=false` read to a human as "off", and honouring them as "on" because they
 # are non-empty is the kind of surprise that costs an afternoon.
 _ENV_TRUTHY = {"1", "true", "yes", "on"}
@@ -200,7 +200,7 @@ def oauth_visible(saved: dict) -> bool:
     this is a convenience rather than a gate the CLI has to enforce.
 
     TOKEN_FILE is read from module globals at call time for the same reason
-    resolve_mail_backend does it: _apply_root() rebinds it when WAMAILSYNC_ROOT
+    resolve_mail_backend does it: _apply_root() rebinds it when CHATMAILSYNC_ROOT
     moves the storage root out from under us, and a value captured at import
     would point at the old root.
     """
