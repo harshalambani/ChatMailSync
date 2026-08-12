@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.Intent
 import android.net.Uri
@@ -71,7 +71,7 @@ fun ChatDetailScreen(
 
     Scaffold(
         topBar = {
-            WaMailTopBar(
+            ChatMailTopBar(
                 title = chat?.displayName ?: chatId,
                 navigationIcon = {
                     IconButton(onClick = onBack) {

@@ -1,4 +1,4 @@
-# WA Mail Sync
+# Chat Mail Sync
 
 Sync exported WhatsApp `.txt` (or `.zip`) chats into your own mailbox. Each chat
 becomes an email thread under a `WhatsApp/<Chat Name>` label/folder, with messages
@@ -7,6 +7,9 @@ media). Mail is delivered over IMAP with an app password, which works with any
 provider — Gmail, Outlook, Yahoo, iCloud, Fastmail, and more. A Gmail-only
 Google sign-in path also exists but is no longer offered by default; see
 [Why IMAP is the default](#why-imap-is-the-default).
+
+Currently supports WhatsApp chat exports. The name does not box the app in —
+other chat sources can be added without another rename.
 
 It ships as a Windows desktop GUI (`gui.py`) and a command-line tool (`cli.py`).
 A packaged, portable `.exe` build is also available (see [Building the portable exe](#building-the-portable-exe)).
@@ -94,13 +97,13 @@ help text), which is most of a typical feature.
 ├── setup_auth.py            # One-time OAuth2 setup helper
 ├── requirements.txt
 ├── requirements-lock.txt    # Hash-pinned, reproducible install (used by build_portable.ps1)
-├── wa-chat-sync.spec        # PyInstaller build spec
+├── chat-mail-sync.spec      # PyInstaller build spec
 ├── build_portable.ps1       # One-command portable build (Windows)
 └── sign_exe.ps1             # Optional self-signed code-signing helper
 ```
 
 All runtime paths derive from `PROJECT_ROOT` in `src/config.py`
-(`Path(__file__).parent.parent`, or the `WAMAILSYNC_ROOT` env var when set by
+(`Path(__file__).parent.parent`, or the `CHATMAILSYNC_ROOT` env var when set by
 the portable launcher). There are no hardcoded absolute paths or registry writes.
 
 ---
@@ -272,7 +275,7 @@ itself after a week is worse than not offering it — but nothing below the
 transport layer changed, and it still runs unaltered for anyone using it. The
 option stays visible when the saved backend is `gmail_oauth`, when an
 `auth/token.json` exists, or when the advanced unlock is set: seven clicks on
-the version line at the bottom of Settings, or `WAMAILSYNC_ENABLE_OAUTH=1`
+the version line at the bottom of Settings, or `CHATMAILSYNC_ENABLE_OAUTH=1`
 (desktop only; Android has no user-settable environment variable, so the tap
 gesture is the mechanism on both). The first time OAuth is seen in use the
 unlock is latched, so the option cannot disappear from under an existing user
@@ -409,17 +412,17 @@ pip install pyinstaller
 
 | Invocation | Effect |
 |---|---|
-| `.\build_portable.ps1` | Run PyInstaller, then assemble `dist\WAMailSyncPortable\`. |
+| `.\build_portable.ps1` | Run PyInstaller, then assemble `dist\ChatMailSyncPortable\`. |
 | `.\build_portable.ps1 -SkipBuild` | Re-assemble the layout only (skip PyInstaller). |
 | `.\build_portable.ps1 -Sign` | Build, then code-sign the exe with a self-signed dev cert (`sign_exe.ps1`). |
 | `.\build_portable.ps1 -Sign -InstallCert` | Also install the dev cert as trusted (run as admin). |
 
 Build internals:
 
-- `wa-chat-sync.spec` — PyInstaller spec. Bundles `customtkinter` and
+- `chat-mail-sync.spec` — PyInstaller spec. Bundles `customtkinter` and
   `googleapiclient` data files, the `tkinterdnd2` native DLL, and a few hidden
   imports PyInstaller's static analysis misses.
-- The portable launcher (`WAMailSyncPortable.bat`) sets `WAMAILSYNC_ROOT` to the
+- The portable launcher (`ChatMailSyncPortable.exe`) sets `CHATMAILSYNC_ROOT` to the
   bundle's `Data\` folder so the frozen exe resolves `auth/` and `data/` correctly.
   It is the only variable honoured; the pre-rename `WAGMAIL_ROOT` fallback was
   removed on 2026-08-08.

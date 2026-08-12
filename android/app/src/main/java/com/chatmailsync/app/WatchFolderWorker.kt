@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.accounts.Account
 import android.app.NotificationChannel
@@ -109,7 +109,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             if (pending.isEmpty()) return
 
             val delivered = pending.keys.filter { name ->
-                !WaMailApplication.inboxDir(context).resolve(name).exists()
+                !ChatMailApplication.inboxDir(context).resolve(name).exists()
             }
             if (delivered.isEmpty()) return
 
@@ -237,7 +237,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             // before a mail account was configured. Without this check, every
             // subsequent "Sync now" reported a false "No new files found"
             // forever, since alreadyImported skips them here unconditionally.
-            if (!WaMailApplication.hasPendingInboxFiles(applicationContext)) {
+            if (!ChatMailApplication.hasPendingInboxFiles(applicationContext)) {
                 return Result.success(
                     workDataOf(
                         KEY_IMPORTED_COUNT to 0,
@@ -344,7 +344,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             )
         )
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("WA Mail Sync")
+            .setContentTitle("Chat Mail Sync")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setAutoCancel(true)

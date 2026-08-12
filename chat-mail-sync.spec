@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# PyInstaller build spec for WA Mail Sync.
+# PyInstaller build spec for Chat Mail Sync.
 #
 # Build with:
-#   cd "C:\Users\user\Documents\Cowork Playground\WAMailSync"
-#   pyinstaller wa-chat-sync.spec
+#   cd "C:\Users\user\Documents\Cowork Playground\ChatMailSync"
+#   pyinstaller chat-mail-sync.spec
 #
-# Output: dist\WAMailSync\  (--onedir bundle)
+# Output: dist\ChatMailSync\  (--onedir bundle)
 
 import sys
 from pathlib import Path
@@ -106,7 +106,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,      # --onedir: binaries go in the COLLECT step
-    name="WAMailSync",
+    name="ChatMailSync",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -122,5 +122,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="WAMailSync",          # dist\WAMailSync\
+    name="ChatMailSync",          # dist\ChatMailSync\
 )

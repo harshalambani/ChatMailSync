@@ -21,7 +21,7 @@ script can help you.
 | --- | --- | --- | --- |
 | **Android release keystore** | `android/app/release.jks` | **Irreplaceable** | Back up off-machine. See below. |
 | **Keystore passwords** | `android/keystore.properties` | **Irreplaceable** | Back up **separately** from the `.jks`. |
-| Windows dev signing cert | `CN=WAMailSync Dev`, `Cert:\CurrentUser\My` | Regenerable | Do not back up. Re-run the create-and-trust script. |
+| Windows dev signing cert | `CN=ChatMailSync Dev`, `Cert:\CurrentUser\My` | Regenerable | Do not back up. Re-run the create-and-trust script. |
 | Google OAuth client secret | `auth/credentials.json` | Re-downloadable | Fetch again from Google Cloud Console. |
 | Google OAuth token | `auth/token.json` | Regenerable | Sign in again. Expires roughly weekly anyway while the app is unverified. |
 | IMAP app password | `auth/imap_credentials.json` (Windows), Android Keystore | Regenerable | Revoke at the provider and issue a new one. |
@@ -65,7 +65,7 @@ Then confirm the backup actually works, because an untested backup is a belief
 rather than a fact:
 
 ```
-cd "C:\Users\inabm\Documents\Cowork Playground\WAMailSync"
+cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
 keytool -list -v -keystore android\app\release.jks
 ```
 

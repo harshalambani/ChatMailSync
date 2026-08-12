@@ -166,17 +166,17 @@ def test_oauth_is_visible_is_pure_and_needs_no_files_or_settings():
 
 def test_default_root_falls_back_to_project_dir_when_no_override():
     # No set_root() call in this test — exercises the untouched Windows
-    # default path (WAMAILSYNC_ROOT env var / __file__-relative fallback).
+    # default path (CHATMAILSYNC_ROOT env var / __file__-relative fallback).
     assert config.PROJECT_ROOT == Path(config.__file__).parent.parent
 
 
-def test_env_root_uses_wamailsync_root_and_ignores_the_legacy_name(
+def test_env_root_uses_chatmailsync_root_and_ignores_the_legacy_name(
     tmp_path, monkeypatch
 ):
-    """WAMAILSYNC_ROOT is the only env var honoured.
+    """CHATMAILSYNC_ROOT is the only env var honoured.
 
     A WAGMAIL_ROOT fallback lived in _compute_root() until 2026-08-08, for
-    portable installs predating the WAGmailSync -> WAMailSync rename. It was
+    portable installs predating the WAGmailSync -> WA Mail Sync rename. It was
     dropped deliberately (see the comment there), so the interesting assertion
     is now the *negative* one: an install still exporting only the old name
     must fall through to the __file__-relative default rather than silently
@@ -197,16 +197,16 @@ def test_env_root_uses_wamailsync_root_and_ignores_the_legacy_name(
 
     # The current var works.
     monkeypatch.delenv("WAGMAIL_ROOT", raising=False)
-    monkeypatch.setenv("WAMAILSYNC_ROOT", str(new_root))
+    monkeypatch.setenv("CHATMAILSYNC_ROOT", str(new_root))
     assert config._compute_root() == new_root
 
     # The legacy name alone is ignored -- falls through to the default.
-    monkeypatch.delenv("WAMAILSYNC_ROOT", raising=False)
+    monkeypatch.delenv("CHATMAILSYNC_ROOT", raising=False)
     monkeypatch.setenv("WAGMAIL_ROOT", str(old_root))
     assert config._compute_root() == Path(config.__file__).parent.parent
 
     # And it cannot override the current var when both are set.
-    monkeypatch.setenv("WAMAILSYNC_ROOT", str(new_root))
+    monkeypatch.setenv("CHATMAILSYNC_ROOT", str(new_root))
     assert config._compute_root() == new_root
 
 

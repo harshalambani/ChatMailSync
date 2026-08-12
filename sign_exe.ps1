@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Sign WAMailSync.exe with a self-signed code-signing certificate.
+    Sign ChatMailSync.exe with a self-signed code-signing certificate.
 
 .DESCRIPTION
-    1. Looks for an existing "CN=WAMailSync Dev" cert in Cert:\CurrentUser\My.
+    1. Looks for an existing "CN=ChatMailSync Dev" cert in Cert:\CurrentUser\My.
     2. Creates one (valid 3 years) if none exists.
-    3. Signs the exe in dist\WAMailSyncPortable\App\WAMailSync\ using signtool.
+    3. Signs the exe in dist\ChatMailSyncPortable\App\ChatMailSync\ using signtool.
     4. With -InstallCert: installs the cert to LocalMachine\TrustedPublisher so
        Windows stops SmartScreen-flagging the exe on THIS machine (requires admin).
 
@@ -16,7 +16,7 @@
 
 .EXAMPLE
     # Sign only
-    cd "C:\Users\user\Documents\Cowork Playground\WAMailSync"
+    cd "C:\Users\user\Documents\Cowork Playground\ChatMailSync"
     .\sign_exe.ps1
 
     # Sign and mark trusted on this machine (run as administrator)
@@ -31,7 +31,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $Signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-$ExePath  = Join-Path $PSScriptRoot "dist\WAMailSyncPortable\App\WAMailSync\WAMailSync.exe"
+$ExePath  = Join-Path $PSScriptRoot "dist\ChatMailSyncPortable\App\ChatMailSync\ChatMailSync.exe"
 
 if (-not (Test-Path $ExePath)) {
     Write-Error "Exe not found at '$ExePath'. Run build_portable.ps1 first."
@@ -45,15 +45,16 @@ if (-not (Test-Path $Signtool)) {
 # Step 1 - Get or create the dev signing certificate
 # ---------------------------------------------------------------------------
 
-# Renamed from "WAGmailSync Dev" on 2026-08-06, deliberately and with the
-# consequence understood: this string is the identity baked into the
+# Renamed twice, both times deliberately: "WAGmailSync Dev" -> "WAMailSync Dev"
+# on 2026-08-06, and -> "ChatMailSync Dev" on 2026-08-12 with the app rename.
+# The consequence is understood each time: this string is the identity baked into the
 # self-signed cert, so changing it mints a NEW certificate with a new
 # thumbprint. The old cert stays valid where it is already trusted, but this
 # machine must run -InstallCert (elevated) once more before SmartScreen stops
 # warning about builds signed with the new one. That was an acceptable
 # one-off cost here; it would not be if the cert were ever distributed.
 # Treat this as a trusted identity, not a build path - do not churn it.
-$CertSubject = "CN=WAMailSync Dev"
+$CertSubject = "CN=ChatMailSync Dev"
 
 $cert = Get-ChildItem "Cert:\CurrentUser\My" -CodeSigningCert |
     Where-Object { $_.Subject -eq $CertSubject -and $_.NotAfter -gt (Get-Date) } |

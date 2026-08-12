@@ -51,7 +51,7 @@ from typing import Optional
 # own) from being silently accepted here as if it were one of ours, and vice
 # versa. Do not treat this as a key -- DPAPI's real protection comes entirely
 # from the per-user master key, not from this constant.
-_APP_ENTROPY = b"WA Mail Sync IMAP app password v1"
+_APP_ENTROPY = b"Chat Mail Sync IMAP app password v1"
 
 # CRYPTPROTECT_UI_FORBIDDEN: never let CryptProtectData/CryptUnprotectData
 # show a UI prompt. This app can run headless (e.g. a scheduled/background

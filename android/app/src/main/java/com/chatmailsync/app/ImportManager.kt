@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.Context
 import android.net.Uri
@@ -31,7 +31,7 @@ object ImportManager {
         // mirroring android_api.py's Path(name).name pattern.
         val displayName = File(rawName).name
         if (displayName.isBlank()) return null
-        val dest = File(WaMailApplication.inboxDir(context), displayName)
+        val dest = File(ChatMailApplication.inboxDir(context), displayName)
 
         if (dest.exists()) return ImportOutcome(dest, alreadyQueued = true)
 

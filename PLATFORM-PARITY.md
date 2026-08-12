@@ -220,8 +220,9 @@ reasoning behind each is still the reasoning the code follows.
    per the rename task's scope.
 
    **Superseded 2026-08-08 — the three Android names above were renamed after
-   all.** They are now `wamail_prefs` (`AppPrefs.kt`), `wamail_imap_key`
-   (`SecretStore.kt`) and `filesDir/wamail` (`WaMailApplication.kt`). The
+   all.** They became `wamail_prefs` (`AppPrefs.kt`), `wamail_imap_key`
+   (`SecretStore.kt`) and `filesDir/wamail` (then `WaMailApplication.kt`) — and
+   moved again to `chatmail_*` / `filesDir/chatmail` with the v1.9.0 rename. The
    "orphaning existing installs" reason was real but had expired: the only
    install was the test device, and it was being cleared for a fresh sync with a
    new app password, so there was nothing left to orphan. The stronger claim
@@ -245,7 +246,7 @@ reasoning behind each is still the reasoning the code follows.
    rest were comments, docstrings and help copy.
 
    `help.html` turned out to matter more than its hit count suggested: it is
-   the file bundled by `wa-chat-sync.spec` and opened by the Help button, and
+   the file bundled by `chat-mail-sync.spec` and opened by the Help button, and
    its setup section had already been updated for IMAP while the framing around
    it still said Gmail - so the shipped help page contradicted itself.
    `docs/privacy.html` had a genuine gap, not just a stale name: it described
@@ -265,7 +266,34 @@ reasoning behind each is still the reasoning the code follows.
    `wagmail_imap_key` identifiers (renamed 2026-08-08, see above), and real
    repository URLs.
 
-   Two items were deliberately out of scope at the time. The cert subject is now
-   `CN=WAMailSync Dev` (2026-08-06), and `docs/CNAME` is now
+   Two items were deliberately out of scope at the time. The cert subject became
+   `CN=WAMailSync Dev` (2026-08-06), and `docs/CNAME` became
    `wamailsync.ambani.tech`, cut over once the DNS record existed. The
-   repository and folder name remain open.
+   repository and folder name remained open.
+
+3. **P3 - Chat Mail Sync: the name stops being WhatsApp-only. Done in
+   v1.9.0 (2026-08-12).** Every identifier and display string moved in one
+   branch, on both platforms in the same commits: display name **Chat Mail
+   Sync** (always spaced — `ChatMail®` is a live asserted brand in encrypted
+   comms, so the compressed form is reserved for machine identifiers), Android
+   `namespace`/`applicationId` `com.wamailsync.app` -> `com.chatmailsync.app`
+   with the FileProvider authority and its one `getUriForFile` caller in the
+   same commit, on-device names `wamail_prefs`/`wamail_imap_key`/`filesDir/wamail`
+   -> `chatmail_*`/`filesDir/chatmail`, Kotlin types `WaMail*` -> `ChatMail*`,
+   and on Windows the `AppID`, launcher `.ini` filename, PyInstaller spec
+   (`wa-chat-sync.spec` -> `chat-mail-sync.spec`), dev cert subject, and
+   `WAMAILSYNC_ROOT` -> `CHATMAILSYNC_ROOT` with no fallback.
+
+   What it costs the user, and why it was still now: a new `applicationId` is a
+   new Android sandbox, so `sync_state.db` does not carry over and re-importing
+   an already-synced export would upload every message a second time; the IMAP
+   app password must be re-entered by hand because the Keystore alias is
+   per-app; and a Windows user must copy `Data\` across from the old portable
+   folder before first launch. Every one of those gets more expensive with each
+   additional install, and the only install is still the test device.
+
+   The `wamailsync.ambani.tech` hostname, `docs/CNAME` and the GitHub
+   repository name are deliberately NOT in this branch: DNS has no automatic
+   redirect, so the CNAME cannot move before the new record exists without
+   taking the site down. They cut over after the merge, with the old hostname
+   kept alive serving a redirect.

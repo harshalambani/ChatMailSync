@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.Manifest
 import android.content.Intent
@@ -119,9 +119,9 @@ class MainActivity : ComponentActivity() {
                 "dark" -> true
                 else -> isSystemInDarkTheme()
             }
-            WaMailTheme(darkTheme = darkTheme) {
+            ChatMailTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    WaMailApp(
+                    ChatMailApp(
                         registerImportCallback = { onImported = it },
                         themeMode = themeMode,
                         onThemeModeChange = {
@@ -198,7 +198,7 @@ private fun SyncStatusBar(text: String, fraction: Float?, running: Boolean, onCl
 }
 
 @Composable
-fun WaMailApp(
+fun ChatMailApp(
     registerImportCallback: ((Uri) -> Unit) -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
@@ -853,7 +853,7 @@ fun WaMailApp(
                     inboxFiles = inboxFiles,
                     onImportPick = { pickFile.launch(arrayOf("*/*")) },
                     onPreview = { name ->
-                        val path = WaMailApplication.inboxDir(context).resolve(name).absolutePath
+                        val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
                             .callAttr("preview", path).toString()
                     },

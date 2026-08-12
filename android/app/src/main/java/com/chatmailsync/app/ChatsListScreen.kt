@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.Intent
 import androidx.compose.material.icons.Icons
@@ -125,7 +125,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
 
     fun exportCsv() {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-        val file = File(dir, "wa_chat_sync_chats.csv")
+        val file = File(dir, "chat_mail_sync_chats.csv")
         file.writeText(buildString {
             appendLine("chat_id,display_name,status,messages_synced,last_run_at,source_file")
             chats.forEach { c ->
@@ -141,7 +141,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
                 )
             }
         })
-        val uri = FileProvider.getUriForFile(context, "com.wamailsync.app.fileprovider", file)
+        val uri = FileProvider.getUriForFile(context, "com.chatmailsync.app.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
@@ -152,7 +152,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
 
     Scaffold(
         topBar = {
-            WaMailTopBar(
+            ChatMailTopBar(
                 title = "Chats",
                 actions = {
                     IconButton(onClick = { refresh() }) {

@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.net.Uri
 import android.widget.Toast
@@ -96,7 +96,7 @@ fun SettingsScreen(
     var policyMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { WaMailTopBar(title = "Settings") },
+        topBar = { ChatMailTopBar(title = "Settings") },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -228,7 +228,7 @@ fun SettingsScreen(
             Text("About / Help", style = MaterialTheme.typography.titleMedium)
             // Read from BuildConfig, which gradle generates from versionName /
             // versionCode, so this cannot drift from the APK. It used to be the
-            // hardcoded string "WA Mail Sync — Android (dev build)", which a
+            // hardcoded string "Chat Mail Sync — Android (dev build)", which a
             // release-signed 1.0.1 went on displaying -- worse than showing
             // nothing, because it was confidently wrong.
             //
@@ -255,7 +255,7 @@ fun SettingsScreen(
             // will set the flag again on next launch. The Toast says so rather
             // than claiming a hide that did not happen.
             Text(
-                "WA Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
+                "Chat Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
                     if (BuildConfig.DEBUG) " — debug build" else "",
                 modifier = Modifier.clickable {
                     versionTaps += 1

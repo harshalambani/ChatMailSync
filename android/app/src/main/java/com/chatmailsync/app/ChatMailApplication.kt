@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.app.Application
 import android.content.Context
@@ -12,7 +12,7 @@ import java.io.File
  * anything else touches it — config.set_root() must run before any other
  * src.* module resolves a path-derived constant (see config.py's docstring).
  */
-class WaMailApplication : Application() {
+class ChatMailApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
@@ -35,7 +35,7 @@ class WaMailApplication : Application() {
          * sync_state.db, and nothing in the app will ever look at them again.
          * The rename is only complete once the device's app storage is cleared
          * (or the app reinstalled) — otherwise it is a rename plus an orphan. */
-        fun pythonRoot(context: Context): File = File(context.filesDir, "wamail")
+        fun pythonRoot(context: Context): File = File(context.filesDir, "chatmail")
 
         fun inboxDir(context: Context): File =
             File(pythonRoot(context), "data/inbox").apply { mkdirs() }

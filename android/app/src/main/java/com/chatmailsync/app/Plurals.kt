@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 /**
  * "1 message" / "68 messages", instead of "1 message(s)" / "68 message(s)".

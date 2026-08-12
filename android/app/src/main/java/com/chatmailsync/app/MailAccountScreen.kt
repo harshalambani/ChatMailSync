@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -224,7 +224,7 @@ fun MailAccountScreen(
 
     Scaffold(
         topBar = {
-            WaMailTopBar(
+            ChatMailTopBar(
                 title = "Mail account",
                 navigationIcon = {
                     IconButton(onClick = onBack) {

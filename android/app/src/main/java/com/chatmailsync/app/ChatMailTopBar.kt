@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 private val MastheadHeight = 88.dp
 
 @Composable
-fun WaMailTopBar(
+fun ChatMailTopBar(
     title: String,
     subtitle: String? = null,
     navigationIcon: @Composable () -> Unit = {},

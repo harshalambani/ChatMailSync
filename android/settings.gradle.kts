@@ -18,5 +18,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WAMailSyncAndroid"
+rootProject.name = "ChatMailSyncAndroid"
 include(":app")

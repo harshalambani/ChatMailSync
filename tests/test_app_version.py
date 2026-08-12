@@ -22,8 +22,8 @@ Type=PortableApps.comFormat
 Version=3.9
 
 [Details]
-Name=WA Mail Sync Portable
-AppID=WAMailSyncPortable
+Name=Chat Mail Sync Portable
+AppID=ChatMailSyncPortable
 
 [Version]
 PackageVersion=1.0.1.0
@@ -81,32 +81,32 @@ def test_source_checkout_reports_development_build(monkeypatch):
     monkeypatch.delattr(sys, "frozen", raising=False)
     assert app_version._candidate_ini_paths() == []
     assert app_version.app_version() == app_version.FALLBACK
-    assert app_version.version_label() == "WA Mail Sync - development build"
+    assert app_version.version_label() == "Chat Mail Sync - development build"
 
 
 def test_frozen_looks_beside_the_exe(tmp_path, monkeypatch):
     """The built layout is fixed by the PortableApps.com Format: the exe in
-    App\\WAMailSync\\, the metadata in App\\AppInfo\\."""
+    App\\ChatMailSync\\, the metadata in App\\AppInfo\\."""
     app_dir = tmp_path / "App"
-    exe_dir = app_dir / "WAMailSync"
+    exe_dir = app_dir / "ChatMailSync"
     exe_dir.mkdir(parents=True)
     info_dir = app_dir / "AppInfo"
     info_dir.mkdir()
     (info_dir / "appinfo.ini").write_text(APPINFO, encoding="utf-8")
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(exe_dir / "WAMailSync.exe"))
+    monkeypatch.setattr(sys, "executable", str(exe_dir / "ChatMailSync.exe"))
 
     assert app_version.app_version() == "1.0.1"
-    assert app_version.version_label() == "WA Mail Sync 1.0.1"
+    assert app_version.version_label() == "Chat Mail Sync 1.0.1"
 
 
 def test_frozen_without_appinfo_falls_back(tmp_path, monkeypatch):
     """A bundle assembled by hand, without AppInfo\\. Say so rather than guess."""
-    exe_dir = tmp_path / "App" / "WAMailSync"
+    exe_dir = tmp_path / "App" / "ChatMailSync"
     exe_dir.mkdir(parents=True)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(exe_dir / "WAMailSync.exe"))
+    monkeypatch.setattr(sys, "executable", str(exe_dir / "ChatMailSync.exe"))
 
     assert app_version.app_version() == app_version.FALLBACK
 
@@ -115,14 +115,14 @@ def test_frozen_without_appinfo_falls_back(tmp_path, monkeypatch):
 def test_both_frozen_layouts(tmp_path, monkeypatch, layout):
     """Also support a onedir bundle run outside the PortableApps wrapper, where
     AppInfo\\ sits next to the exe instead of one level up."""
-    exe_dir = tmp_path / "App" / "WAMailSync"
+    exe_dir = tmp_path / "App" / "ChatMailSync"
     exe_dir.mkdir(parents=True)
     parent = exe_dir.parent / "AppInfo" if layout == "portableapps" else exe_dir / "AppInfo"
     parent.mkdir()
     (parent / "appinfo.ini").write_text(APPINFO, encoding="utf-8")
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(exe_dir / "WAMailSync.exe"))
+    monkeypatch.setattr(sys, "executable", str(exe_dir / "ChatMailSync.exe"))
 
     assert app_version.app_version() == "1.0.1"
 

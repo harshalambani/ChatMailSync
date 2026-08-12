@@ -1,4 +1,4 @@
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -47,10 +47,10 @@ object SecretStore {
     // PREFS_NAME: the same file AppPrefs declares independently — keep the two
     // in step, and see the longer note there on what this rename would cost
     // once the app is on the Galaxy Store.
-    private const val KEY_ALIAS = "wamail_imap_key"
+    private const val KEY_ALIAS = "chatmail_imap_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val GCM_TAG_LENGTH_BITS = 128
-    private const val PREFS_NAME = "wamail_prefs"
+    private const val PREFS_NAME = "chatmail_prefs"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -90,7 +90,7 @@ object SecretStore {
     }
 
     /** Encrypts [value] with the Keystore key and stores it under [key] in
-     * `wamail_prefs`. Overwrites any previous value stored under the same
+     * `chatmail_prefs`. Overwrites any previous value stored under the same
      * key. */
     fun putSecret(context: Context, key: String, value: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)

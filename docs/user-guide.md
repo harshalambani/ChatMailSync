@@ -1,4 +1,4 @@
-# WA Mail Sync — User Guide
+# Chat Mail Sync — User Guide
 
 A friendly, step-by-step guide to backing up your WhatsApp chats into your
 mailbox. No technical knowledge needed.

@@ -1,5 +1,5 @@
 """
-CLI entry point for WA Chat Sync.
+CLI entry point for Chat Mail Sync.
 
 Usage examples:
   python cli.py sync

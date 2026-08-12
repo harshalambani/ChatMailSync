@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package com.wamailsync.app
+package com.chatmailsync.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -79,7 +79,7 @@ fun HomeScreen(
     var chunkMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { WaMailTopBar(title = "WA Mail Sync", subtitle = "Private mail archive") },
+        topBar = { ChatMailTopBar(title = "Chat Mail Sync", subtitle = "Private mail archive") },
     ) { padding ->
         Column(
             modifier = Modifier
