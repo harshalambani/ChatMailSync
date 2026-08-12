@@ -3,8 +3,10 @@
 Sync exported WhatsApp `.txt` (or `.zip`) chats into your own mailbox. Each chat
 becomes an email thread under a `WhatsApp/<Chat Name>` label/folder, with messages
 rendered as a readable, WhatsApp-style HTML conversation (inline images, attached
-media). Gmail (OAuth) and IMAP (any provider — Outlook, Yahoo, iCloud, Fastmail,
-and more) are both supported backends.
+media). Mail is delivered over IMAP with an app password, which works with any
+provider — Gmail, Outlook, Yahoo, iCloud, Fastmail, and more. A Gmail-only
+Google sign-in path also exists but is no longer offered by default; see
+[Why IMAP is the default](#why-imap-is-the-default).
 
 It ships as a Windows desktop GUI (`gui.py`) and a command-line tool (`cli.py`).
 A packaged, portable `.exe` build is also available (see [Building the portable exe](#building-the-portable-exe)).
@@ -262,11 +264,23 @@ tune:
   This applies even if the client is configured for a 30- or 180-day token
   duration ([Google Cloud Console Help](https://support.google.com/cloud/answer/15549945?hl=en)).
 
-So OAuth means reconnecting roughly weekly. IMAP has neither limit. `gmail_oauth`
-remains fully supported and selectable in Settings, where choosing it shows a
-notice explaining the above. **Existing users are not migrated:** a settings file
-predating the backend setting is pinned back to `gmail_oauth` when an
-`auth/token.json` is present (`config.resolve_mail_backend`).
+So OAuth means reconnecting roughly weekly. IMAP has neither limit.
+
+Since **v1.6.0** the OAuth option is therefore **demoted, not removed**. It is
+no longer offered to someone who has never used it — offering a door that locks
+itself after a week is worse than not offering it — but nothing below the
+transport layer changed, and it still runs unaltered for anyone using it. The
+option stays visible when the saved backend is `gmail_oauth`, when an
+`auth/token.json` exists, or when the advanced unlock is set: seven clicks on
+the version line at the bottom of Settings, or `WAMAILSYNC_ENABLE_OAUTH=1`
+(desktop only; Android has no user-settable environment variable, so the tap
+gesture is the mechanism on both). The first time OAuth is seen in use the
+unlock is latched, so the option cannot disappear from under an existing user
+who tries IMAP (`config.should_latch_oauth`).
+
+**Existing users are not migrated:** a settings file predating the backend
+setting is pinned back to `gmail_oauth` when an `auth/token.json` is present
+(`config.resolve_mail_backend`).
 
 ### How the IMAP app password is protected
 

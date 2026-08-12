@@ -39,14 +39,14 @@
   configure yourself.
 </p>
 <p>
-  Worth knowing how that is guaranteed, because it depends on which connection you use.
-  With <strong>Google sign-in</strong>, Google itself enforces it: the app is granted
-  permission to add mail and nothing more, so reading your mail is refused at Google's end.
-  With an <strong>email app password</strong> (the default), your provider has no way to
-  hand out a limited password &mdash; any password that can add mail can technically do
-  anything. There the guarantee is the app's own code: it uses only four commands, none of
+  Worth knowing how that is guaranteed. With an <strong>email app password</strong> &mdash;
+  how you connect unless you were already using Google sign-in &mdash; your provider has no
+  way to hand out a limited password: any password that can add mail can technically do
+  anything. So the guarantee is the app's own code: it uses only four commands, none of
   which can open or remove a message. The source is public if you or anyone else wants to
-  check it.
+  check it. On the older <strong>Google sign-in</strong>, Google itself enforces it instead:
+  the app is granted permission to add mail and nothing more, so reading your mail is refused
+  at Google's end.
 </p>
 
 <h2>First run</h2>

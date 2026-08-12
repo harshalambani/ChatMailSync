@@ -51,9 +51,14 @@ your real password.
 
 This does not expire. To disconnect later, click **Forget saved password**.
 
-### Option B — Google sign-in (OAuth)
+### Option B — Google sign-in (Gmail only, hidden by default)
 
-This still works, but comes with two limits worth knowing before you pick it.
+**You will not see this option unless you were already using it.** It is hidden
+on a new setup for the reasons below; to show it deliberately, click the version
+line at the bottom of Settings seven times. Everyone else should use Option A —
+it reaches Gmail perfectly well.
+
+It still works, and comes with two limits that are why it is no longer offered.
 The app has not gone through Google's app-verification process, so Google treats
 it as being in "Testing" mode:
 
@@ -76,8 +81,9 @@ To disconnect later, click **Sign Out** (this revokes access and removes the
 saved sign-in).
 
 > **Already using Google sign-in?** Nothing changes for you. The app keeps you on
-> Google sign-in and will not ask for an app password. You can switch to IMAP
-> whenever you like from Settings.
+> Google sign-in and will not ask for an app password, and the option stays
+> visible on your setup — including after you try IMAP, so switching is not a
+> one-way door. You can switch whenever you like from Settings.
 
 ---
 
@@ -192,23 +198,23 @@ attached for download.
 **The app says "Not connected" or authorising fails.**
 If you're using **Email app password (IMAP)**, double-check the email address
 and app password under **Settings → Mail account → Change…**, and that the app
-password hasn't been revoked by your provider. If you're using **Google sign-in**, click **Connect** and
+password hasn't been revoked by your provider. If you were already using
+**Google sign-in**, click **Connect** and
 complete the sign-in in your browser, making sure you pick the right Google
 account and approve the permission request. If it still fails, click **Sign
 Out**, then **Connect** again to start fresh.
 
 **What stops the app reading or deleting my mail?**
-It depends on which connection you use, and the difference is worth knowing.
-With **Google sign-in**, Google enforces it: the app is granted permission to
-insert mail and nothing else, checked on every request at Google's end, so it
-would be refused even if the app asked. With an **email app password** (the
-default), no provider can issue a password limited to one operation — any
+With an **email app password** — how you connect unless you were already using
+Google sign-in — no provider can issue a password limited to one operation: any
 password that can add mail can technically do anything. There the guarantee is
 the app's own code, which uses only four mail commands: list folders, create a
 folder, subscribe to it, and add a message. None of them can open or remove a
 message, and because the app never opens a folder for reading it never reaches
 the state where that would be possible. The source is public if you or anyone
-else wants to verify it.
+else wants to verify it. On the older **Google sign-in**, Google enforces it
+instead: the app is granted permission to insert mail and nothing else, checked
+at Google's end on every request, so it would be refused even if the app asked.
 
 **Where is my email app password kept?**
 Encrypted at rest, on the machine you entered it on. On Windows it is encrypted

@@ -58,12 +58,13 @@ private val FAQ = listOf(
         "enough: the messages stay in All Mail. Open the label, select every conversation, delete " +
         "them, then empty the Bin.",
     "Why does it ask me to reconnect every week?" to
-        "Only if you're using Google sign-in (OAuth) — the app hasn't gone through Google's app-" +
+        "Only if you're using Google sign-in — the app hasn't gone through Google's app-" +
         "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +
         "and only accounts added as test users (up to 100) can connect. This is Google's rule for " +
-        "unverified apps and can't be extended from within the app. The Email app password (IMAP) " +
-        "backend doesn't have this limit — it's the default, and connecting once doesn't expire. You can " +
-        "switch to it any time from Settings without losing anything already synced.",
+        "unverified apps and can't be extended from within the app. That's why Google sign-in is no " +
+        "longer offered to new setups: an email app password connects to any provider, Gmail " +
+        "included, and doesn't expire. You can switch to it any time from Settings without losing " +
+        "anything already synced.",
     "Where is my email app password kept?" to
         "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
         "phone's secure hardware. It's never written into the app's settings, never shown in the " +
@@ -98,14 +99,14 @@ private val FAQ = listOf(
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
     "What stops it reading or deleting my mail?" to
-        "That depends on how you connect. With Google sign-in, Google enforces it: the app is " +
-        "granted permission to add mail and nothing else, so a request to read your mail is " +
-        "refused at Google's end — it would be refused even if the app tried. With an email app " +
-        "password (the default), no provider can give out a limited password: any password that " +
-        "can add mail can technically do anything. There the guarantee is the app's own code, " +
-        "which uses only four mail commands — list folders, create a folder, subscribe to it, and " +
-        "add a message. None of them can open or remove a message, and the source is public for " +
-        "anyone who wants to check.",
+        "With an email app password — how everyone connects unless they were already using Google " +
+        "sign-in — the guarantee is the app's own code, because no provider can give out a limited " +
+        "password: any password that can add mail can technically do anything. The app uses only " +
+        "four mail commands — list folders, create a folder, subscribe to it, and add a message. " +
+        "None of them can open or remove a message, and the source is public for anyone who wants " +
+        "to check. On the older Google sign-in, Google enforces it instead: the app is granted " +
+        "permission to add mail and nothing else, so a request to read your mail is refused at " +
+        "Google's end — it would be refused even if the app tried.",
 )
 
 @Composable

@@ -93,3 +93,52 @@ jobs:
       # in a count.
       - name: Run tests
         run: python -m pytest tests -q -rs --strict-markers
+
+  # The Kotlin half of the OAuth-visibility contract (v1.6.0). It exists as a
+  # separate job rather than a step above because it needs the whole Android
+  # toolchain -- JDK, SDK platform, and a host Python for Chaquopy -- and
+  # because it must be able to fail on its own terms.
+  #
+  # This is the repo's only Kotlin test, and it runs here rather than nowhere
+  # for one reason: the truth table it asserts is the same one
+  # tests/test_config.py asserts on the Python side. A parity rule that only
+  # one platform actually checks is a comment, not a rule.
+  #
+  # Plain JVM unit tests -- no emulator, no Robolectric. See
+  # android/app/src/test/.../OauthVisibilityTest.kt.
+  android-unit-tests:
+    name: Android unit tests (Kotlin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # JDK 17 matches sourceCompatibility/jvmTarget in
+      # android/app/build.gradle.kts, as codeql.yml does.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Chaquopy needs a host Python matching chaquopy { version = "3.13" },
+      # even for a unit-test build, because the debug variant it compiles
+      # against carries the Python source set.
+      - name: Set up Python 3.13 for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Accept SDK licences and install platform 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Kotlin unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
