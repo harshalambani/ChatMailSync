@@ -25,6 +25,7 @@ object AppPrefs {
     private const val KEY_CHUNK_SIZE = "chunk_size"
     private const val KEY_DRY_RUN_DEFAULT = "dry_run_default"
     private const val KEY_MAIL_BACKEND = "mail_backend"
+    private const val KEY_OAUTH_UNLOCKED = "oauth_unlocked"
     private const val KEY_IMAP_PROVIDER = "imap_provider"
     private const val KEY_IMAP_HOST = "imap_host"
     private const val KEY_IMAP_PORT = "imap_port"
@@ -157,6 +158,69 @@ object AppPrefs {
         getSavedMailBackend(context)?.let { return it }
         if (getConnectedAccountEmail(context) != null) return MAIL_BACKEND_GMAIL_OAUTH
         return MAIL_BACKEND_IMAP
+    }
+
+    /** Mirrors src/config.py's oauth_is_visible() exactly -- same three
+     * grounds, same order, same truth table. Pure and Context-free on purpose:
+     * this repo has no Kotlin test source set, so a function needing a Context
+     * could not be unit tested without dragging in a whole Android test
+     * runtime to assert one boolean. Everything that decides the answer lives
+     * here; isOauthVisible() below only fetches the three values.
+     *
+     * The Gmail OAuth path is DEMOTED, not deleted (v1.6.0). Visibility is
+     * gated; behaviour is not -- SyncWorker and WatchFolderWorker still honour
+     * MAIL_BACKEND_GMAIL_OAUTH exactly as before, because a latched existing
+     * user still runs that path.
+     *
+     * [connectedEmail] is the Android equivalent of the desktop's token.json:
+     * evidence that OAuth has actually been used here. Without grounds (a) and
+     * (b) an existing OAuth user would be stranded -- shown a backend they
+     * cannot select, or quietly pushed onto IMAP and asked for an app password
+     * they have never created.
+     *
+     * If you change this, change src/config.py:oauth_is_visible in the same
+     * commit. One without the other means the two platforms disagree about
+     * who is allowed to see Google sign-in, and only one of them is wrong. */
+    fun oauthIsVisible(
+        savedBackend: String?,
+        connectedEmail: String?,
+        unlocked: Boolean,
+    ): Boolean =
+        savedBackend == MAIL_BACKEND_GMAIL_OAUTH || connectedEmail != null || unlocked
+
+    /** Null-safe read of the advanced unlock flag. Set by the tap gesture on
+     * the version row in SettingsScreen; there is deliberately no re-lock UI,
+     * because clearing app data is the reset and that is proportionate for a
+     * maintainer-facing switch. Android has no user-settable environment
+     * variable, which is why the desktop's WAMAILSYNC_ENABLE_OAUTH has no twin
+     * here and the gesture had to be the primary mechanism on both. */
+    fun isOauthUnlocked(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_OAUTH_UNLOCKED, false)
+
+    fun setOauthUnlocked(context: Context, unlocked: Boolean) {
+        prefs(context).edit().putBoolean(KEY_OAUTH_UNLOCKED, unlocked).apply()
+    }
+
+    fun isOauthVisible(context: Context): Boolean =
+        oauthIsVisible(
+            getSavedMailBackend(context),
+            getConnectedAccountEmail(context),
+            isOauthUnlocked(context),
+        )
+
+    /** Persists the unlock flag the first time OAuth is seen in use, mirroring
+     * src/config.py:should_latch_oauth. Closes a one-way trap: an existing
+     * OAuth user who switches to IMAP would otherwise lose the option behind
+     * them, and on Android signing out clears the connected email, so the
+     * evidence is gone for good rather than merely hidden. Cheap enough to
+     * call on every Settings open -- it writes only on the transition. */
+    fun latchOauthIfInUse(context: Context) {
+        if (isOauthUnlocked(context)) return
+        if (getSavedMailBackend(context) == MAIL_BACKEND_GMAIL_OAUTH ||
+            getConnectedAccountEmail(context) != null
+        ) {
+            setOauthUnlocked(context, true)
+        }
     }
 
     fun getImapProvider(context: Context): String =

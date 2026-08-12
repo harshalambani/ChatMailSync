@@ -134,6 +134,106 @@ def resolve_mail_backend(saved: dict) -> str:
         return MAIL_BACKEND_GMAIL_OAUTH
     return DEFAULT_MAIL_BACKEND
 
+
+# ---------------------------------------------------------------------------
+# Gmail OAuth visibility (v1.6.0)
+#
+# The OAuth path is DEMOTED, not deleted. Everything below the transport
+# Protocol is unchanged and resolve_mail_backend() above is untouched -- what
+# changes is only whether the choice is OFFERED. Someone who has never used
+# OAuth should never be shown it, because picking it leads somewhere we cannot
+# make work for them: the client is in Google's "Testing" publishing status
+# (see the note above resolve_mail_backend), so consent expires 7 days after it
+# is granted and only 100 pre-listed accounts can sign in at all. Offering a
+# door that locks itself after a week is worse than not offering it.
+#
+# Visibility is gated; BEHAVIOUR is not. A backend that resolves to gmail_oauth
+# still builds the OAuth transport exactly as before, whether or not the option
+# would be offered to a fresh user.
+# ---------------------------------------------------------------------------
+
+OAUTH_UNLOCK_ENV = "WAMAILSYNC_ENABLE_OAUTH"
+SETTING_OAUTH_UNLOCKED = "oauth_unlocked"
+
+# Accepted truthy spellings for OAUTH_UNLOCK_ENV. Deliberately a small closed
+# set rather than "any non-empty string": `WAMAILSYNC_ENABLE_OAUTH=0` and
+# `=false` read to a human as "off", and honouring them as "on" because they
+# are non-empty is the kind of surprise that costs an afternoon.
+_ENV_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def oauth_is_visible(saved_backend, token_exists: bool, unlocked: bool) -> bool:
+    """Whether the Gmail OAuth option should be offered at all.
+
+    Deliberately pure -- three plain values in, a bool out, no file access and
+    no settings dict. Its Kotlin twin, AppPrefs.oauthIsVisible, is pure for a
+    sharper reason: AppPrefs needs a Context for SharedPreferences, and there is
+    no Kotlin test source set in this repo, so a Context-free function is the
+    only part of the Android gate that can be unit tested without adding a
+    whole Android test runtime to assert one boolean. Keeping the Python side
+    the same shape is what lets both platforms test the identical truth table.
+
+    True on any of three grounds:
+
+    a. the user has explicitly saved gmail_oauth -- they chose it;
+    b. `token_exists` -- evidence of prior OAuth use. On Android the equivalent
+       evidence is a non-null connected account email;
+    c. `unlocked` -- the advanced flag (see oauth_visible for the two ways it
+       gets set).
+
+    (a) and (b) are what keep an existing OAuth user working. Hiding the option
+    from someone actively using it would strand them: the UI would show a
+    backend they cannot see, or silently offer to move them to IMAP and demand
+    an app password they have never created.
+    """
+    return bool(
+        saved_backend == MAIL_BACKEND_GMAIL_OAUTH or token_exists or unlocked
+    )
+
+
+def oauth_visible(saved: dict) -> bool:
+    """oauth_is_visible() for a real settings dict on this machine.
+
+    The unlock flag is honoured from either the settings file or the
+    environment. The env var exists for headless and CLI use, where there is no
+    version label to click; note that cli.py never selects a backend itself, so
+    this is a convenience rather than a gate the CLI has to enforce.
+
+    TOKEN_FILE is read from module globals at call time for the same reason
+    resolve_mail_backend does it: _apply_root() rebinds it when WAMAILSYNC_ROOT
+    moves the storage root out from under us, and a value captured at import
+    would point at the old root.
+    """
+    env = os.environ.get(OAUTH_UNLOCK_ENV, "").strip().lower()
+    return oauth_is_visible(
+        saved.get("mail_backend"),
+        globals()["TOKEN_FILE"].exists(),
+        bool(saved.get(SETTING_OAUTH_UNLOCKED)) or env in _ENV_TRUTHY,
+    )
+
+
+def should_latch_oauth(saved: dict) -> bool:
+    """Whether to persist the unlock flag because OAuth is already in use.
+
+    Without this latch there is a one-way trap: an existing OAuth user opens
+    Settings, switches to IMAP to try it, saves -- and the OAuth option
+    disappears behind them, because the saved backend is no longer gmail_oauth.
+    On desktop token.json would usually still be there to rescue them, but on
+    Android signing out clears the connected account email and the evidence is
+    gone for good.
+
+    So the first time we see OAuth actually in use, we write the flag down.
+    It costs one boolean in a file that is already being written, and it means
+    the option can never vanish from under someone who was using it.
+
+    Returns False when the flag is already set, so callers can use it directly
+    as "is a write needed" without re-writing the settings file on every load.
+    """
+    if saved.get(SETTING_OAUTH_UNLOCKED):
+        return False
+    return oauth_visible(saved)
+
+
 # ---------------------------------------------------------------------------
 # IMAP provider presets (Road B, phase 1)
 #

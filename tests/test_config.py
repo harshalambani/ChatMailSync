@@ -33,6 +33,108 @@ def test_sync_manager_picks_up_root_set_before_construction(tmp_path):
         config.set_root(Path(__file__).parent.parent)
 
 
+# ---------------------------------------------------------------------------
+# Gmail OAuth visibility (v1.6.0 demotion)
+#
+# The truth table below is the contract, and it is deliberately the SAME four
+# rows the Kotlin twin asserts against AppPrefs.oauthIsVisible. If a row here
+# changes without the matching row there changing, the two platforms disagree
+# about who is offered Google sign-in and exactly one of them is wrong.
+# ---------------------------------------------------------------------------
+
+
+def test_a_fresh_user_is_never_offered_oauth(tmp_path, monkeypatch):
+    """The whole point of the demotion. No saved choice, no prior token, no
+    unlock -> the option does not exist for this person."""
+    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    config.set_root(tmp_path)
+    try:
+        assert config.oauth_visible({}) is False
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
+def test_the_unlock_flag_reveals_oauth(tmp_path, monkeypatch):
+    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    config.set_root(tmp_path)
+    try:
+        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: True}) is True
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
+def test_an_existing_token_reveals_oauth_and_still_resolves_to_it(tmp_path, monkeypatch):
+    """Case (c): someone already signed in with Google must be untouched.
+
+    Both halves matter. The option has to stay visible, AND the backend has to
+    still resolve to gmail_oauth -- hiding the option is a demotion, resolving
+    them onto IMAP would be a silent migration that demands an app password
+    they have never created."""
+    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    config.set_root(tmp_path)
+    try:
+        config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.TOKEN_FILE.write_text("{}")
+        assert config.oauth_visible({}) is True
+        assert config.resolve_mail_backend({}) == config.MAIL_BACKEND_GMAIL_OAUTH
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
+def test_switching_a_latched_oauth_user_to_imap_does_not_hide_the_option(
+    tmp_path, monkeypatch
+):
+    """The one-way trap the latch exists to close.
+
+    An OAuth user tries IMAP. Their saved backend is now imap and -- on Android,
+    where signing out clears the connected email -- the evidence of prior OAuth
+    use is gone for good. Without the latched flag they could never switch
+    back, because the option that would let them has disappeared."""
+    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    config.set_root(tmp_path)
+    try:
+        saved = {"mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH}
+        assert config.should_latch_oauth(saved) is True
+        saved[config.SETTING_OAUTH_UNLOCKED] = True
+
+        # Already latched -- no second write needed.
+        assert config.should_latch_oauth(saved) is False
+
+        saved["mail_backend"] = config.MAIL_BACKEND_IMAP
+        assert config.oauth_visible(saved) is True
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
+def test_the_env_var_unlocks_but_only_for_truthy_spellings(tmp_path, monkeypatch):
+    """`=0` and `=false` read to a human as "off". Honouring them as "on"
+    merely because they are non-empty is a surprise worth an afternoon."""
+    config.set_root(tmp_path)
+    try:
+        for value in ("1", "true", "YES", "On"):
+            monkeypatch.setenv(config.OAUTH_UNLOCK_ENV, value)
+            assert config.oauth_visible({}) is True, value
+        for value in ("", "0", "false", "no"):
+            monkeypatch.setenv(config.OAUTH_UNLOCK_ENV, value)
+            assert config.oauth_visible({}) is False, value
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
+def test_oauth_is_visible_is_pure_and_needs_no_files_or_settings():
+    """Guards the property that makes the Kotlin twin testable at all.
+
+    AppPrefs.oauthIsVisible has to be callable without a Context, because this
+    repo has no Kotlin test source set and adding an Android test runtime to
+    assert one boolean is out of proportion. Keeping the Python side the same
+    three-argument shape is what lets both platforms check the same rows."""
+    assert config.oauth_is_visible(None, False, False) is False
+    assert config.oauth_is_visible(config.MAIL_BACKEND_GMAIL_OAUTH, False, False) is True
+    assert config.oauth_is_visible(None, True, False) is True
+    assert config.oauth_is_visible(None, False, True) is True
+    assert config.oauth_is_visible(config.MAIL_BACKEND_IMAP, False, False) is False
+
+
 def test_default_root_falls_back_to_project_dir_when_no_override():
     # No set_root() call in this test — exercises the untouched Windows
     # default path (WAMAILSYNC_ROOT env var / __file__-relative fallback).
