@@ -26,11 +26,11 @@ kotlin {
 }
 
 android {
-    namespace = "com.wamailsync.app"
+    namespace = "com.chatmailsync.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.wamailsync.app"
+        applicationId = "com.chatmailsync.app"
         minSdk = 24
         targetSdk = 36
         // Moves with DisplayVersion/PackageVersion in
@@ -40,8 +40,8 @@ android {
         // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
         // only, so the phone build was stamped as released without ever being
         // published. v1.4.1 is the first release to carry both.
-        versionCode = 15
-        versionName = "1.6.0"
+        versionCode = 16
+        versionName = "1.9.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
