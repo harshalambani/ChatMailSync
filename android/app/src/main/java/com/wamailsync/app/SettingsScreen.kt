@@ -249,11 +249,17 @@ fun SettingsScreen(
                         versionTaps += 1
                         if (versionTaps >= VERSION_TAPS_TO_UNLOCK) {
                             AppPrefs.setOauthUnlocked(context, true)
+                            // Kept to two short lines on purpose: a Toast is
+                            // clipped, not scrolled, and the first draft lost
+                            // its final clause to an ellipsis on a 1080px
+                            // device. The reason it is hidden is spelled out in
+                            // full on the Mail account screen, next to the
+                            // choice itself, which is where it can actually be
+                            // read -- this only has to say where to go.
                             Toast.makeText(
                                 context,
-                                "Google sign-in is now offered on the Mail " +
-                                    "account screen. It is hidden by default " +
-                                    "because sign-in expires about every 7 days.",
+                                "Google sign-in is now offered on the " +
+                                    "Mail account screen.",
                                 Toast.LENGTH_LONG,
                             ).show()
                         }
