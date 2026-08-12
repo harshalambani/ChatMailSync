@@ -104,6 +104,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Before any UI reads the flag: write down that OAuth is in use, if it
+        // is. Otherwise an existing OAuth user who switches to IMAP loses the
+        // option behind them -- and signing out clears the connected email, so
+        // on Android that evidence is gone for good rather than merely hidden.
+        // Writes only on the transition. The desktop twin runs in
+        // gui.py:_load_settings, also at startup.
+        AppPrefs.latchOauthIfInUse(this)
+
         setContent {
             var themeMode by remember { mutableStateOf(AppPrefs.getThemeMode(this)) }
             val darkTheme = when (themeMode) {

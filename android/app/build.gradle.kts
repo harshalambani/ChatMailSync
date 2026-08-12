@@ -170,4 +170,11 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // JVM unit tests only -- no Robolectric, no androidTest runtime. The one
+    // thing tested here (AppPrefs.oauthIsVisible) is Context-free on purpose,
+    // which is what lets a plain JUnit assertion check the same truth table
+    // tests/test_config.py checks on the Python side. Adding an Android test
+    // runtime to assert one boolean would cost more than it proves.
+    testImplementation("junit:junit:4.13.2")
 }

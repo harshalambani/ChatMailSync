@@ -3,6 +3,8 @@
 package com.wamailsync.app
 
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +31,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+
+// Taps on the version line needed to reveal the demoted Gmail sign-in option.
+// Seven, with no counter and no hint, matching gui.py's
+// _SettingsPanel._VERSION_CLICKS_TO_UNLOCK: nobody arrives here by accident,
+// and anyone who has been told about it can count. There is deliberately no
+// re-lock -- clearing app data is the reset, which is proportionate for a
+// maintainer-facing switch.
+private const val VERSION_TAPS_TO_UNLOCK = 7
 
 private val THEME_LABELS = mapOf(
     "system" to "Match system",
@@ -76,8 +87,12 @@ fun SettingsScreen(
     syncedFilePolicy: String,
     onSyncedFilePolicyChange: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
+    // Not remembered across leaving the screen: a half-finished tap run should
+    // not survive a trip elsewhere and complete itself later.
+    var versionTaps by remember { mutableStateOf(0) }
     var policyMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -220,9 +235,30 @@ fun SettingsScreen(
             // versionCode is shown alongside the name because it is the number
             // `adb shell dumpsys package` reports and the one the store orders
             // by, so it is what actually answers "am I on the current build?".
+            //
+            // Seven taps here reveal the Gmail sign-in option on the mail
+            // account screen -- the twin of the click gesture on gui.py's
+            // version label, in the same place for the same reason. It is
+            // undiscoverable on purpose: the option is for the maintainer and
+            // for recovering an existing OAuth user, not a feature to find.
             Text(
                 "WA Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
-                    if (BuildConfig.DEBUG) " — debug build" else ""
+                    if (BuildConfig.DEBUG) " — debug build" else "",
+                modifier = Modifier.clickable {
+                    if (!AppPrefs.isOauthUnlocked(context)) {
+                        versionTaps += 1
+                        if (versionTaps >= VERSION_TAPS_TO_UNLOCK) {
+                            AppPrefs.setOauthUnlocked(context, true)
+                            Toast.makeText(
+                                context,
+                                "Google sign-in is now offered on the Mail " +
+                                    "account screen. It is hidden by default " +
+                                    "because sign-in expires about every 7 days.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                },
             )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
             TextButton(onClick = onOpenSyncLog) { Text("Sync log") }

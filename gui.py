@@ -43,11 +43,14 @@ from src.config import (
     MAIL_BACKEND_GMAIL_OAUTH,
     MAIL_BACKEND_IMAP,
     PROCESSED_DIR,
+    SETTING_OAUTH_UNLOCKED,
     STATE_DB_PATH,
     TOKEN_FILE,
     is_gmail_mailbox,
     mailbox_clear_steps,
+    oauth_visible,
     resolve_mail_backend,
+    should_latch_oauth,
 )
 from src.app_version import version_label
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
@@ -175,6 +178,15 @@ def _load_settings() -> dict:
     # written before mail_backend existed needs the token.json guard, not the
     # bare default. gui_worker calls the same helper on the same file.
     settings["mail_backend"] = resolve_mail_backend(saved)
+    # Latch the OAuth unlock the first time we see OAuth actually in use, so the
+    # option can never vanish from under someone who was using it -- see
+    # config.should_latch_oauth for the trap this closes. Writes only on the
+    # transition, never on the common path, and a failed write is not worth
+    # complaining about: the evidence that latched it (token.json, or the saved
+    # backend) is still there to latch it again next launch.
+    if should_latch_oauth(saved):
+        settings[SETTING_OAUTH_UNLOCKED] = True
+        _save_settings(settings)
     return settings
 
 
@@ -2151,6 +2163,48 @@ class _SettingsPanel(_Panel):
             text_color=("gray45", "gray60"), anchor="w",
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
+        # Seven clicks here reveal the Gmail sign-in option on the mail account
+        # screen. Deliberately undiscoverable: it is for the maintainer and for
+        # recovering an existing OAuth user, not a feature. Bound on the label
+        # rather than a button because a button would advertise itself, and on
+        # the version line specifically so it matches Android's twin gesture in
+        # SettingsScreen -- the same gesture in the same place on both.
+        self._version_label.bind("<Button-1>", self._on_version_click)
+        self._version_clicks = 0
+
+    _VERSION_CLICKS_TO_UNLOCK = 7
+
+    def _on_version_click(self, _event=None) -> None:
+        """Reveal the demoted Gmail sign-in option after seven clicks.
+
+        Seven, and with no counter shown, because nobody arrives here by
+        accident and anyone who has been told about it can count. There is
+        deliberately no way to re-lock from the UI: the flag lives in the
+        settings file, so removing it is a file edit, which is proportionate
+        for a switch aimed at the maintainer.
+
+        Saving immediately -- rather than on the Save button -- keeps this
+        independent of the rest of the screen: the click is not a settings
+        edit the user might cancel, it is a one-way reveal, and the mail
+        account screen reads the flag the next time it is opened.
+        """
+        if self._app._settings.get(SETTING_OAUTH_UNLOCKED):
+            return
+        self._version_clicks += 1
+        if self._version_clicks < self._VERSION_CLICKS_TO_UNLOCK:
+            return
+        self._app._settings[SETTING_OAUTH_UNLOCKED] = True
+        _save_settings(self._app._settings)
+        messagebox.showinfo(
+            "Advanced option shown",
+            "Google sign-in is now offered on the Mail account screen.\n\n"
+            "It is hidden by default because this app has not completed "
+            "Google's verification for the permission it needs to add mail, "
+            "so sign-in expires about every 7 days and only accounts "
+            "pre-listed in the Google Cloud project can use it at all. "
+            "An app password over IMAP has neither limit.",
+            parent=self,
+        )
 
     # ------------------------------------------------------------------
     # Mail account (its own window -- Android's MailAccountScreen)
@@ -2365,14 +2419,27 @@ class _MailAccountPanel(_Panel):
             # Gmail-only path -- and this fallback is what silently wrote it.
             value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[DEFAULT_MAIL_BACKEND])
         )
-        # 240, not the 190 the provider menu below uses: the backend labels
-        # now carry the Gmail-only/any-provider distinction and the longer of
-        # them clips at 190.
-        ctk.CTkOptionMenu(
-            row3, values=list(_BACKEND_LABELS.values()),
-            variable=self._backend_var, width=240, height=30,
-            command=lambda _v: self._on_backend_changed(),
-        ).pack(side="left")
+        if oauth_visible(settings):
+            # 240, not the 190 the provider menu below uses: the backend labels
+            # now carry the Gmail-only/any-provider distinction and the longer of
+            # them clips at 190.
+            ctk.CTkOptionMenu(
+                row3, values=list(_BACKEND_LABELS.values()),
+                variable=self._backend_var, width=240, height=30,
+                command=lambda _v: self._on_backend_changed(),
+            ).pack(side="left")
+        else:
+            # Only one way in, so this is a statement of fact rather than a
+            # choice -- and a one-item dropdown is a worse lie than a label,
+            # because it implies there is something else behind it. The Gmail
+            # sign-in path still exists and still runs; it is just not offered
+            # to someone who has never used it, because Google's "Testing"
+            # status expires that consent 7 days after granting it (see
+            # config.oauth_is_visible). The unlock is seven clicks on the
+            # version line at the bottom of Settings.
+            ctk.CTkLabel(
+                row3, text=_BACKEND_LABELS[MAIL_BACKEND_IMAP], anchor="w",
+            ).pack(side="left")
         # A CTkOptionMenu fires its command on every pick, including picking
         # the value already selected. Without something to compare against,
         # re-choosing the current backend tore the IMAP form down and built it
@@ -2514,6 +2581,12 @@ class _MailAccountPanel(_Panel):
         OptionMenu command does not fire on initial render), and is not
         blocking -- OAuth remains fully supported and selectable, and anyone
         already signed in is unaffected.
+
+        Since v1.6.0 the dropdown itself only exists for someone the option is
+        visible to (config.oauth_visible), so this now warns two audiences: a
+        user who deliberately unlocked it, and an existing OAuth user who is
+        switching back. Both benefit from the reminder; neither is surprised
+        by it.
         """
         if getattr(self, "_oauth_warning_shown", False):
             return

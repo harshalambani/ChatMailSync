@@ -177,6 +177,19 @@ fun MailAccountScreen(
     val context = LocalContext.current
     var testResult by remember { mutableStateOf<String?>(null) }
     var backendMenuOpen by remember { mutableStateOf(false) }
+    // Computed from the LIVE screen state, not from prefs alone: mailBackend
+    // and connectedEmail are what this screen is currently showing, and a user
+    // who just picked OAuth must not have the picker vanish from under them
+    // mid-edit. Only the unlock flag is read from storage. Deliberately not
+    // remembered -- it is cheap, and it has to follow those two values.
+    //
+    // The latch that makes this durable runs in MainActivity; see
+    // AppPrefs.latchOauthIfInUse.
+    val oauthVisible = AppPrefs.oauthIsVisible(
+        mailBackend,
+        connectedEmail,
+        AppPrefs.isOauthUnlocked(context),
+    )
     var providerMenuOpen by remember { mutableStateOf(false) }
     // Password is deliberately never pre-filled from a saved value — Compose
     // state here is plain (unencrypted) memory, and re-displaying a saved
@@ -260,18 +273,32 @@ fun MailAccountScreen(
             )
 
             Text("Mail backend", style = MaterialTheme.typography.titleMedium)
-            Box {
-                OutlinedButton(onClick = { backendMenuOpen = true }) {
-                    Text(BACKEND_LABELS[mailBackend] ?: mailBackend)
-                }
-                DropdownMenu(expanded = backendMenuOpen, onDismissRequest = { backendMenuOpen = false }) {
-                    BACKEND_LABELS.forEach { (backend, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = { onMailBackendChange(backend); backendMenuOpen = false },
-                        )
+            if (oauthVisible) {
+                Box {
+                    OutlinedButton(onClick = { backendMenuOpen = true }) {
+                        Text(BACKEND_LABELS[mailBackend] ?: mailBackend)
+                    }
+                    DropdownMenu(expanded = backendMenuOpen, onDismissRequest = { backendMenuOpen = false }) {
+                        BACKEND_LABELS.forEach { (backend, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = { onMailBackendChange(backend); backendMenuOpen = false },
+                            )
+                        }
                     }
                 }
+            } else {
+                // One way in, so this states a fact instead of offering a
+                // choice. A one-item dropdown would be the worse lie: it
+                // implies something else is behind it. Matches the static
+                // label gui.py falls back to in the same situation.
+                //
+                // The Gmail sign-in path is demoted, not removed -- it still
+                // runs for anyone using it. It is simply not offered to
+                // someone who has never used it, because Google's "Testing"
+                // publishing status expires that consent 7 days after it is
+                // granted (see AppPrefs.oauthIsVisible).
+                Text(BACKEND_LABELS[AppPrefs.MAIL_BACKEND_IMAP]!!)
             }
 
             if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
