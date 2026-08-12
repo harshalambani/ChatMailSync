@@ -236,33 +236,51 @@ fun SettingsScreen(
             // `adb shell dumpsys package` reports and the one the store orders
             // by, so it is what actually answers "am I on the current build?".
             //
-            // Seven taps here reveal the Gmail sign-in option on the mail
+            // Seven taps here toggle the Gmail sign-in option on the mail
             // account screen -- the twin of the click gesture on gui.py's
             // version label, in the same place for the same reason. It is
             // undiscoverable on purpose: the option is for the maintainer and
             // for recovering an existing OAuth user, not a feature to find.
+            //
+            // A toggle rather than a one-way reveal because there is no undo
+            // otherwise: desktop can hand-edit settings.json, but the only way
+            // to clear this flag on a phone was `pm clear`, which also destroys
+            // the Keystore mail credential, the sync state and the watched
+            // folder grant. Seven more taps is a cheaper undo than losing all
+            // of that.
+            //
+            // Clearing the flag cannot hide the option from someone actually
+            // using OAuth: oauthIsVisible still returns true from a saved
+            // gmail_oauth backend or a connected account, and latchOauthIfInUse
+            // will set the flag again on next launch. The Toast says so rather
+            // than claiming a hide that did not happen.
             Text(
                 "WA Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
                     if (BuildConfig.DEBUG) " — debug build" else "",
                 modifier = Modifier.clickable {
-                    if (!AppPrefs.isOauthUnlocked(context)) {
-                        versionTaps += 1
-                        if (versionTaps >= VERSION_TAPS_TO_UNLOCK) {
-                            AppPrefs.setOauthUnlocked(context, true)
-                            // Kept to two short lines on purpose: a Toast is
-                            // clipped, not scrolled, and the first draft lost
-                            // its final clause to an ellipsis on a 1080px
-                            // device. The reason it is hidden is spelled out in
-                            // full on the Mail account screen, next to the
-                            // choice itself, which is where it can actually be
-                            // read -- this only has to say where to go.
-                            Toast.makeText(
-                                context,
+                    versionTaps += 1
+                    if (versionTaps >= VERSION_TAPS_TO_UNLOCK) {
+                        versionTaps = 0
+                        val unlocking = !AppPrefs.isOauthUnlocked(context)
+                        AppPrefs.setOauthUnlocked(context, unlocking)
+                        // Kept to two short lines on purpose: a Toast is
+                        // clipped, not scrolled, and the first draft lost its
+                        // final clause to an ellipsis on a 1080px device. The
+                        // reason it is hidden is spelled out in full on the
+                        // Mail account screen, next to the choice itself,
+                        // which is where it can actually be read -- this only
+                        // has to say where to go.
+                        val message = when {
+                            unlocking ->
                                 "Google sign-in is now offered on the " +
-                                    "Mail account screen.",
-                                Toast.LENGTH_LONG,
-                            ).show()
+                                    "Mail account screen."
+                            AppPrefs.isOauthVisible(context) ->
+                                "Google sign-in stays shown: it is in use " +
+                                    "on this phone."
+                            else ->
+                                "Google sign-in is hidden again."
                         }
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
                 },
             )
