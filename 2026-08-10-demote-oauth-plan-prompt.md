@@ -2,11 +2,15 @@
 
 **Context for the planning session — read this whole file, then produce a phased implementation plan (not code yet).**
 
-## Precondition (assume it's true)
-Google has **rejected / we cancelled** the OAuth verification request for the restricted
-`gmail.insert` scope (we declined the recurring paid CASA AL1 assessment). The OAuth client
-has therefore dropped to **"Testing" publishing status**. This is fine — the app already
-defaults to an IMAP backend and IMAP is fully live and verified on both Windows and Android.
+## Precondition (CONFIRMED, 2026-08-12)
+The OAuth verification request for the restricted `gmail.insert` scope has been
+**cancelled/rejected** — we declined the recurring paid CASA AL1 assessment, and Google
+confirmed there is no sponsorship or workaround for restricted scopes. We also declined their
+"Brand Verification" (scopeless) offer, because a scopeless OAuth flow can't insert mail and
+buys nothing. The OAuth client therefore now sits in **"Testing" publishing status**. This is
+fine — the app already defaults to an IMAP backend and IMAP is fully live and verified on both
+Windows and Android. The rejection is reversible (a new verification request can be submitted
+later) but we do not intend to.
 
 ## The decision to implement
 **Demote, don't delete.** Stop presenting "Google sign-in (OAuth)" as a peer choice next to
