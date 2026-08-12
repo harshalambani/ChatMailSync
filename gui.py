@@ -2163,9 +2163,10 @@ class _SettingsPanel(_Panel):
             text_color=("gray45", "gray60"), anchor="w",
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
-        # Seven clicks here reveal the Gmail sign-in option on the mail account
-        # screen. Deliberately undiscoverable: it is for the maintainer and for
-        # recovering an existing OAuth user, not a feature. Bound on the label
+        # Seven clicks here toggle the Gmail sign-in option on the mail account
+        # screen -- reveal it, and seven more hide it again. Deliberately
+        # undiscoverable: it is for the maintainer and for recovering an
+        # existing OAuth user, not a feature. Bound on the label
         # rather than a button because a button would advertise itself, and on
         # the version line specifically so it matches Android's twin gesture in
         # SettingsScreen -- the same gesture in the same place on both.
@@ -2175,36 +2176,71 @@ class _SettingsPanel(_Panel):
     _VERSION_CLICKS_TO_UNLOCK = 7
 
     def _on_version_click(self, _event=None) -> None:
-        """Reveal the demoted Gmail sign-in option after seven clicks.
+        """Toggle the demoted Gmail sign-in option every seven clicks.
 
         Seven, and with no counter shown, because nobody arrives here by
-        accident and anyone who has been told about it can count. There is
-        deliberately no way to re-lock from the UI: the flag lives in the
-        settings file, so removing it is a file edit, which is proportionate
-        for a switch aimed at the maintainer.
+        accident and anyone who has been told about it can count.
+
+        It is a toggle, not a one-way reveal: seven more clicks put the option
+        back out of sight. Without that the only way to undo a reveal was to
+        hand-edit the settings file, or -- on Android, where there is no file
+        to edit -- to wipe the app's data, which also takes the mailbox
+        credential and the sync state with it. An undo that costs more than
+        the thing it undoes is not an undo.
+
+        What it cannot do is hide the option from someone who is actually
+        using OAuth. It clears only the manual flag; config.oauth_visible
+        still returns True from a saved gmail_oauth backend, an existing
+        token.json, or the env var, and the dialog says so rather than
+        claiming a hide that did not happen.
 
         Saving immediately -- rather than on the Save button -- keeps this
         independent of the rest of the screen: the click is not a settings
-        edit the user might cancel, it is a one-way reveal, and the mail
-        account screen reads the flag the next time it is opened.
+        edit the user might cancel, and the mail account screen reads the flag
+        the next time it is opened.
         """
-        if self._app._settings.get(SETTING_OAUTH_UNLOCKED):
-            return
         self._version_clicks += 1
         if self._version_clicks < self._VERSION_CLICKS_TO_UNLOCK:
             return
-        self._app._settings[SETTING_OAUTH_UNLOCKED] = True
+        self._version_clicks = 0
+
+        unlocking = not self._app._settings.get(SETTING_OAUTH_UNLOCKED)
+        self._app._settings[SETTING_OAUTH_UNLOCKED] = unlocking
         _save_settings(self._app._settings)
-        messagebox.showinfo(
-            "Advanced option shown",
-            "Google sign-in is now offered on the Mail account screen.\n\n"
-            "It is hidden by default because this app has not completed "
-            "Google's verification for the permission it needs to add mail, "
-            "so sign-in expires about every 7 days and only accounts "
-            "pre-listed in the Google Cloud project can use it at all. "
-            "An app password over IMAP has neither limit.",
-            parent=self,
-        )
+
+        if unlocking:
+            messagebox.showinfo(
+                "Advanced option shown",
+                "Google sign-in is now offered on the Mail account screen.\n\n"
+                "It is hidden by default because this app has not completed "
+                "Google's verification for the permission it needs to add "
+                "mail, so sign-in expires about every 7 days and only "
+                "accounts pre-listed in the Google Cloud project can use it "
+                "at all. An app password over IMAP has neither limit.\n\n"
+                "Seven more clicks here hide it again.",
+                parent=self,
+            )
+        elif oauth_visible(self._app._settings):
+            messagebox.showinfo(
+                "Advanced option still shown",
+                "Google sign-in stays on the Mail account screen because it "
+                "is in use on this machine -- it is either the saved backend "
+                "or there is a saved Google sign-in.\n\n"
+                "Hiding it from someone using it would strand them, so the "
+                "app will not do that. Switch to an app password first if "
+                "you want it gone.",
+                parent=self,
+            )
+        else:
+            messagebox.showinfo(
+                "Advanced option hidden",
+                "Google sign-in is hidden again. The Mail account screen is "
+                "back to an app password only.\n\n"
+                "Nothing else changed: no credential was removed and no "
+                "setting other than this one was touched. Seven more clicks "
+                "here bring it back.",
+                parent=self,
+            )
 
     # ------------------------------------------------------------------
     # Mail account (its own window -- Android's MailAccountScreen)

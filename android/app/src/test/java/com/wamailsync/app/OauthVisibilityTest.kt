@@ -54,6 +54,19 @@ class OauthVisibilityTest {
     }
 
     @Test
+    fun `clearing the unlock cannot hide oauth from a user of it`() {
+        // The re-hide half of the seven-tap toggle. Clearing the flag is the
+        // only thing the gesture does, so someone still on gmail_oauth, or
+        // still signed in, keeps the option regardless -- which is why
+        // SettingsScreen re-reads visibility after clearing and says "stays
+        // shown" instead of "hidden".
+        assertTrue(
+            AppPrefs.oauthIsVisible(AppPrefs.MAIL_BACKEND_GMAIL_OAUTH, null, false)
+        )
+        assertTrue(AppPrefs.oauthIsVisible(null, "someone@example.com", false))
+    }
+
+    @Test
     fun `a latched user who switches to imap keeps the option`() {
         // The one-way trap the latch exists to close. Their saved backend is
         // now imap and signing out cleared the connected email, so the unlock

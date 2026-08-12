@@ -106,6 +106,35 @@ def test_switching_a_latched_oauth_user_to_imap_does_not_hide_the_option(
         config.set_root(Path(__file__).parent.parent)
 
 
+def test_clearing_the_unlock_cannot_hide_oauth_from_a_user_of_it(
+    tmp_path, monkeypatch
+):
+    """The re-hide half of the seven-click toggle.
+
+    Clearing the flag is the only thing the gesture does. Someone whose saved
+    backend is still gmail_oauth, or who still has a token.json, keeps the
+    option regardless -- which is why gui.py re-reads oauth_visible after
+    clearing and says "still shown" instead of claiming a hide that did not
+    happen. On a fresh user the same click really does hide it."""
+    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    config.set_root(tmp_path)
+    try:
+        saved = {
+            "mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH,
+            config.SETTING_OAUTH_UNLOCKED: False,
+        }
+        assert config.oauth_visible(saved) is True
+
+        config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.TOKEN_FILE.write_text("{}", encoding="utf-8")
+        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: False}) is True
+
+        config.TOKEN_FILE.unlink()
+        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: False}) is False
+    finally:
+        config.set_root(Path(__file__).parent.parent)
+
+
 def test_the_env_var_unlocks_but_only_for_truthy_spellings(tmp_path, monkeypatch):
     """`=0` and `=false` read to a human as "off". Honouring them as "on"
     merely because they are non-empty is a surprise worth an afternoon."""
