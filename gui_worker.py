@@ -365,6 +365,11 @@ def resolve_imap_password(data: dict) -> str:
     password is empty or retrying forever. The blob itself never appears in
     that message.
 
+    A "password_dpapi" that only decrypts under a superseded entropy string
+    (an install carried across the v1.9.0 WA Mail Sync -> Chat Mail Sync
+    rename) is re-saved under the current one, for the same reason and with
+    the same best-effort policy as the legacy-plaintext upgrade below.
+
     A legacy plaintext "password" read on a Windows machine where DPAPI is
     available is opportunistically re-saved encrypted -- a transparent
     upgrade so existing installs migrate off plaintext storage the next time
@@ -374,16 +379,27 @@ def resolve_imap_password(data: dict) -> str:
     that was already proven to work.
     """
     if "password_dpapi" in data:
-        password = secret_store.unprotect(data["password_dpapi"])
-        if password is None:
-            raise RuntimeError(
-                "The saved IMAP app password could not be decrypted on this "
-                "computer/account. This happens when the auth folder is "
-                "copied to a different machine or a different Windows user "
-                "-- Windows ties the encryption to the original account by "
-                "design. Please re-enter the app password in Settings."
-            )
-        return password
+        password, used_legacy_entropy = secret_store.unprotect_ex(data["password_dpapi"])
+        if password is not None:
+            if used_legacy_entropy:
+                try:
+                    _save_imap_credentials(
+                        data["host"], data["port"], data["email"], password
+                    )
+                except Exception:
+                    log.warning(
+                        "Could not re-encrypt the saved IMAP app password under "
+                        "the current key material; continuing with the existing "
+                        "copy, which still reads."
+                    )
+            return password
+        raise RuntimeError(
+            "The saved IMAP app password could not be decrypted on this "
+            "computer/account. This happens when the auth folder is "
+            "copied to a different machine or a different Windows user "
+            "-- Windows ties the encryption to the original account by "
+            "design. Please re-enter the app password in Settings."
+        )
 
     if "password" not in data:
         # Neither key present: the file exists but carries no password at all

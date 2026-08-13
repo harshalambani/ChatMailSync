@@ -459,6 +459,52 @@ def test_build_transport_imap_decrypts_dpapi_password(worker_paths, monkeypatch)
     assert captured["password"] == password
 
 
+def test_build_transport_imap_reads_and_upgrades_legacy_entropy_blob(worker_paths, monkeypatch):
+    """A credentials file carried across the v1.9.0 rename must still open,
+    and must be re-encrypted under the current entropy while it does.
+
+    This is the exact failure seen on the real install on 2026-08-12: Data\\
+    was copied forward as PLATFORM-PARITY.md's P3 entry instructed, but
+    _APP_ENTROPY had changed, so DPAPI refused the blob and the app reported
+    "Connected" and "Not connected" at the same time."""
+    if not secret_store.is_available():
+        pytest.skip("DPAPI not available in this environment")
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    password = "written-under-the-old-name"
+
+    # Write the file exactly as a pre-rename build would have. This uses a
+    # NESTED context rather than monkeypatch.undo(): undo() is not scoped to
+    # the two setattrs above, it unwinds every patch on the fixture's
+    # monkeypatch -- including worker_paths' redirection of
+    # IMAP_CREDENTIALS_FILE into tmp_path, which would point the rest of this
+    # test at the developer's real auth/ folder.
+    with monkeypatch.context() as legacy_build:
+        legacy_build.setattr(
+            secret_store, "_APP_ENTROPY", secret_store._LEGACY_APP_ENTROPY[0]
+        )
+        legacy_build.setattr(secret_store, "_LEGACY_APP_ENTROPY", ())
+        gui_worker._save_imap_credentials(
+            "imap.gmail.com", 993, "me@example.com", password
+        )
+
+    legacy_blob = json.loads(worker_paths["imap_credentials"].read_text())["password_dpapi"]
+
+    captured = {}
+
+    def fake_build_imap_transport(host, port, email, pw):
+        captured.update(password=pw)
+        return "FAKE_TRANSPORT"
+
+    monkeypatch.setattr(gui_worker, "build_imap_transport", fake_build_imap_transport)
+    assert gui_worker.build_transport_for_active_backend() == "FAKE_TRANSPORT"
+    assert captured["password"] == password
+
+    # Re-saved under the current entropy, so the next read needs no fallback.
+    upgraded = json.loads(worker_paths["imap_credentials"].read_text())["password_dpapi"]
+    assert upgraded != legacy_blob
+    assert secret_store.unprotect_ex(upgraded) == (password, False)
+
+
 def test_build_transport_imap_undecryptable_dpapi_raises_runtimeerror_without_leaking(worker_paths):
     """A password_dpapi blob that fails to decrypt (auth/ copied to another
     machine or another Windows user) must raise a specific RuntimeError --
