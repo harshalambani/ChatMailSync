@@ -292,6 +292,39 @@ reasoning behind each is still the reasoning the code follows.
    folder before first launch. Every one of those gets more expensive with each
    additional install, and the only install is still the test device.
 
+   **What P3 got wrong, found in real use on 2026-08-12 and fixed in the
+   next release.** "Copy `Data\` across before first launch" was necessary but
+   not sufficient, and the paragraph above is left standing precisely so the
+   miss is legible. The rename also changed `_APP_ENTROPY` in
+   `src/secret_store.py` from `WA Mail Sync IMAP app password v1` to
+   `Chat Mail Sync ...`. DPAPI entropy is a *second key input*, not a label:
+   `CryptUnprotectData` only succeeds against the entropy `CryptProtectData`
+   was given, byte for byte. So the copied `auth\imap_credentials.json` was
+   orphaned by the very act of carrying it forward. The Android analogue —
+   the Keystore alias — *was* reasoned through here; its Windows counterpart
+   was not, because on Android a new `applicationId` makes the whole question
+   moot while on Windows `Data\` is designed to survive.
+
+   Two fixes, and the second is the one that matters more:
+
+   - `secret_store` now keeps a `_LEGACY_APP_ENTROPY` list and retries
+     superseded entropy strings on read, and `gui_worker.resolve_imap_password`
+     re-saves under the current one on a legacy hit — so the blob migrates
+     itself on first use and the list can eventually shrink rather than grow.
+   - `gui._silent_build_transport` no longer ends in `except Exception: pass`.
+     That bare catch is what turned a one-line credential problem into an app
+     that displayed "Connected (<address>)" in green while Sync answered "Not
+     connected", with no explanation anywhere — it swallowed the specific,
+     actionable `RuntimeError` that `resolve_imap_password` had gone to real
+     trouble to construct. The failure now reaches the log pane and corrects
+     the header.
+
+   Parity note: Android had neither defect. `SecretStore.getSecret` catches a
+   failed decrypt, clears the dead blob and returns null, so
+   `AppPrefs.hasImapPassword` — a real decrypt attempt, not a file-existence
+   check — goes false and the header follows. The gap was Windows being the
+   weaker of the two; this batch closes it in Windows' favour.
+
    The `wamailsync.ambani.tech` hostname, `docs/CNAME` and the GitHub
    repository name are deliberately NOT in this branch: DNS has no automatic
    redirect, so the CNAME cannot move before the new record exists without

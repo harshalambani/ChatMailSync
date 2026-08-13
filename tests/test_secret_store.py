@@ -92,6 +92,57 @@ def test_is_available_true_on_this_windows_box():
 
 
 # ---------------------------------------------------------------------------
+# Legacy entropy fallback. The v1.9.0 rename changed _APP_ENTROPY, which
+# silently orphaned every password already on disk: entropy is a second key
+# input to DPAPI, so CryptUnprotectData refuses a blob written under the old
+# string. These tests pin the fallback that repairs it, and -- just as
+# importantly -- pin that the old string stays in _LEGACY_APP_ENTROPY, since
+# deleting it would re-break exactly the installs the fallback exists for.
+# ---------------------------------------------------------------------------
+
+def test_wa_mail_sync_entropy_is_still_listed_as_legacy():
+    assert b"WA Mail Sync IMAP app password v1" in secret_store._LEGACY_APP_ENTROPY
+
+
+def test_current_entropy_is_not_also_in_the_legacy_list():
+    # Would make used_legacy_entropy meaningless and trigger a pointless
+    # re-save on every single read.
+    assert secret_store._APP_ENTROPY not in secret_store._LEGACY_APP_ENTROPY
+
+
+@_requires_dpapi
+def test_blob_written_under_legacy_entropy_still_decrypts(monkeypatch):
+    legacy = secret_store._LEGACY_APP_ENTROPY[0]
+    with monkeypatch.context() as old_build:
+        old_build.setattr(secret_store, "_APP_ENTROPY", legacy)
+        old_build.setattr(secret_store, "_LEGACY_APP_ENTROPY", ())
+        blob = secret_store.protect("carried-across-the-rename")
+    assert blob is not None
+
+    assert secret_store.unprotect(blob) == "carried-across-the-rename"
+
+
+@_requires_dpapi
+def test_unprotect_ex_flags_legacy_and_current_correctly(monkeypatch):
+    legacy = secret_store._LEGACY_APP_ENTROPY[0]
+
+    current_blob = secret_store.protect("written-today")
+    assert secret_store.unprotect_ex(current_blob) == ("written-today", False)
+
+    with monkeypatch.context() as old_build:
+        old_build.setattr(secret_store, "_APP_ENTROPY", legacy)
+        old_build.setattr(secret_store, "_LEGACY_APP_ENTROPY", ())
+        old_blob = secret_store.protect("written-before-the-rename")
+
+    assert secret_store.unprotect_ex(old_blob) == ("written-before-the-rename", True)
+
+
+@_requires_dpapi
+def test_unprotect_ex_returns_none_false_for_garbage():
+    assert secret_store.unprotect_ex("not a dpapi blob") == (None, False)
+
+
+# ---------------------------------------------------------------------------
 # Non-Windows behaviour -- simulated via monkeypatch since this suite only
 # runs on Windows machines. Not gated by the module-level skipif above: these
 # must run regardless of whether real DPAPI is available, since they're

@@ -53,6 +53,29 @@ from typing import Optional
 # from the per-user master key, not from this constant.
 _APP_ENTROPY = b"Chat Mail Sync IMAP app password v1"
 
+# Entropy strings used by earlier releases, newest first. unprotect() retries
+# with each of these when the current one fails, so a Data\ folder carried
+# across an app rename still decrypts.
+#
+# Why this list has to exist: entropy is a *second key input* to DPAPI, not a
+# label. CryptUnprotectData only succeeds when the entropy matches the value
+# CryptProtectData was given byte for byte. The v1.9.0 rename (WA Mail Sync ->
+# Chat Mail Sync) changed the constant above, which silently orphaned every
+# password already on disk -- PLATFORM-PARITY.md's P3 entry reasoned through
+# the equivalent Android Keystore-alias problem and told Windows users to copy
+# Data\ across, but missed that copying it forward was exactly what would
+# break. Reading through a legacy entropy is not a weakening: DPAPI's
+# protection comes entirely from the per-user master key, and the entropy is
+# only a small cross-application hardening measure (see _APP_ENTROPY above).
+#
+# Callers that can re-save should do so after a legacy hit -- see
+# unprotect_with_entropy_age() and gui_worker.resolve_imap_password -- so a
+# blob migrates to the current entropy on first use and this list can
+# eventually be emptied rather than grown forever.
+_LEGACY_APP_ENTROPY = (
+    b"WA Mail Sync IMAP app password v1",
+)
+
 # CRYPTPROTECT_UI_FORBIDDEN: never let CryptProtectData/CryptUnprotectData
 # show a UI prompt. This app can run headless (e.g. a scheduled/background
 # sync); a blocking OS prompt in that context would hang the process instead
@@ -182,10 +205,36 @@ def unprotect(blob: str) -> Optional[str]:
     treating it as an empty password -- see gui_worker's credential-read
     helper for the RuntimeError it raises in that case.
 
+    A blob written by an earlier release under a superseded entropy string
+    still decrypts here (see _LEGACY_APP_ENTROPY). Callers that want to know
+    whether that happened, so they can re-save under the current entropy,
+    should call unprotect_ex() instead.
+
     Never includes the blob or any decrypted content in a log line or
     exception -- this function has no logging calls and swallows every
     exception without re-raising or formatting it into a message.
     """
+    return unprotect_ex(blob)[0]
+
+
+def unprotect_ex(blob: str) -> tuple[Optional[str], bool]:
+    """unprotect(), plus whether a legacy entropy was what made it work.
+
+    Returns (plaintext, used_legacy_entropy). On failure, (None, False).
+
+    The second element is the caller's cue to re-save the secret so the next
+    read needs no fallback -- it is deliberately not acted on here, because
+    this module knows nothing about where any given blob is stored.
+    """
+    for entropy in (_APP_ENTROPY,) + _LEGACY_APP_ENTROPY:
+        plaintext = _unprotect_with(blob, entropy)
+        if plaintext is not None:
+            return plaintext, entropy is not _APP_ENTROPY
+    return None, False
+
+
+def _unprotect_with(blob: str, entropy: bytes) -> Optional[str]:
+    """One CryptUnprotectData attempt against a specific entropy value."""
     dll = _load_dpapi()
     if dll is None:
         return None
@@ -199,7 +248,7 @@ def unprotect(blob: str) -> Optional[str]:
 
     try:
         in_blob = _make_blob(encrypted)
-        entropy_blob = _make_blob(_APP_ENTROPY)
+        entropy_blob = _make_blob(entropy)
         ok = crypt32.CryptUnprotectData(
             ctypes.byref(in_blob),
             None,  # ppszDataDescr -- discard the optional description output

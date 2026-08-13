@@ -68,7 +68,7 @@ object SecretStore {
         // — a key regenerated at a different size cannot decrypt anything
         // already saved, so every existing user would silently hit the
         // "password could not be decrypted" path and have to re-enter it.
-        // Documented in WA-Mail-Sync-Password-Storage.docx §3; if this ever
+        // Documented in Chat-Mail-Sync-Password-Storage.docx §3; if this ever
         // changes, that comparison table changes with it.
         //
         // No user-authentication requirement: this password gates access to

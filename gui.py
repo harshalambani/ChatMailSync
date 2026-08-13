@@ -28,6 +28,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from _splash import dismiss_launcher_splash
 from gui_worker import (
     SyncWorker,
+    _scrub_paths,
     check_auth_status,
     connect_gmail,
     connect_imap,
@@ -1339,7 +1340,25 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         return "normal" if TOKEN_FILE.exists() else "disabled"
 
     def _silent_build_transport(self) -> None:
-        """Build the transport object in the background after a valid auth-status check."""
+        """Build the transport object in the background after a valid auth-status check.
+
+        "Silent" means no dialog and no browser, not "no evidence". This used
+        to end in a bare ``except Exception: pass``, and on 2026-08-12 that
+        produced the worst possible outcome on a real install: the header said
+        "Connected (<address>)" in green while Sync answered "Not connected",
+        with nothing anywhere to explain the contradiction. The green came from
+        check_auth_status(), which for IMAP is deliberately file-only, while
+        Sync gates on self._transport -- so the moment this build failed the
+        two disagreed, and resolve_imap_password's careful, actionable
+        RuntimeError was caught and destroyed on the way past.
+
+        So: still no dialog (this runs unprompted at startup, and a modal on
+        launch over something the user may not be about to do would be worse
+        than the log line), but the reason lands in the log pane and the header
+        is corrected to match what Sync will actually do. Widget work is
+        marshalled back to the Tk thread with after() -- this is a daemon
+        thread and Tk is not thread-safe.
+        """
         try:
             if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
                 if IMAP_CREDENTIALS_FILE.exists():
@@ -1350,8 +1369,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                     )
             else:
                 self._transport = DiscoveryTransport(build_service())
-        except Exception:
-            pass
+        except Exception as exc:
+            # str(exc) is safe to show: mail_client scrubs the app password out
+            # of any login/connection error before it propagates, and
+            # secret_store never puts the blob or the plaintext into a message.
+            msg = _scrub_paths(str(exc)) or exc.__class__.__name__
+            self.after(0, lambda: self._report_transport_failure(msg))
+
+    def _report_transport_failure(self, msg: str) -> None:
+        """Show why the saved connection could not be reopened. Tk thread only."""
+        self._append_log(f"Could not reopen the saved connection: {msg}")
+        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_label.configure(text="Not connected — reconnect")
+        self._auth_btn.configure(text="Connect", command=self._on_connect_click)
+        self._signout_btn.configure(state=self._signout_state())
 
     def _on_connect_click(self) -> None:
         if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
