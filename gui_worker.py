@@ -258,14 +258,16 @@ def _save_imap_credentials(host: str, port: int, email: str, password: str) -> N
 def check_auth_status() -> tuple[bool, str]:
     """Return (is_valid, status_text) for whichever backend is active.
 
-    Never opens a browser and never makes a network call for IMAP (a stored,
-    parseable credentials file counts as "connected" -- a bad password only
-    surfaces on the next actual connect/sync attempt, same as an expired
-    OAuth token without a refresh_token would need a real reconnect).
+    Never opens a browser and never makes a network call for IMAP: a stored
+    credential that this machine can still read counts as "connected", and a
+    password that is merely *wrong* only surfaces on the next actual
+    connect/sync attempt, same as an expired OAuth token without a
+    refresh_token would need a real reconnect. See check_imap_auth_status()
+    for what "can still read" now means and why it is more than it was.
     """
     settings = _load_mail_backend_settings()
     if settings["mail_backend"] == MAIL_BACKEND_IMAP:
-        return _check_imap_auth_status()
+        return check_imap_auth_status()
     return _check_gmail_auth_status()
 
 
@@ -301,15 +303,49 @@ def _check_gmail_auth_status() -> tuple[bool, str]:
         return False, f"Auth error: {exc}"
 
 
-def _check_imap_auth_status() -> tuple[bool, str]:
+def check_imap_auth_status() -> tuple[bool, str]:
+    """Is there a credential here that can actually be used? Local checks only.
+
+    Public, unlike its Gmail sibling, because the Settings screen's account
+    summary needs this same judgement for the IMAP backend and must not
+    re-derive it -- re-deriving it is precisely how that summary ended up
+    file-existence-based while this function moved on.
+
+    This used to stop at "the file exists and parses", and on 2026-08-12 that
+    produced the worst outcome a status check can produce: a green "Connected
+    (<address>)" header over a saved password Windows would no longer decrypt,
+    with Sync -- which gates on a real transport -- answering "Not connected"
+    a click later. Neither half explained the other.
+
+    So the password is now genuinely resolved, not merely observed to exist.
+    That is a local operation (DPAPI, no network), so the promise made above
+    still holds: a *wrong* password still only surfaces on the next real
+    connect, because only the server can judge that. What is caught here is
+    the class of failure this machine can judge by itself -- an auth\\ folder
+    carried to another Windows account, or a blob orphaned by an entropy
+    change. Android has always worked this way (AppPrefs.hasImapPassword is a
+    real decrypt attempt); this brings Windows level with it.
+
+    Resolving also migrates: a legacy-entropy or legacy-plaintext password is
+    re-saved in its current form on the way through, so an upgraded install
+    repairs itself at the first status check rather than waiting for a sync.
+    """
     if not IMAP_CREDENTIALS_FILE.exists():
         return False, "Not connected"
     try:
         data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
-        email = data.get("email", "")
-        return True, (f"Connected ({email})" if email else "Connected")
     except Exception as exc:
         return False, f"Credential error: {_scrub_paths(str(exc))}"
+    try:
+        resolve_imap_password(data)
+    except Exception:
+        # resolve_imap_password's message is the actionable one and reaches
+        # the user through the connect/sync paths; this label has room for a
+        # state, not an explanation. It must never carry exception text --
+        # that is how a credential detail would end up painted on the header.
+        return False, "Not connected — reconnect"
+    email = data.get("email", "")
+    return True, (f"Connected ({email})" if email else "Connected")
 
 
 def connect_gmail(result_queue: queue.Queue) -> None:

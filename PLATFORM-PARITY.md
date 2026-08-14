@@ -325,6 +325,19 @@ reasoning behind each is still the reasoning the code follows.
    check — goes false and the header follows. The gap was Windows being the
    weaker of the two; this batch closes it in Windows' favour.
 
+   **v1.9.2 finished it at the source.** v1.9.1 corrected the header *after*
+   the fact — `check_auth_status()` still went green off a file that merely
+   existed and parsed, and a background transport build turned it red a moment
+   later. `check_imap_auth_status()` now resolves the password instead of
+   observing the file, so the answer is right the first time it is given. This
+   is the same judgement `AppPrefs.hasImapPassword` has always made on Android
+   and the direct parity fix for it; it costs one local DPAPI call and still
+   makes no network call, so the deliberate "a *wrong* password only surfaces
+   on a real connect" rule is untouched. The Settings screen's account summary,
+   which had kept its own copy of the file-existence test, now asks that one
+   function rather than re-deriving the answer — re-deriving it is how the two
+   drifted apart to begin with.
+
    The `wamailsync.ambani.tech` hostname, `docs/CNAME` and the GitHub
    repository name are deliberately NOT in this branch: DNS has no automatic
    redirect, so the CNAME cannot move before the new record exists without

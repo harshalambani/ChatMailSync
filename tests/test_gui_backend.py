@@ -64,9 +64,18 @@ def settings_file(tmp_path, monkeypatch, token_file):
     # test_settings_shows_the_account_summary_not_the_form began failing the
     # moment a real IMAP account was connected on the machine running the
     # suite, while CI (which has no credentials at all) stayed green.
-    monkeypatch.setattr(
-        gui, "IMAP_CREDENTIALS_FILE", tmp_path / "auth" / "imap_credentials.json"
-    )
+    #
+    # Both modules' copies of the constant, not just gui's. _render_account_summary
+    # now asks gui_worker.check_imap_auth_status() instead of answering from a
+    # file check of its own (v1.9.2), so patching only gui's copy left the real
+    # question -- "is there a usable credential?" -- being answered against the
+    # developer's real auth\ folder while everything else in the test was
+    # isolated. That is the same trap this comment already described once; it
+    # moves whenever the judgement moves, so isolate the path in every module
+    # that owns one.
+    imap_credentials = tmp_path / "auth" / "imap_credentials.json"
+    monkeypatch.setattr(gui, "IMAP_CREDENTIALS_FILE", imap_credentials)
+    monkeypatch.setattr(gui_worker, "IMAP_CREDENTIALS_FILE", imap_credentials)
     return path
 
 
@@ -598,16 +607,40 @@ def test_build_transport_imap_upgrade_failure_does_not_break_read(worker_paths, 
 
 
 def test_check_imap_auth_status_works_for_dpapi_shape(worker_paths):
-    """_check_imap_auth_status only ever reads 'email', so it must keep
-    working unchanged for the new password_dpapi file shape."""
+    """A real DPAPI blob written by this machine reads back as connected."""
     _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
-    worker_paths["imap_credentials"].write_text(json.dumps({
-        "host": "imap.gmail.com", "port": 993,
-        "email": "me@example.com", "password_dpapi": "irrelevant-for-this-check",
-    }))
+    if not secret_store.is_available():
+        pytest.skip("Windows DPAPI (crypt32.dll) not available in this environment")
+    gui_worker._save_imap_credentials(
+        "imap.gmail.com", 993, "me@example.com", "hunter2-app-pw"
+    )
+    assert "password_dpapi" in json.loads(worker_paths["imap_credentials"].read_text())
+
     valid, text = gui_worker.check_auth_status()
     assert valid is True
     assert text == "Connected (me@example.com)"
+    assert "hunter2-app-pw" not in text
+
+
+def test_check_imap_auth_status_rejects_undecryptable_blob(worker_paths):
+    """The v1.9.1 regression test, one layer earlier than the header.
+
+    A password_dpapi this machine cannot decrypt (a copied auth\\ folder, or a
+    blob orphaned by an entropy change) must not read as connected just
+    because the file parses. Before v1.9.2 it did, and the green header that
+    produced was contradicted by Sync a click later.
+    """
+    _write_settings(worker_paths["settings"], mail_backend=MAIL_BACKEND_IMAP)
+    worker_paths["imap_credentials"].write_text(json.dumps({
+        "host": "imap.gmail.com", "port": 993,
+        "email": "me@example.com", "password_dpapi": "bm90LWEtcmVhbC1kcGFwaS1ibG9i",
+    }))
+    valid, text = gui_worker.check_auth_status()
+    assert valid is False
+    assert text == "Not connected — reconnect"
+    # The status label has room for a state, not an explanation: no exception
+    # text, and so no path or credential detail, may ride along in it.
+    assert "@" not in text
 
 
 # ---------------------------------------------------------------------------
