@@ -5,16 +5,30 @@ import android.content.Context
 /** Small SharedPreferences wrapper for the watched-folder feature (Home
  * feedback: "can we set an input folder to keep looking for changes in"). */
 object AppPrefs {
-    // Renamed from "wagmail_prefs" on 2026-08-08. This is a storage identifier,
-    // not a display string: changing it makes an existing install read a
-    // different (empty) prefs file and come back at defaults — backend choice,
-    // IMAP host/port/email, watched folder and the encrypted password all gone.
-    // That was acceptable only because the sole install is our own test device,
-    // which is being cleared in the same change. Once this ships on the Galaxy
-    // Store the identical edit would silently wipe every user's settings on
-    // update, with no error to explain it. SecretStore declares the same name
-    // independently against the same file — the two must stay in step.
-    private const val PREFS_NAME = "chatmail_prefs"
+    // This is a storage identifier, not a display string: changing it makes an
+    // existing install read a different (empty) prefs file and come back at
+    // defaults — backend choice, IMAP host/port/email, watched folder and the
+    // encrypted password all gone, with no error to explain it. SecretStore
+    // declares the same name independently against the same file — the two must
+    // stay in step.
+    //
+    // It has moved three times: "wagmail_prefs" -> "wamail_prefs" on 2026-08-08,
+    // -> "chatmail_prefs" at v1.9.0, -> the current value at v1.9.3. Each was
+    // affordable for its own reason, and neither reason is permanent:
+    //
+    //   - 2026-08-08: the sole install was our own test device, cleared in the
+    //     same change.
+    //   - v1.9.0: the applicationId changed in that same commit
+    //     (com.wamailsync.app -> com.chatmailsync.app), so the build installed
+    //     as a *new app* with an empty sandbox. There was nothing to orphan.
+    //   - v1.9.3: still one test device, and this settled the last
+    //     inconsistency — the desktop side spells the product out in full
+    //     (CHATMAILSYNC_ROOT, src/config.py), while these carried a clipped
+    //     prefix inherited from the WhatsApp-and-Gmail era.
+    //
+    // Treat it as frozen from here. Once this ships on the Galaxy Store the
+    // identical edit silently wipes every user's settings on update.
+    private const val PREFS_NAME = "chatmailsync_prefs"
     private const val KEY_WATCHED_FOLDER_URI = "watched_folder_uri"
     private const val KEY_AUTO_WATCH_ENABLED = "auto_watch_enabled"
     private const val KEY_IMPORTED_DOC_IDS = "imported_doc_ids"

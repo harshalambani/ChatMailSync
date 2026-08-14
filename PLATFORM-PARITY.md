@@ -338,6 +338,24 @@ reasoning behind each is still the reasoning the code follows.
    function rather than re-deriving the answer — re-deriving it is how the two
    drifted apart to begin with.
 
+   **v1.9.3 settled the storage identifiers, which had drifted the other way.**
+   Windows spells the product out in full (`CHATMAILSYNC_ROOT`, `src/config.py`)
+   while Android's three storage identifiers carried a clipped prefix inherited
+   from the WhatsApp-and-Gmail era — `chatmail_prefs`, `chatmail_imap_key`,
+   `filesDir/chatmail`, themselves the third spelling after `wagmail_*` and
+   `wamail_*`. They are now `chatmailsync_*` / `filesDir/chatmailsync`. Nothing
+   observable changes: these are sandbox-private names no user or other app can
+   see. What made it worth doing *now* is that the window is closing — the
+   Galaxy Store listing turns this exact edit from free into a silent wipe of
+   every user's settings on update, with no error to explain it. It cost one
+   `pm clear` on the one test device. The three Kotlin comments that carry this
+   history were corrected in the same change: each had kept its narrative from
+   the 2026-08-08 rename while its value moved on at v1.9.0, so all three named
+   the wrong predecessor and the wrong date for the constant on the next line,
+   and none recorded the fact that actually mattered — that v1.9.0 changed the
+   `applicationId` in the same commit, which is why *that* rename orphaned
+   nothing.
+
    The `wamailsync.ambani.tech` hostname, `docs/CNAME` and the GitHub
    repository name are deliberately NOT in this branch: DNS has no automatic
    redirect, so the CNAME cannot move before the new record exists without
