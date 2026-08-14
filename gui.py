@@ -30,6 +30,7 @@ from gui_worker import (
     SyncWorker,
     _scrub_paths,
     check_auth_status,
+    check_imap_auth_status,
     connect_gmail,
     connect_imap,
     resolve_imap_password,
@@ -1347,10 +1348,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         produced the worst possible outcome on a real install: the header said
         "Connected (<address>)" in green while Sync answered "Not connected",
         with nothing anywhere to explain the contradiction. The green came from
-        check_auth_status(), which for IMAP is deliberately file-only, while
-        Sync gates on self._transport -- so the moment this build failed the
-        two disagreed, and resolve_imap_password's careful, actionable
-        RuntimeError was caught and destroyed on the way past.
+        check_auth_status(), which for IMAP went no further than "the file is
+        there and parses", while Sync gates on self._transport -- so the moment
+        this build failed the two disagreed, and resolve_imap_password's
+        careful, actionable RuntimeError was caught and destroyed on the way
+        past.
+
+        Both ends have since been closed: check_imap_auth_status() now
+        resolves the password rather than observing the file, so the header
+        starts honest instead of being corrected a second later. This handler
+        stays regardless -- it is what covers every *other* reason a transport
+        build can fail, and the point of the fix is that a failure here is
+        never silent again.
 
         So: still no dialog (this runs unprompted at startup, and a modal on
         launch over something the user may not be about to do would be worse
@@ -2281,11 +2290,20 @@ class _SettingsPanel(_Panel):
         """One backend-neutral line: who we are connected as, or that we are
         not. Mirrors the summary Android computes for its "Mail account" nav
         row -- the email when there is a usable credential, "Not connected"
-        otherwise."""
+        otherwise.
+
+        "Usable" is asked of gui_worker rather than answered here. This line
+        used to settle it with IMAP_CREDENTIALS_FILE.exists(), which is the
+        same mistake the main header made until v1.9.1: a file left behind by
+        an install whose password this machine can no longer decrypt would
+        still print an address, in a screen whose entire job is to tell you
+        which account you are on.
+        """
         settings = self._app._settings
         if settings.get("mail_backend") == MAIL_BACKEND_IMAP:
             email = str(settings.get("imap_email") or "").strip()
-            text = email if (email and IMAP_CREDENTIALS_FILE.exists()) else "Not connected"
+            usable, _status = check_imap_auth_status()
+            text = email if (email and usable) else "Not connected"
         elif TOKEN_FILE.exists():
             # The main window's auth label is the desktop's authority on the
             # Google side -- it already distinguishes "Connected" from

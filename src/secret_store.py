@@ -69,7 +69,7 @@ _APP_ENTROPY = b"Chat Mail Sync IMAP app password v1"
 # only a small cross-application hardening measure (see _APP_ENTROPY above).
 #
 # Callers that can re-save should do so after a legacy hit -- see
-# unprotect_with_entropy_age() and gui_worker.resolve_imap_password -- so a
+# unprotect_ex() and gui_worker.resolve_imap_password -- so a
 # blob migrates to the current entropy on first use and this list can
 # eventually be emptied rather than grown forever.
 _LEGACY_APP_ENTROPY = (
