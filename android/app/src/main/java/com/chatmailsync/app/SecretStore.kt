@@ -32,7 +32,13 @@ import javax.crypto.spec.GCMParameterSpec
  */
 object SecretStore {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
-    // Both names renamed off the pre-rename "wagmail" spelling on 2026-08-08.
+    // Both names have moved three times: the "wagmail" spelling inherited from
+    // the WhatsApp-and-Gmail era -> "wamail_*" on 2026-08-08 -> "chatmail_*" at
+    // v1.9.0 -> the current, fully spelled-out values at v1.9.3. AppPrefs
+    // carries the full account of why each step was affordable; the short
+    // version is that the v1.9.0 step rode on a new applicationId (a new
+    // sandbox, so nothing existed to orphan) and this one still has only our
+    // own test device to clear.
     //
     // KEY_ALIAS: getOrCreateKey() finds nothing under the new alias and
     // generates a fresh key, so any password saved under the old one fails its
@@ -47,10 +53,10 @@ object SecretStore {
     // PREFS_NAME: the same file AppPrefs declares independently — keep the two
     // in step, and see the longer note there on what this rename would cost
     // once the app is on the Galaxy Store.
-    private const val KEY_ALIAS = "chatmail_imap_key"
+    private const val KEY_ALIAS = "chatmailsync_imap_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val GCM_TAG_LENGTH_BITS = 128
-    private const val PREFS_NAME = "chatmail_prefs"
+    private const val PREFS_NAME = "chatmailsync_prefs"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -90,7 +96,7 @@ object SecretStore {
     }
 
     /** Encrypts [value] with the Keystore key and stores it under [key] in
-     * `chatmail_prefs`. Overwrites any previous value stored under the same
+     * `chatmailsync_prefs`. Overwrites any previous value stored under the same
      * key. */
     fun putSecret(context: Context, key: String, value: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
