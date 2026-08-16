@@ -803,6 +803,23 @@ def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]
     return dt.timestamp()
 
 
+def imap_tls_context() -> "ssl.SSLContext":
+    """The one TLS context every IMAP connection in this app uses.
+
+    create_default_context() alone gives check_hostname=True and
+    CERT_REQUIRED, which is the part that matters; the explicit floor is
+    here because "whatever the default happens to be" is not a promise. On
+    current CPython the default already refuses TLS 1.0/1.1, but that is a
+    property of the interpreter the app is built against, and this app ships
+    inside two of them (the portable Windows bundle and Chaquopy) whose
+    versions move independently. Gmail, Outlook, iCloud and Fastmail have
+    all required 1.2+ for years, so the floor costs no real connection.
+    """
+    ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
 class ImapTransport:
     """IMAP APPEND transport (Road B phase 1): app-password IMAP instead of
     Gmail OAuth. Implements the same 3-method MailTransport Protocol as
@@ -854,7 +871,8 @@ class ImapTransport:
         # verify_mode=CERT_NONE, so the handshake would succeed against any
         # certificate at all — handing the app password (sent in the clear
         # inside LOGIN) and every archived chat to an active MITM.
-        # create_default_context() gives check_hostname=True + CERT_REQUIRED.
+        # imap_tls_context() gives check_hostname=True + CERT_REQUIRED, and
+        # pins the TLS floor at 1.2 — see its docstring.
         #
         # timeout is keyword-only and is applied to the underlying socket, so
         # it bounds every later read too, not just the connect. Without it a
@@ -864,7 +882,7 @@ class ImapTransport:
             conn = imaplib.IMAP4_SSL(
                 self._host,
                 self._port,
-                ssl_context=ssl.create_default_context(),
+                ssl_context=imap_tls_context(),
                 timeout=GMAIL_SOCKET_TIMEOUT,
             )
         except ssl.SSLError as exc:
@@ -1205,8 +1223,17 @@ def _gmail_like(host: str, email: str) -> bool:
     Gmail has neither "gmail" in the address nor, necessarily, in a custom
     host — but imap.gmail.com is the giveaway either way.
     """
-    blob = f"{host or ''} {email or ''}".lower()
-    return "gmail.com" in blob or "googlemail.com" in blob
+    # Matched on the domain, not as a substring anywhere in the string: a
+    # host of "imap.notgmail.com.example.net" or an address at
+    # "gmail.com.phish.example" contains "gmail.com" and is not Google, and
+    # the wrong hint here sends someone off to generate an app password at a
+    # provider that does not issue them.
+    domains = ("gmail.com", "googlemail.com")
+    hostname = (host or "").strip().lower().rstrip(".")
+    if any(hostname == d or hostname.endswith("." + d) for d in domains):
+        return True
+    _, _, mail_domain = (email or "").strip().lower().rpartition("@")
+    return any(mail_domain == d or mail_domain.endswith("." + d) for d in domains)
 
 
 def login_failure_hint(host: str, email: str) -> str:
@@ -1246,11 +1273,10 @@ def _probe_tcp(host: str, port: int) -> "socket.socket":
 
 
 def _probe_tls(sock: "socket.socket", host: str) -> None:
-    ctx = ssl.create_default_context()
-    # Same context settings the real transport uses (check_hostname=True,
-    # CERT_REQUIRED) — a test that is laxer than the real connection would
-    # pass and then leave the user with a sync that fails.
-    wrapped = ctx.wrap_socket(sock, server_hostname=host)
+    # The same context the real transport uses — a test that is laxer than
+    # the real connection would pass and then leave the user with a sync
+    # that fails.
+    wrapped = imap_tls_context().wrap_socket(sock, server_hostname=host)
     wrapped.close()
 
 

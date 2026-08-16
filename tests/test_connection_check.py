@@ -178,6 +178,39 @@ def test_transport_is_closed_even_when_login_fails(monkeypatch, all_probes_pass)
 
 
 # ---------------------------------------------------------------------------
+# TLS
+# ---------------------------------------------------------------------------
+
+
+def test_tls_context_verifies_and_refuses_tls_below_1_2():
+    # The app password travels in the clear inside LOGIN, so an unverified
+    # or downgraded handshake hands it to whoever answered. Asserted rather
+    # than assumed because both of the interpreters this ships inside move
+    # their own defaults independently.
+    ctx = mail_client.imap_tls_context()
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.minimum_version >= ssl.TLSVersion.TLSv1_2
+
+
+def test_the_probe_and_the_real_transport_share_one_tls_context(monkeypatch):
+    # A probe laxer than the real connection would pass and then leave the
+    # user with a sync that fails -- and a probe stricter than it would
+    # block a connection that actually works.
+    calls = []
+    sock = _FakeSocket()
+
+    class _FakeContext:
+        def wrap_socket(self, s, server_hostname=None):
+            calls.append(server_hostname)
+            return sock
+
+    monkeypatch.setattr(mail_client, "imap_tls_context", _FakeContext)
+    mail_client._probe_tls(sock, HOST)
+    assert calls == [HOST], "_probe_tls must use the shared context, not its own"
+
+
+# ---------------------------------------------------------------------------
 # Microcopy
 # ---------------------------------------------------------------------------
 
@@ -195,6 +228,31 @@ def test_workspace_domain_on_gmail_host_still_gets_the_gmail_hint(
     # A Workspace address has no "gmail" in it; the host is the giveaway.
     _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
     result = check_connection("imap.gmail.com", PORT, "someone@acme.co", PASSWORD)
+    assert "16-character app password" in result["message"]
+
+
+@pytest.mark.parametrize(
+    "host, email",
+    [
+        ("imap.notgmail.com.example.net", "someone@acme.co"),
+        ("imap.acme.co", "someone@gmail.com.phish.example"),
+        ("gmail.com.example.net", "someone@acme.co"),
+    ],
+)
+def test_lookalike_domains_do_not_get_the_gmail_hint(
+    monkeypatch, all_probes_pass, host, email
+):
+    # The hint is matched on the domain, not on "gmail.com" appearing
+    # anywhere: sending someone to generate a Google app password for a
+    # provider that does not issue them is worse than saying nothing.
+    _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
+    result = check_connection(host, PORT, email, PASSWORD)
+    assert "16-character app password" not in result["message"]
+
+
+def test_googlemail_address_still_gets_the_gmail_hint(monkeypatch, all_probes_pass):
+    _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
+    result = check_connection("imap.acme.co", PORT, "someone@googlemail.com", PASSWORD)
     assert "16-character app password" in result["message"]
 
 
