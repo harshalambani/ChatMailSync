@@ -7,15 +7,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -25,14 +30,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.chaquo.python.Python
@@ -103,8 +113,52 @@ fun formatFooterStats(chats: List<ChatSummary>): String {
         "$totalMsgs message${if (totalMsgs != 1L) "s" else ""} synced$lastSyncSuffix"
 }
 
+/** The three states the dot distinguishes, and the words that go with them.
+ *
+ * Three, not four: the Windows list has a separate amber for "pending", but
+ * "pending" here only ever means a run that started and did not record a
+ * finish, which from the outside is indistinguishable from never having
+ * synced -- the chat is not in the mailbox either way, and the fix is the
+ * same. Four colours would be four things to learn for three outcomes. */
+private enum class ChatStatus(val description: String) {
+    SYNCED("Synced"),
+    FAILED("Last sync failed"),
+    NOT_SYNCED("Not synced yet"),
+}
+
+private fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStatus) {
+    "complete" -> ChatStatus.SYNCED
+    "failed" -> ChatStatus.FAILED
+    else -> ChatStatus.NOT_SYNCED
+}
+
+/** The row's at-a-glance state, matching the dot the Windows list has had
+ * since _add_chat_row -- this gap ran Android-ward. Colour alone would fail
+ * anyone who cannot separate the green from the red, so the same three words
+ * are also on the status line and in the content description. */
 @Composable
-fun ChatsListScreen(onOpenChat: (String) -> Unit) {
+private fun StatusDot(lastRunStatus: String?) {
+    val status = chatStatusOf(lastRunStatus)
+    // Theme roles, never raw hex: ChatMailTheme assigns every M3 role
+    // deliberately, and a one-off green here would drift the moment the
+    // palette moves. tertiary *is* the archival green, added for exactly
+    // this kind of "OK" indicator.
+    val color = when (status) {
+        ChatStatus.SYNCED -> MaterialTheme.colorScheme.tertiary
+        ChatStatus.FAILED -> MaterialTheme.colorScheme.error
+        ChatStatus.NOT_SYNCED -> MaterialTheme.colorScheme.outline
+    }
+    Box(
+        modifier = Modifier
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(color)
+            .semantics { contentDescription = status.description }
+    )
+}
+
+@Composable
+fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
     var chats by remember { mutableStateOf(listOf<ChatSummary>()) }
     var menuOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -195,35 +249,70 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit) {
                 )
             }
             if (chats.isEmpty()) {
+                // An empty screen is the first thing a new user sees, so it
+                // carries the instructions rather than describing the absence:
+                // the WhatsApp menu path is the one step nobody guesses, and
+                // "Go to Home" was a signpost to a screen that then had to
+                // explain itself all over again.
                 Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("Nothing synced yet.", style = MaterialTheme.typography.bodyLarge)
-                    Text("Go to Home to import and sync a WhatsApp export.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "No chats archived yet.",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "In WhatsApp, open a chat and tap ⋮ → More → Export chat, " +
+                            "then import the .zip or .txt here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Button(
+                        onClick = onImportChat,
+                        modifier = Modifier.padding(top = 20.dp),
+                    ) { Text("Import a chat export") }
                 }
             } else if (filteredChats.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("No chats match \"$query\".", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "No chats match \"$query\".",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "The filter matches chat names only, not message text.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    TextButton(
+                        onClick = { query = "" },
+                        modifier = Modifier.padding(top = 12.dp),
+                    ) { Text("Clear filter") }
                 }
             } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(filteredChats) { chat ->
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenChat(chat.chatId) }
                             .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(chat.displayName, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            text = "${chat.lastRunStatus ?: "pending"} · ${chat.messagesSynced} messages · " +
-                                formatSyncTime(chat.lastRunAt),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        StatusDot(chat.lastRunStatus)
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(chat.displayName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                text = "${chat.lastRunStatus ?: "pending"} · ${chat.messagesSynced} messages · " +
+                                    formatSyncTime(chat.lastRunAt),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                     HorizontalDivider()
                 }

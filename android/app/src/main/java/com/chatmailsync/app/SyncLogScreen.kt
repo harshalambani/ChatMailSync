@@ -9,11 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -64,7 +60,7 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
 }
 
 @Composable
-fun SyncLogScreen(onBack: () -> Unit) {
+fun SyncLogScreen(onBack: () -> Unit, backLabel: String = "Back") {
     var runs by remember { mutableStateOf(listOf<SyncRunLogEntry>()) }
 
     LaunchedEffect(Unit) { runs = loadSyncLog() }
@@ -74,11 +70,12 @@ fun SyncLogScreen(onBack: () -> Unit) {
             ChatMailTopBar(
                 title = "Sync log",
                 subtitle = "Last 90 days",
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+                // The only pushed screen whose label cannot be a constant: it
+                // is reached both from Settings and from a finished run on
+                // Home, and a hardcoded word would lie on one of the two
+                // paths. The caller knows which, so the caller names it.
+                backLabel = backLabel,
+                onBack = onBack,
             )
         },
     ) { padding ->
@@ -87,7 +84,20 @@ fun SyncLogScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("No syncs in the last 90 days.", style = MaterialTheme.typography.bodyLarge)
+                // Says what the screen *will* hold rather than only that it
+                // is empty -- read cold, "No syncs" is as easily a fault as
+                // an accurate nothing-has-happened-yet.
+                Text(
+                    "No syncs in the last 90 days.",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "Every sync run lands here - what was uploaded, when, and " +
+                        "anything that failed. Nothing has run yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {

@@ -870,6 +870,11 @@ fun ChatMailApp(
             composable("chats") {
                 ChatsListScreen(
                     onOpenChat = { chatId -> navController.navigate("chat/$chatId") },
+                    // The empty state offers the import directly rather than
+                    // sending the user to Home to find it -- same launcher
+                    // Home's own [Import] button uses, so a file picked from
+                    // either place lands in the same inbox.
+                    onImportChat = { pickFile.launch(arrayOf("*/*")) },
                 )
             }
             composable("chat/{chatId}") { entry ->
@@ -925,26 +930,27 @@ fun ChatMailApp(
                                 onResult("Save an IMAP app password first.")
                             } else {
                                 Thread {
-                                    var transport: com.chaquo.python.PyObject? = null
                                     val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+                                    // check_connection_text() runs the five stages
+                                    // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
+                                    // failed, instead of the old labels_list() call whose
+                                    // only two outcomes were a raw folder dump or "Could
+                                    // not connect". It lives in src/mail_client.py so this
+                                    // screen and the Windows [Test connection] button say
+                                    // the same words -- see PLATFORM-PARITY.md. It reports
+                                    // failures as a return value rather than an exception,
+                                    // so the catch below is only for a bridge-level fault.
                                     val text = try {
-                                        transport = Python.getInstance().getModule("src.mail_client")
+                                        Python.getInstance().getModule("src.mail_client")
                                             .callAttr(
-                                                "build_imap_transport",
+                                                "check_connection_text",
                                                 AppPrefs.getImapHost(context),
                                                 AppPrefs.getImapPort(context),
                                                 AppPrefs.getImapEmail(context),
                                                 password,
-                                            )
-                                        transport?.callAttr("labels_list").toString()
+                                            ).toString()
                                     } catch (e: Exception) {
                                         redactSecret("Could not connect: ${e.message}", password)
-                                    } finally {
-                                        try {
-                                            transport?.callAttr("close")
-                                        } catch (_: Exception) {
-                                            // Best-effort logout only.
-                                        }
                                     }
                                     android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(text) }
                                 }.start()
@@ -1007,7 +1013,20 @@ fun ChatMailApp(
                 HelpScreen(onBack = { navController.popBackStack() })
             }
             composable("syncLog") {
-                SyncLogScreen(onBack = { navController.popBackStack() })
+                // Two ways in - Settings, and the status line on Home - so the
+                // back label is read off the stack rather than fixed. Anything
+                // unmapped falls back to a plain "Back", which is no worse than
+                // the bare arrow this replaced.
+                val from = navController.previousBackStackEntry?.destination?.route
+                SyncLogScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = when (from) {
+                        "home" -> "Home"
+                        "settings" -> "Settings"
+                        "chats" -> "Chats"
+                        else -> "Back"
+                    },
+                )
             }
             composable("syncProgress") {
                 SyncProgressScreen(

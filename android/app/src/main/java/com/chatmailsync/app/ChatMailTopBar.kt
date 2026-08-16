@@ -8,11 +8,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -41,13 +48,61 @@ import androidx.compose.ui.unit.sp
  */
 private val MastheadHeight = 88.dp
 
+/**
+ * The labelled back affordance: `← Chats`, not a bare arrow.
+ *
+ * A back arrow on its own says only "leave", and the feedback on this app was
+ * exactly that it "is not very intuitive or obvious" -- it does not say what
+ * you are leaving *to*, which on a screen reached from two places is the only
+ * thing worth knowing. The Windows window has said "Back to sync" / "Back to
+ * settings" since its panel stack shipped; this is the Android half of that
+ * parity.
+ */
+@Composable
+private fun BackAffordance(label: String, onBack: () -> Unit) {
+    TextButton(
+        onClick = onBack,
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+        contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
+    ) {
+        Icon(
+            // AutoMirrored: this is now the app's only back arrow, so there is
+            // no consistency reason left to keep the deprecated fixed-direction
+            // one, and it flips correctly under a right-to-left locale.
+            Icons.AutoMirrored.Filled.ArrowBack,
+            // null, not "Back": the label beside it is already the button's
+            // accessible name, and a description here makes a screen reader
+            // announce the control twice.
+            contentDescription = null,
+            modifier = androidx.compose.ui.Modifier.size(18.dp),
+        )
+        Text(
+            label,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            maxLines = 1,
+            modifier = androidx.compose.ui.Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
 @Composable
 fun ChatMailTopBar(
     title: String,
     subtitle: String? = null,
+    // Where back goes, in words. Set these instead of navigationIcon on any
+    // screen that is pushed onto another -- the mark steps aside when they
+    // are, because an 88dp band cannot carry a 56dp badge, a labelled back
+    // and a title without one of them being squeezed, and on a pushed screen
+    // the badge is the least useful of the three.
+    backLabel: String? = null,
+    onBack: (() -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val labelledBack = backLabel != null && onBack != null
     TopAppBar(
         expandedHeight = MastheadHeight,
         title = {
@@ -64,7 +119,7 @@ fun ChatMailTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Image(
+                    if (!labelledBack) Image(
                         painter = painterResource(R.drawable.ic_masthead),
                         contentDescription = null,
                         // 56dp, not the old 72dp. The adaptive foreground drew
@@ -93,7 +148,9 @@ fun ChatMailTopBar(
                 }
             }
         },
-        navigationIcon = navigationIcon,
+        navigationIcon = {
+            if (backLabel != null && onBack != null) BackAffordance(backLabel, onBack) else navigationIcon()
+        },
         actions = actions,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primary,
