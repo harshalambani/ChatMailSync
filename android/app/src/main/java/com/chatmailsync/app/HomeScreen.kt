@@ -135,8 +135,13 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     if (inboxFiles.isEmpty()) {
+                        // Spells out the WhatsApp menu path. "Export chat" as
+                        // a bare quoted phrase assumed the user already knew
+                        // where it lives, and it is buried three levels down
+                        // -- it is the one step nobody guesses.
                         Text(
-                            "Share a WhatsApp \"Export chat\" file to this app, or import one below.",
+                            "In WhatsApp, open a chat and tap ⋮ → More → Export chat. " +
+                                "Share the file to this app, or import it below.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

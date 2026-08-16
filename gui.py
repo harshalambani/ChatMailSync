@@ -34,6 +34,7 @@ from gui_worker import (
     connect_gmail,
     connect_imap,
     resolve_imap_password,
+    test_imap_connection,
 )
 from src.config import (
     CREDENTIALS_FILE,
@@ -772,8 +773,63 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                  + last_sync_str
         )
 
+        if not rows:
+            self._add_empty_chat_state(filtered=bool(filt), query=filt)
+            return
+
         for row in rows:
             self._add_chat_row(row)
+
+    def _add_empty_chat_state(self, *, filtered: bool, query: str) -> None:
+        """Fill the empty chat list with instructions instead of blank space.
+
+        This panel showed nothing at all on a first run -- the one moment the
+        user most needs telling what to do. Same two cases and the same words
+        as Android's ChatsListScreen, which is where the copy was written.
+        """
+        wrap = ctk.CTkFrame(self._chat_scroll, fg_color="transparent")
+        wrap.pack(fill="both", expand=True, padx=12, pady=24)
+
+        if filtered:
+            ctk.CTkLabel(
+                wrap, text=f'No chats match "{query}".',
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w", justify="left",
+            ).pack(fill="x")
+            ctk.CTkLabel(
+                wrap,
+                text="The filter matches chat names only, not message text.",
+                text_color=("gray40", "gray60"), wraplength=280,
+                anchor="w", justify="left",
+            ).pack(fill="x", pady=(6, 10))
+            ctk.CTkButton(
+                wrap, text="Clear filter", width=110, height=28,
+                fg_color="transparent", border_width=1,
+                text_color=("gray10", "gray90"),
+                # after(0) because _filter_var's trace rebuilds this list,
+                # which destroys the very button whose command is running.
+                # The refresh comes from the trace -- calling it here as well
+                # would rebuild twice.
+                command=lambda: self.after(0, lambda: self._filter_var.set("")),
+            ).pack(anchor="w")
+            return
+
+        ctk.CTkLabel(
+            wrap, text="No chats archived yet.",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w", justify="left",
+        ).pack(fill="x")
+        ctk.CTkLabel(
+            wrap,
+            text="In WhatsApp, open a chat and tap ⋮ → More → Export chat, "
+                 "then drop the .zip or .txt here.",
+            text_color=("gray40", "gray60"), wraplength=280,
+            anchor="w", justify="left",
+        ).pack(fill="x", pady=(6, 10))
+        ctk.CTkButton(
+            wrap, text="Browse files…", width=120, height=28,
+            command=self._browse_files,
+        ).pack(anchor="w")
 
     def _add_chat_row(self, row: dict) -> None:
         status = row.get("last_run_status")
@@ -2439,6 +2495,22 @@ class _MailAccountPanel(_Panel):
             command=self._close,
         ).pack(side="right")
 
+        # Test connection: parity with Android's MailAccountScreen, which has
+        # had one since the IMAP backend shipped while this window had none at
+        # all -- so the only way to find out whether the details worked was to
+        # Save them. Left-packed, away from Save/Cancel: it is not a commit
+        # action, and sitting next to Save is how people press it expecting
+        # the window to close. Starts disabled and follows the three fields it
+        # needs -- see _update_test_btn_state.
+        self._test_btn = ctk.CTkButton(
+            btn_row, text="Test connection", width=130, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_test_connection,
+            state="disabled",
+        )
+        self._test_btn.pack(side="left")
+
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True)
 
@@ -2584,10 +2656,24 @@ class _MailAccountPanel(_Panel):
             justify="left", text_color=("gray40", "gray60"), font=("", 11),
         ).pack(fill="x", padx=20, pady=(0, 4))
 
-        self._status_label = ctk.CTkLabel(self._imap_frame, text="", text_color=("gray40", "gray60"))
+        # wraplength/anchor because this label now carries the staged
+        # connection-test result, which is a sentence rather than the two
+        # words ("Testing connection…") it used to hold.
+        self._status_label = ctk.CTkLabel(
+            self._imap_frame, text="", text_color=("gray40", "gray60"),
+            wraplength=340, justify="left", anchor="w",
+        )
         self._status_label.pack(fill="x", padx=20, pady=(0, 4))
 
+        # KeyRelease, not a StringVar trace: these entries were built without
+        # textvariables and adding them now would mean re-plumbing every read
+        # in _on_save. The button state is cosmetic gating, so the one-event
+        # lag on paste-by-menu is not worth that churn.
+        for entry in (self._host_entry, self._port_entry, self._email_entry):
+            entry.bind("<KeyRelease>", lambda _e: self._update_test_btn_state())
+
         self._apply_host_field_state()
+        self._update_test_btn_state()
         if current_backend == MAIL_BACKEND_IMAP:
             self._imap_frame.pack(fill="x")
 
@@ -2647,6 +2733,7 @@ class _MailAccountPanel(_Panel):
             self._imap_frame.pack_forget()
             self._help_container.pack_forget()
             self._warn_oauth_is_limited()
+        self._update_test_btn_state()
 
     def _warn_oauth_is_limited(self) -> None:
         """Warn, once per Mail account window, that the OAuth path is limited.
@@ -2717,6 +2804,96 @@ class _MailAccountPanel(_Panel):
             self._host_entry.configure(state="disabled")
             self._port_entry.delete(0, "end")
             self._port_entry.insert(0, str(info["port"]))
+        self._update_test_btn_state()
+
+    # ------------------------------------------------------------------
+    # Test connection
+    # ------------------------------------------------------------------
+
+    def _update_test_btn_state(self) -> None:
+        """Enable [Test connection] only when there is something to test.
+
+        Called from three places because the fields move under three
+        different hands: the user typing, the provider menu autofilling host
+        and port, and the backend menu switching the whole form away.
+        """
+        if getattr(self, "_test_running", False):
+            return
+        usable = (
+            self._backend_var.get() == _BACKEND_LABELS[MAIL_BACKEND_IMAP]
+            and bool(self._host_entry.get().strip())
+            and bool(self._port_entry.get().strip())
+            and bool(self._email_entry.get().strip())
+        )
+        self._test_btn.configure(state="normal" if usable else "disabled")
+
+    def _on_test_connection(self) -> None:
+        provider_key = _PROVIDER_LABELS_REV.get(self._provider_var.get(), "gmail")
+        info = IMAP_PROVIDERS.get(provider_key, IMAP_PROVIDERS["custom"])
+        host = self._host_entry.get().strip() or (info["host"] or "")
+        try:
+            port = int(self._port_entry.get().strip())
+        except ValueError:
+            port = info["port"]
+        email = self._email_entry.get().strip()
+
+        # A typed password is tested as typed; an empty field falls back to
+        # the saved credential, matching what Save does. Without the
+        # fallback, testing a working saved account would always report a
+        # rejected login -- the field is deliberately never pre-filled.
+        password = self._password_entry.get()
+        if not password:
+            password = self._saved_imap_password()
+            if not password:
+                self._status_label.configure(
+                    text="Enter the app password to test, or save one first."
+                )
+                return
+
+        self._test_running = True
+        self._test_btn.configure(state="disabled")
+        self._status_label.configure(text="Testing connection…")
+        result_q: queue.Queue = queue.Queue()
+        threading.Thread(
+            target=test_imap_connection,
+            args=(result_q, host, port, email, password),
+            daemon=True,
+        ).start()
+        self.after(150, lambda: self._poll_test_connection(result_q))
+
+    def _saved_imap_password(self) -> str:
+        """The stored app password, or "" if there isn't one we can read.
+
+        Swallows every failure on purpose: this is a convenience fallback
+        for the test button, and a credential file that cannot be decrypted
+        is a separate problem with its own message elsewhere. The password is
+        never returned to the UI, only handed to the worker thread.
+        """
+        try:
+            if not IMAP_CREDENTIALS_FILE.exists():
+                return ""
+            data = json.loads(IMAP_CREDENTIALS_FILE.read_text(encoding="utf-8"))
+            return resolve_imap_password(data) or ""
+        except Exception:
+            return ""
+
+    def _poll_test_connection(self, result_q: "queue.Queue") -> None:
+        try:
+            event = result_q.get_nowait()
+        except queue.Empty:
+            self.after(150, lambda: self._poll_test_connection(result_q))
+            return
+
+        self._test_running = False
+        self._update_test_btn_state()
+        # Shown in place rather than in a messagebox: the whole point of the
+        # staged test is to read the failure while looking at the fields that
+        # caused it, and a modal covers them. Also honours the standing "no
+        # pop-ups -- in the main window" rule for this window's own results.
+        self._status_label.configure(
+            text=event["msg"],
+            text_color=("#14532d", "#86efac") if event["ok"] else ("#7f1d1d", "#fca5a5"),
+        )
 
     # ------------------------------------------------------------------
     # App-password help (collapsible, under the IMAP form)
@@ -2893,7 +3070,12 @@ class _MailAccountPanel(_Panel):
                 # working saved credential. Runs in a background thread;
                 # the password itself never gets logged or echoed back.
                 self._save_btn.configure(state="disabled")
-                self._status_label.configure(text="Testing connection…")
+                # text_color reset explicitly: a previous [Test connection]
+                # result may have left this label red or green, and a stale
+                # colour under new text reads as a verdict on the new text.
+                self._status_label.configure(
+                    text="Testing connection…", text_color=("gray40", "gray60"),
+                )
                 result_q: queue.Queue = queue.Queue()
                 threading.Thread(
                     target=connect_imap,

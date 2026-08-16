@@ -46,7 +46,7 @@ Not shared - every one of these needs its own change:
 
 | Concern | Windows | Android |
 | --- | --- | --- |
-| UI | `gui.py` (Tkinter) | Compose screens (`*Screen.kt`, `MainActivity.kt`) |
+| UI | `gui.py` — **CustomTkinter** (`class App(ctk.CTk, TkinterDnD.DnDWrapper)`) | Compose screens (`*Screen.kt`, `MainActivity.kt`) |
 | Background/threading glue | `gui_worker.py` | `SyncWorker.kt`, `WatchFolderWorker.kt` |
 | Settings persistence | `data/.settings.json` | `AppPrefs.kt` (SharedPreferences) |
 | Secret storage | `src/secret_store.py` (DPAPI) + NTFS ACL | `SecretStore.kt` (AndroidKeyStore AES/GCM) |
@@ -59,6 +59,26 @@ needs deliberate work on each side, and the two implementations must agree on
 semantics even though they disagree on storage. `AppPrefs.resolveMailBackend()`
 exists purely to mirror `src/config.py:resolve_mail_backend()`; if one of
 those changes, the other is now wrong.
+
+### The Windows client is not a webview
+
+Stated plainly because it has been got wrong twice, in a task brief and in a
+research report written from it, and each time it silently mis-costed the work
+that followed. `gui.py` is **CustomTkinter widget code** - there is no HTML, no
+CSS, no cascade and no theme tokens in the app chrome. `src/html_renderer.py`
+renders the help page and mail previews *into* that chrome; it is not the
+chrome.
+
+The practical consequence, and the reason this is worth a heading: a design
+recommendation phrased as "a fixed-bottom bar", "cards", "a tab strip" or "a
+chip row" is one line of CSS in a webview and a hand-built layout here. Any
+plan that treats the two front-ends as symmetric in *effort* is wrong even when
+it is right about the *feature*. Cost Windows separately, every time.
+
+A second consequence, tracked as real work rather than trivia: Compose gets a
+complete `ChatMailTheme` for free, and CustomTkinter gets nothing. Until the
+Windows theme module lands, colour on that side is literal hex at each call
+site and the two clients do not read as one product.
 
 ## Checklist before calling a feature done
 

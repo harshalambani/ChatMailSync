@@ -803,6 +803,23 @@ def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]
     return dt.timestamp()
 
 
+def imap_tls_context() -> "ssl.SSLContext":
+    """The one TLS context every IMAP connection in this app uses.
+
+    create_default_context() alone gives check_hostname=True and
+    CERT_REQUIRED, which is the part that matters; the explicit floor is
+    here because "whatever the default happens to be" is not a promise. On
+    current CPython the default already refuses TLS 1.0/1.1, but that is a
+    property of the interpreter the app is built against, and this app ships
+    inside two of them (the portable Windows bundle and Chaquopy) whose
+    versions move independently. Gmail, Outlook, iCloud and Fastmail have
+    all required 1.2+ for years, so the floor costs no real connection.
+    """
+    ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
 class ImapTransport:
     """IMAP APPEND transport (Road B phase 1): app-password IMAP instead of
     Gmail OAuth. Implements the same 3-method MailTransport Protocol as
@@ -854,7 +871,8 @@ class ImapTransport:
         # verify_mode=CERT_NONE, so the handshake would succeed against any
         # certificate at all — handing the app password (sent in the clear
         # inside LOGIN) and every archived chat to an active MITM.
-        # create_default_context() gives check_hostname=True + CERT_REQUIRED.
+        # imap_tls_context() gives check_hostname=True + CERT_REQUIRED, and
+        # pins the TLS floor at 1.2 — see its docstring.
         #
         # timeout is keyword-only and is applied to the underlying socket, so
         # it bounds every later read too, not just the connect. Without it a
@@ -864,7 +882,7 @@ class ImapTransport:
             conn = imaplib.IMAP4_SSL(
                 self._host,
                 self._port,
-                ssl_context=ssl.create_default_context(),
+                ssl_context=imap_tls_context(),
                 timeout=GMAIL_SOCKET_TIMEOUT,
             )
         except ssl.SSLError as exc:
@@ -1176,6 +1194,258 @@ def build_imap_transport(host: str, port: int, email: str, password: str) -> Mai
     phase 2) preset/selection vocabulary this pairs with.
     """
     return ImapTransport(host=host, port=port, email=email, password=password)
+
+
+# ---------------------------------------------------------------------------
+# Staged connection test
+# ---------------------------------------------------------------------------
+
+# The five things that have to go right, in the order they happen. A single
+# "Could not connect" tells the user nothing about which of these failed, and
+# each one has a completely different fix: a typo'd host, a blocked port, a
+# corporate TLS interceptor, a wrong password, and a mailbox that refuses new
+# folders are five different afternoons.
+CONNECTION_STAGES = ("DNS", "TCP", "TLS", "LOGIN", "FOLDER")
+
+_STAGE_LABELS = {
+    "DNS": "Finding the server",
+    "TCP": "Reaching the server",
+    "TLS": "Securing the connection",
+    "LOGIN": "Signing in",
+    "FOLDER": "Creating the mail folder",
+}
+
+
+def _gmail_like(host: str, email: str) -> bool:
+    """True when a rejected password is most likely a *normal* Google password.
+
+    Matched on both host and address because a Workspace domain hosted on
+    Gmail has neither "gmail" in the address nor, necessarily, in a custom
+    host — but imap.gmail.com is the giveaway either way.
+    """
+    # Matched on the domain, not as a substring anywhere in the string: a
+    # host of "imap.notgmail.com.example.net" or an address at
+    # "gmail.com.phish.example" contains "gmail.com" and is not Google, and
+    # the wrong hint here sends someone off to generate an app password at a
+    # provider that does not issue them.
+    domains = ("gmail.com", "googlemail.com")
+    hostname = (host or "").strip().lower().rstrip(".")
+    if any(hostname == d or hostname.endswith("." + d) for d in domains):
+        return True
+    _, _, mail_domain = (email or "").strip().lower().rpartition("@")
+    return any(mail_domain == d or mail_domain.endswith("." + d) for d in domains)
+
+
+def login_failure_hint(host: str, email: str) -> str:
+    """The one sentence that turns a rejected login into a next action.
+
+    Deliberately specific and deliberately not funny: this is a credential
+    screen, and a joke here reads as the app not taking the failure
+    seriously. Provider-specific because the generic advice ("check your
+    password") is the exact advice that keeps a Gmail user stuck — their
+    password is not wrong, it is the wrong *kind* of password.
+    """
+    if _gmail_like(host, email):
+        return (
+            "Gmail rejected this password. Gmail needs a 16-character app "
+            "password, not your normal Google password — your account "
+            "password will always be rejected here."
+        )
+    if "outlook" in (host or "").lower() or "office365" in (host or "").lower():
+        return (
+            "The server rejected this password. Microsoft 365 accounts often "
+            "have app passwords switched off by an administrator, in which "
+            "case no password will work here until they turn IMAP back on."
+        )
+    return (
+        "The server rejected this sign-in. That usually means a wrong app "
+        "password, but some providers also need IMAP switched on in their "
+        "own settings first."
+    )
+
+
+def _probe_dns(host: str, port: int) -> None:
+    socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+
+
+def _probe_tcp(host: str, port: int) -> "socket.socket":
+    return socket.create_connection((host, port), timeout=GMAIL_SOCKET_TIMEOUT)
+
+
+def _probe_tls(sock: "socket.socket", host: str) -> None:
+    # The same context the real transport uses — a test that is laxer than
+    # the real connection would pass and then leave the user with a sync
+    # that fails.
+    wrapped = imap_tls_context().wrap_socket(sock, server_hostname=host)
+    wrapped.close()
+
+
+def check_connection(host: str, port: int, email: str, password: str) -> dict:
+    """Run the five connection stages in order and report where it stopped.
+
+    Returns a dict — never raises for a connection problem, because every
+    caller here is a UI that wants to *show* the failure:
+
+        {"ok": bool,
+         "stage": <the stage reached>,
+         "failed_stage": <stage that failed, or None>,
+         "message": <one line for the user>,
+         "stages": [{"name", "label", "ok"}...]}
+
+    Stages 1-3 are probed on a throwaway socket so each can fail on its own;
+    stages 4-5 go through the real ImapTransport, so what passes here is what
+    the sync itself will do. Stage 5 creates the app's own parent folder,
+    which is idempotent and is a folder the first sync would create anyway —
+    it leaves no probe litter in the user's mailbox.
+    """
+    results: list[dict] = []
+    reached = None
+
+    def record(name: str, ok: bool) -> None:
+        results.append({"name": name, "label": _STAGE_LABELS[name], "ok": ok})
+
+    def outcome(failed: Optional[str], message: str) -> dict:
+        return {
+            "ok": failed is None,
+            "stage": reached,
+            "failed_stage": failed,
+            "message": message,
+            "stages": results,
+        }
+
+    host = (host or "").strip()
+    email = (email or "").strip()
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        port = 0
+    if not host or not port or not email or not password:
+        return outcome(
+            "DNS",
+            "Fill in the server, port, email address and app password first.",
+        )
+
+    # 1. DNS
+    reached = "DNS"
+    try:
+        _probe_dns(host, port)
+    except OSError as exc:
+        record("DNS", False)
+        return outcome(
+            "DNS",
+            f"Could not find {host}. Check the server name for a typo — "
+            f"nothing was sent. ({_strip_secret(str(exc), password)})",
+        )
+    record("DNS", True)
+
+    # 2. TCP
+    reached = "TCP"
+    sock = None
+    try:
+        sock = _probe_tcp(host, port)
+    except OSError as exc:
+        record("TCP", False)
+        return outcome(
+            "TCP",
+            f"Found {host} but could not open port {port}. A firewall, VPN or "
+            f"the provider may be blocking it. "
+            f"({_strip_secret(str(exc), password)})",
+        )
+    record("TCP", True)
+
+    # 3. TLS
+    reached = "TLS"
+    try:
+        _probe_tls(sock, host)
+    except (ssl.SSLError, OSError) as exc:
+        record("TLS", False)
+        try:
+            sock.close()
+        except OSError:
+            pass
+        return outcome(
+            "TLS",
+            f"Reached {host}:{port} but its security certificate could not be "
+            f"verified, so no password was sent. This is normal on some "
+            f"corporate networks that inspect traffic. "
+            f"({_strip_secret(str(exc), password)})",
+        )
+    record("TLS", True)
+
+    # 4. LOGIN — real transport from here on.
+    reached = "LOGIN"
+    # ImapTransport directly rather than build_imap_transport(): the staged
+    # test needs _get_conn()/close(), which are on the class and not on the
+    # 3-method MailTransport Protocol that the builder is annotated to return.
+    transport = ImapTransport(host=host, port=port, email=email, password=password)
+    try:
+        try:
+            transport._get_conn()  # noqa: SLF001 — same package, deliberate.
+        except MailTransportError as exc:
+            record("LOGIN", False)
+            if exc.status == 401:
+                return outcome("LOGIN", login_failure_hint(host, email))
+            return outcome(
+                "LOGIN",
+                f"Connected to {host}:{port} but signing in failed. "
+                f"{_strip_secret(str(exc), password)}",
+            )
+        except Exception as exc:  # noqa: BLE001 — must not escape to the UI.
+            record("LOGIN", False)
+            return outcome(
+                "LOGIN",
+                f"Connected to {host}:{port} but signing in failed. "
+                f"{_strip_secret(str(exc), password)}",
+            )
+        record("LOGIN", True)
+
+        # 5. FOLDER
+        reached = "FOLDER"
+        try:
+            transport.labels_create({"name": LABEL_PARENT})
+        except Exception as exc:  # noqa: BLE001
+            record("FOLDER", False)
+            return outcome(
+                "FOLDER",
+                f"Signed in as {email}, but the mailbox would not create the "
+                f"'{LABEL_PARENT}' folder, so chats could not be filed. "
+                f"{_strip_secret(str(exc), password)}",
+            )
+        record("FOLDER", True)
+    finally:
+        try:
+            transport.close()
+        except Exception:  # noqa: BLE001 — best-effort logout only.
+            pass
+
+    return outcome(
+        None,
+        f"All good — signed in as {email} and the '{LABEL_PARENT}' folder is "
+        f"ready.",
+    )
+
+
+def format_connection_result(result: dict) -> str:
+    """A check_connection() dict flattened to one display string.
+
+    Split out from check_connection_text so a caller that already has the
+    dict -- gui_worker's Save path, which needs to branch on result["ok"] --
+    gets the same sentence without opening a second connection.
+    """
+    if result.get("ok"):
+        return result["message"]
+    label = _STAGE_LABELS.get(result.get("failed_stage") or "", "Connecting")
+    return f"{label} failed. {result['message']}"
+
+
+def check_connection_text(host: str, port: int, email: str, password: str) -> str:
+    """check_connection() flattened to one display string.
+
+    Exists so both front-ends render the same words: Kotlin calls this over
+    the Chaquopy bridge and CustomTkinter calls it via gui_worker, rather
+    than each inventing its own phrasing from the dict.
+    """
+    return format_connection_result(check_connection(host, port, email, password))
 
 
 # ---------------------------------------------------------------------------

@@ -43,10 +43,14 @@ from src.mail_client import (
     ChunkSize,
     DiscoveryTransport,
     MailTransport,
+    MailTransportError,
     _restrict_auth_dir_acl,
     _restrict_file_acl,
     build_imap_transport,
     build_service,
+    check_connection,
+    format_connection_result,
+    login_failure_hint,
 )
 from src.sync_manager import ProgressSyncManager as _ProgressSyncManager
 from src.sync_manager import SyncStats, _scrub_paths
@@ -382,7 +386,46 @@ def connect_imap(
         _save_imap_credentials(host, port, email, password)
         result_queue.put({"type": "auth_ok", "transport": transport})
     except Exception as exc:
-        result_queue.put({"type": "auth_error", "msg": _scrub_paths(str(exc))})
+        # A rejected sign-in gets the same sentence the [Test connection]
+        # button would give it -- for a Gmail account that is the difference
+        # between "check your password" (which is exactly the advice that
+        # keeps them stuck) and "Gmail needs a 16-character app password".
+        # Classified from the exception rather than by re-running the staged
+        # check, so a failed Save does not open a second connection.
+        if isinstance(exc, MailTransportError) and exc.status == 401:
+            msg = login_failure_hint(host, email)
+        else:
+            msg = _scrub_paths(str(exc))
+        result_queue.put({"type": "auth_error", "msg": msg})
+
+
+def test_imap_connection(
+    result_queue: queue.Queue,
+    host: str,
+    port: int,
+    email: str,
+    password: str,
+) -> None:
+    """Run the staged connection test and post the result for the UI to show.
+
+    Backs the [Test connection] button, which Windows did not have at all
+    while Android did (MailAccountScreen.kt). Nothing is persisted here: this
+    is a read-only probe of details the user has typed but may not want to
+    save yet, and it never posts the password back in any form.
+    """
+    try:
+        check = check_connection(host, port, email, password)
+        result_queue.put({
+            "type": "test_result",
+            "ok": check["ok"],
+            "msg": _scrub_paths(format_connection_result(check)),
+        })
+    except Exception as exc:
+        result_queue.put({
+            "type": "test_result",
+            "ok": False,
+            "msg": _scrub_paths(str(exc)),
+        })
 
 
 def resolve_imap_password(data: dict) -> str:
