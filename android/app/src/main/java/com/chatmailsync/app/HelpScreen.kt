@@ -4,16 +4,22 @@ package com.chatmailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 // Kept in sync with the Windows edition's help.html by hand for now — a
 // shared-markdown generator (per the screen-guides doc §9) is future work,
@@ -22,7 +28,10 @@ private val FAQ = listOf(
     "How do I export a chat from WhatsApp?" to
         "Open the chat in WhatsApp -> tap the three-dot menu -> More -> Export chat. " +
         "Choose \"Include media\" for a .zip with photos/videos, or \"Without media\" for a plain .txt. " +
-        "Then share it to this app (or use \"Import a WhatsApp export\" on Home).",
+        "Then share it to this app (or use \"Import a WhatsApp export\" on Home). " +
+        "One chat at a time: WhatsApp has no multi-select export, so you cannot tick several chats " +
+        "and export them together — each one has to be exported from inside that chat. This app has " +
+        "no such limit; once the files are here you can import and sync as many as you like at once.",
     "Why doesn't this app \"send\" my messages anywhere?" to
         "It uses your mail provider's insert API (Gmail's insert API, or IMAP APPEND for other " +
         "providers), which adds mail directly into your own mailbox without actually sending " +
@@ -91,6 +100,29 @@ private val FAQ = listOf(
         "stop leaves everything where it was. The Windows edition has the same feature with one " +
         "difference worth knowing: it can only check while the app is open, and its \"delete\" " +
         "option sends the file to the Recycle Bin rather than erasing it.",
+    "How do I make it sync on a schedule?" to
+        "The watched folder is the schedule — there is no separate \"sync every N hours\" setting, " +
+        "because with nothing new in the inbox there would be nothing to do. Point Settings -> " +
+        "Watched folder at a folder, turn on \"Auto-import from this folder\", and pick an interval: " +
+        "every 15 min (the default), 30 min, hour, 3 hours, 6 hours, 12 hours, or once a day. " +
+        "There is no shorter option than 15 minutes: Android's background scheduler enforces that " +
+        "floor and no app can go under it. Treat the interval as \"no more often than\" rather than " +
+        "\"exactly\" — the system delays and batches background work to save power, so hourly means " +
+        "roughly hourly. The scan needs no network; the sync it triggers does, so an offline tick " +
+        "imports the files and leaves them in the inbox for the next run. \"Sync now\" always runs " +
+        "immediately regardless of the schedule. Unlike the Windows edition, this one keeps checking " +
+        "with the app closed — that is what the system scheduler is for.",
+    "Auto-import has stopped running on its own. Why?" to
+        "Almost always battery optimisation: Android has put the app to sleep, and a sleeping app " +
+        "gets no background ticks. Exempt it once. Stock Android: Settings -> Apps -> Chat Mail " +
+        "Sync -> Battery -> Unrestricted. Samsung, which is stricter and will otherwise stop the " +
+        "schedule within a day or two of non-use: Settings -> Battery -> Background usage limits — " +
+        "make sure the app is not under \"Sleeping apps\" or \"Deep sleeping apps\", add it to " +
+        "\"Never sleeping apps\", and turn off \"Put unused apps to sleep\" if you open the app " +
+        "rarely. Xiaomi, Oppo, Vivo and OnePlus also keep a separate \"Autostart\" permission — " +
+        "without it background work stops after a reboot. None of this affects manual syncs or " +
+        "\"Sync now\", which run in the foreground while you are watching; it only affects " +
+        "unattended checks.",
     "What can't this app do?" to
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
         "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
@@ -104,6 +136,28 @@ private val FAQ = listOf(
         "permission to add mail and nothing else, so a request to read your mail is refused at " +
         "Google's end — it would be refused even if the app tried.",
 )
+
+/**
+ * One line of the FAQ, with its "Q" or "A" tag hanging in a fixed gutter so the
+ * two halves of an entry read as a pair rather than as two paragraphs.
+ */
+@Composable
+private fun QaLine(tag: String, text: String, style: TextStyle) {
+    Row {
+        Text(
+            text = tag,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp,
+            ),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .width(20.dp)
+                .alignByBaseline(),
+        )
+        Text(text = text, style = style, modifier = Modifier.alignByBaseline())
+    }
+}
 
 @Composable
 fun HelpScreen(onBack: () -> Unit) {
@@ -124,10 +178,13 @@ fun HelpScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            FAQ.forEach { (question, answer) ->
-                Column {
-                    Text(question, style = MaterialTheme.typography.titleSmall)
-                    Text(answer, style = MaterialTheme.typography.bodyMedium)
+            FAQ.forEachIndexed { index, (question, answer) ->
+                if (index > 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    QaLine("Q", question, MaterialTheme.typography.titleSmall)
+                    QaLine("A", answer, MaterialTheme.typography.bodyMedium)
                 }
             }
         }

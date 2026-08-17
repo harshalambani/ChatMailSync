@@ -75,8 +75,29 @@
     margin: 14px 0;
     font-size: 15px;
   }
-  .faq dt { font-weight: 600; margin-top: 14px; }
-  .faq dd { margin: 2px 0 0; color: #374151; }
+  .faq dt {
+    font-weight: 600;
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e6ea;
+    color: var(--green-dark);
+  }
+  .faq dt:first-of-type { margin-top: 6px; padding-top: 0; border-top: none; }
+  .faq dd { margin: 6px 0 0; color: #374151; }
+  .faq dt::before,
+  .faq dd::before {
+    display: inline-block;
+    width: 26px;
+    margin-left: -26px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    color: var(--green);
+  }
+  .faq dt::before { content: "Q"; }
+  .faq dd::before { content: "A"; }
+  .faq dt, .faq dd { padding-left: 26px; }
+  .faq dd p { margin: 8px 0 0; }
   .pill {
     display: inline-block;
     background: var(--accent);
@@ -112,6 +133,7 @@
       <li><a href="#export">Exporting a WhatsApp chat to a file</a></li>
       <li><a href="#add">Adding chat files to the app</a></li>
       <li><a href="#sync">Running a sync</a></li>
+      <li><a href="#schedule">Scheduling: having it sync on its own</a></li>
       <li><a href="#gmail">Where your messages appear</a></li>
       <li><a href="#faq">Troubleshooting &amp; FAQ</a></li>
     </ol>
@@ -132,9 +154,9 @@
 
   <section id="setup">
     <h2>2. One-time setup: connecting to your mailbox</h2>
-    <p>Before the first sync, the app needs permission to add messages to your mailbox. There are two ways to connect. <strong>Email app password (IMAP)</strong> is the default and the recommended one.</p>
+    <p>Before the first sync, the app needs permission to add messages to your mailbox. It does that with an <strong>email app password (IMAP)</strong>, which works with Gmail, Outlook, Yahoo, iCloud, Fastmail and any other IMAP mailbox.</p>
 
-    <h3>Option A &mdash; Email app password (IMAP) &mdash; recommended</h3>
+    <h3>Email app password (IMAP)</h3>
     <p>An &ldquo;app password&rdquo; is a separate password your email provider generates for one app. It only works for mail, and you can revoke it at any time without changing your real password.</p>
     <ol>
       <li>Create an app password with your provider. For Gmail: Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App passwords. (Most providers require two-factor authentication to be on first.)</li>
@@ -147,27 +169,15 @@
     </ol>
     <p>This does not expire. To disconnect later, click <strong>Forget saved password</strong>.</p>
 
-    <h3>Option B &mdash; Google sign-in (OAuth)</h3>
-    <p>This still works, but comes with two limits worth knowing first. The app has not gone through Google&rsquo;s app-verification process, so Google treats it as being in &ldquo;Testing&rdquo; mode:</p>
-    <ul>
-      <li>Only Google accounts that have been <strong>added as test users</strong> can sign in, and there is a limit of 100.</li>
-      <li><strong>Google expires the sign-in about every 7 days</strong>, so you have to reconnect roughly weekly. This is Google&rsquo;s rule for unverified apps and cannot be extended from within the app.</li>
-    </ul>
-    <p>If that suits you anyway:</p>
-    <ol>
-      <li>Open the app.</li>
-      <li>In the top-right corner, click <strong>Connect</strong>.</li>
-      <li>Your web browser opens a Google sign-in page. Choose the Google account you want your WhatsApp chats saved into.</li>
-      <li>Google asks whether to allow the app to manage your mail. Approve it.</li>
-      <li>Back in the app, the indicator turns <span class="pill">● green</span> and says <strong>Connected</strong>.</li>
-    </ol>
-    <p>To disconnect later, click <strong>Sign Out</strong> (this revokes access and removes the saved sign-in).</p>
-    <p><strong>Already using Google sign-in?</strong> Nothing changes for you. The app keeps you on Google sign-in and will not ask for an app password. You can switch to IMAP whenever you like from Settings.</p>
+    <h3>A note on Google sign-in</h3>
+    <p>Earlier versions connected to Gmail through a Google account instead of an app password. That route is closed to new setups: the app has not been through Google&rsquo;s verification process, so Google only lets accounts that were manually added as test users sign in at all &mdash; there is no way to add yourself. An app password reaches Gmail perfectly well and does not expire.</p>
+    <p>If you are already signed in with Google, nothing changes. The app keeps you there, will not ask you for an app password, and the option stays visible on your setup &mdash; including after you try IMAP, so switching is not a one-way door.</p>
   </section>
 
   <section id="export">
     <h2>3. Exporting a WhatsApp chat to a file</h2>
     <p>Do this on your phone, then move the file to your computer (email it to yourself, use a USB cable, or any cloud drive).</p>
+    <div class="note"><strong>One chat at a time.</strong> WhatsApp has no multi-select export &mdash; you cannot tick several chats and export them together. Each chat has to be exported on its own, from inside that chat. The app itself has no such limit: once the files are on your computer you can add as many as you like at once and sync them in one run.</div>
     <h3>On Android</h3>
     <ol>
       <li>Open the chat you want to back up.</li>
@@ -196,6 +206,7 @@
       <li>Click <strong>Open Inbox Folder</strong> and copy the file into that folder yourself.</li>
     </ul>
     <p>Added files appear in the <strong>Files in inbox</strong> list, with a count like "2 files ready to sync". You can add several chats at once.</p>
+    <p>If your exports always land in the same place, the app can collect them itself, on a schedule if you want one &mdash; see section 6.</p>
   </section>
 
   <section id="sync">
@@ -214,8 +225,72 @@
     <p>When it's done, each chat appears in the list on the left with a green dot and a message count. Synced files move out of the inbox automatically.</p>
   </section>
 
+  <section id="schedule">
+    <h2>6. Scheduling: having it sync on its own</h2>
+    <p>There is one scheduling mechanism, and it is the <strong>watched folder</strong>: you nominate a folder, the app checks it on an interval, and anything new it finds is imported and synced without you opening anything. There is no separate "sync every N hours" setting, because with nothing new in the inbox there would be nothing for it to do.</p>
+    <p>Both editions have the feature and the same settings. What differs is what the operating system underneath will allow.</p>
+
+    <h3>Setting it up on Windows</h3>
+    <ol>
+      <li><strong>Settings &rarr; Watched folder &rarr; Choose&hellip;</strong> and pick the folder.</li>
+      <li>That alone is enough for on-demand use: <strong>Check watched folder</strong> appears on the main window and looks whenever you click it, whether or not the automatic check is switched on.</li>
+      <li>To have it look by itself, tick <strong>Check it automatically</strong> and choose an interval.</li>
+      <li><strong>After syncing</strong> decides the fate of the <em>original</em> file in the watched folder.</li>
+    </ol>
+    <p><strong>Interval options:</strong> every 5 min &middot; every 15 min (default) &middot; every 30 min &middot; every hour &middot; every 3 hours &middot; every 6 hours &middot; every 12 hours &middot; once a day.</p>
+    <p><strong>After syncing options:</strong> <em>Leave in place</em> (default) &middot; <em>Move to a "synced" subfolder</em> &middot; <em>Delete after import (Recycle Bin)</em>.</p>
+    <div class="note"><strong>The check only runs while the app is open.</strong> The Windows edition installs no background service and no scheduled task &mdash; the timer lives inside the running window. Close the app and nothing is checked until you open it again. If you want it checking all day, leave the window open (minimised is fine).</div>
+    <p>Changing the interval takes effect immediately on the existing schedule; it does not wait for the current wait to run out, and it never leaves two timers running.</p>
+
+    <h3>Setting it up on Android</h3>
+    <ol>
+      <li><strong>Settings &rarr; Watched folder &rarr; Choose folder</strong> and pick the folder.</li>
+      <li><strong>Sync now</strong> in the same section checks immediately, whether or not auto-import is on.</li>
+      <li>Turn on <strong>Auto-import from this folder</strong> and choose an interval.</li>
+      <li><strong>After import, synced files:</strong> the same three choices.</li>
+    </ol>
+    <p><strong>Interval options:</strong> every 15 min (default) &middot; every 30 min &middot; every hour &middot; every 3 hours &middot; every 6 hours &middot; every 12 hours &middot; once a day.</p>
+    <p>Two differences from Windows, both imposed by Android rather than chosen:</p>
+    <ul>
+      <li><strong>There is no 5-minute option.</strong> Android's background scheduler enforces a hard 15-minute floor that no app of any kind can go under.</li>
+      <li><strong>"Delete after import" really deletes.</strong> Android has no Recycle Bin, so there is nothing to recover the file from. The Windows edition recycles instead.</li>
+    </ul>
+    <p>In exchange, Android <em>does</em> check with the app closed &mdash; that is the whole point of doing it through the system scheduler.</p>
+
+    <h3>The interval is a floor, not a promise (Android)</h3>
+    <p>Android treats a periodic job as "not more often than this", never "exactly this". A tick can be delayed &mdash; by minutes on a phone in use, by hours on one idle in Doze &mdash; and several may be batched together to save power. Set it to every hour and expect roughly hourly, not on the hour.</p>
+    <p>The scan itself needs no network. The sync it triggers does, so if the phone is offline when a tick fires, the files are imported and wait in the inbox for the next run rather than failing.</p>
+
+    <h3>Making the schedule reliable &mdash; battery optimisation (Android)</h3>
+    <p>The most common reason a schedule "stops working" is Android's battery optimisation putting the app to sleep. If auto-import matters to you, exempt the app once:</p>
+    <ul>
+      <li><strong>Stock Android:</strong> Settings &rarr; Apps &rarr; <strong>Chat Mail Sync</strong> &rarr; <strong>Battery</strong> &rarr; <strong>Unrestricted</strong>.</li>
+      <li><strong>Samsung (One UI)</strong>, which is stricter and will otherwise stop the schedule within a day or two of non-use: Settings &rarr; <strong>Battery</strong> &rarr; <strong>Background usage limits</strong> &mdash; make sure the app is <strong>not</strong> in <em>Sleeping apps</em> or <em>Deep sleeping apps</em>, and add it to <strong>Never sleeping apps</strong>. Also turn off <em>Put unused apps to sleep</em> if you use the app infrequently.</li>
+      <li><strong>Xiaomi / Oppo / Vivo / OnePlus:</strong> these keep a separate "Autostart" or "Startup manager" permission as well. Enable it for the app, or background work stops after a reboot.</li>
+    </ul>
+    <p>None of this affects manual syncs or <strong>Sync now</strong> &mdash; those run in the foreground while you are looking at the app, so the system leaves them alone. It only affects unattended checks.</p>
+    <div class="note"><strong>Battery cost.</strong> The check itself is cheap &mdash; a directory listing &mdash; but it is not free, and the sync that follows uses the network. Once a day suits most people; every 15 minutes is for a folder that genuinely receives exports through the day.</div>
+
+    <h3>What is <em>not</em> scheduled</h3>
+    <ul>
+      <li><strong>Nothing is scheduled unless you nominate a watched folder.</strong> Files you drag in or import by hand sit in the inbox until you sync.</li>
+      <li><strong>The inbox refresh interval in Settings is not a schedule.</strong> It only decides how often the file list on screen redraws (Off &middot; 15 s &middot; 30 s &middot; 1 min &middot; 5 min). It never syncs anything.</li>
+      <li><strong>There is no continuous, live sync.</strong> Each run is a single pass over whatever is waiting.</li>
+    </ul>
+
+    <h3>Rules the two editions share</h3>
+    <ul>
+      <li>Only the nominated folder is looked at. Subfolders are ignored &mdash; which is also why the <code>synced</code> subfolder is never re-imported.</li>
+      <li><code>.txt</code> and <code>.zip</code> only, the same as drag-and-drop.</li>
+      <li>Each source file is picked up exactly once, however often the check runs.</li>
+      <li>The <strong>After syncing</strong> rule is applied only once a file has genuinely reached your mailbox. A sync that fails, or that you stop, leaves your originals exactly where they are.</li>
+      <li>If a file cannot be moved or removed, the app says so and leaves it alone rather than losing it.</li>
+      <li>If no mail account is connected when a check finds something, the files are imported and left in the inbox with a note, not thrown away.</li>
+    </ul>
+  </section>
+
   <section id="gmail">
-    <h2>6. Where your messages appear</h2>
+    <h2>7. Where your messages appear</h2>
     <p>Open your email and look in the folder list. You'll find:</p>
     <ul>
       <li>A <strong>WhatsApp</strong> folder.</li>
@@ -227,7 +302,7 @@
   </section>
 
   <section id="faq">
-    <h2>7. Troubleshooting &amp; FAQ</h2>
+    <h2>8. Troubleshooting &amp; FAQ</h2>
     <dl class="faq">
       <dt>The app says "Not connected" or authorising fails.</dt>
       <dd><strong>On IMAP</strong> (the default): open <strong>Settings &rarr; Mail account &rarr; Change&hellip;</strong> and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
