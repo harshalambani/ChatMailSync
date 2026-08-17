@@ -506,8 +506,12 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
     }
 }
 
+// internal, not private: the chat detail screen is the same kind of page as
+// this one -- a labelled fact per line under a ruled heading -- and two copies
+// of that is how two detail screens end up with different label weights on the
+// same phone. Windows lifted the same pair onto _Panel for the same reason.
 @Composable
-private fun DetailSection(title: String) {
+internal fun DetailSection(title: String) {
     Text(
         title,
         style = MaterialTheme.typography.labelLarge,
@@ -518,7 +522,7 @@ private fun DetailSection(title: String) {
 }
 
 @Composable
-private fun DetailField(label: String, value: String) {
+internal fun DetailField(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Text(
             label,

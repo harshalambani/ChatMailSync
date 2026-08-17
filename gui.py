@@ -59,6 +59,7 @@ from src.config import (
 from src.app_version import version_label
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.mail_client import mailbox_folder_for
+from src.progress import ProgressTracker
 from src.watch_folder import (
     DEFAULT_WATCH_INTERVAL_MINUTES,
     MIN_WATCH_INTERVAL_MINUTES,
@@ -115,6 +116,18 @@ _CHAT_EMPTY_CHIP_TITLES = {
     "synced": "No chats have synced yet.",
     "failed": "Nothing has failed.",
     "never": "Every chat has been synced at least once.",
+}
+
+
+# The same three states said as a headline rather than as a chip label, for
+# the top of a single chat's screen. Word-for-word Android's ChatStatus
+# descriptions, since it is the same chat in the same three states. Not the
+# run headlines (_STATUS_HEADLINE): those describe one run, and a chat that
+# has never run is "Not synced yet", not "Still running".
+_CHAT_STATUS_HEADLINE = {
+    "synced": "Synced",
+    "failed": "Last sync failed",
+    "never": "Not synced yet",
 }
 
 
@@ -344,6 +357,105 @@ def _help_html_path() -> "Path | None":
     return None
 
 
+class _Tooltip:
+    """A hover label for a button whose whole text is one glyph.
+
+    Nine controls on this window say ⚙ ? ☽ ☀ ⟳ ↗ ↺ ✕ and CSV, several of them
+    22x20 -- a set of symbols the user has to click to learn. Android says what
+    each of its equivalents does in words on the button itself; Windows has no
+    room for that on a 22px target in a 236px column, so it says it on hover
+    instead. The words are the ones the chat detail panel uses for the same
+    action, so the shortcut and the screen it shortcuts cannot name the same
+    thing differently.
+
+    Not a pop-up in the sense the in-window panels replaced: it takes no input,
+    it cannot be dismissed wrongly, and it disappears the moment the pointer
+    leaves or the button is pressed.
+    """
+
+    # Long enough that sweeping the pointer across a row of buttons does not
+    # flash a trail of them, short enough to feel like an answer.
+    DELAY_MS = 450
+
+    def __init__(self, widget, text: str) -> None:
+        self._widget = widget
+        self._text = text
+        self._after_id = None
+        self._window = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Destroy>", self._hide, add="+")
+
+    def set_text(self, text: str) -> None:
+        """Re-word a tooltip whose button has changed meaning (the theme
+        toggle is the only one, and its icon changes with it)."""
+        self._text = text
+        self._hide()
+
+    def _schedule(self, _event=None) -> None:
+        self._cancel()
+        try:
+            self._after_id = self._widget.after(self.DELAY_MS, self._show)
+        except tkinter.TclError:                        # widget already gone
+            self._after_id = None
+
+    def _cancel(self) -> None:
+        if self._after_id is not None:
+            try:
+                self._widget.after_cancel(self._after_id)
+            except tkinter.TclError:
+                pass
+            self._after_id = None
+
+    def _show(self) -> None:
+        self._after_id = None
+        if self._window is not None:
+            return
+        try:
+            if not self._widget.winfo_viewable():
+                return
+            x = self._widget.winfo_rootx()
+            y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        except tkinter.TclError:
+            return
+        win = tkinter.Toplevel(self._widget)
+        win.wm_overrideredirect(True)                   # no title bar, no border
+        win.wm_geometry(f"+{x}+{y}")
+        try:
+            win.wm_attributes("-topmost", True)
+        except tkinter.TclError:
+            pass
+        tkinter.Label(
+            win, text=self._text,
+            background=gui_theme.SURFACE_CONTAINER_HIGH,
+            foreground=gui_theme.ON_SURFACE,
+            borderwidth=1, relief="solid",
+            padx=7, pady=3,
+        ).pack()
+        self._window = win
+
+    def _hide(self, _event=None) -> None:
+        self._cancel()
+        if self._window is not None:
+            try:
+                self._window.destroy()
+            except tkinter.TclError:
+                pass
+            self._window = None
+
+
+def _tooltip(widget, text: str):
+    """Attach a hover label and hand the widget straight back.
+
+    Returns the widget so a tooltip can be wrapped around a button at the point
+    it is created, without breaking the .pack() chain these builders are
+    written in.
+    """
+    _Tooltip(widget, text)
+    return widget
+
+
 # ---------------------------------------------------------------------------
 # App — mixes CTk (customtkinter) with TkinterDnD drag-and-drop support
 # ---------------------------------------------------------------------------
@@ -410,8 +522,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._last_run_dry_run = False
         self._auth_wait_after = None
         self._auth_cancelled = False
-        # The bar only moves forwards within a run -- see _advance_progress().
-        self._progress_fraction = 0.0
+        # What the bar and its label say, derived by the shared core rather
+        # than by this window -- see src/progress.py.
+        self._progress = ProgressTracker()
         # In-window screens, innermost last. Android pushes SettingsScreen and
         # MailAccountScreen onto a nav stack rather than opening dialogs, and
         # this is the same idea: settings stays alive underneath while the mail
@@ -604,8 +717,14 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             command=self._on_toggle_theme,
         )
         self._theme_btn.pack(side="left", padx=(0, 4))
+        # Kept on the button as the icon flips, for the same reason the icon
+        # flips: it names the destination, not the current state.
+        self._theme_tip = _Tooltip(
+            self._theme_btn,
+            "Switch to dark theme" if _saved_theme == "light" else "Switch to light theme",
+        )
 
-        ctk.CTkButton(
+        _tooltip(ctk.CTkButton(
             auth_frame, text="⚙", width=32, height=30,
             fg_color="transparent", border_width=1,
             border_color=gui_theme.ON_PRIMARY,
@@ -613,9 +732,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=gui_theme.ON_PRIMARY,
             font=ctk.CTkFont(size=14),
             command=self._open_settings,
-        ).pack(side="left")
+        ), "Settings").pack(side="left")
 
-        ctk.CTkButton(
+        _tooltip(ctk.CTkButton(
             auth_frame, text="?", width=32, height=30,
             fg_color="transparent", border_width=1,
             border_color=gui_theme.ON_PRIMARY,
@@ -623,7 +742,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=gui_theme.ON_PRIMARY,
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._open_help,
-        ).pack(side="left", padx=(4, 0))
+        ), "Help").pack(side="left", padx=(4, 0))
 
     # ------------------------------------------------------------------
     # Footer  (packed before main so it stays pinned to the bottom)
@@ -733,21 +852,21 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             textvariable=self._filter_var, height=32,
         ).pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-        ctk.CTkButton(
+        _tooltip(ctk.CTkButton(
             filter_row, text="⟳", width=32, height=32,
             font=ctk.CTkFont(size=15),
             fg_color="transparent", border_width=1,
             text_color=gui_theme.ON_SURFACE,
             command=self._refresh_all,
-        ).pack(side="left", padx=(0, 4))
+        ), "Refresh the chat list").pack(side="left", padx=(0, 4))
 
-        ctk.CTkButton(
+        _tooltip(ctk.CTkButton(
             filter_row, text="CSV", width=38, height=32,
             font=ctk.CTkFont(size=10, weight="bold"),
             fg_color="transparent", border_width=1,
             text_color=gui_theme.ON_SURFACE,
             command=self._on_export_csv_click,
-        ).pack(side="left")
+        ), "Export this list as a CSV file").pack(side="left")
 
         # ── Status chips ──────────────────────────────────────────────
         # The text box filters by name, which only helps someone who already
@@ -1100,34 +1219,38 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         gmail_thread_id = row.get("gmail_thread_id")
         if gmail_thread_id and self._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
             url = f"https://mail.google.com/mail/u/0/#all/{gmail_thread_id}"
-            ctk.CTkButton(
+            # Same words as _ChatDetailPanel's button for the same action --
+            # these three glyphs are shortcuts to that panel's actions, and a
+            # shortcut that names its destination differently is a third thing
+            # to learn rather than a faster way to the first.
+            _tooltip(ctk.CTkButton(
                 top, text="↗", width=22, height=20,
                 font=ctk.CTkFont(size=11),
                 fg_color="transparent", hover_color=gui_theme.TERTIARY_CONTAINER,
                 text_color=gui_theme.ON_SURFACE_VARIANT,
                 command=lambda u=url: webbrowser.open(u),
-            ).pack(side="right", padx=(0, 2))
+            ), "Open in Gmail").pack(side="right", padx=(0, 2))
 
         # Resync button (only for chats that have been processed before).
         if synced:
-            ctk.CTkButton(
+            _tooltip(ctk.CTkButton(
                 top, text="↺", width=22, height=20,
                 font=ctk.CTkFont(size=11),
                 fg_color="transparent", hover_color=gui_theme.PRIMARY_CONTAINER,
                 text_color=gui_theme.ON_SURFACE_VARIANT,
                 command=lambda cid=chat_id, dn=display_name, sf=source_filename:
                     self._on_resync_chat(cid, dn, sf),
-            ).pack(side="right", padx=(0, 2))
+            ), "Reset (forget sync history)").pack(side="right", padx=(0, 2))
 
         # Delete button.
-        ctk.CTkButton(
+        _tooltip(ctk.CTkButton(
             top, text="✕", width=22, height=20,
             font=ctk.CTkFont(size=11),
             fg_color="transparent", hover_color=gui_theme.ERROR_CONTAINER,
             text_color=gui_theme.ON_SURFACE_VARIANT,
             command=lambda cid=chat_id, dn=display_name, s=synced:
                 self._on_delete_chat(cid, dn, s),
-        ).pack(side="right", padx=(0, 2))
+        ), "Delete from list").pack(side="right", padx=(0, 2))
 
         # ── Bottom row: last-sync date, message count, status ──────────
         bot = ctk.CTkFrame(frame, fg_color="transparent")
@@ -1169,6 +1292,26 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 bot, text=f"{msgs} msgs", anchor="e",
                 font=ctk.CTkFont(size=10), text_color=gui_theme.ON_SURFACE_VARIANT,
             ).pack(side="right")
+
+        # The row opens the chat, the way tapping a chat does on Android. Until
+        # now the three glyphs were the whole of what a chat could be asked --
+        # 22x20 targets with no labels, no room for the facts behind them, and
+        # nothing at all for a chat that had never synced. Bound on the labels
+        # too, since a click lands on whichever one is under the cursor rather
+        # than on the frame; the glyph buttons swallow their own clicks, so
+        # they keep working as the shortcuts they are.
+        def open_chat(_event=None, r=row):
+            self._open_chat_detail(r)
+
+        for widget in (frame, top, bot, *bot.winfo_children()):
+            widget.bind("<Button-1>", open_chat)
+        for widget in top.winfo_children():
+            if isinstance(widget, ctk.CTkLabel):
+                widget.bind("<Button-1>", open_chat)
+
+    def _open_chat_detail(self, row: dict) -> None:
+        """Open one chat's own screen, mirroring Android's ChatDetailScreen."""
+        self._push_panel(lambda app, master, r=row: _ChatDetailPanel(app, master, r))
 
     # ------------------------------------------------------------------
     # Inbox / file handling
@@ -1426,11 +1569,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             chunk_size=self._chunk_var.get(),
         )
 
-    def _begin_sync(self, dry_run: bool, chunk_size: str) -> None:
+    def _begin_sync(
+        self, dry_run: bool, chunk_size: str, chat_filter: str | None = None
+    ) -> None:
         """Start a sync. Split out of the button handler so the watched folder
         can start a real sync of its own without faking a click (and without
         inheriting whatever the Dry run box happens to be set to -- an
-        automatic run that quietly did nothing would be worse than useless)."""
+        automatic run that quietly did nothing would be worse than useless).
+
+        chat_filter narrows the run to one chat, which is what the chat detail
+        panel's [Sync just this chat] asks for -- the same SyncManager filter
+        cli.py exposes as --chat and Android reaches from ChatDetailScreen.
+        """
         if self._worker is not None:
             return  # already running
 
@@ -1443,7 +1593,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Reset UI state.
         self._sync_btn.configure(state="disabled", text="Syncing…")
         self._stop_btn.configure(state="normal")
-        self._progress_fraction = 0.0
+        self._progress.reset()
         self._progress_bar.set(0)
         self._progress_label.configure(text="Starting…")
         self._log_lines.clear()
@@ -1456,6 +1606,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             db_path      = STATE_DB_PATH,
             inbox_dir    = INBOX_DIR,
             processed_dir= PROCESSED_DIR,
+            chat_filter  = chat_filter,
         )
         self._worker = worker
         worker.start()
@@ -1481,69 +1632,35 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if self._worker is worker:
             self.after(_POLL_MS, self._poll_sync_queue)
 
-    def _advance_progress(self, fraction: float) -> None:
-        """Move the bar to `fraction`, but never backwards within a run.
+    def _render_progress(self) -> None:
+        """Paint bar and label from the shared ProgressState.
 
-        Two sources drive it and they disagree in scale: `chunk` counts
-        messages across the whole sync, `file_done` counts files. Finishing
-        the first of three files is 1/3, but if that file was most of the
-        work the message count may already have been past half -- so taking
-        each event at face value made the bar visibly retreat at every file
-        boundary. Whichever source is further along is the honest answer; a
-        bar that goes backwards just reads as a bug. Reset per run in
-        _begin_sync().
+        Every label string and the monotonic-fraction rule live in
+        src/progress.py, not here -- this window and Android's sync screen
+        are showing the same run and must describe it identically, and
+        keeping a second copy of the rules on each side is exactly how they
+        stopped matching.
         """
-        if fraction > self._progress_fraction:
-            self._progress_fraction = fraction
-            self._progress_bar.set(fraction)
+        state = self._progress.state
+        if state.fraction >= 0:
+            self._progress_bar.set(state.fraction)
+        self._progress_label.configure(text=state.line)
 
     def _handle_sync_event(self, event: dict) -> None:
         t = event["type"]
+        # Every event goes through the tracker first, including the ones with
+        # side effects below -- the label/bar it produces is the whole of
+        # what those branches used to compute by hand.
+        self._progress.feed(event)
 
         if t == "log":
             self._append_log(event["msg"])
+            return
 
-        elif t == "files_total":
-            n = event["n"]
-            self._progress_label.configure(
-                text="Inbox is empty" if n == 0 else f"Found {n} file(s)…"
-            )
+        self._render_progress()
 
-        elif t == "syncing":
-            self._progress_label.configure(text=f"Syncing: {event['name']}")
-
-        elif t == "chunk":
-            # The whole-sync percentage, as on Android (SyncWorker's
-            # eventFraction/progressText). The engine counts every *new*
-            # message in a parse+dedup pre-scan before the first network
-            # call, so this advances continuously while one large chat is
-            # still being pushed, instead of the bar sitting at a file-count
-            # fraction -- 0/1 for the entire run, when the inbox holds a
-            # single file -- and only jumping at the end.
-            total = event["global_total"]
-            if total:
-                self._advance_progress(event["global_done"] / total)
-            self._progress_label.configure(
-                text=f"Syncing: {event['name']} — "
-                     f"{event['msgs_done']} / {event['total_msgs']} messages"
-            )
-
-        elif t == "file_done":
-            done, total = event["done"], event["total"]
-            if total:
-                self._advance_progress(done / total)
-            self._progress_label.configure(text=f"{done} / {total} files")
-
-        elif t == "done":
+        if t == "done":
             stats = event["stats"]
-            stopped = event.get("stopped", False)
-            self._progress_bar.set(1.0)
-            summary = (
-                f"Stopped — {stats.messages_synced} msg{'s' if stats.messages_synced != 1 else ''} synced"
-                if stopped else
-                f"Done — {stats.messages_synced} msg{'s' if stats.messages_synced != 1 else ''} synced"
-            )
-            self._progress_label.configure(text=summary)
             self._append_log("─" * 48)
             self._append_log(str(stats))
             self._sync_btn.configure(state="normal", text="▶  Sync Now")
@@ -1558,7 +1675,6 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._append_log(f"ERROR: {event['msg']}")
             self._sync_btn.configure(state="normal", text="▶  Sync Now")
             self._stop_btn.configure(state="disabled")
-            self._progress_label.configure(text="Failed — see log")
             self._worker = None
             self._refresh_chat_list()
             # After a failure too: some files in the run may still have been
@@ -1793,14 +1909,30 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _on_delete_chat(self, chat_id: str, display_name: str, synced: bool) -> None:
         """Remove a chat entry from the DB. Confirms first if it was ever synced."""
         if synced:
+            # Same words as the chat detail panel's in-window gate and as
+            # Android's dialog: this glyph is a shortcut to that action, not a
+            # differently-worded second version of it.
             ok = messagebox.askyesno(
-                "Remove chat?",
-                f"Remove '{display_name}' from the list?\n\n"
-                "This only deletes the local record — emails already in your mailbox are not affected.",
+                "Delete this chat?",
+                f"This removes '{display_name}' from your list entirely — unlike "
+                "Reset, it won't be kept for re-syncing. Mail already in your "
+                "mailbox is not deleted.\n\n"
+                "It also forgets which messages were already archived, so if you "
+                "ever import this export again you will get a second copy of all "
+                "of them unless you delete the old mail first.",
                 icon="warning",
             )
             if not ok:
                 return
+        self._apply_chat_delete(chat_id, display_name)
+
+    def _apply_chat_delete(self, chat_id: str, display_name: str) -> None:
+        """Drop the local record, once something has established consent.
+
+        Split out for the same reason as _apply_chat_reset: the chat detail
+        panel asks in the window rather than in a dialog and must not carry a
+        second copy of what removal means.
+        """
         try:
             delete_chat(chat_id, STATE_DB_PATH)
             self._append_log(f"Removed '{display_name}' from chat list.")
@@ -1882,6 +2014,19 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             if not confirmed:
                 return
 
+        self._apply_chat_reset(chat_id, display_name, source_filename)
+
+    def _apply_chat_reset(
+        self, chat_id: str, display_name: str, source_filename: str
+    ) -> bool:
+        """Do the reset itself, once something has established consent.
+
+        Split out of _on_resync_chat because the chat detail panel asks the
+        same question in the window rather than in a dialog (see
+        _ChatDetailPanel) and must not carry a second copy of what "reset"
+        actually does -- clearing local state and putting the export back
+        where the next sync will find it. Returns whether it went through.
+        """
         try:
             # confirmed_mailbox_cleared is set only on the path where the user
             # answered both prompts; the archived == 0 path passes it because
@@ -1889,10 +2034,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             reset_chat(chat_id, STATE_DB_PATH, confirmed_mailbox_cleared=True)
         except MailboxNotClearedError as exc:
             self._append_log(f"Reset refused for '{display_name}': {exc}")
-            return
+            return False
         except Exception as exc:
             self._append_log(f"Could not reset '{display_name}': {exc}")
-            return
+            return False
 
         # Move the export file back from processed/ to inbox/ if found.
         src = PROCESSED_DIR / source_filename
@@ -1912,6 +2057,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             )
         self._refresh_chat_list()
         self._refresh_inbox_count()
+        return True
 
     def _on_stop_click(self) -> None:
         if self._worker is None:
@@ -2150,6 +2296,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.set_appearance_mode(new_mode)
         icon = "☽" if new_mode == "light" else "☀"
         self._theme_btn.configure(text=icon)
+        self._theme_tip.set_text(
+            "Switch to dark theme" if new_mode == "light" else "Switch to light theme"
+        )
         # Rebuild dynamic sections so chat rows pick up the new theme colors.
         self._refresh_chat_list()
         self._refresh_inbox_count()
@@ -2342,6 +2491,34 @@ class _Panel(ctk.CTkFrame):
 
     def _close(self) -> None:
         self._app._pop_panel()
+
+    # ── Shared detail-page furniture ───────────────────────────────────
+    # On _Panel rather than on one panel, because the run detail screen and
+    # the chat detail screen are the same kind of page -- a labelled fact per
+    # line under a ruled heading -- and two copies of that is how two screens
+    # end up with different label widths on the same window.
+
+    def _section_rule(self, parent, title: str) -> None:
+        ctk.CTkLabel(
+            parent, text=title, anchor="w",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(10, 2))
+        ctk.CTkFrame(parent, height=1, fg_color=gui_theme.OUTLINE_VARIANT).pack(
+            fill="x", pady=(0, 6)
+        )
+
+    def _field(self, parent, label: str, value: str, *, value_color=None) -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=1)
+        ctk.CTkLabel(
+            row, text=label, anchor="w", width=190,
+            font=ctk.CTkFont(size=12), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="left")
+        ctk.CTkLabel(
+            row, text=value, anchor="w", font=ctk.CTkFont(size=12),
+            text_color=value_color or gui_theme.ON_SURFACE,
+        ).pack(side="left", fill="x", expand=True)
 
 
 class _SettingsPanel(_Panel):
@@ -3760,7 +3937,7 @@ class _SyncRunPanel(_Panel):
                 font=ctk.CTkFont(size=11),
             ).pack(fill="x", padx=10, pady=8)
 
-        self._section(body, "Messages")
+        self._section_rule(body, "Messages")
         self._field(body, "Parsed from the export", f"{run.get('messages_parsed') or 0}")
         self._field(body, "Uploaded to your mailbox", f"{run.get('messages_synced') or 0}")
         # Named rather than left as a bare "skipped" count: skipped means
@@ -3770,7 +3947,7 @@ class _SyncRunPanel(_Panel):
             body, "Already there, so skipped", f"{run.get('messages_skipped') or 0}",
         )
 
-        self._section(body, "Timing")
+        self._section_rule(body, "Timing")
         self._field(body, "Started", _format_run_time(run.get("started_at"), long=True))
         self._field(
             body, "Finished",
@@ -3781,7 +3958,7 @@ class _SyncRunPanel(_Panel):
         if duration:
             self._field(body, "Took", duration)
 
-        self._section(body, "Run")
+        self._section_rule(body, "Run")
         self._field(body, "Chat", run.get("display_name") or "Unknown chat")
         self._field(
             body, "Started by",
@@ -3791,26 +3968,310 @@ class _SyncRunPanel(_Panel):
             self._field(body, "Newest message synced", str(run["last_synced_ts"]))
         self._field(body, "Run number", str(run.get("run_id") or "—"))
 
-    def _section(self, parent, title: str) -> None:
-        ctk.CTkLabel(
-            parent, text=title, anchor="w",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=gui_theme.ON_SURFACE_VARIANT,
-        ).pack(fill="x", pady=(10, 2))
-        ctk.CTkFrame(parent, height=1, fg_color=gui_theme.OUTLINE_VARIANT).pack(
-            fill="x", pady=(0, 6)
-        )
 
-    def _field(self, parent, label: str, value: str) -> None:
-        row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", pady=1)
+class _ChatDetailPanel(_Panel):
+    """One chat, in full: what has been archived for it, and what can be done.
+
+    Android has had this screen since chats got their own route
+    (ChatDetailScreen); Windows had three unlabelled 22x20 glyphs on the list
+    row and nothing else -- no place to see when a chat last synced, whether a
+    mail thread exists for it, or how many messages went out, and no way at all
+    to sync a single chat. The facts, the four actions and the wording of the
+    reset gate are the same ones Android shows, because the chat is the same
+    chat and the consequences are the same consequences.
+
+    The one deliberate difference is where the destructive gate appears. On
+    Android it is an AlertDialog; here it renders inside the panel, because
+    stacking a modal over an in-window screen is exactly the pop-up habit these
+    panels replaced. The questions asked, their order and their text are
+    unchanged -- and the steps come from src.config's mailbox_clear_steps, so
+    this panel, the row's glyph and the CLI cannot drift into giving different
+    instructions for the same irreversible action.
+    """
+
+    def __init__(self, app: "App", master, row: dict) -> None:
+        super().__init__(app, master, row.get("display_name") or "Chat", "Back to sync")
+        self._row = dict(row)
+        self._chat_id = row["chat_id"]
+        self._display_name = row.get("display_name") or self._chat_id
+        self._source_filename = row.get("source_filename", "")
+
+        self._body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._body.pack(fill="both", expand=True, padx=18, pady=(12, 12))
+
+        # What a gate, if any, is currently asking. 0 = nothing pending; 1 and
+        # 2 are the reset gates (the instruction, then the commitment);
+        # "delete" is the removal confirm. One at a time by construction:
+        # opening any gate replaces whatever was open.
+        self._gate = 0
+        self._archived = 0
+        self._folder = ""
+        self._message = ""
+
+        self._render()
+
+    # ── Rendering ──────────────────────────────────────────────────────
+
+    def _render(self) -> None:
+        for w in self._body.winfo_children():
+            w.destroy()
+
+        row = self._row
+        status = _chat_status_of(row)
+        color = _STATUS_COLOR.get(row.get("last_run_status"), _STATUS_COLOR[None])
+
+        head = ctk.CTkFrame(self._body, fg_color="transparent")
+        head.pack(fill="x", pady=(0, 6))
         ctk.CTkLabel(
-            row, text=label, anchor="w", width=190,
-            font=ctk.CTkFont(size=12), text_color=gui_theme.ON_SURFACE_VARIANT,
+            head, text="●", text_color=color, width=18, font=ctk.CTkFont(size=14),
         ).pack(side="left")
         ctk.CTkLabel(
-            row, text=value, anchor="w", font=ctk.CTkFont(size=12),
-        ).pack(side="left", fill="x", expand=True)
+            head, text=_CHAT_STATUS_HEADLINE.get(status, status), anchor="w",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(side="left", padx=(4, 0))
+
+        self._section_rule(self._body, "This chat")
+        self._field(self._body, "Messages synced", str(row.get("messages_synced") or 0))
+        self._field(
+            self._body, "Last sync",
+            _format_run_time(row.get("last_run_at"), long=True)
+            if row.get("last_run_at") else "Never",
+        )
+        # Not "has a Gmail thread": under IMAP the stored id is the RFC 822
+        # Message-ID we generated, which is what threads the archive there.
+        self._field(
+            self._body, "Mail thread exists",
+            "Yes" if row.get("gmail_thread_id") else "No",
+        )
+        if self._source_filename:
+            self._field(self._body, "Export file", self._source_filename)
+
+        self._section_rule(self._body, "Actions")
+        if self._gate:
+            self._render_gate()
+        else:
+            self._render_actions()
+
+        if self._message:
+            ctk.CTkLabel(
+                self._body, text=self._message, anchor="w", justify="left",
+                wraplength=430, font=ctk.CTkFont(size=11),
+                text_color=gui_theme.ON_SURFACE_VARIANT,
+            ).pack(fill="x", pady=(12, 0))
+
+    def _action(self, text: str, command, *, danger: bool = False, enabled: bool = True):
+        """Full-width and labelled, in the order Android lists them."""
+        btn = ctk.CTkButton(
+            self._body, text=text, height=34, anchor="w",
+            font=ctk.CTkFont(size=12),
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.ERROR if danger else gui_theme.OUTLINE,
+            text_color=gui_theme.ERROR if danger else gui_theme.ON_SURFACE,
+            hover_color=gui_theme.ERROR_CONTAINER if danger else gui_theme.SURFACE_CONTAINER_HIGH,
+            command=command,
+        )
+        btn.pack(fill="x", pady=3)
+        if not enabled:
+            btn.configure(state="disabled")
+        return btn
+
+    def _render_actions(self) -> None:
+        thread_id = self._row.get("gmail_thread_id")
+        # Gated on the backend, not just on a thread existing -- same reasoning
+        # as the list row's glyph: the deep link only means anything for a
+        # mailbox Gmail actually hosts.
+        if self._app._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
+            url = f"https://mail.google.com/mail/u/0/#all/{thread_id}"
+            self._action(
+                "Open in Gmail",
+                lambda u=url: webbrowser.open(u),
+                enabled=bool(thread_id),
+            )
+
+        syncing = self._app._worker is not None
+        self._action(
+            "Current sync is on" if syncing else "Sync just this chat",
+            self._on_sync_this_chat,
+            enabled=not syncing,
+        )
+
+        # Not "re-sync from scratch": this syncs nothing. It clears the record
+        # so that a *later* sync starts over.
+        self._action("Reset (forget sync history)", self._open_reset_gate, danger=True)
+        self._action("Delete from list", self._open_delete_gate, danger=True)
+
+    # ── Gates ──────────────────────────────────────────────────────────
+
+    def _gate_box(self, title: str, body_text: str) -> None:
+        box = ctk.CTkFrame(self._body, corner_radius=6, fg_color=gui_theme.ERROR_CONTAINER)
+        box.pack(fill="x", pady=(2, 6))
+        ctk.CTkLabel(
+            box, text=title, anchor="w", justify="left",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=gui_theme.ON_ERROR_CONTAINER,
+        ).pack(fill="x", padx=12, pady=(10, 4))
+        ctk.CTkLabel(
+            box, text=body_text, anchor="w", justify="left", wraplength=410,
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_ERROR_CONTAINER,
+        ).pack(fill="x", padx=12, pady=(0, 10))
+
+    def _gate_buttons(self, confirm_text: str, confirm_command) -> None:
+        row = ctk.CTkFrame(self._body, fg_color="transparent")
+        row.pack(fill="x", pady=(2, 0))
+        # Cancel first and on the left, where the eye lands: the confirming
+        # button is the one that cannot be undone, so it is neither the default
+        # nor where the pointer already is.
+        ctk.CTkButton(
+            row, text="Cancel", width=90, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._cancel_gate,
+        ).pack(side="left")
+        ctk.CTkButton(
+            row, text=confirm_text, height=32,
+            fg_color=gui_theme.ERROR, hover_color=gui_theme.ERROR_HOVER,
+            command=confirm_command,
+        ).pack(side="left", padx=(8, 0))
+
+    def _cancel_gate(self) -> None:
+        self._gate = 0
+        self._render()
+
+    def _render_gate(self) -> None:
+        if self._gate == "delete":
+            # Android's words for the same question (ChatDetailScreen's delete
+            # dialog), because it is the same question with the same
+            # consequence -- including the second paragraph, which is the part
+            # that actually distinguishes this from Reset.
+            self._gate_box(
+                "Delete this chat?",
+                f"This removes '{self._display_name}' from your list entirely — "
+                "unlike Reset, it won't be kept for re-syncing. Mail already in "
+                "your mailbox is not deleted.\n\n"
+                "It also forgets which messages were already archived, so if you "
+                "ever import this export again you will get a second copy of all "
+                "of them unless you delete the old mail first.",
+            )
+            self._gate_buttons("Delete", self._confirm_delete)
+            return
+
+        archived, folder = self._archived, self._folder
+        noun = "message" if archived == 1 else "messages"
+
+        if archived == 0:
+            self._gate_box(
+                "Reset this chat?",
+                f"Reset sync history for '{self._display_name}'?\n\n"
+                "Nothing has been archived for this chat yet, so no duplicate "
+                "mail can result.\n\n"
+                "A new mail thread is created the next time this chat is synced.",
+            )
+            self._gate_buttons("Reset", self._confirm_reset)
+            return
+
+        if self._gate == 1:
+            steps = mailbox_clear_steps(folder, is_gmail_mailbox(self._app._settings))
+            numbered = "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1))
+            self._gate_box(
+                "Delete the old mail first",
+                f"'{self._display_name}' already has {archived} {noun} archived "
+                f"in your mailbox, in:\n\n    {folder}\n\n"
+                "Resetting makes the app forget it sent them, so the next sync "
+                "files a second copy. This app can never delete mail - only "
+                "you can.\n\n"
+                f"{numbered}\n\n"
+                "Have you already deleted that mail?",
+            )
+            self._gate_buttons("Yes, I deleted it", self._advance_reset_gate)
+            return
+
+        # Gate 2 -- the commitment. It does NOT claim an immediate re-archive:
+        # reset only clears local state and moves the export back to the inbox.
+        self._gate_box(
+            "Confirm reset",
+            f"You've said this folder is now empty:\n\n    {folder}\n\n"
+            "Resetting clears the app's record of this chat. No mail is sent "
+            f"now - the next sync re-archives all {archived} {noun} into a "
+            "fresh thread.\n\n"
+            "If any of the old mail is still there, that sync gives you a "
+            "second copy of it, and only you can clean it up.",
+        )
+        self._gate_buttons("Reset", self._confirm_reset)
+
+    def _open_reset_gate(self) -> None:
+        """Ask how much mail is already out there before asking anything else,
+        so the gate can name a real count and the real folder."""
+        try:
+            self._archived = count_archived_messages(self._chat_id, STATE_DB_PATH)
+        except Exception:
+            self._archived = 0
+        self._folder = mailbox_folder_for(self._display_name)
+        self._gate = 1
+        self._message = ""
+        self._render()
+
+    def _advance_reset_gate(self) -> None:
+        self._gate = 2
+        self._render()
+
+    def _open_delete_gate(self) -> None:
+        # A chat that has never synced has no record whose loss is worth
+        # confirming -- the same exemption _on_delete_chat makes.
+        if self._row.get("last_run_status") is None:
+            self._confirm_delete()
+            return
+        self._gate = "delete"
+        self._message = ""
+        self._render()
+
+    # ── Doing the thing ────────────────────────────────────────────────
+
+    def _confirm_delete(self) -> None:
+        self._app._apply_chat_delete(self._chat_id, self._display_name)
+        # The chat this panel is about no longer exists, so there is nothing
+        # left here to show -- Android's onDeleted navigates back for the same
+        # reason.
+        self._close()
+
+    def _confirm_reset(self) -> None:
+        ok = self._app._apply_chat_reset(
+            self._chat_id, self._display_name, self._source_filename
+        )
+        self._gate = 0
+        self._message = (
+            "Reset complete. The next sync re-archives this chat from the "
+            "start — the sync log has the detail."
+            if ok else
+            "Reset did not go through. The sync log says why."
+        )
+        self._refresh_row()
+        self._render()
+
+    def _on_sync_this_chat(self) -> None:
+        """Run a sync narrowed to this chat, then go back to watch it.
+
+        Back rather than staying put: the progress bar and the log live on the
+        sync view, and a panel sitting over them would hide the very thing the
+        button just started -- the same reason Android leaves the chat screen
+        for the progress screen.
+        """
+        self._close()
+        self._app._begin_sync(
+            dry_run=self._app._dry_run_var.get(),
+            chunk_size=self._app._chunk_var.get(),
+            chat_filter=self._chat_id,
+        )
+
+    def _refresh_row(self) -> None:
+        """Re-read this chat's row, so the facts above say what is true now
+        rather than what was true when the panel opened."""
+        try:
+            for row in get_sync_summary(STATE_DB_PATH):
+                if row["chat_id"] == self._chat_id:
+                    self._row = dict(row)
+                    return
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

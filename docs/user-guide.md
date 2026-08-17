@@ -481,6 +481,22 @@ the practical ceiling for a single file is around 18 MB on a 25 MB provider.
 
 ---
 
+### Q. Where do I see everything about one chat?
+
+**A.** Open the chat itself: on Windows click its row in the list, on Android tap
+it in the chats list. Either way you get a screen for that one chat, inside the
+same window, showing when it last synced, how many messages have gone out,
+whether a mail thread already exists for it and which export file it came from.
+The same four actions are on it: open it in Gmail, sync just that one chat, reset
+it, or delete it from the list.
+
+**Sync just this chat** runs a normal sync limited to that chat, instead of
+everything waiting in the inbox — the same job as the command line's `--chat`
+option. On Windows, the small icons on a chat's row in the list are shortcuts to
+these same actions; hover over any of them to see what it does.
+
+---
+
 ### Q. I want to re-do a chat from scratch. What does Reset do?
 
 **A.** On Windows, click the **↺** (re-sync) icon next to the chat in the list;

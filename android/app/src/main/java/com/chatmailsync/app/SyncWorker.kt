@@ -56,6 +56,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS_TEXT = "progress_text"
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
+        /** The same fraction as a whole number, or -1 when there is no honest
+         * one yet. Rounded in src/progress.py rather than here so the
+         * collapsed sync bar and the Windows window can never disagree by a
+         * percentage point. */
+        const val KEY_PROGRESS_PERCENT = "progress_percent"
         const val KEY_LOG_LINES = "log_lines"
         const val NOTIFICATION_CHANNEL_ID = "sync_channel"
         const val NOTIFICATION_ID = 1001
@@ -101,8 +106,6 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
         return coroutineScope {
             val androidApi = Python.getInstance().getModule("src.android_api")
-            var lastFraction = -1f
-            var lastText: String? = null
             // What was last handed to WorkManager/the notification, as
             // distinct from what the last event said. The poll below runs on a
             // fixed 250ms tick whether or not any event arrived, and it used
@@ -119,63 +122,46 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             var postedText: String? = null
             var postedFraction = Float.NaN
             var postedLog: String? = null
-            // Milestone lines only (file started/finished, inbox scan
-            // result) — not every "chunk" tick, which fires many times per
-            // file and would spam a log rather than read like one. Capped
-            // so this stays well under WorkManager Data's ~10KB limit for a
-            // long sync. Mirrors (in spirit) the Windows GUI's rolling log
-            // box (gui_worker._QueueHandler), which Android never had.
-            val logLines = ArrayDeque<String>()
             val pollJob = launch(Dispatchers.IO) {
                 // Check immediately (not delay-then-check): a quick sync —
                 // e.g. all files already up to date, nothing but dedup
                 // checks to do — can finish inside the first poll interval,
-                // and a leading delay meant its "syncing"/"file_done" events
-                // were never read before the job completed. Drain *every*
-                // event queued since the last check (get_progress_events()),
-                // not just the newest one, so a burst of several files'
-                // worth of events between polls isn't collapsed down to a
-                // single stale snapshot.
+                // and a leading delay meant its progress was never read
+                // before the job completed.
+                //
+                // What comes back is the whole state of the run so far, not
+                // the events since the last look, so a slow tick can't drop
+                // anything: the status line, the monotonic fraction and the
+                // milestone log are all derived in src/progress.py, which
+                // the Windows GUI renders from too. Kotlin's job here is to
+                // move those three strings onto the notification and into
+                // WorkManager's Data — not to decide what they say.
                 while (isActive) {
-                    val events = try {
-                        androidApi.callAttr("get_progress_events").asList()
+                    val state = try {
+                        androidApi.callAttr("progress_state")
                     } catch (_: Exception) {
-                        emptyList()
+                        null
                     }
-                    for (event in events) {
-                        // Only ever forwards within a run. chunk counts
-                        // messages across the whole sync and file_done counts
-                        // files, so the two disagree on scale: finishing the
-                        // first of three files is 1/3, but if that file was
-                        // most of the work the message count is already past
-                        // half, and taking each at face value made the bar
-                        // retreat at every file boundary. Whichever source is
-                        // further along is the honest answer.
-                        eventFraction(event)?.let {
-                            if (it > lastFraction) lastFraction = it
-                        }
-                        progressText(event)?.let { lastText = it }
-                        milestoneText(event)?.let { line ->
-                            logLines.addLast(line)
-                            while (logLines.size > 50) logLines.removeFirst()
-                        }
-                    }
-                    lastText?.let { text ->
-                        val log = logLines.joinToString("\n")
+                    val text = state?.let { stateString(it, "line") }?.takeIf { it.isNotBlank() }
+                    if (text != null) {
+                        val fraction = stateString(state, "fraction")?.toFloatOrNull() ?: -1f
+                        val percent = stateString(state, "percent")?.toIntOrNull() ?: -1
+                        val log = stateString(state, "log") ?: ""
                         if (text != postedText ||
-                            lastFraction != postedFraction ||
+                            fraction != postedFraction ||
                             log != postedLog
                         ) {
                             notify(text)
                             setProgress(
                                 workDataOf(
                                     KEY_PROGRESS_TEXT to text,
-                                    KEY_PROGRESS_FRACTION to lastFraction,
+                                    KEY_PROGRESS_FRACTION to fraction,
+                                    KEY_PROGRESS_PERCENT to percent,
                                     KEY_LOG_LINES to log,
                                 )
                             )
                             postedText = text
-                            postedFraction = lastFraction
+                            postedFraction = fraction
                             postedLog = log
                         }
                     }
@@ -249,81 +235,13 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
-    private fun progressText(event: com.chaquo.python.PyObject): String? {
-        val type = try {
-            event.callAttr("get", "type")?.toString()
-        } catch (_: Exception) {
-            null
-        } ?: return null
-        return when (type) {
-            "files_total" -> {
-                val n = eventGet(event, "n")
-                if (n == "0") "Inbox is empty" else "Found $n file(s)…"
-            }
-            "syncing" -> "Syncing: ${eventGet(event, "name")}"
-            "file_done" -> "${eventGet(event, "done")} / ${eventGet(event, "total")} files"
-            // "chunk" carries the true whole-sync percentage — the local
-            // engine already knows the total number of *new* messages before
-            // any network call is made (a parse+dedup pre-scan run upfront),
-            // so this advances continuously even while one large chat's
-            // chunks are still being pushed, instead of freezing at a
-            // file-count fraction for however long that one file takes.
-            "chunk" -> "Syncing: ${eventGet(event, "name")} — " +
-                "${eventGet(event, "msgs_done")} / ${eventGet(event, "total_msgs")} messages"
-            else -> null
-        }
-    }
-
-    /** Milestone-only subset of progressText's events, for the scrollable
-     * log pane — deliberately excludes "chunk" (fires many times per file;
-     * that's what the single-line live progress text is for). */
-    private fun milestoneText(event: com.chaquo.python.PyObject): String? {
-        val type = try {
-            event.callAttr("get", "type")?.toString()
-        } catch (_: Exception) {
-            null
-        } ?: return null
-        return when (type) {
-            "files_total" -> {
-                val n = eventGet(event, "n")
-                if (n == "0") "Inbox is empty" else "Found $n file(s) to sync"
-            }
-            "syncing" -> "Starting: ${eventGet(event, "name")}"
-            "file_done" -> "Finished ${eventGet(event, "done")} / ${eventGet(event, "total")} files"
-            else -> null
-        }
-    }
-
-    private fun eventFraction(event: com.chaquo.python.PyObject): Float? {
-        val type = try {
-            event.callAttr("get", "type")?.toString()
-        } catch (_: Exception) {
-            null
-        }
-        return when (type) {
-            "chunk" -> {
-                val done = eventGet(event, "global_done").toIntOrNull() ?: return null
-                val total = eventGet(event, "global_total").toIntOrNull() ?: return null
-                if (total > 0) done.toFloat() / total.toFloat() else null
-            }
-            // Fallback for spans with no chunk data yet (e.g. before the
-            // first network call, or a run that's all dedup-skips with
-            // nothing to push) — file-count is coarser but better than
-            // nothing.
-            "file_done" -> {
-                val done = eventGet(event, "done").toIntOrNull() ?: return null
-                val total = eventGet(event, "total").toIntOrNull() ?: return null
-                if (total > 0) done.toFloat() / total.toFloat() else null
-            }
-            else -> null
-        }
-    }
-
-    private fun eventGet(event: com.chaquo.python.PyObject, key: String): String =
+    /** One field out of progress_state()'s dict, or null. Kotlin never has to
+     * interpret these — src/progress.py has already decided what they say. */
+    private fun stateString(state: com.chaquo.python.PyObject?, key: String): String? =
         try {
-            event.callAttr("get", key).toString()
+            state?.callAttr("get", key)?.toString()?.takeIf { it != "None" }
         } catch (_: Exception) {
-            "?"
+            null
         }
 
     private fun notify(text: String) {

@@ -33,6 +33,7 @@ import gui_worker
 import src.config
 from src import secret_store
 from src.config import IMAP_PROVIDERS, MAIL_BACKEND_GMAIL_OAUTH, MAIL_BACKEND_IMAP
+from src.progress import ProgressTracker
 
 
 # ---------------------------------------------------------------------------
@@ -1074,17 +1075,20 @@ class _FakeLabel:
 
 
 class _FakeApp:
+    """Just enough of App to run _handle_sync_event: the two widgets it
+    paints, and the shared tracker that now decides what they say."""
+
     def __init__(self):
         self._progress_bar = _FakeBar()
         self._progress_label = _FakeLabel()
-        self._progress_fraction = 0.0
+        self._progress = ProgressTracker()
 
     def handle(self, event):
         gui.App._handle_sync_event(self, event)
         return self
 
-    def _advance_progress(self, fraction):
-        gui.App._advance_progress(self, fraction)
+    def _render_progress(self):
+        gui.App._render_progress(self)
 
 
 def _chunk(**over):

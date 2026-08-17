@@ -38,6 +38,11 @@ import kotlin.math.roundToInt
 fun SyncProgressScreen(
     workManager: WorkManager,
     onDone: () -> Unit,
+    // Leaving a *running* sync is not the same as finishing one: the work
+    // carries on, so this pops the screen without pruning it (see
+    // onDoneAndPrune) and hands the run over to the collapsed sync bar, which
+    // follows the user onto every other screen and taps back to here.
+    onMinimize: () -> Unit = onDone,
 ) {
     // Unique work name (not an in-memory UUID) — lets this screen re-find
     // an in-flight sync even if the app process was killed and relaunched
@@ -68,8 +73,24 @@ fun SyncProgressScreen(
         onDone()
     }
 
+    val running = workInfo?.state == WorkInfo.State.RUNNING ||
+        workInfo?.state == WorkInfo.State.ENQUEUED
+
     Scaffold(
-        topBar = { ChatMailTopBar(title = "Sync progress") },
+        topBar = {
+            // Only while it is running: once the run is over the only way out
+            // is [Done], which also prunes. A back arrow sitting next to that
+            // button would be two exits with different consequences.
+            if (running) {
+                ChatMailTopBar(
+                    title = "Sync progress",
+                    backLabel = "Home",
+                    onBack = onMinimize,
+                )
+            } else {
+                ChatMailTopBar(title = "Sync progress")
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
@@ -107,6 +128,10 @@ fun SyncProgressScreen(
                 }
                 else -> {
                     val fraction = workInfo.progress.getFloat(SyncWorker.KEY_PROGRESS_FRACTION, -1f)
+                    // Rounded on the Python side and carried here, so this
+                    // screen and the collapsed bar can never differ by a
+                    // point on the same run.
+                    val percent = workInfo.progress.getInt(SyncWorker.KEY_PROGRESS_PERCENT, -1)
                     val text = workInfo.progress.getString(SyncWorker.KEY_PROGRESS_TEXT) ?: "Syncing…"
                     if (fraction in 0f..1f) {
                         LinearProgressIndicator(
@@ -119,7 +144,7 @@ fun SyncProgressScreen(
                         ) {
                             Text(text, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "${(fraction * 100).roundToInt()}%",
+                                if (percent >= 0) "$percent%" else "${(fraction * 100).roundToInt()}%",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -144,6 +169,15 @@ fun SyncProgressScreen(
                             ),
                         ) { Text("Cancel sync") }
                     }
+
+                    // Says out loud what the back arrow above now does --
+                    // otherwise leaving this screen looks like it might be
+                    // the same thing as cancelling.
+                    Text(
+                        "You can leave this screen — the sync keeps running, and the bar at the bottom brings you back.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     // Rolling milestone log (file started/finished, inbox
                     // scan result) — Windows' GUI has always shown a log

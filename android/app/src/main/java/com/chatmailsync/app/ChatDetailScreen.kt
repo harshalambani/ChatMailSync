@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -75,17 +79,50 @@ fun ChatDetailScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            // Scrollable now that the facts have headings above them: on a
+            // short screen the four action buttons were the first thing to go
+            // off the bottom, and they are the reason the screen exists.
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val c = chat
             if (c == null) {
                 Text("Loading…")
             } else {
-                Text("Status: ${c.lastRunStatus ?: "pending"}", style = MaterialTheme.typography.bodyLarge)
-                Text("Messages synced: ${c.messagesSynced}")
-                Text("Last sync: ${formatSyncTime(c.lastRunAt)}")
-                Text("Mail thread exists: ${if (c.hasThread) "Yes" else "No"}")
+                // Was four bare sentences and four buttons in one flat column,
+                // with "Status: complete" leading -- a database value, read
+                // out. Now the state is said once at the top in the same three
+                // words the list's dot uses, the facts sit under a ruled "This
+                // chat" heading as label/value pairs (DetailSection and
+                // DetailField, shared with the run detail screen), and the
+                // four buttons are visibly a separate group rather than the
+                // continuation of a list of facts.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    StatusDot(c.lastRunStatus)
+                    Text(
+                        chatStatusOf(c.lastRunStatus).description,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+
+                DetailSection("This chat")
+                DetailField("Messages synced", c.messagesSynced.toString())
+                DetailField("Last sync", if (c.lastRunAt != null) formatSyncTime(c.lastRunAt) else "Never")
+                // Not "has a Gmail thread": under IMAP the stored id is the
+                // RFC 822 Message-ID we generated, which is what threads the
+                // archive there.
+                DetailField("Mail thread exists", if (c.hasThread) "Yes" else "No")
+                c.sourceFilename?.let { DetailField("Export file", it) }
+
+                DetailSection("Actions")
 
                 // Gated on the *backend*, not just on a thread existing: under
                 // IMAP the stored thread id is the RFC 822 Message-ID we

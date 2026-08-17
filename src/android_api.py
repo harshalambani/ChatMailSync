@@ -29,6 +29,7 @@ from src.state import (
     reset_chat,
     resolve_chat,
 )
+from src.progress import ProgressTracker
 from src.sync_manager import ProgressSyncManager
 
 # Mirrors gui_worker.py's existing {"type": ..., ...} event vocabulary
@@ -56,31 +57,34 @@ class _CallbackSink:
 # Chaquopy has no supported way for Python to call back into an arbitrary
 # Kotlin object as if it were a function (confirmed the hard way in Phase A4:
 # a Kotlin object with a __call__ method raised "is not callable" when Python
-# tried to invoke it). So instead of a live callback, sync() appends every
-# event to this module-level list, which Kotlin drains on a timer via
-# get_progress_events() while the sync WorkManager job runs on another
-# thread — mirroring how gui_worker's queue.Queue is fully drained on each
-# Windows GUI poll tick, rather than only ever exposing the latest event
-# (which silently dropped whole files' worth of "syncing"/"file_done"
-# events whenever a sync ran faster than the poll interval).
+# tried to invoke it). So instead of a live callback, sync() folds every
+# event into a module-level ProgressTracker (src/progress.py) that Kotlin
+# reads on a timer via progress_state().
+#
+# That snapshot is *cumulative*, which is what makes it safe to poll: it
+# replaced a drain-the-queue API whose events were consumed by whoever looked
+# first, so a caller that missed a tick lost those events for good — and a
+# caller that arrived late (a collapsed sync bar recomposed after the user
+# navigated away and back) had no way to learn what it had missed. Reading a
+# state instead of a stream also means the label and fraction rules live in
+# the shared core for both front-ends rather than being restated in Kotlin.
 # ---------------------------------------------------------------------------
 
 _progress_lock = threading.Lock()
-_progress_events: list = []
+_progress_tracker = ProgressTracker()
 
 
-def get_progress_events() -> list:
-    """Drain and return all progress events published since the last call
-    (oldest first), for polling from Kotlin. Empty list if none yet."""
+def progress_state() -> dict:
+    """The current sync's progress as a rendered snapshot -- phase, chat,
+    fraction, the one-line status, and the milestone log. Safe to poll at any
+    rate and from any thread; polling consumes nothing."""
     with _progress_lock:
-        events = list(_progress_events)
-        _progress_events.clear()
-        return events
+        return _progress_tracker.state.as_dict()
 
 
 def _publish_progress(event: dict) -> None:
     with _progress_lock:
-        _progress_events.append(event)
+        _progress_tracker.feed(event)
 
 
 def ping() -> str:
@@ -217,7 +221,7 @@ def sync(
             on_progress(event)
 
     with _progress_lock:
-        _progress_events.clear()
+        _progress_tracker.reset()
     _stop_event.clear()
     mgr = ProgressSyncManager(
         transport=transport,
@@ -229,7 +233,12 @@ def sync(
     )
     stats = mgr.run(chat_filter=chat_filter)
     stopped = _stop_event.is_set()
-    _publish_progress({"type": "done"})
+    # `stopped` travels with the event so progress_state()'s final headline
+    # says "Stopped" rather than "Done" -- a run the user cut short did
+    # finish, but claiming it simply completed would misreport it. The counts
+    # stay out: SyncStats is not JSON-marshallable across Chaquopy, and the
+    # Kotlin side already reads them off the worker's result Data.
+    _publish_progress({"type": "done", "stopped": stopped})
     return {**asdict(stats), "stopped": stopped}
 
 

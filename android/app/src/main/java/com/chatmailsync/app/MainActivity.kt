@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -158,40 +160,77 @@ private val bottomDests = listOf(
     BottomDest("settings", "Settings", Icons.Filled.Settings),
 )
 
-/** Always-present footer row above the bottom nav — this is a sync app, so
- * "is anything syncing right now" deserves dedicated, permanent real estate
- * rather than being buried in whichever tab happens to be open. Shows live
- * progress while a sync (manual or watched-folder/scheduled) is running, and
- * the last known outcome otherwise; tapping jumps to the most relevant
- * detail screen for whatever it's currently showing. */
+/** The collapsed sync bar — this is a sync app, so "is anything syncing right
+ * now" deserves dedicated, permanent real estate rather than being buried in
+ * whichever tab happens to be open. Shows live progress while a sync (manual
+ * or watched-folder/scheduled) is running, and the last known outcome
+ * otherwise; tapping jumps to the most relevant detail screen for whatever
+ * it's currently showing.
+ *
+ * A running sync keeps this bar on screen everywhere, not just on the three
+ * tabs (see showSyncBar below) — leaving the progress screen to look
+ * something up used to mean losing the run entirely until you found your way
+ * back, which is half of what "the progress bar functionality is not the same
+ * as the android app" was about. The bar is the way back: it says what is
+ * happening, how far along, and reopens the full view on tap.
+ *
+ * The text and the fraction are rendered by src/progress.py and carried here
+ * verbatim, so this bar, the full progress screen, the notification and the
+ * Windows window all say the same words. */
 @Composable
-private fun SyncStatusBar(text: String, fraction: Float?, running: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(
-                Icons.Filled.Refresh,
-                contentDescription = null,
-                tint = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (running) {
-            if (fraction != null && fraction in 0f..1f) {
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+private fun SyncStatusBar(
+    text: String,
+    fraction: Float?,
+    percent: Int?,
+    running: Boolean,
+    detached: Boolean,
+    onClick: () -> Unit,
+) {
+    Column {
+        // Off the tabs the bar floats directly on top of a scrolling screen,
+        // so it needs its own edge; above the nav bar that edge would just be
+        // a second line next to the nav bar's own.
+        if (detached) HorizontalDivider()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                // Only when there is a real number behind it: a run that is
+                // all dedup-skips never earns a percentage, and showing "0%"
+                // for the whole of it would be a worse lie than showing none.
+                if (running && percent != null && percent >= 0) {
+                    Text(
+                        "$percent%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            if (running) {
+                if (fraction != null && fraction in 0f..1f) {
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                }
             }
         }
     }
@@ -704,6 +743,8 @@ fun ChatMailApp(
     val autoSyncProgressText = autoSyncWorkInfo?.progress?.getString(SyncWorker.KEY_PROGRESS_TEXT)
     val autoSyncProgressFraction = autoSyncWorkInfo?.progress
         ?.getFloat(SyncWorker.KEY_PROGRESS_FRACTION, -1f)
+    val autoSyncProgressPercent = autoSyncWorkInfo?.progress
+        ?.getInt(SyncWorker.KEY_PROGRESS_PERCENT, -1)
     val autoSyncResultText = when (autoSyncWorkInfo?.state) {
         WorkInfo.State.SUCCEEDED ->
             "Sync result:\n\n${autoSyncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
@@ -762,6 +803,12 @@ fun ChatMailApp(
         autoSyncRunning -> autoSyncProgressFraction
         else -> null
     }
+    val syncStatusPercent = when {
+        manualSyncRunning ->
+            syncWorkInfo?.progress?.getInt(SyncWorker.KEY_PROGRESS_PERCENT, -1)
+        autoSyncRunning -> autoSyncProgressPercent
+        else -> null
+    }
     val onSyncStatusClick: () -> Unit = {
         when {
             manualSyncRunning -> navController.navigate("syncProgress")
@@ -773,17 +820,27 @@ fun ChatMailApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in bottomDests.map { it.route }
+    // A run in flight follows you: the bar stays on every screen except the
+    // full progress view itself, where it would only repeat what already
+    // fills the screen. Idle, it stays where it always was -- pinned above
+    // the tabs -- so a sub-screen isn't given a footer that says nothing.
+    val showSyncBar = showBottomBar ||
+        (syncStatusRunning && currentRoute != "syncProgress")
 
     Scaffold(
         bottomBar = {
-            if (showBottomBar) {
-                Column {
+            Column {
+                if (showSyncBar) {
                     SyncStatusBar(
                         text = syncStatusText,
                         fraction = syncStatusFraction,
+                        percent = syncStatusPercent,
                         running = syncStatusRunning,
+                        detached = !showBottomBar,
                         onClick = onSyncStatusClick,
                     )
+                }
+                if (showBottomBar) {
                     NavigationBar {
                         bottomDests.forEach { dest ->
                             NavigationBarItem(
@@ -1044,6 +1101,11 @@ fun ChatMailApp(
                 SyncProgressScreen(
                     workManager = workManager,
                     onDone = { navController.popBackStack("home", inclusive = false) },
+                    // Same destination, deliberately different call: onDone
+                    // prunes the finished work first, and pruning a run that
+                    // is still going would leave the collapsed bar with
+                    // nothing to observe.
+                    onMinimize = { navController.popBackStack("home", inclusive = false) },
                 )
             }
         }
