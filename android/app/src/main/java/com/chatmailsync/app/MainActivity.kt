@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -44,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -159,6 +162,21 @@ private val bottomDests = listOf(
     BottomDest("chats", "Chats", Icons.Filled.List),
     BottomDest("settings", "Settings", Icons.Filled.Settings),
 )
+
+/** Which tab a screen belongs under. The tabs are shown on every destination,
+ * not just the three top-level ones -- a sub-screen used to hide them, so from
+ * Mail account (where you land after entering credentials) there was no Home
+ * button at all and the labelled back arrow was the only way out. Sub-screens
+ * still light up the tab they were opened from, so the bar says where you are
+ * rather than going blank. */
+private fun tabForRoute(route: String?): String? = when {
+    route == null -> null
+    route == "home" || route == "syncProgress" -> "home"
+    route == "chats" || route.startsWith("chat/") -> "chats"
+    route == "settings" || route == "mailAccount" || route == "help" -> "settings"
+    route.startsWith("syncLog") -> "settings"
+    else -> null
+}
 
 /** The collapsed sync bar — this is a sync app, so "is anything syncing right
  * now" deserves dedicated, permanent real estate rather than being buried in
@@ -819,15 +837,33 @@ fun ChatMailApp(
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = currentRoute in bottomDests.map { it.route }
-    // A run in flight follows you: the bar stays on every screen except the
-    // full progress view itself, where it would only repeat what already
-    // fills the screen. Idle, it stays where it always was -- pinned above
-    // the tabs -- so a sub-screen isn't given a footer that says nothing.
-    val showSyncBar = showBottomBar ||
-        (syncStatusRunning && currentRoute != "syncProgress")
+    // Every screen keeps the tabs. The one exception is the full-screen sync
+    // progress view, which is a modal moment with its own way out.
+    val showBottomBar = currentRoute != "syncProgress"
+    val selectedTab = tabForRoute(currentRoute)
+    // The sync bar follows the same rule: everywhere except the progress
+    // screen, where it would only repeat what already fills the screen.
+    val showSyncBar = showBottomBar
+
+    // The keyboard is never left standing across a screen change. Compose
+    // keeps focus (and so the IME) alive when the destination changes, and
+    // nothing in this app ever dismissed it -- so after typing into the mail
+    // account fields the keyboard stayed up on whatever screen came next,
+    // sitting on top of the tab bar and swallowing taps on Home.
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(currentRoute) {
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+    }
 
     Scaffold(
+        // targetSdk 36 means edge-to-edge is enforced: the window is no longer
+        // resized for the keyboard, and Scaffold's default insets cover the
+        // system bars but not the IME. Without this the tab bar is drawn
+        // *underneath* an open keyboard -- visible, but every tap lands on a
+        // key instead, which reads as "the Home button does not work".
+        modifier = Modifier.imePadding(),
         bottomBar = {
             Column {
                 if (showSyncBar) {
@@ -836,7 +872,7 @@ fun ChatMailApp(
                         fraction = syncStatusFraction,
                         percent = syncStatusPercent,
                         running = syncStatusRunning,
-                        detached = !showBottomBar,
+                        detached = false,
                         onClick = onSyncStatusClick,
                     )
                 }
@@ -844,7 +880,7 @@ fun ChatMailApp(
                     NavigationBar {
                         bottomDests.forEach { dest ->
                             NavigationBarItem(
-                                selected = currentRoute == dest.route,
+                                selected = selectedTab == dest.route,
                                 onClick = {
                                     navController.navigate(dest.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
