@@ -25,6 +25,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
+import gui_theme
 from _splash import dismiss_launcher_splash
 from gui_worker import (
     SyncWorker,
@@ -86,14 +87,13 @@ if _THEME_FILE.exists():
         _saved_theme = _t
 
 ctk.set_appearance_mode(_saved_theme)
-ctk.set_default_color_theme("blue")
 
-_STATUS_COLOR = {
-    "complete": "#2ecc71",
-    "failed":   "#e74c3c",
-    "pending":  "#f39c12",
-    None:       "#7f8c8d",
-}
+# Quiet Archive, the same palette the Android app has used since 2026-07-05.
+# This has to run before the first widget is constructed -- CustomTkinter reads
+# its defaults out of ThemeManager at construction time, not at draw time.
+gui_theme.apply_theme(ctk)
+
+_STATUS_COLOR = gui_theme.STATUS_COLOR
 
 _LOG_MAX_LINES    = 200
 _POLL_MS          = 150    # queue poll interval (ms)
@@ -268,6 +268,35 @@ def _app_icon_path() -> "Path | None":
     return None
 
 
+def _masthead_image_path() -> "Path | None":
+    """Locate the PNG the masthead draws its mark from.
+
+    A .png rather than the .ico the title bar uses: Tk's own PhotoImage reads
+    PNG natively (8.6+) and cannot read .ico at all, and the alternative --
+    Pillow -- is in chat-mail-sync.spec's excludes list precisely so it does
+    not get dragged into the bundle for one 38px logo.
+
+    appicon_75.png rather than appicon_32.png, then halved at draw time:
+    scaling a bitmap *up* to fill the band would show every pixel of it, and
+    Tk's zoom() has no interpolation to hide that with.
+    """
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "appicon_75.png")
+        candidates.append(Path(sys.executable).parent / "appicon_75.png")
+        candidates.append(
+            Path(sys.executable).parent.parent / "AppInfo" / "appicon_75.png"
+        )
+    candidates.append(
+        Path(__file__).parent / "portable" / "App" / "AppInfo" / "appicon_75.png"
+    )
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
+
+
 def _help_html_path() -> "Path | None":
     """Locate help.html for both source runs and the frozen PyInstaller bundle."""
     candidates = []
@@ -290,7 +319,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
     # The header is a fixed-height strip with pack_propagate off, and in-window
     # screens are placed directly below it -- see _push_panel().
-    _HEADER_HEIGHT = 52
+    # 72, not the old 52: the masthead stacks a 38px mark against a two-line
+    # wordmark, and the band is what the panel stack positions itself below
+    # (_show_panel offsets by this constant), so an unchanged 52 would clip the
+    # eyebrow AND slide every panel up under it. Android's is 88dp; Windows
+    # runs tighter because a desktop window has a title bar above it already.
+    _HEADER_HEIGHT = 72
 
     def __init__(self) -> None:
         super().__init__()
@@ -416,22 +450,72 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     # ------------------------------------------------------------------
 
     def _build_header(self) -> None:
-        hdr = ctk.CTkFrame(self, height=52, corner_radius=0)
+        # The masthead, not a grey strip: a postmark-blue band carrying the
+        # app's mark beside a serif wordmark, which is what Android's
+        # ChatMailTopBar has drawn since the identity work. Two front-ends of
+        # the same product should be recognisable as the same product, and
+        # until now the only thing they shared was the word "Sync".
+        hdr = ctk.CTkFrame(
+            self, height=self._HEADER_HEIGHT, corner_radius=0,
+            fg_color=gui_theme.PRIMARY,
+        )
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
 
+        brand = ctk.CTkFrame(hdr, fg_color="transparent")
+        brand.pack(side="left", padx=(14, 0))
+
+        # Best-effort, like the title-bar icon: a missing or unreadable mark is
+        # cosmetic, and must never be the reason the window fails to build.
+        # Held on self because Tk keeps only a weak reference to a PhotoImage
+        # and a locally-scoped one is garbage-collected into a blank square.
+        #
+        # CustomTkinter warns that this is not a CTkImage and so will not scale
+        # on a HighDPI display. Accepted, not overlooked: CTkImage is a Pillow
+        # wrapper, and Pillow is excluded from the bundle (chat-mail-sync.spec)
+        # -- it is not in the shipped app at all. The cost is a mark that stays
+        # 38 physical pixels while text around it grows; the alternative is
+        # several MB of imaging library for one logo.
+        self._masthead_img = None
+        _mark = _masthead_image_path()
+        if _mark:
+            try:
+                img = tkinter.PhotoImage(file=str(_mark))
+                self._masthead_img = img.subsample(2, 2)   # 75px -> 38px
+            except Exception:
+                self._masthead_img = None
+        if self._masthead_img is not None:
+            ctk.CTkLabel(
+                brand, text="", image=self._masthead_img,
+            ).pack(side="left", padx=(0, 10))
+
+        words = ctk.CTkFrame(brand, fg_color="transparent")
+        words.pack(side="left")
+
         ctk.CTkLabel(
-            hdr,
+            words,
             text="Chat Mail Sync",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).pack(side="left", padx=16)
+            font=ctk.CTkFont(family=gui_theme.SERIF_FAMILY, size=17, weight="bold"),
+            text_color=gui_theme.ON_PRIMARY,
+            anchor="w",
+        ).pack(anchor="w")
+
+        # Android's masthead eyebrow, in the same small-caps-with-tracking
+        # treatment. Tk has no letter-spacing, so the spacing is in the string.
+        ctk.CTkLabel(
+            words,
+            text="W H A T S A P P   →   Y O U R   M A I L B O X",
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color=gui_theme.ON_PRIMARY,
+            anchor="w",
+        ).pack(anchor="w")
 
         # Auth section (right-aligned inside header).
         auth_frame = ctk.CTkFrame(hdr, fg_color="transparent")
         auth_frame.pack(side="right", padx=12)
 
         self._auth_dot = ctk.CTkLabel(
-            auth_frame, text="●", text_color="#e74c3c",
+            auth_frame, text="●", text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"],
             font=ctk.CTkFont(size=16), width=20,
         )
         self._auth_dot.pack(side="left", padx=(0, 4))
@@ -448,11 +532,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._auth_label = ctk.CTkLabel(
             auth_frame, text="Not connected",
             font=ctk.CTkFont(size=12), width=180, anchor="w",
+            text_color=gui_theme.ON_PRIMARY,
         )
         self._auth_label.pack(side="left", padx=(0, 10))
 
+        # Everything from here down sits on the band, so all of it takes the
+        # band variants: a stock CTkButton is primary-filled and would be a
+        # primary rectangle on a primary strip.
         self._auth_btn = ctk.CTkButton(
             auth_frame, text="Connect", width=90, height=30,
+            fg_color=gui_theme.BAND_BUTTON_FG,
+            hover_color=gui_theme.BAND_BUTTON_HOVER,
+            text_color=gui_theme.BAND_BUTTON_TEXT,
             command=self._on_connect_click,
         )
         self._auth_btn.pack(side="left", padx=(0, 6))
@@ -460,7 +551,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._signout_btn = ctk.CTkButton(
             auth_frame, text="Sign Out", width=80, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            border_color=gui_theme.ON_PRIMARY,
+            hover_color=gui_theme.BAND_GHOST_HOVER,
+            text_color=gui_theme.ON_PRIMARY,
             state="disabled",
             command=self._on_signout_click,
         )
@@ -471,7 +564,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._theme_btn = ctk.CTkButton(
             auth_frame, text=_theme_icon, width=32, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            border_color=gui_theme.ON_PRIMARY,
+            hover_color=gui_theme.BAND_GHOST_HOVER,
+            text_color=gui_theme.ON_PRIMARY,
             font=ctk.CTkFont(size=14),
             command=self._on_toggle_theme,
         )
@@ -480,7 +575,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkButton(
             auth_frame, text="⚙", width=32, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            border_color=gui_theme.ON_PRIMARY,
+            hover_color=gui_theme.BAND_GHOST_HOVER,
+            text_color=gui_theme.ON_PRIMARY,
             font=ctk.CTkFont(size=14),
             command=self._open_settings,
         ).pack(side="left")
@@ -488,7 +585,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkButton(
             auth_frame, text="?", width=32, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            border_color=gui_theme.ON_PRIMARY,
+            hover_color=gui_theme.BAND_GHOST_HOVER,
+            text_color=gui_theme.ON_PRIMARY,
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._open_help,
         ).pack(side="left", padx=(4, 0))
@@ -516,7 +615,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._stop_btn = ctk.CTkButton(
             ctrl, text="⏹  Stop", width=90, height=36,
             font=ctk.CTkFont(size=13),
-            fg_color="#c0392b", hover_color="#922b21",
+            fg_color=gui_theme.ERROR, hover_color=gui_theme.ERROR_HOVER,
             state="disabled",
             command=self._on_stop_click,
         )
@@ -539,7 +638,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._footer_stats_label = ctk.CTkLabel(
             footer, text="",
             font=ctk.CTkFont(size=11),
-            text_color=("gray40", "gray60"),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
             anchor="w",
         )
         self._footer_stats_label.pack(fill="x", padx=10, pady=(0, 2))
@@ -586,7 +685,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             filter_row, text="⟳", width=32, height=32,
             font=ctk.CTkFont(size=15),
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._refresh_all,
         ).pack(side="left", padx=(0, 4))
 
@@ -594,7 +693,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             filter_row, text="CSV", width=38, height=32,
             font=ctk.CTkFont(size=10, weight="bold"),
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._on_export_csv_click,
         ).pack(side="left")
 
@@ -608,7 +707,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         right.pack(side="left", fill="both", expand=True)
 
         # Drop zone.
-        drop = ctk.CTkFrame(right, corner_radius=10, border_width=2, border_color="#3b82f6")
+        drop = ctk.CTkFrame(right, corner_radius=10, border_width=2, border_color=gui_theme.PRIMARY)
         drop.pack(fill="both", expand=True, pady=(0, 6))
 
         drop.drop_target_register(DND_FILES)
@@ -616,7 +715,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         ctk.CTkLabel(
             drop, text="⬇   Drop  .txt  or  .zip  export files here",
-            font=ctk.CTkFont(size=13), text_color="#6b7280",
+            font=ctk.CTkFont(size=13), text_color=gui_theme.ON_SURFACE_VARIANT,
         ).pack(pady=(14, 4))
 
         btn_row = ctk.CTkFrame(drop, fg_color="transparent")
@@ -630,7 +729,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkButton(
             btn_row, text="Open Inbox Folder", width=148, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=lambda: os.startfile(str(INBOX_DIR)),
         ).pack(side="left", padx=6)
 
@@ -642,7 +741,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_now_btn = ctk.CTkButton(
             btn_row, text="Check watched folder", width=168, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._on_check_watch_now,
         )
 
@@ -653,7 +752,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._file_list_frame.pack(fill="x", expand=False, padx=10, pady=(0, 6))
 
         self._inbox_label = ctk.CTkLabel(
-            drop, text="", font=ctk.CTkFont(size=11), text_color="#6b7280",
+            drop, text="", font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
         )
         self._inbox_label.pack(pady=(0, 10))
 
@@ -799,13 +898,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ctk.CTkLabel(
                 wrap,
                 text="The filter matches chat names only, not message text.",
-                text_color=("gray40", "gray60"), wraplength=280,
+                text_color=gui_theme.ON_SURFACE_VARIANT, wraplength=280,
                 anchor="w", justify="left",
             ).pack(fill="x", pady=(6, 10))
             ctk.CTkButton(
                 wrap, text="Clear filter", width=110, height=28,
                 fg_color="transparent", border_width=1,
-                text_color=("gray10", "gray90"),
+                text_color=gui_theme.ON_SURFACE,
                 # after(0) because _filter_var's trace rebuilds this list,
                 # which destroys the very button whose command is running.
                 # The refresh comes from the trace -- calling it here as well
@@ -823,7 +922,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             wrap,
             text="In WhatsApp, open a chat and tap ⋮ → More → Export chat, "
                  "then drop the .zip or .txt here.",
-            text_color=("gray40", "gray60"), wraplength=280,
+            text_color=gui_theme.ON_SURFACE_VARIANT, wraplength=280,
             anchor="w", justify="left",
         ).pack(fill="x", pady=(6, 10))
         ctk.CTkButton(
@@ -872,8 +971,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ctk.CTkButton(
                 top, text="↗", width=22, height=20,
                 font=ctk.CTkFont(size=11),
-                fg_color="transparent", hover_color="#14532d",
-                text_color="#6b7280",
+                fg_color="transparent", hover_color=gui_theme.TERTIARY_CONTAINER,
+                text_color=gui_theme.ON_SURFACE_VARIANT,
                 command=lambda u=url: webbrowser.open(u),
             ).pack(side="right", padx=(0, 2))
 
@@ -882,8 +981,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ctk.CTkButton(
                 top, text="↺", width=22, height=20,
                 font=ctk.CTkFont(size=11),
-                fg_color="transparent", hover_color="#1e3a5f",
-                text_color="#6b7280",
+                fg_color="transparent", hover_color=gui_theme.PRIMARY_CONTAINER,
+                text_color=gui_theme.ON_SURFACE_VARIANT,
                 command=lambda cid=chat_id, dn=display_name, sf=source_filename:
                     self._on_resync_chat(cid, dn, sf),
             ).pack(side="right", padx=(0, 2))
@@ -892,8 +991,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkButton(
             top, text="✕", width=22, height=20,
             font=ctk.CTkFont(size=11),
-            fg_color="transparent", hover_color="#7f1d1d",
-            text_color="#6b7280",
+            fg_color="transparent", hover_color=gui_theme.ERROR_CONTAINER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
             command=lambda cid=chat_id, dn=display_name, s=synced:
                 self._on_delete_chat(cid, dn, s),
         ).pack(side="right", padx=(0, 2))
@@ -919,7 +1018,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkLabel(
             bot,
             text="  ·  ".join(parts) if parts else "new",
-            font=ctk.CTkFont(size=10), text_color="#6b7280", anchor="w",
+            font=ctk.CTkFont(size=10), text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
         ).pack(side="left")
 
     # ------------------------------------------------------------------
@@ -949,7 +1048,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             ctk.CTkLabel(
                 self._file_list_frame,
                 text="No files in inbox.",
-                font=ctk.CTkFont(size=11), text_color="#6b7280",
+                font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
             ).pack(anchor="w", padx=4, pady=2)
         else:
             for f in files:
@@ -1368,7 +1467,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._apply_auth_status(valid, text)
 
     def _apply_auth_status(self, valid: bool, text: str) -> None:
-        self._auth_dot.configure(text_color="#2ecc71" if valid else "#e74c3c")
+        self._auth_dot.configure(
+            text_color=gui_theme.STATUS_COLOR_ON_BAND[
+                "complete" if valid else "failed"
+            ]
+        )
         self._auth_label.configure(text=text)
         # command restored alongside the text: while a browser sign-in is
         # outstanding the button is "Cancel" and points at _cancel_connect, and
@@ -1444,7 +1547,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _report_transport_failure(self, msg: str) -> None:
         """Show why the saved connection could not be reopened. Tk thread only."""
         self._append_log(f"Could not reopen the saved connection: {msg}")
-        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Not connected — reconnect")
         self._auth_btn.configure(text="Connect", command=self._on_connect_click)
         self._signout_btn.configure(state=self._signout_state())
@@ -1490,7 +1593,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if self._auth_wait_after is not None:
             self.after_cancel(self._auth_wait_after)
             self._auth_wait_after = None
-        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Sign-in cancelled")
         self._auth_btn.configure(
             state="normal", text="Connect", command=self._on_connect_click
@@ -1514,7 +1617,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         if event["type"] == "auth_ok":
             self._transport = event["transport"]
-            self._auth_dot.configure(text_color="#2ecc71")
+            self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["complete"])
             self._auth_label.configure(text="Connected")
             # command restored: it was pointing at _cancel_connect for the
             # duration of the wait.
@@ -1525,7 +1628,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._append_log("Gmail authentication successful.")
         else:
             timed_out = event.get("timeout", False)
-            self._auth_dot.configure(text_color="#e74c3c")
+            self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
             self._auth_label.configure(
                 text="Sign-in not completed" if timed_out else "Auth failed"
             )
@@ -1708,7 +1811,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         self._transport = None
-        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Not connected")
         # See _apply_auth_status: relabelling must restore the command too.
         self._auth_btn.configure(
@@ -1747,7 +1850,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         self._transport = None
-        self._auth_dot.configure(text_color="#e74c3c")
+        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Not connected")
         # See _apply_auth_status: relabelling must restore the command too.
         self._auth_btn.configure(
@@ -2052,7 +2155,13 @@ class _Panel(ctk.CTkFrame):
         super().__init__(master, corner_radius=0)
         self._app = app
 
-        bar = ctk.CTkFrame(self, height=44, corner_radius=0)
+        # The same band as the main window's masthead, one notch shorter and
+        # without the mark: a pushed screen replaces the whole window below the
+        # title bar, so if this bar were a plain grey strip the app would appear
+        # to change identity every time you opened Settings. Android's pushed
+        # screens keep ChatMailTopBar for exactly that reason -- they just swap
+        # the badge for the labelled back.
+        bar = ctk.CTkFrame(self, height=48, corner_radius=0, fg_color=gui_theme.PRIMARY)
         bar.pack(fill="x", side="top")
         bar.pack_propagate(False)
         # A bare arrow was reported as neither intuitive nor obvious: on Android
@@ -2063,10 +2172,16 @@ class _Panel(ctk.CTkFrame):
         ctk.CTkButton(
             bar, text=f"←  {back_to}", height=30,
             font=ctk.CTkFont(size=13),
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.ON_PRIMARY,
+            hover_color=gui_theme.BAND_GHOST_HOVER,
+            text_color=gui_theme.ON_PRIMARY,
             command=self._close,
         ).pack(side="left", padx=(14, 12))
         ctk.CTkLabel(
-            bar, text=title, anchor="w", font=ctk.CTkFont(size=15, weight="bold"),
+            bar, text=title, anchor="w",
+            font=ctk.CTkFont(family=gui_theme.SERIF_FAMILY, size=16, weight="bold"),
+            text_color=gui_theme.ON_PRIMARY,
         ).pack(side="left")
 
     def _close(self) -> None:
@@ -2107,7 +2222,7 @@ class _SettingsPanel(_Panel):
         ctk.CTkButton(
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._close,
         ).pack(side="right")
 
@@ -2126,7 +2241,7 @@ class _SettingsPanel(_Panel):
         acc_row.pack(fill="x", padx=20, pady=(6, 0))
         self._account_summary = ctk.CTkLabel(
             acc_row, text="", anchor="w", font=("", 11),
-            text_color=("gray40", "gray60"),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
         )
         # Left-aligned and adjacent, not expand-then-pin-right. As a pop-up this
         # row was only ever as wide as the dialog, so a right-pinned button sat
@@ -2140,7 +2255,7 @@ class _SettingsPanel(_Panel):
         ctk.CTkButton(
             acc_row, text="Change…", width=90, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._open_mail_account,
         ).pack(side="left", padx=(12, 0))
         self._render_account_summary()
@@ -2177,19 +2292,19 @@ class _SettingsPanel(_Panel):
         ctk.CTkLabel(wrow, text="Watched folder:", width=130, anchor="w").pack(side="left")
         self._watch_path_label = ctk.CTkLabel(
             wrow, text="", anchor="w", font=("", 11),
-            text_color=("gray40", "gray60"), width=160,
+            text_color=gui_theme.ON_SURFACE_VARIANT, width=160,
         )
         self._watch_path_label.pack(side="left")
         ctk.CTkButton(
             wrow, text="Choose…", width=76, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._on_choose_watch_folder,
         ).pack(side="left", padx=(4, 0))
         ctk.CTkButton(
             wrow, text="Clear", width=54, height=30,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._on_clear_watch_folder,
         ).pack(side="left", padx=(4, 0))
 
@@ -2245,7 +2360,7 @@ class _SettingsPanel(_Panel):
                 "runs while the app is open."
             ),
             wraplength=380, justify="left", anchor="w",
-            text_color=("gray40", "gray60"), font=("", 11),
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         ).pack(fill="x", padx=20, pady=(0, 4))
 
         # ── About / Help ───────────────────────────────────────────────
@@ -2256,7 +2371,7 @@ class _SettingsPanel(_Panel):
         self._section(body, "About / Help")
         self._version_label = ctk.CTkLabel(
             body, text=version_label(), font=("", 11),
-            text_color=("gray45", "gray60"), anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
         # Seven clicks here toggle the Gmail sign-in option on the mail account
@@ -2390,7 +2505,7 @@ class _SettingsPanel(_Panel):
         HorizontalDivider between sections."""
         if not first:
             ctk.CTkFrame(
-                parent, height=1, fg_color=("gray78", "gray30"),
+                parent, height=1, fg_color=gui_theme.OUTLINE_VARIANT,
             ).pack(fill="x", padx=20, pady=(14, 0))
         ctk.CTkLabel(
             parent, text=title, anchor="w", font=("", 13, "bold"),
@@ -2491,7 +2606,7 @@ class _MailAccountPanel(_Panel):
         ctk.CTkButton(
             btn_row, text="Cancel", width=80, height=32,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._close,
         ).pack(side="right")
 
@@ -2505,7 +2620,7 @@ class _MailAccountPanel(_Panel):
         self._test_btn = ctk.CTkButton(
             btn_row, text="Test connection", width=130, height=32,
             fg_color="transparent", border_width=1,
-            text_color=("gray10", "gray90"),
+            text_color=gui_theme.ON_SURFACE,
             command=self._on_test_connection,
             state="disabled",
         )
@@ -2563,7 +2678,7 @@ class _MailAccountPanel(_Panel):
                 "chats again."
             ),
             wraplength=360, justify="left", anchor="w",
-            text_color=("gray40", "gray60"), font=("", 11),
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         ).pack(fill="x", padx=20, pady=(8, 0))
 
         row3 = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
@@ -2653,14 +2768,14 @@ class _MailAccountPanel(_Panel):
         )
         ctk.CTkLabel(
             self._imap_frame, text=note_text, wraplength=340,
-            justify="left", text_color=("gray40", "gray60"), font=("", 11),
+            justify="left", text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         ).pack(fill="x", padx=20, pady=(0, 4))
 
         # wraplength/anchor because this label now carries the staged
         # connection-test result, which is a sentence rather than the two
         # words ("Testing connection…") it used to hold.
         self._status_label = ctk.CTkLabel(
-            self._imap_frame, text="", text_color=("gray40", "gray60"),
+            self._imap_frame, text="", text_color=gui_theme.ON_SURFACE_VARIANT,
             wraplength=340, justify="left", anchor="w",
         )
         self._status_label.pack(fill="x", padx=20, pady=(0, 4))
@@ -2692,8 +2807,8 @@ class _MailAccountPanel(_Panel):
 
         self._help_toggle_btn = ctk.CTkButton(
             self._help_container, text="Not sure how to get an app password?",
-            fg_color="transparent", hover_color=("gray85", "gray25"),
-            text_color=("gray10", "gray90"), font=("", 11),
+            fg_color="transparent", hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE, font=("", 11),
             anchor="w", height=24,
             command=self._toggle_help,
         )
@@ -2892,7 +3007,7 @@ class _MailAccountPanel(_Panel):
         # pop-ups -- in the main window" rule for this window's own results.
         self._status_label.configure(
             text=event["msg"],
-            text_color=("#14532d", "#86efac") if event["ok"] else ("#7f1d1d", "#fca5a5"),
+            text_color=gui_theme.TERTIARY if event["ok"] else gui_theme.ERROR,
         )
 
     # ------------------------------------------------------------------
@@ -2933,7 +3048,7 @@ class _MailAccountPanel(_Panel):
             # rendered as a ragged zig-zag.
             ctk.CTkLabel(
                 self._help_frame, text=text, wraplength=340, anchor="w",
-                justify="left", text_color=("gray40", "gray60"), font=("", 11),
+                justify="left", text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
             ).pack(fill="x", pady=(0, 4))
 
         if provider_key == "custom":
@@ -2980,17 +3095,17 @@ class _MailAccountPanel(_Panel):
         link_row.pack(fill="x", pady=(4, 0))
         ctk.CTkButton(
             link_row, text="Copy question", width=110, height=26,
-            fg_color="transparent", border_width=1, text_color=("gray10", "gray90"),
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
             command=lambda: self._copy_prompt(provider_key, provider_label, host),
         ).pack(side="left", padx=(0, 6))
         ctk.CTkButton(
             link_row, text="Search for steps", width=120, height=26,
-            fg_color="transparent", border_width=1, text_color=("gray10", "gray90"),
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
             command=lambda: self._search_prompt(provider_key, provider_label, host),
         ).pack(side="left")
 
         self._help_copied_label = ctk.CTkLabel(
-            self._help_frame, text="", text_color=("gray40", "gray60"), font=("", 11),
+            self._help_frame, text="", text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         )
         self._help_copied_label.pack(fill="x", pady=(2, 0))
 
@@ -3002,7 +3117,7 @@ class _MailAccountPanel(_Panel):
             ctk.CTkButton(
                 self._help_frame, text=f"Open {provider_label}'s help page",
                 height=26, fg_color="transparent", border_width=1,
-                text_color=("gray10", "gray90"),
+                text_color=gui_theme.ON_SURFACE,
                 command=lambda: webbrowser.open(help_url),
             ).pack(fill="x", pady=(4, 0))
 
@@ -3074,7 +3189,7 @@ class _MailAccountPanel(_Panel):
                 # result may have left this label red or green, and a stale
                 # colour under new text reads as a verdict on the new text.
                 self._status_label.configure(
-                    text="Testing connection…", text_color=("gray40", "gray60"),
+                    text="Testing connection…", text_color=gui_theme.ON_SURFACE_VARIANT,
                 )
                 result_q: queue.Queue = queue.Queue()
                 threading.Thread(
