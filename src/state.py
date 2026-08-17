@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Mapping, Optional
 
 from src import config
 
@@ -377,6 +377,30 @@ def get_recent_runs(days: int = 90, db_path: Optional[Path] = None) -> list[sqli
             """,
             (cutoff,),
         ).fetchall()
+
+
+def is_uneventful_run(row: Mapping[str, Any]) -> bool:
+    """True when a run finished cleanly and changed nothing in the mailbox.
+
+    A watched folder re-scans every chat on every tick, and each chat gets its
+    own `sync_runs` row whether or not the export moved. On a 40-chat inbox
+    checked daily that is ~1,200 rows a month, of which the handful that
+    actually uploaded something are the only ones anyone opens the log to
+    find. The log therefore folds these away by default -- see the Windows
+    _SyncLogPanel and Android's SyncLogScreen, both of which show a count and
+    a way to unfold rather than hiding them outright.
+
+    Deliberately *not* "messages_synced == 0": a failed run also uploads
+    nothing, and burying failures is the one thing this must never do. A
+    still-`pending` run is not uneventful either -- it hasn't finished, so
+    there is nothing yet to judge.
+
+    The rule lives here, in the shared core, so the two front-ends cannot
+    drift into folding away different runs: Windows calls this directly and
+    Android reads the `uneventful` flag that android_api.sync_log() stamps on
+    each row from it.
+    """
+    return row["status"] == "complete" and not (row["messages_synced"] or 0)
 
 
 # ---------------------------------------------------------------------------

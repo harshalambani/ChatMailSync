@@ -96,6 +96,17 @@ def test_get_recent_runs_excludes_runs_outside_window(db_path):
     assert state.get_recent_runs(days=-1, db_path=db_path) == []
 
 
+def test_is_uneventful_run_never_hides_a_failure():
+    """The whole point of folding no-op runs away is that the eventful ones
+    stay findable -- so a failed run is never uneventful no matter how little
+    it uploaded, and neither is one that has not finished."""
+    assert state.is_uneventful_run({"status": "complete", "messages_synced": 0})
+    assert state.is_uneventful_run({"status": "complete", "messages_synced": None})
+    assert not state.is_uneventful_run({"status": "complete", "messages_synced": 3})
+    assert not state.is_uneventful_run({"status": "failed", "messages_synced": 0})
+    assert not state.is_uneventful_run({"status": "pending", "messages_synced": 0})
+
+
 def test_reset_chat_isolates_other_chats(db_path):
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
     state.upsert_chat("chat2", "Chat Two", "chat2.txt", db_path=db_path)

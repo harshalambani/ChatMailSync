@@ -69,8 +69,10 @@ from src.state import (
     MailboxNotClearedError,
     count_archived_messages,
     delete_chat,
+    get_recent_runs,
     get_sync_summary,
     init_db,
+    is_uneventful_run,
     reset_chat,
 )
 
@@ -94,6 +96,37 @@ ctk.set_appearance_mode(_saved_theme)
 gui_theme.apply_theme(ctk)
 
 _STATUS_COLOR = gui_theme.STATUS_COLOR
+
+# The chat list's status chips. Three states, not four: a chat is synced,
+# it failed, or it has never run. Android's ChatStatus enum deliberately has
+# the same three -- a chat mid-run is a transient the list is not the place to
+# chase, and a fourth chip nobody could ever click while looking at it is
+# worse than none.
+_CHAT_FILTERS = ("all", "synced", "failed", "never")
+_CHAT_FILTER_LABELS = {
+    "all": "All",
+    "synced": "Synced",
+    "failed": "Failed",
+    "never": "Never synced",
+}
+
+# Answers "why is this list empty?" for each chip, in that chip's own terms.
+_CHAT_EMPTY_CHIP_TITLES = {
+    "synced": "No chats have synced yet.",
+    "failed": "Nothing has failed.",
+    "never": "Every chat has been synced at least once.",
+}
+
+
+def _chat_status_of(row: dict) -> str:
+    """Which chip a chat row belongs under."""
+    status = row.get("last_run_status")
+    if status == "failed":
+        return "failed"
+    if status is None or status == "":
+        return "never"
+    return "synced"
+
 
 _LOG_MAX_LINES    = 200
 _POLL_MS          = 150    # queue poll interval (ms)
@@ -635,13 +668,32 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._progress_label.pack(side="left", padx=(8, 0))
 
         # ── Stats bar ─────────────────────────────────────────────────
+        stats_row = ctk.CTkFrame(footer, fg_color="transparent")
+        stats_row.pack(fill="x", padx=10, pady=(0, 2))
+
         self._footer_stats_label = ctk.CTkLabel(
-            footer, text="",
+            stats_row, text="",
             font=ctk.CTkFont(size=11),
             text_color=gui_theme.ON_SURFACE_VARIANT,
             anchor="w",
         )
-        self._footer_stats_label.pack(fill="x", padx=10, pady=(0, 2))
+        self._footer_stats_label.pack(side="left", fill="x", expand=True)
+
+        # Right here, and not in the header with the other screens, because
+        # the box below it is the reason anyone wants it: the live log holds
+        # 200 lines and empties on close, and the person staring at it asking
+        # "what happened on Tuesday?" is exactly who this button is for. On
+        # Android the same screen hangs off Settings and off a finished run on
+        # Home -- both places where the question gets asked there.
+        ctk.CTkButton(
+            stats_row, text="Sync log  ›", width=88, height=22,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.OUTLINE_VARIANT,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._open_sync_log,
+        ).pack(side="right")
 
         # ── Log textbox ───────────────────────────────────────────────
         self._log_box = ctk.CTkTextbox(
@@ -696,6 +748,31 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=gui_theme.ON_SURFACE,
             command=self._on_export_csv_click,
         ).pack(side="left")
+
+        # ── Status chips ──────────────────────────────────────────────
+        # The text box filters by name, which only helps someone who already
+        # knows which chat they want. "Which of these failed?" was not
+        # answerable at all without reading every dot in the list. Counts live
+        # on the chips so the question is usually answered without a click --
+        # and they count the whole list, not the current filter, so a chip
+        # never reports zero merely because it is the one selected.
+        # Two rows of two rather than one row of four: this panel is a fixed
+        # 236px, and "Never synced (12)" on a 55px chip is a chip that says
+        # "Neve…". Same four labels as Android, which has the width for one
+        # scrolling row -- the wording is what has to match, not the geometry.
+        self._chat_status_filter = "all"
+        chips = ctk.CTkFrame(left, fg_color="transparent")
+        chips.pack(fill="x", padx=8, pady=(0, 4))
+        self._chat_chips: dict = {}
+        for i, key in enumerate(_CHAT_FILTERS):
+            btn = ctk.CTkButton(
+                chips, text=_CHAT_FILTER_LABELS[key], height=24,
+                font=ctk.CTkFont(size=10),
+                command=lambda k=key: self._set_chat_status_filter(k),
+            )
+            btn.grid(row=i // 2, column=i % 2, sticky="ew", padx=(0, 3), pady=(0, 3))
+            self._chat_chips[key] = btn
+        chips.grid_columnconfigure((0, 1), weight=1, uniform="chip")
 
         self._chat_scroll = ctk.CTkScrollableFrame(left, label_text="Synced chats")
         self._chat_scroll.pack(fill="both", expand=True, padx=4, pady=(0, 6))
@@ -842,15 +919,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception:
             rows = []
 
+        # The full list, before either filter, is what the chips count and
+        # what the footer totals -- one read, used for both.
+        all_rows = list(rows)
+        self._sync_chat_chips(all_rows)
+
         filt = self._filter_var.get().strip().lower()
         if filt:
             rows = [r for r in rows if filt in r["display_name"].lower()]
+        status_filter = getattr(self, "_chat_status_filter", "all")
+        if status_filter != "all":
+            rows = [r for r in rows if _chat_status_of(r) == status_filter]
 
-        # Update footer stats using the full (unfiltered) summary.
-        try:
-            all_rows = get_sync_summary(STATE_DB_PATH)
-        except Exception:
-            all_rows = []
         total_chats = len(all_rows)
         total_msgs  = sum(r.get("messages_synced") or 0 for r in all_rows)
 
@@ -873,21 +953,73 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
 
         if not rows:
-            self._add_empty_chat_state(filtered=bool(filt), query=filt)
+            self._add_empty_chat_state(
+                filtered=bool(filt), query=filt,
+                status_filter=status_filter, had_any=bool(all_rows),
+            )
             return
 
         for row in rows:
             self._add_chat_row(row)
 
-    def _add_empty_chat_state(self, *, filtered: bool, query: str) -> None:
+    def _set_chat_status_filter(self, key: str) -> None:
+        if key == getattr(self, "_chat_status_filter", "all"):
+            return
+        self._chat_status_filter = key
+        self._refresh_chat_list()
+
+    def _sync_chat_chips(self, all_rows: list) -> None:
+        """Put live counts on the chips and mark the selected one."""
+        counts = {"all": len(all_rows), "synced": 0, "failed": 0, "never": 0}
+        for row in all_rows:
+            counts[_chat_status_of(row)] += 1
+        selected = getattr(self, "_chat_status_filter", "all")
+        for key, btn in self._chat_chips.items():
+            is_sel = key == selected
+            btn.configure(
+                text=f"{_CHAT_FILTER_LABELS[key]} ({counts[key]})",
+                fg_color=gui_theme.PRIMARY if is_sel else "transparent",
+                text_color=gui_theme.ON_PRIMARY if is_sel else gui_theme.ON_SURFACE,
+                border_width=0 if is_sel else 1,
+                border_color=gui_theme.OUTLINE_VARIANT,
+                hover_color=gui_theme.PRIMARY_HOVER if is_sel else gui_theme.NEUTRAL_HOVER,
+            )
+
+    def _add_empty_chat_state(
+        self, *, filtered: bool, query: str,
+        status_filter: str = "all", had_any: bool = False,
+    ) -> None:
         """Fill the empty chat list with instructions instead of blank space.
 
         This panel showed nothing at all on a first run -- the one moment the
-        user most needs telling what to do. Same two cases and the same words
-        as Android's ChatsListScreen, which is where the copy was written.
+        user most needs telling what to do. Same cases and the same words as
+        Android's ChatsListScreen, which is where the copy was written.
         """
         wrap = ctk.CTkFrame(self._chat_scroll, fg_color="transparent")
         wrap.pack(fill="both", expand=True, padx=12, pady=24)
+
+        # A chip emptying the list is its own case: "No chats archived yet"
+        # under a [Failed (0)] chip, on an inbox holding forty chats, is a
+        # flat lie about the state of the app.
+        if status_filter != "all" and had_any:
+            ctk.CTkLabel(
+                wrap, text=_CHAT_EMPTY_CHIP_TITLES[status_filter],
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w", justify="left", wraplength=200,
+            ).pack(fill="x")
+            if filtered:
+                ctk.CTkLabel(
+                    wrap, text=f'The name filter "{query}" is also on.',
+                    text_color=gui_theme.ON_SURFACE_VARIANT, wraplength=200,
+                    anchor="w", justify="left",
+                ).pack(fill="x", pady=(6, 10))
+            ctk.CTkButton(
+                wrap, text="Show all chats", width=130, height=28,
+                fg_color="transparent", border_width=1,
+                text_color=gui_theme.ON_SURFACE,
+                command=lambda: self._set_chat_status_filter("all"),
+            ).pack(anchor="w", pady=(6, 0))
+            return
 
         if filtered:
             ctk.CTkLabel(
@@ -1001,25 +1133,42 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         bot = ctk.CTkFrame(frame, fg_color="transparent")
         bot.pack(fill="x", padx=(24, 4), pady=(0, 5))
 
-        parts: list[str] = []
+        # Was "Jul 3  ·  142 msgs  ·  complete" -- three facts of different
+        # kinds strung into one sentence, in a 236px column that clipped the
+        # end of it. Now: when on the left, how much on the right, and the
+        # status stays in the dot above rather than being said twice. "failed"
+        # is the exception and is spelled out, in the error colour, because a
+        # dot is the wrong amount of emphasis for the one row you must not
+        # scroll past.
         last_run_at = row.get("last_run_at")
+        when = ""
         if last_run_at:
             try:
                 dt = datetime.fromisoformat(last_run_at)
-                parts.append(f"{dt.strftime('%b')} {dt.day}")
+                when = f"{dt.strftime('%b')} {dt.day}"
             except Exception:
-                pass
-        msgs = row.get("messages_synced") or 0
-        if msgs:
-            parts.append(f"{msgs} msgs")
-        if status:
-            parts.append(status)
+                when = ""
+
+        if status == "failed":
+            left_text, left_color = "Failed", gui_theme.ERROR
+            if when:
+                left_text = f"Failed · {when}"
+        elif when:
+            left_text, left_color = when, gui_theme.ON_SURFACE_VARIANT
+        else:
+            left_text, left_color = "Not synced yet", gui_theme.ON_SURFACE_VARIANT
 
         ctk.CTkLabel(
-            bot,
-            text="  ·  ".join(parts) if parts else "new",
-            font=ctk.CTkFont(size=10), text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
+            bot, text=left_text, anchor="w",
+            font=ctk.CTkFont(size=10), text_color=left_color,
         ).pack(side="left")
+
+        msgs = row.get("messages_synced") or 0
+        if msgs:
+            ctk.CTkLabel(
+                bot, text=f"{msgs} msgs", anchor="e",
+                font=ctk.CTkFont(size=10), text_color=gui_theme.ON_SURFACE_VARIANT,
+            ).pack(side="right")
 
     # ------------------------------------------------------------------
     # Inbox / file handling
@@ -1881,6 +2030,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._panels[-1].focus_set()
             return
         self._push_panel(_SettingsPanel)
+
+    def _open_sync_log(self) -> None:
+        """Show the 90-day run history in this window, not as a pop-up."""
+        if self._panels:
+            self._panels[-1].focus_set()
+            return
+        self._push_panel(_SyncLogPanel)
 
     def _push_panel(self, factory) -> None:
         """Put an in-window screen over the sync view.
@@ -3225,6 +3381,436 @@ class _MailAccountPanel(_Panel):
                 "Could not connect",
                 f"Could not connect with those details:\n\n{event['msg']}",
             )
+
+
+# ---------------------------------------------------------------------------
+# Sync log  (90 days of runs, and one run in full)
+# ---------------------------------------------------------------------------
+
+# The same two words Android's SyncLogScreen uses. "watched_folder" is the
+# stored value, not something to put in front of anyone.
+_TRIGGER_LABELS = {"manual": "Manual", "watched_folder": "Watched folder"}
+
+# Says what happened, not what the column contains: "complete" is a state
+# name, and the run detail is opened by someone asking a question.
+_STATUS_HEADLINE = {
+    "complete": "Finished",
+    "failed": "Failed",
+    "pending": "Still running",
+}
+
+
+def _format_run_time(iso: "str | None", *, long: bool = False) -> str:
+    """An ISO timestamp as a person would say it. Never raises.
+
+    Rows are drawn from whatever is in the DB, and a stored timestamp that
+    cannot be parsed is a cosmetic problem -- it must not be the reason the
+    log fails to open. dt.day rather than the %-d strftime flag, which is not
+    portable (see _refresh_chat_list).
+    """
+    if not iso:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(iso)
+    except Exception:
+        return str(iso)
+    if long:
+        return f"{dt.strftime('%b')} {dt.day}, {dt.strftime('%Y')} at {dt.strftime('%H:%M')}"
+    return f"{dt.strftime('%b')} {dt.day}, {dt.strftime('%H:%M')}"
+
+
+def _run_counts_text(run: dict) -> str:
+    """The one-line summary of what a run moved.
+
+    A run that uploaded nothing says so in words. "0 synced, 0 skipped" is
+    technically the same information and reads as a malfunction.
+    """
+    synced = run.get("messages_synced") or 0
+    skipped = run.get("messages_skipped") or 0
+    if run.get("status") == "failed":
+        return f"{synced} synced before it failed" if synced else "Nothing uploaded"
+    if not synced and not skipped:
+        return "Nothing new"
+    parts = [f"{synced} synced"]
+    if skipped:
+        parts.append(f"{skipped} already there")
+    return ", ".join(parts)
+
+
+def _run_duration(run: dict) -> str:
+    """How long a run took, or "" when that cannot be worked out."""
+    started, completed = run.get("started_at"), run.get("completed_at")
+    if not started or not completed:
+        return ""
+    try:
+        seconds = int(
+            (datetime.fromisoformat(completed) - datetime.fromisoformat(started)).total_seconds()
+        )
+    except Exception:
+        return ""
+    if seconds < 0:
+        return ""
+    if seconds < 60:
+        return f"{seconds} second{'s' if seconds != 1 else ''}"
+    minutes, rest = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes} min {rest} s" if rest else f"{minutes} min"
+    hours, rest_min = divmod(minutes, 60)
+    return f"{hours} h {rest_min} min" if rest_min else f"{hours} h"
+
+
+def _first_line(text: str) -> str:
+    """The first line of an error, for a row that has room for one line."""
+    line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    return line if len(line) <= 120 else line[:117] + "…"
+
+
+class _SyncLogPanel(_Panel):
+    """Ninety days of sync runs, and a way into any one of them.
+
+    Until now the only history Windows had was the footer's live textbox: 200
+    lines, in memory, gone the moment the app closed. Anyone asking "did last
+    Tuesday's sync actually go?" had no way to find out. Android has had this
+    screen (SyncLogScreen) since the state DB grew sync_runs; this is the same
+    data, from the same shared query -- state.get_recent_runs() -- with the
+    same 90-day window, so neither front-end can quietly show a different
+    history than the other.
+
+    Two things make it readable rather than merely complete:
+
+    * Routine no-op runs fold away. A watched folder produces one row per chat
+      per tick whether or not anything moved, and the runs worth finding are
+      the ones that uploaded something or failed. Consecutive uneventful runs
+      collapse *in place* -- a counted row you can unfold -- rather than being
+      dropped or floated to the bottom, so the chronology stays honest.
+    * The filter is [All] / [Errors] with live counts on the chips, so
+      "were there any failures?" is answered before you press anything.
+
+    The two are deliberately orthogonal: under Errors nothing is uneventful by
+    definition (a failed run is never folded), so the fold simply has nothing
+    to do rather than needing to be reasoned about.
+    """
+
+    _FILTERS = ("all", "errors")
+    _FILTER_LABELS = {"all": "All", "errors": "Errors"}
+
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Sync log", "Back to sync")
+
+        self._filter = "all"
+        # Group index -> True once the user has unfolded that run of no-op
+        # runs. Keyed by the run_id the group starts at rather than by
+        # position, so a refresh that inserts newer runs above doesn't reopen
+        # or re-fold an unrelated group.
+        self._expanded: set = set()
+
+        try:
+            self._runs = [dict(r) for r in get_recent_runs(90, STATE_DB_PATH)]
+        except Exception:
+            self._runs = []
+
+        head = ctk.CTkFrame(self, fg_color="transparent")
+        head.pack(fill="x", padx=20, pady=(12, 6))
+
+        ctk.CTkLabel(
+            head, text="Last 90 days", anchor="w",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="left")
+
+        self._chip_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._chip_row.pack(fill="x", padx=20, pady=(0, 8))
+        self._chips: dict = {}
+        for key in self._FILTERS:
+            btn = ctk.CTkButton(
+                self._chip_row, text=self._FILTER_LABELS[key], width=96, height=28,
+                font=ctk.CTkFont(size=11),
+                command=lambda k=key: self._set_filter(k),
+            )
+            btn.pack(side="left", padx=(0, 6))
+            self._chips[key] = btn
+
+        self._body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._body.pack(fill="both", expand=True, padx=14, pady=(0, 12))
+
+        self._render()
+
+    # ── Filtering ──────────────────────────────────────────────────────
+
+    def _visible_runs(self) -> list:
+        if self._filter == "errors":
+            return [r for r in self._runs if r.get("status") == "failed"]
+        return list(self._runs)
+
+    def _set_filter(self, key: str) -> None:
+        if key == self._filter:
+            return
+        self._filter = key
+        self._render()
+
+    def _sync_chips(self) -> None:
+        """Put the live count in each chip and mark the selected one.
+
+        Counts come from the whole 90 days, not from what is currently shown:
+        a chip that read "Errors (0)" only because Errors was already selected
+        would be answering its own question.
+        """
+        counts = {
+            "all": len(self._runs),
+            "errors": sum(1 for r in self._runs if r.get("status") == "failed"),
+        }
+        for key, btn in self._chips.items():
+            selected = key == self._filter
+            btn.configure(
+                text=f"{self._FILTER_LABELS[key]}  ({counts[key]})",
+                fg_color=gui_theme.PRIMARY if selected else "transparent",
+                text_color=gui_theme.ON_PRIMARY if selected else gui_theme.ON_SURFACE,
+                border_width=0 if selected else 1,
+                border_color=gui_theme.OUTLINE,
+                hover_color=gui_theme.PRIMARY_HOVER if selected else gui_theme.SURFACE_CONTAINER_HIGH,
+            )
+
+    # ── Rendering ──────────────────────────────────────────────────────
+
+    def _render(self) -> None:
+        for w in self._body.winfo_children():
+            w.destroy()
+        self._sync_chips()
+
+        runs = self._visible_runs()
+        if not runs:
+            self._render_empty()
+            return
+
+        # Walk the list in order, folding each *consecutive* stretch of
+        # uneventful runs. In place, because the alternative -- a global
+        # "hide no-ops" switch -- silently changes what "the run above this
+        # one" means, which is exactly the reading the log exists to support.
+        i = 0
+        while i < len(runs):
+            if not is_uneventful_run(runs[i]):
+                self._render_run_row(runs[i])
+                i += 1
+                continue
+            j = i
+            while j < len(runs) and is_uneventful_run(runs[j]):
+                j += 1
+            group = runs[i:j]
+            key = group[0].get("run_id")
+            if key in self._expanded:
+                for run in group:
+                    self._render_run_row(run, muted=True)
+                self._render_fold_row(key, len(group), expanded=True)
+            else:
+                self._render_fold_row(key, len(group), expanded=False)
+            i = j
+
+    def _render_empty(self) -> None:
+        wrap = ctk.CTkFrame(self._body, fg_color="transparent")
+        wrap.pack(fill="x", padx=8, pady=24)
+        if self._filter == "errors":
+            title, detail = (
+                "No failed runs in the last 90 days.",
+                "Everything that ran, finished. Switch to All to see the full history.",
+            )
+        else:
+            title, detail = (
+                "No syncs in the last 90 days.",
+                "Every sync run lands here — what was uploaded, when, and anything "
+                "that failed. Nothing has run yet.",
+            )
+        ctk.CTkLabel(
+            wrap, text=title, anchor="w", justify="left",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(fill="x")
+        ctk.CTkLabel(
+            wrap, text=detail, anchor="w", justify="left", wraplength=460,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(6, 0))
+
+    def _render_fold_row(self, key, count: int, *, expanded: bool) -> None:
+        """The counted stand-in for a stretch of runs that changed nothing."""
+        label = (
+            f"Hide {count} run{'s' if count != 1 else ''} with nothing new"
+            if expanded else
+            f"{count} run{'s' if count != 1 else ''} with nothing new  —  Show"
+        )
+        ctk.CTkButton(
+            self._body, text=label, height=26, anchor="w",
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=0,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            hover_color=gui_theme.SURFACE_CONTAINER_HIGH,
+            command=lambda k=key: self._toggle_group(k),
+        ).pack(fill="x", padx=6, pady=1)
+
+    def _toggle_group(self, key) -> None:
+        if key in self._expanded:
+            self._expanded.discard(key)
+        else:
+            self._expanded.add(key)
+        self._render()
+
+    def _render_run_row(self, run: dict, *, muted: bool = False) -> None:
+        """One run: dot + chat + when on the first line, counts + how on the
+        second.
+
+        This replaces a single "complete · Manual · 12 synced, 3 skipped · 3
+        Aug" string. Four unrelated facts separated by middots read as one
+        sentence and scan as none of them -- the status is a colour, the time
+        belongs on the right edge where the eye goes to compare rows, and the
+        counts are the only part worth reading in full.
+        """
+        status = run.get("status")
+        color = gui_theme.STATUS_COLOR.get(
+            status if status in gui_theme.STATUS_COLOR else None
+        )
+        frame = ctk.CTkFrame(self._body, corner_radius=6)
+        frame.pack(fill="x", padx=4, pady=2)
+
+        # The whole row opens the run, not just a link inside it: a 26px
+        # target inside a 44px row is the kind of thing that only works for
+        # whoever built it. Bound on the children too -- a click lands on
+        # whichever label is under the cursor, not on the frame.
+        def open_run(_event=None, r=run):
+            self._app._push_panel(lambda app, master, rr=r: _SyncRunPanel(app, master, rr))
+
+        top = ctk.CTkFrame(frame, fg_color="transparent")
+        top.pack(fill="x", padx=8, pady=(6, 0))
+
+        ctk.CTkLabel(
+            top, text="●", text_color=color, width=16,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            top, text=run.get("display_name") or "Unknown chat", anchor="w",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=gui_theme.ON_SURFACE_VARIANT if muted else gui_theme.ON_SURFACE,
+        ).pack(side="left", fill="x", expand=True, padx=(4, 8))
+
+        ctk.CTkLabel(
+            top, text=_format_run_time(run.get("started_at")), anchor="e",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="right")
+
+        bot = ctk.CTkFrame(frame, fg_color="transparent")
+        bot.pack(fill="x", padx=(28, 8), pady=(0, 6))
+
+        ctk.CTkLabel(
+            bot, text=_run_counts_text(run), anchor="w",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            bot, text=_TRIGGER_LABELS.get(run.get("trigger"), run.get("trigger") or ""),
+            anchor="e", font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="right")
+
+        if status == "failed" and run.get("error_message"):
+            ctk.CTkLabel(
+                frame, text=_first_line(run["error_message"]), anchor="w",
+                justify="left", wraplength=440,
+                font=ctk.CTkFont(size=11), text_color=gui_theme.ERROR,
+            ).pack(fill="x", padx=(28, 8), pady=(0, 6))
+
+        for widget in (frame, top, bot, *top.winfo_children(), *bot.winfo_children()):
+            widget.bind("<Button-1>", open_run)
+
+
+class _SyncRunPanel(_Panel):
+    """One run, in full: what it touched, when, and why it stopped.
+
+    The list row has room for four facts; a run has a dozen, and the ones that
+    matter when something went wrong -- how long it took, how many messages
+    were parsed versus actually uploaded, the whole error rather than its
+    first line -- are exactly the ones a single row cannot carry. Nothing here
+    is fetched: get_recent_runs() already returns every sync_runs column, so
+    this is the same row the list drew, shown at length.
+    """
+
+    def __init__(self, app: "App", master, run: dict) -> None:
+        super().__init__(app, master, run.get("display_name") or "Sync run", "Back to sync log")
+        self._run = run
+
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=18, pady=(12, 12))
+
+        status = run.get("status") or "pending"
+        color = gui_theme.STATUS_COLOR.get(
+            status if status in gui_theme.STATUS_COLOR else None
+        )
+
+        head = ctk.CTkFrame(body, fg_color="transparent")
+        head.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(
+            head, text="●", text_color=color, width=18, font=ctk.CTkFont(size=14),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            head, text=_STATUS_HEADLINE.get(status, status), anchor="w",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(side="left", padx=(4, 0))
+
+        if status == "failed" and run.get("error_message"):
+            box = ctk.CTkFrame(body, corner_radius=6, fg_color=gui_theme.ERROR_CONTAINER)
+            box.pack(fill="x", pady=(0, 12))
+            ctk.CTkLabel(
+                box, text=run["error_message"], anchor="w", justify="left",
+                wraplength=430, text_color=gui_theme.ON_ERROR_CONTAINER,
+                font=ctk.CTkFont(size=11),
+            ).pack(fill="x", padx=10, pady=8)
+
+        self._section(body, "Messages")
+        self._field(body, "Parsed from the export", f"{run.get('messages_parsed') or 0}")
+        self._field(body, "Uploaded to your mailbox", f"{run.get('messages_synced') or 0}")
+        # Named rather than left as a bare "skipped" count: skipped means
+        # already in the mailbox from an earlier run, and read cold a skipped
+        # count looks like something went missing.
+        self._field(
+            body, "Already there, so skipped", f"{run.get('messages_skipped') or 0}",
+        )
+
+        self._section(body, "Timing")
+        self._field(body, "Started", _format_run_time(run.get("started_at"), long=True))
+        self._field(
+            body, "Finished",
+            _format_run_time(run.get("completed_at"), long=True)
+            if run.get("completed_at") else "—  (did not finish)",
+        )
+        duration = _run_duration(run)
+        if duration:
+            self._field(body, "Took", duration)
+
+        self._section(body, "Run")
+        self._field(body, "Chat", run.get("display_name") or "Unknown chat")
+        self._field(
+            body, "Started by",
+            _TRIGGER_LABELS.get(run.get("trigger"), run.get("trigger") or "—"),
+        )
+        if run.get("last_synced_ts"):
+            self._field(body, "Newest message synced", str(run["last_synced_ts"]))
+        self._field(body, "Run number", str(run.get("run_id") or "—"))
+
+    def _section(self, parent, title: str) -> None:
+        ctk.CTkLabel(
+            parent, text=title, anchor="w",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(10, 2))
+        ctk.CTkFrame(parent, height=1, fg_color=gui_theme.OUTLINE_VARIANT).pack(
+            fill="x", pady=(0, 6)
+        )
+
+    def _field(self, parent, label: str, value: str) -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=1)
+        ctk.CTkLabel(
+            row, text=label, anchor="w", width=190,
+            font=ctk.CTkFont(size=12), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="left")
+        ctk.CTkLabel(
+            row, text=value, anchor="w", font=ctk.CTkFont(size=12),
+        ).pack(side="left", fill="x", expand=True)
 
 
 # ---------------------------------------------------------------------------
