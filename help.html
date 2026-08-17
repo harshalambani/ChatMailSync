@@ -304,47 +304,73 @@
   <section id="faq">
     <h2>8. Troubleshooting &amp; FAQ</h2>
     <dl class="faq">
-      <dt>The app says "Not connected" or authorising fails.</dt>
+      <dt>How do I export a chat from WhatsApp?</dt>
+      <dd>On your phone, open the chat &rarr; the three-dot menu &rarr; <strong>More</strong> &rarr; <strong>Export chat</strong>, then choose <strong>Include media</strong> (a <code>.zip</code>) or <strong>Without media</strong> (a plain <code>.txt</code>), and send the file to your PC. Section 3 has the longer version. One chat at a time &mdash; WhatsApp has no multi-select export &mdash; but this app will happily take as many exported files at once as you have.</dd>
+
+      <dt>Why doesn't the app "send" my messages anywhere?</dt>
+      <dd>Because nothing is being sent. The app uses the mail command that <em>adds</em> a message to a mailbox (IMAP APPEND), which is how your mail client saves a draft or a copy of an outgoing mail. Your chats land in your own mailbox and nobody else receives anything.</dd>
+
+      <dt>What stops it reading or deleting my mail?</dt>
+      <dd>With an <strong>email app password</strong> &mdash; how everyone connects unless they were already using Google sign-in &mdash; no provider can issue a password limited to one operation: any password that can add mail can technically do anything. There the guarantee is the app's own code, which uses only four mail commands: list folders, create a folder, subscribe to it, and add a message. None of them can open or remove a message, and the source is public for anyone who wants to check. On the older <strong>Google sign-in</strong>, Google enforces it instead: the app is granted permission to add mail and nothing else, so a request to read your mail would be refused at Google's end.</dd>
+
+      <dt>Where is my email app password kept?</dt>
+      <dd>Encrypted at rest on this PC, with Windows DPAPI, using a key derived from your Windows login and on top of a file only your account can open. It is never written into the app's settings file, never shown back to you in the password box after saving, and never included in a log line or an error message. (The Android edition does the same thing with a key held in the phone's Android Keystore.)</dd>
+
+      <dt>The app says "Not connected", or authorising fails.</dt>
       <dd><strong>On IMAP</strong> (the default): open <strong>Settings &rarr; Mail account &rarr; Change&hellip;</strong> and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
-      <strong>On Google sign-in:</strong> click <strong>Connect</strong> and complete the sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh. Remember Google expires this sign-in about every 7 days (see section 2).</dd>
+      <strong>On Google sign-in:</strong> click <strong>Connect</strong> and complete the sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh.</dd>
+
+      <dt>Why does it ask me to reconnect every week?</dt>
+      <dd>Only if you are on <strong>Google sign-in</strong>. The app has not been through Google's app-verification process, so Google treats it as "Testing": the sign-in expires roughly every 7 days, and only accounts added by hand as test users can use it at all. That is Google's rule for unverified apps and cannot be extended from inside the app &mdash; and it is why Google sign-in is no longer offered to new setups (section 2). An app password reaches Gmail perfectly well and does not expire; switching to one loses nothing already synced.</dd>
+
+      <dt>I moved the app to another PC, or set it up on a new phone, and it wants the password again.</dt>
+      <dd>That is expected, not a fault. Windows encrypts the saved app password with a key tied to your Windows account on that particular machine, so a copy of the app carried to a different PC &mdash; or opened under a different Windows user &mdash; cannot unlock it. Nobody who picks up the folder can read your password either, which is the point. Your app password is still valid at your provider: enter it again under <strong>Settings &rarr; Mail account</strong> on the new machine.</dd>
+
+      <dt>My file doesn't show up in the inbox.</dt>
+      <dd>Only <code>.txt</code> and <code>.zip</code> files are accepted. Make sure you exported the chat (not a screenshot or a contact card), and that the file actually copied over. Click the <strong>&#8635;</strong> refresh button to re-check the inbox folder.</dd>
+
+      <dt>My photos and files didn't come through.</dt>
+      <dd>You probably exported <strong>Without media</strong>. Re-export the chat choosing <strong>Include media</strong> / <strong>Attach Media</strong> (this produces a <code>.zip</code>), then sync that file.</dd>
 
       <dt>What is the watched folder for?</dt>
       <dd>It saves you copying files in by hand. Point it at a folder in <strong>Settings</strong> &mdash; wherever you save WhatsApp exports &mdash; and any <code>.txt</code> or <code>.zip</code> that appears there is copied into the inbox and queued for the next sync. Tick <strong>Check it automatically</strong> and it looks on its own on the interval you choose; leave it unticked and it only looks when you click <strong>Check watched folder</strong>.
-      <p>Only that one folder is looked at &mdash; subfolders are left alone &mdash; and each file is picked up only once, so leaving it switched on costs you nothing. Your original is never touched at import time: the <strong>After syncing</strong> setting takes effect only once a file has actually reached your mailbox, so a sync that fails, or one you stop, leaves everything exactly where it was. The delete option sends the original to the Recycle Bin, never a permanent delete; where it cannot do that (a network drive, say) it leaves the file alone and says so in the log.</p>
-      <p><strong>One limitation:</strong> the check only runs while this app is open &mdash; a closed app has nothing running to do the looking. The Android edition uses the phone's own job scheduler and does keep checking in the background; its shortest interval is 15 minutes, a rule Android imposes, where this edition can go down to 5.</p></dd>
+      <p>Only that one folder is looked at &mdash; subfolders are left alone &mdash; and each file is picked up only once, so leaving it switched on costs you nothing. Your original is never touched at import time: the <strong>After syncing</strong> setting takes effect only once a file has actually reached your mailbox, so a sync that fails, or one you stop, leaves everything exactly where it was. The delete option sends the original to the Recycle Bin, never a permanent delete; where it cannot do that (a network drive, say) it leaves the file alone and says so in the log.</p></dd>
+
+      <dt>How do I make it sync on a schedule?</dt>
+      <dd>The watched folder <em>is</em> the schedule &mdash; there is no separate "sync every N hours" setting, because with nothing new in the inbox there would be nothing to do. Point it at a folder, tick <strong>Check it automatically</strong>, and pick an interval from every 5 minutes to once a day. Section 6 covers this in full, including what the Android edition does differently.</dd>
+
+      <dt>The schedule stopped running on its own. Why?</dt>
+      <dd>On this edition, the check only runs <strong>while the app is open</strong> &mdash; there is no background service and no scheduled task, so a closed app has nothing running to do the looking. Leave the window open (minimised is fine) if you want it to keep collecting. The Android edition uses the phone's own job scheduler and does keep checking with the app closed; if <em>that</em> one has gone quiet, the cause is almost always battery optimisation &mdash; see section 6.</dd>
+
+      <dt>Will I get duplicate messages if I sync the same chat again?</dt>
+      <dd>Not on this instance of the app. It remembers what it has already saved and only adds new messages, so you can safely re-export a chat later to pick up newer messages &mdash; the overlap is skipped automatically. That memory belongs to this copy of the app, though, not to your mailbox; see the next answer.</dd>
+
+      <dt>Can two instances of the app archive into the same mailbox?</dt>
+      <dd>They can, but they will not know about each other, and you will get duplicates. This is not about Windows versus Android: <em>any</em> two instances behave this way &mdash; two PCs, two phones, one of each, or even two copies of this portable app in different folders, since each copy carries its own <code>Data\</code>.
+      <p>The record of what has already been archived belongs to the instance that did the archiving; nothing about it is stored in your mailbox. A second instance signed in to the same account therefore starts from zero knowledge and re-files every chat you give it, even chats the first one archived months ago. This app can add mail but never remove it, so clearing the duplicates afterwards is manual work only you can do.</p>
+      <p><strong>Use one instance per mailbox.</strong> If you want to archive from more than one place, give each instance its own mailbox or its own account. Replacing an instance is a different case: carry <code>Data\data\sync_state.db</code> across and the new one picks up exactly where the old one stopped.</p></dd>
 
       <dt>The sync said some media was "too large to email".</dt>
       <dd>Every email provider caps how big a single email can be &mdash; 25 MB at Gmail, Outlook and Yahoo, 20 MB at iCloud, more at some others. The app stays under that cap by splitting a busy day across several emails, so in almost every case you will never notice it. One case cannot be split: a <em>single</em> file, usually a long video, larger than the whole cap on its own. No email anywhere can carry it.
       <p>When that happens the message is still archived &mdash; the text, the sender, the time, its place in the conversation &mdash; and the email carries a note where the video would have been, naming the file and its size. Only the file itself is left out, and it will be left out on every future sync too, which is why the sync summary lists it by name rather than letting you discover it years later. <strong>The video is not lost:</strong> it is still in the WhatsApp export you imported, and still on your phone. If you want it in your mailbox, send it to yourself separately, or shrink it first.</p>
       <p>One thing that surprises people: a 20 MB video does not make a 20 MB email. Email cannot carry raw files, so everything is re-encoded on the way out, which adds about a third &mdash; a 20 MB video arrives as a roughly 27 MB email. That is why the practical ceiling for a single file is around 18 MB on a 25 MB provider.</p></dd>
 
-      <dt>My file doesn't show up in the inbox.</dt>
-      <dd>Only <code>.txt</code> and <code>.zip</code> files are accepted. Make sure you exported the chat (not a screenshot), and that the file actually copied over. Click the <strong>⟳</strong> refresh button to re-check the inbox folder.</dd>
-
-      <dt>Will I get duplicate messages if I sync the same chat again?</dt>
-      <dd>Not on this instance of the app. It remembers what it has already saved and only adds new messages, so you can safely re-export a chat later to pick up newer messages — the overlap is skipped automatically. That memory belongs to this copy of the app, though, not to your mailbox; see the next answer.</dd>
-
-      <dt>Can two instances of the app archive into the same mailbox?</dt>
-      <dd>They can, but they will not know about each other, and you will get duplicates. This is not about Windows versus Android: <em>any</em> two instances behave this way — two PCs, two phones, one of each, or even two copies of this portable app in different folders, since each copy carries its own <code>Data\</code>.
-      <p>The record of what has already been archived belongs to the instance that did the archiving; nothing about it is stored in your mailbox. A second instance signed in to the same account therefore starts from zero knowledge and re-files every chat you give it, even chats the first one archived months ago. This app can add mail but never remove it, so clearing the duplicates afterwards is manual work only you can do.</p>
-      <p><strong>Use one instance per mailbox.</strong> If you want to archive from more than one place, give each instance its own mailbox or its own account. Replacing an instance is a different case: carry <code>Data\data\sync_state.db</code> across and the new one picks up exactly where the old one stopped.</p></dd>
-
-      <dt>I want to re-do a chat from scratch.</dt>
-      <dd>Click the <strong>↺</strong> (re-sync) icon next to the chat. This clears the app's record of that chat and moves its file back to the inbox so you can sync it again.
+      <dt>I want to re-do a chat from scratch. What does Reset do?</dt>
+      <dd>Click the <strong>&#8634;</strong> (re-sync) icon next to the chat. This clears the app's record of that chat and moves its file back to the inbox so you can sync it again. It does <strong>not</strong> delete anything already in your mailbox.
       <p><strong>Delete the old mail first.</strong> This app can only add mail, never remove it, so if the earlier messages are still in your mailbox the next sync files a second copy alongside them. If the chat has already been archived, the app tells you which folder to clear and asks you to confirm you have done it before it will reset.</p>
       <p><strong>On Gmail this needs care.</strong> Gmail has no real folders, only labels &mdash; deleting the label just unlabels the messages and leaves them sitting in All Mail, where the next sync will still find them as duplicates. Open the label, select every conversation, delete them, then empty the Bin.</p></dd>
 
       <dt>I removed a chat from the list by mistake.</dt>
-      <dd>The <strong>✕</strong> button only removes the chat from the app's list — it does <strong>not</strong> delete anything from your mailbox. Your emails are safe. Add the export file again to bring it back.</dd>
+      <dd>The <strong>&#10005;</strong> button only removes the chat from the app's list &mdash; it does <strong>not</strong> delete anything from your mailbox. Your emails are safe. Add the export file again to bring it back.</dd>
 
       <dt>The times on some messages look off.</dt>
-      <dd>WhatsApp exports don't include a timezone. If your phone's timezone changed between exports, some timestamps can appear shifted. This is a limitation of WhatsApp exports, not a bug in the app.</dd>
-
-      <dt>My photos/files didn't come through.</dt>
-      <dd>You probably exported <strong>Without media</strong>. Re-export the chat choosing <strong>Include media</strong> / <strong>Attach Media</strong> (this produces a <code>.zip</code>), then sync that file.</dd>
+      <dd>WhatsApp exports don't include a timezone, so the app reads them against the exporting phone's local clock. If your phone's timezone changed between exports, or you export from a different timezone than the chat was recorded in, some timestamps can appear shifted. This is a limitation of WhatsApp exports, not a bug in the app.</dd>
 
       <dt>Can I keep a copy of my chat list?</dt>
-      <dd>Yes — click the <strong>CSV</strong> button above the chat list to save a spreadsheet of all your synced chats.</dd>
+      <dd>Yes &mdash; click the <strong>CSV</strong> button above the chat list to save a spreadsheet of all your synced chats.</dd>
+
+      <dt>What can't this app do?</dt>
+      <dd>It cannot read your existing mail, cannot send email on your behalf, and cannot sync continuously in the background &mdash; each sync is a one-time pass over whatever is waiting in the inbox. It also cannot remove anything from your mailbox, which is why several answers above ask you to clear a folder by hand.</dd>
     </dl>
   </section>
 </main>

@@ -280,56 +280,179 @@ attached for download.
 ## 8. Troubleshooting & FAQ
 
 Every entry below is one question and one answer: **Q.** is the question, **A.**
-is the answer, and a rule separates one from the next.
+is the answer, and a rule separates one from the next. The Windows in-app help
+and the Android **Help & FAQ** screen carry the same questions in the same
+order, each answered for its own platform.
 
 ---
 
-### Q. The app says "Not connected" or authorising fails.
+### Q. How do I export a chat from WhatsApp?
 
-**A.** If you're using **Email app password (IMAP)**, double-check the email address
-and app password under **Settings → Mail account → Change…**, and that the app
-password hasn't been revoked by your provider. If you were already using
-**Google sign-in**, click **Connect** and
-complete the sign-in in your browser, making sure you pick the right Google
-account and approve the permission request. If it still fails, click **Sign
-Out**, then **Connect** again to start fresh.
+**A.** On your phone, open the chat → the three-dot menu → **More** → **Export
+chat**, then choose **Include media** (a `.zip`) or **Without media** (a plain
+`.txt`). Section 3 has the longer version, including how to get the file onto
+your PC. One chat at a time — WhatsApp has no multi-select export — but the app
+itself will take as many exported files at once as you have.
 
 ---
 
-### Q. What stops the app reading or deleting my mail?
+### Q. Why doesn't the app "send" my messages anywhere?
 
-**A.** With an **email app password** — how you connect unless you were already using
-Google sign-in — no provider can issue a password limited to one operation: any
-password that can add mail can technically do anything. There the guarantee is
-the app's own code, which uses only four mail commands: list folders, create a
-folder, subscribe to it, and add a message. None of them can open or remove a
-message, and because the app never opens a folder for reading it never reaches
-the state where that would be possible. The source is public if you or anyone
-else wants to verify it. On the older **Google sign-in**, Google enforces it
-instead: the app is granted permission to insert mail and nothing else, checked
-at Google's end on every request, so it would be refused even if the app asked.
+**A.** Because nothing is being sent. The app uses the mail command that *adds*
+a message to a mailbox (IMAP APPEND), which is the same thing your mail client
+does when it saves a draft or files a copy of an outgoing message. Your chats
+land in your own mailbox and nobody else receives anything.
+
+---
+
+### Q. What stops it reading or deleting my mail?
+
+**A.** With an **email app password** — how you connect unless you were already
+using Google sign-in — no provider can issue a password limited to one
+operation: any password that can add mail can technically do anything. There the
+guarantee is the app's own code, which uses only four mail commands: list
+folders, create a folder, subscribe to it, and add a message. None of them can
+open or remove a message, and because the app never opens a folder for reading
+it never reaches the state where that would be possible. The source is public if
+you or anyone else wants to verify it. On the older **Google sign-in**, Google
+enforces it instead: the app is granted permission to insert mail and nothing
+else, checked at Google's end on every request, so it would be refused even if
+the app asked.
 
 ---
 
 ### Q. Where is my email app password kept?
 
-**A.** Encrypted at rest, on the machine you entered it on. On Windows it is encrypted
-with Windows DPAPI using a key derived from your Windows login, on top of a file
-that only your account can open; on Android it is encrypted with a key held in
-the phone's Android Keystore. Either way it is never written into the app's
-settings file, never shown back to you in the password box after saving, and
-never included in a log line or an error message.
+**A.** Encrypted at rest, on the machine you entered it on. On Windows it is
+encrypted with Windows DPAPI using a key derived from your Windows login, on top
+of a file that only your account can open; on Android it is encrypted with a key
+held in the phone's Android Keystore, which never leaves the phone's secure
+hardware. Either way it is never written into the app's settings file, never
+shown back to you in the password box after saving, and never included in a log
+line or an error message.
 
 ---
 
-### Q. I moved the app to another PC and it says the saved password can't be decrypted.
+### Q. The app says "Not connected", or authorising fails.
 
-**A.** That is expected, not a fault. Windows encrypts the saved app password with a
-key tied to your Windows account on that particular machine, so a copy of the
-app carried to a different PC — or opened under a different Windows user —
-cannot unlock it. Nobody who picks up the folder can read your password either,
-which is the point. Your app password is still valid at your provider: just
-enter it again under **Settings → Mail account** on the new machine.
+**A.** If you're using **Email app password (IMAP)**, double-check the email
+address and app password under **Settings → Mail account → Change…**, and that
+the app password hasn't been revoked by your provider. App passwords are the
+usual culprit — they are revoked if you turn off two-factor authentication, and
+some providers expire them. If you were already using **Google sign-in**, click
+**Connect** and complete the sign-in in your browser, making sure you pick the
+right Google account and approve the permission request. If it still fails,
+click **Sign Out**, then **Connect** again to start fresh.
+
+---
+
+### Q. Why does it ask me to reconnect every week?
+
+**A.** Only if you are on **Google sign-in**. The app has not been through
+Google's app-verification process, so Google treats it as "Testing": the sign-in
+expires roughly every 7 days, and only accounts added by hand as test users can
+use it at all. That is Google's rule for unverified apps and cannot be extended
+from inside the app — and it is why Google sign-in is no longer offered to new
+setups (section 2). An app password reaches Gmail perfectly well and does not
+expire; switching to one loses nothing already synced.
+
+---
+
+### Q. I moved the app to another PC, or set it up on a new phone, and it wants the password again.
+
+**A.** That is expected, not a fault. The saved app password is encrypted with a
+key tied to the machine it was entered on: your Windows account on that
+particular PC, or the Android Keystore on that particular phone. A copy of the
+app carried to a different PC, opened under a different Windows user, moved to a
+new phone, or reinstalled after an uninstall cannot unlock it. Nobody who picks
+up the folder or the phone can read your password either, which is the point.
+Your app password is still valid at your provider: just enter it again under
+**Settings → Mail account** on the new device.
+
+---
+
+### Q. My file doesn't show up in the inbox.
+
+**A.** Only `.txt` and `.zip` files are accepted. Make sure you exported the chat
+(not a screenshot or contact card), and that the file actually arrived — copied
+over, on Windows; shared to the app or picked with **Import a WhatsApp export**,
+on Android. On Windows, click the **⟳** refresh button to re-check the inbox
+folder.
+
+---
+
+### Q. My photos and files didn't come through.
+
+**A.** You probably exported **Without media**. Re-export the chat choosing
+**Include media** / **Attach Media** (this produces a `.zip`), then sync that
+file.
+
+---
+
+### Q. What is the watched folder for?
+
+**A.** It saves you adding files by hand. Point it at a folder — wherever your
+WhatsApp exports land — and any `.txt` or `.zip` that appears there is picked up
+and queued for the next sync. Only that one folder is looked at, subfolders are
+left alone, and each file is picked up only once, so leaving it switched on
+costs you nothing. Your original is never touched at import time: the
+**After syncing** / **After import** setting takes effect only once a file has
+actually reached your mailbox, so a sync that fails, or one you stop, leaves
+everything exactly where it was. Section 6 covers it in full.
+
+---
+
+### Q. How do I make it sync on a schedule?
+
+**A.** The watched folder *is* the schedule — there is no separate "sync every N
+hours" setting, because with nothing new in the inbox there would be nothing to
+do. Point it at a folder, switch on the automatic check, and pick an interval:
+5 minutes to once a day on Windows, 15 minutes to once a day on Android, where
+the platform imposes the floor. Section 6 has every option on both editions.
+
+---
+
+### Q. The schedule stopped running on its own. Why?
+
+**A.** On **Windows**, the check only runs while the app is open — there is no
+background service and no scheduled task, so a closed app has nothing running to
+do the looking. Leave the window open, minimised if you like. On **Android**,
+which does keep checking with the app closed, the cause is almost always battery
+optimisation: the system has put the app to sleep, and a sleeping app gets no
+background ticks. Exempt it once — stock Android, Samsung's sleep lists and the
+Autostart permission on Xiaomi/Oppo/Vivo/OnePlus are all covered in section 6.
+Neither case affects a manual sync, which runs in the foreground while you watch.
+
+---
+
+### Q. Will I get duplicate messages if I sync the same chat again?
+
+**A.** Not on the same device. Every message is fingerprinted, so the app
+remembers what it has already saved and only adds new messages — you can safely
+re-export a chat later to pick up newer messages, and the overlap is skipped
+automatically. That memory belongs to this instance of the app, though, not to
+your mailbox; see the next question.
+
+---
+
+### Q. Can two instances of the app archive into the same mailbox?
+
+**A.** They can, but they will not know about each other, and you will get
+duplicates. This is not about Windows versus Android — **any** two instances
+behave this way: two PCs, two phones, one of each, or even two copies of the
+portable app on the same PC, since each copy carries its own `Data\` folder.
+
+The record of what has already been archived lives in that instance's own
+`sync_state.db` — nothing about it is stored in the mailbox. A second instance
+signed in to the same account therefore starts from zero knowledge and re-files
+every chat you give it, even chats the first one archived months ago. The app can
+add mail but never remove it, so clearing the duplicates afterwards is manual work
+only you can do.
+
+> **Use one instance per mailbox.** If you want to archive from more than one place,
+> give each instance its own mailbox or its own account. Replacing an instance is a
+> different case — carry `sync_state.db` across and the new one picks up exactly
+> where the old one stopped.
 
 ---
 
@@ -358,48 +481,13 @@ the practical ceiling for a single file is around 18 MB on a 25 MB provider.
 
 ---
 
-### Q. My file doesn't show up in the inbox.
+### Q. I want to re-do a chat from scratch. What does Reset do?
 
-**A.** Only `.txt` and `.zip` files are accepted. Make sure you exported the chat (not a
-screenshot or contact card), and that the file actually copied over. Click the
-**⟳** refresh button to re-check the inbox folder.
-
----
-
-### Q. Will I get duplicate messages if I export and sync the same chat again?
-
-**A.** Not on the same device. The app remembers what it has already saved and only adds
-new messages, so you can safely re-export a chat later to pick up newer messages —
-the overlap is skipped automatically. That memory belongs to this instance of the
-app, though, not to your mailbox; see the next question.
-
----
-
-### Q. Can two instances of the app archive into the same mailbox?
-
-**A.** They can, but they will not know about each other, and you will get duplicates.
-This is not about Windows versus Android — **any** two instances behave this way:
-two PCs, two phones, one of each, or even two copies of the portable app on the
-same PC, since each copy carries its own `Data\` folder.
-
-The record of what has already been archived lives in that instance's own
-`sync_state.db` — nothing about it is stored in the mailbox. A second instance
-signed in to the same account therefore starts from zero knowledge and re-files
-every chat you give it, even chats the first one archived months ago. The app can
-add mail but never remove it, so clearing the duplicates afterwards is manual work
-only you can do.
-
-> **Use one instance per mailbox.** If you want to archive from more than one place,
-> give each instance its own mailbox or its own account. Replacing an instance is a
-> different case — carry `sync_state.db` across and the new one picks up exactly
-> where the old one stopped.
-
----
-
-### Q. I want to re-do a chat from scratch.
-
-**A.** Click the **↺** (re-sync) icon next to the chat in the list. This clears the app's
-record of that chat and moves its file back to the inbox so you can sync it again.
+**A.** On Windows, click the **↺** (re-sync) icon next to the chat in the list;
+on Android, open the chat and choose **Reset (forget sync history)**. Either way
+it clears the app's record of that chat and, where it can, moves its file back to
+the inbox so you can sync it again. It does **not** delete anything already in
+your mailbox.
 
 **Delete the old mail first.** This app can only add mail, never remove it, so if
 the earlier messages are still in your mailbox the next sync files a second copy
@@ -415,28 +503,33 @@ clear and asks you to confirm you have cleared it before it will reset.
 
 ### Q. I removed a chat from the list by mistake.
 
-**A.** The **✕** button only removes the chat from the app's list — it does **not** delete
-anything from your mailbox. Your emails are safe. Just add the export file again
-to bring it back.
+**A.** Removing a chat from the list — the **✕** button on Windows, **Delete from
+list** on Android — does **not** delete anything from your mailbox. Your emails
+are safe. Just add the export file again to bring it back.
 
 ---
 
 ### Q. The times on some messages look off.
 
-**A.** WhatsApp exports don't include a timezone. If your phone's timezone changed between
-exports, some timestamps can appear shifted. This is a known limitation of WhatsApp
+**A.** WhatsApp exports don't include a timezone, so the app reads them against
+the exporting phone's local clock. If your phone's timezone changed between
+exports, or you export from a different timezone than the chat was recorded in,
+some timestamps can appear shifted. This is a known limitation of WhatsApp
 exports, not a bug in the app.
-
----
-
-### Q. My photos/files didn't come through.
-
-**A.** You probably exported **Without media**. Re-export the chat choosing **Include
-media** / **Attach Media** (this produces a `.zip`), then sync that file.
 
 ---
 
 ### Q. Can I keep a copy of my chat list?
 
-**A.** Yes — click the **CSV** button above the chat list to save a spreadsheet of all
-your synced chats.
+**A.** Yes — click the **CSV** button above the chat list on Windows, or use the
+CSV export from the chat list on Android, to get a spreadsheet of all your synced
+chats.
+
+---
+
+### Q. What can't this app do?
+
+**A.** It cannot read your existing mail, cannot send email on your behalf, and
+cannot sync continuously in the background — each sync is a one-time pass over
+whatever is waiting in the inbox. It also cannot remove anything from your
+mailbox, which is why several answers above ask you to clear a folder by hand.
