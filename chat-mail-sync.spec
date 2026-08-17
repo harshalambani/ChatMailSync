@@ -46,6 +46,13 @@ added_data += [("help.html", ".")]
 # taskbar fall back to Tk's generic placeholder.
 added_data += [("portable/App/AppInfo/appicon.ico", ".")]
 
+# And the same mark as a PNG, for the masthead the window draws at the top of
+# itself. A third consumer, needing a third format: Tk's PhotoImage reads PNG
+# natively and cannot read .ico at all, and Pillow - which could convert one -
+# is in the excludes list below on purpose. 75px so it can be halved to 38
+# rather than scaled up, which Tk's zoom() would do without interpolation.
+added_data += [("portable/App/AppInfo/appicon_75.png", ".")]
+
 # ---------------------------------------------------------------------------
 # Binary files (native shared libraries / DLLs)
 # ---------------------------------------------------------------------------
