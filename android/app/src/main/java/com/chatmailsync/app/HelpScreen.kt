@@ -23,7 +23,9 @@ import androidx.compose.ui.unit.sp
 
 // Kept in sync with the Windows edition's help.html by hand for now — a
 // shared-markdown generator (per the screen-guides doc §9) is future work,
-// not justified for this single FAQ screen yet.
+// not justified for this single FAQ screen yet. The questions, and their
+// order, are the same on all three surfaces (this screen, help.html and
+// docs/user-guide.md); only the answers are written per platform.
 private val FAQ = listOf(
     "How do I export a chat from WhatsApp?" to
         "Open the chat in WhatsApp -> tap the three-dot menu -> More -> Export chat. " +
@@ -32,36 +34,32 @@ private val FAQ = listOf(
         "One chat at a time: WhatsApp has no multi-select export, so you cannot tick several chats " +
         "and export them together — each one has to be exported from inside that chat. This app has " +
         "no such limit; once the files are here you can import and sync as many as you like at once.",
-    "Why doesn't this app \"send\" my messages anywhere?" to
+    "Why doesn't the app \"send\" my messages anywhere?" to
         "It uses your mail provider's insert API (Gmail's insert API, or IMAP APPEND for other " +
         "providers), which adds mail directly into your own mailbox without actually sending " +
         "anything. Nobody else receives these emails — they only appear in your mailbox.",
-    "What happens if I sync the same export twice?" to
-        "Every message is fingerprinted (hashed). Re-syncing the same file, or a fresh export that " +
-        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your " +
-        "mailbox. That record belongs to this instance of the app, though, not to your mailbox — " +
-        "see the next answer.",
-    "Can two instances of the app use the same mailbox?" to
-        "They can, but they will not know about each other and you will get duplicates. This is not " +
-        "about Android versus Windows: any two instances behave this way — two phones, two PCs, one " +
-        "of each, or two copies of the portable Windows app in different folders. The record of what " +
-        "has been archived belongs to the instance that did the archiving; nothing about it is stored " +
-        "in the mailbox. A second instance signed in to the same account starts from zero knowledge " +
-        "and re-files every chat you give it. This app can add mail but never remove it, so clearing " +
-        "the duplicates afterwards is manual work. Use one instance per mailbox, or give each its own " +
-        "account. Replacing an instance is a different case: carry the sync state across and the new " +
-        "one continues where the old one stopped.",
-    "Why do message times look off by a few hours?" to
-        "WhatsApp exports don't include a timezone — the app assumes the exporting phone's local " +
-        "clock. If you export from a different timezone than the chat was recorded in, times may shift.",
-    "What does Reset actually do?" to
-        "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
-        "anything already in your mailbox — this app can only add mail, never remove it. The next " +
-        "sync therefore files a fresh copy of the whole chat into a brand-new thread, so if the old " +
-        "mail is still there you end up with two copies. That's why Reset asks you to clear the " +
-        "chat's folder first, and to confirm you've done it. On Gmail, deleting the label is not " +
-        "enough: the messages stay in All Mail. Open the label, select every conversation, delete " +
-        "them, then empty the Bin.",
+    "What stops it reading or deleting my mail?" to
+        "With an email app password — how everyone connects unless they were already using Google " +
+        "sign-in — the guarantee is the app's own code, because no provider can give out a limited " +
+        "password: any password that can add mail can technically do anything. The app uses only " +
+        "four mail commands — list folders, create a folder, subscribe to it, and add a message. " +
+        "None of them can open or remove a message, and the source is public for anyone who wants " +
+        "to check. On the older Google sign-in, Google enforces it instead: the app is granted " +
+        "permission to add mail and nothing else, so a request to read your mail is refused at " +
+        "Google's end — it would be refused even if the app tried.",
+    "Where is my email app password kept?" to
+        "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
+        "phone's secure hardware. It's never written into the app's settings, never shown in the " +
+        "password box again after you save it, and never included in any log or error message. " +
+        "(The Windows edition does the same thing with Windows DPAPI, tied to your Windows account " +
+        "on that PC.)",
+    "The app says \"Not connected\", or authorising fails." to
+        "On an email app password (the default): open Settings -> Mail account and check the host, " +
+        "port and email address, then enter your app password again and save. The password is the " +
+        "usual culprit — providers revoke it if you turn off two-factor authentication, and some " +
+        "expire it on their own. On the older Google sign-in: sign in again and make sure you pick " +
+        "the right account and approve the permission request; if it still fails, sign out and " +
+        "connect again from scratch.",
     "Why does it ask me to reconnect every week?" to
         "Only if you're using Google sign-in — the app hasn't gone through Google's app-" +
         "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +
@@ -70,25 +68,20 @@ private val FAQ = listOf(
         "longer offered to new setups: an email app password connects to any provider, Gmail " +
         "included, and doesn't expire. You can switch to it any time from Settings without losing " +
         "anything already synced.",
-    "Where is my email app password kept?" to
-        "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
-        "phone's secure hardware. It's never written into the app's settings, never shown in the " +
-        "password box again after you save it, and never included in any log or error message. " +
-        "Because the key is tied to this device, the saved password doesn't travel to a new phone " +
-        "or survive uninstalling the app — enter it again in Settings there. It stays valid at your " +
-        "provider either way. (The Windows edition does the same thing with Windows DPAPI, tied to " +
-        "your Windows account on that PC.)",
-    "The sync said some media was \"too large to email\". What happened?" to
-        "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
-        "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +
-        "notice. What can't be split is a single file, usually a long video, that's bigger than the " +
-        "whole cap on its own — no email anywhere can carry it. The message itself is still archived " +
-        "(text, sender, time, its place in the conversation) and the email shows a note in the video's " +
-        "place naming the file and its size. The video isn't lost: it's still in the WhatsApp export " +
-        "you imported, and still on your phone. It will be left out on every future sync too, which is " +
-        "why the sync summary names it. One surprise worth knowing: a 20 MB video doesn't make a 20 MB " +
-        "email — email can't carry raw files, so everything is re-encoded on the way out and grows by " +
-        "about a third. The practical ceiling for one file is around 18 MB on a 25 MB provider.",
+    "I moved the app to another PC, or set it up on a new phone, and it wants the password again." to
+        "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
+        "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +
+        "the app — which is also why nobody who picks up the phone's files can read it. The " +
+        "password is still valid at your provider: enter it again in Settings -> Mail account. " +
+        "The same is true of the Windows edition on a new PC or a different Windows user.",
+    "My file doesn't show up in the inbox." to
+        "Only .txt and .zip files are accepted. Make sure you exported the chat itself (not a " +
+        "screenshot or a contact card), and that the share or the import actually completed — a " +
+        "share sheet dismissed early leaves nothing behind. Pull the Home list to refresh if you " +
+        "imported from another app.",
+    "My photos and files didn't come through." to
+        "You probably exported \"Without media\". Re-export the chat choosing \"Include media\" " +
+        "(this produces a .zip), then import and sync that file.",
     "What is the watched folder for?" to
         "It saves you importing by hand. Point it at a folder, and anything WhatsApp drops there " +
         "(.txt or .zip) is picked up and queued for the next sync. Switch on \"Auto-import from " +
@@ -112,7 +105,7 @@ private val FAQ = listOf(
         "imports the files and leaves them in the inbox for the next run. \"Sync now\" always runs " +
         "immediately regardless of the schedule. Unlike the Windows edition, this one keeps checking " +
         "with the app closed — that is what the system scheduler is for.",
-    "Auto-import has stopped running on its own. Why?" to
+    "The schedule stopped running on its own. Why?" to
         "Almost always battery optimisation: Android has put the app to sleep, and a sleeping app " +
         "gets no background ticks. Exempt it once. Stock Android: Settings -> Apps -> Chat Mail " +
         "Sync -> Battery -> Unrestricted. Samsung, which is stricter and will otherwise stop the " +
@@ -122,19 +115,59 @@ private val FAQ = listOf(
         "rarely. Xiaomi, Oppo, Vivo and OnePlus also keep a separate \"Autostart\" permission — " +
         "without it background work stops after a reboot. None of this affects manual syncs or " +
         "\"Sync now\", which run in the foreground while you are watching; it only affects " +
-        "unattended checks.",
+        "unattended checks. (On Windows the equivalent limit is simpler: the check only runs while " +
+        "the app is open.)",
+    "Will I get duplicate messages if I sync the same chat again?" to
+        "Every message is fingerprinted (hashed). Re-syncing the same file, or a fresh export that " +
+        "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your " +
+        "mailbox. That record belongs to this instance of the app, though, not to your mailbox — " +
+        "see the next answer.",
+    "Can two instances of the app archive into the same mailbox?" to
+        "They can, but they will not know about each other and you will get duplicates. This is not " +
+        "about Android versus Windows: any two instances behave this way — two phones, two PCs, one " +
+        "of each, or two copies of the portable Windows app in different folders. The record of what " +
+        "has been archived belongs to the instance that did the archiving; nothing about it is stored " +
+        "in the mailbox. A second instance signed in to the same account starts from zero knowledge " +
+        "and re-files every chat you give it. This app can add mail but never remove it, so clearing " +
+        "the duplicates afterwards is manual work. Use one instance per mailbox, or give each its own " +
+        "account. Replacing an instance is a different case: carry the sync state across and the new " +
+        "one continues where the old one stopped.",
+    "The sync said some media was \"too large to email\"." to
+        "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
+        "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +
+        "notice. What can't be split is a single file, usually a long video, that's bigger than the " +
+        "whole cap on its own — no email anywhere can carry it. The message itself is still archived " +
+        "(text, sender, time, its place in the conversation) and the email shows a note in the video's " +
+        "place naming the file and its size. The video isn't lost: it's still in the WhatsApp export " +
+        "you imported, and still on your phone. It will be left out on every future sync too, which is " +
+        "why the sync summary names it. One surprise worth knowing: a 20 MB video doesn't make a 20 MB " +
+        "email — email can't carry raw files, so everything is re-encoded on the way out and grows by " +
+        "about a third. The practical ceiling for one file is around 18 MB on a 25 MB provider.",
+    "I want to re-do a chat from scratch. What does Reset do?" to
+        "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
+        "anything already in your mailbox — this app can only add mail, never remove it. The next " +
+        "sync therefore files a fresh copy of the whole chat into a brand-new thread, so if the old " +
+        "mail is still there you end up with two copies. That's why Reset asks you to clear the " +
+        "chat's folder first, and to confirm you've done it. On Gmail, deleting the label is not " +
+        "enough: the messages stay in All Mail. Open the label, select every conversation, delete " +
+        "them, then empty the Bin.",
+    "I removed a chat from the list by mistake." to
+        "\"Delete from list\" only removes the chat from this app's list — it does not delete " +
+        "anything from your mailbox. Your emails are safe. Import the export file again to bring " +
+        "the chat back.",
+    "The times on some messages look off." to
+        "WhatsApp exports don't include a timezone — the app assumes the exporting phone's local " +
+        "clock. If you export from a different timezone than the chat was recorded in, or the " +
+        "phone's timezone changed between exports, times may shift. That's a limitation of the " +
+        "export format, not a bug in the app.",
+    "Can I keep a copy of my chat list?" to
+        "Yes — export the chat list as a CSV from the chats screen and share or save it wherever " +
+        "you like. It lists every chat the app knows about with its last run and status.",
     "What can't this app do?" to
         "It can't read your existing mail, send email on your behalf, or keep syncing live in the " +
-        "background continuously — each sync is a one-time pass over whatever's waiting in the inbox.",
-    "What stops it reading or deleting my mail?" to
-        "With an email app password — how everyone connects unless they were already using Google " +
-        "sign-in — the guarantee is the app's own code, because no provider can give out a limited " +
-        "password: any password that can add mail can technically do anything. The app uses only " +
-        "four mail commands — list folders, create a folder, subscribe to it, and add a message. " +
-        "None of them can open or remove a message, and the source is public for anyone who wants " +
-        "to check. On the older Google sign-in, Google enforces it instead: the app is granted " +
-        "permission to add mail and nothing else, so a request to read your mail is refused at " +
-        "Google's end — it would be refused even if the app tried.",
+        "background continuously — each sync is a one-time pass over whatever's waiting in the " +
+        "inbox. It also can't remove anything from your mailbox, which is why some answers above " +
+        "ask you to clear a folder by hand.",
 )
 
 /**
