@@ -143,6 +143,13 @@ private val FAQ = listOf(
         "why the sync summary names it. One surprise worth knowing: a 20 MB video doesn't make a 20 MB " +
         "email — email can't carry raw files, so everything is re-encoded on the way out and grows by " +
         "about a third. The practical ceiling for one file is around 18 MB on a 25 MB provider.",
+    "Where do I see everything about one chat?" to
+        "Tap the chat in the chats list. Its own screen shows when it last synced, how many messages " +
+        "have gone out, whether a mail thread already exists for it and which export file it came " +
+        "from — with the same four actions on it: open it in Gmail, sync just that one chat, reset " +
+        "it, or delete it from the list. \"Sync just this chat\" runs a normal sync limited to that " +
+        "one chat instead of everything waiting in the inbox. The Windows app has the same screen: " +
+        "click a chat's row in the list.",
     "I want to re-do a chat from scratch. What does Reset do?" to
         "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
         "anything already in your mailbox — this app can only add mail, never remove it. The next " +

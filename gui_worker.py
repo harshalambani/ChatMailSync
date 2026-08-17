@@ -96,6 +96,7 @@ class SyncWorker:
         db_path: Path,
         inbox_dir: Path,
         processed_dir: Path,
+        chat_filter: Optional[str] = None,
     ) -> None:
         self.q: queue.Queue = queue.Queue()
         self._transport = transport
@@ -104,6 +105,10 @@ class SyncWorker:
         self._db_path = db_path
         self._inbox_dir = inbox_dir
         self._processed_dir = processed_dir
+        # SyncManager.run()'s filter, which cli.py has always exposed as
+        # --chat and Android reaches from the chat screen. The GUI could not
+        # ask for one chat at all until the chat detail panel needed it.
+        self._chat_filter = chat_filter
         self._stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -129,7 +134,7 @@ class SyncWorker:
                 progress_queue=self.q,
                 stop_event=self._stop_event,
             )
-            stats = mgr.run()
+            stats = mgr.run(chat_filter=self._chat_filter)
             stopped = self._stop_event.is_set()
             self.q.put({"type": "done", "stats": stats, "stopped": stopped})
         except Exception as exc:

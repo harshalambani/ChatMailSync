@@ -123,7 +123,7 @@ fun formatFooterStats(chats: List<ChatSummary>): String {
  * finish, which from the outside is indistinguishable from never having
  * synced -- the chat is not in the mailbox either way, and the fix is the
  * same. Four colours would be four things to learn for three outcomes. */
-private enum class ChatStatus(
+internal enum class ChatStatus(
     val description: String,
     /** On the filter chip, where the column is narrow and the word sits next
      * to a count. Same four labels as the Windows chip row. */
@@ -138,7 +138,7 @@ private enum class ChatStatus(
     NOT_SYNCED("Not synced yet", "Never synced", "Every chat has been synced at least once."),
 }
 
-private fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStatus) {
+internal fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStatus) {
     "complete" -> ChatStatus.SYNCED
     "failed" -> ChatStatus.FAILED
     else -> ChatStatus.NOT_SYNCED
@@ -149,7 +149,7 @@ private fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStat
  * anyone who cannot separate the green from the red, so the same three words
  * are also on the status line and in the content description. */
 @Composable
-private fun StatusDot(lastRunStatus: String?) {
+internal fun StatusDot(lastRunStatus: String?) {
     val status = chatStatusOf(lastRunStatus)
     // Theme roles, never raw hex: ChatMailTheme assigns every M3 role
     // deliberately, and a one-off green here would drift the moment the
