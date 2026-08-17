@@ -1026,6 +1026,18 @@ fun ChatMailApp(
                         "chats" -> "Chats"
                         else -> "Back"
                     },
+                    onOpenRun = { runId -> navController.navigate("syncLog/$runId") },
+                )
+            }
+            composable("syncLog/{runId}") { entry ->
+                // Only the id travels on the route. The detail screen re-reads
+                // the same 90-day log the list used and picks the run out of
+                // it, so the route survives process death and there is only
+                // ever one query behind both levels.
+                val runId = entry.arguments?.getString("runId")?.toLongOrNull() ?: 0L
+                SyncRunDetailScreen(
+                    runId = runId,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable("syncProgress") {

@@ -4,6 +4,7 @@ from pathlib import Path
 from src import android_api, config
 from src.mail_client import MailTransport
 from src.state import (
+    complete_sync_run,
     compute_message_hash,
     get_chat,
     insert_message_hashes,
@@ -149,6 +150,28 @@ def test_sync_log_defaults_trigger_to_manual(tmp_root, db_path):
 
     runs = android_api.sync_log()
     assert runs[0]["trigger"] == "manual"
+
+
+def test_sync_log_stamps_uneventful_flag(tmp_root, db_path):
+    """Both sync logs fold away runs that finished and changed nothing, and
+    both must fold the same ones -- so the rule lives in the shared core and
+    Kotlin only reads the flag rather than restating it.
+
+    Rows are written directly here: a re-scan that finds nothing new is what
+    produces an uneventful run in the field (sync_manager completes the run
+    with messages_synced=0 when there is nothing to push), and driving that
+    through a real sync would test the importer rather than the flag."""
+    upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    moved = start_sync_run("chat1", db_path=db_path)
+    complete_sync_run(moved, None, None, 5, 5, 0, db_path=db_path)
+    quiet = start_sync_run("chat1", db_path=db_path)
+    complete_sync_run(quiet, None, None, 5, 0, 5, db_path=db_path)
+
+    runs = {r["run_id"]: r for r in android_api.sync_log()}
+    assert len(runs) == 2
+    assert all("uneventful" in r for r in runs.values())
+    assert runs[quiet]["uneventful"] is True
+    assert runs[moved]["uneventful"] is False
 
 
 def test_status_returns_list_of_dicts(tmp_root, db_path):

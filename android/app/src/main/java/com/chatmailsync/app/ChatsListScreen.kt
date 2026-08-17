@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -120,10 +123,19 @@ fun formatFooterStats(chats: List<ChatSummary>): String {
  * finish, which from the outside is indistinguishable from never having
  * synced -- the chat is not in the mailbox either way, and the fix is the
  * same. Four colours would be four things to learn for three outcomes. */
-private enum class ChatStatus(val description: String) {
-    SYNCED("Synced"),
-    FAILED("Last sync failed"),
-    NOT_SYNCED("Not synced yet"),
+private enum class ChatStatus(
+    val description: String,
+    /** On the filter chip, where the column is narrow and the word sits next
+     * to a count. Same four labels as the Windows chip row. */
+    val chipLabel: String,
+    /** Answers "why is this list empty?" in that chip's own terms -- "No
+     * chats archived yet" under a [Failed (0)] chip, on an inbox holding
+     * forty chats, is a flat lie about the state of the app. */
+    val emptyTitle: String,
+) {
+    SYNCED("Synced", "Synced", "No chats have synced yet."),
+    FAILED("Last sync failed", "Failed", "Nothing has failed."),
+    NOT_SYNCED("Not synced yet", "Never synced", "Every chat has been synced at least once."),
 }
 
 private fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStatus) {
@@ -162,6 +174,10 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
     var chats by remember { mutableStateOf(listOf<ChatSummary>()) }
     var menuOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    // null == the All chip. The text box filters by name, which only helps
+    // someone who already knows which chat they want; "which of these failed?"
+    // was not answerable at all without reading every dot in the list.
+    var statusFilter by remember { mutableStateOf<ChatStatus?>(null) }
     val context = LocalContext.current
 
     // Most-recently-synced first (get_sync_summary's own SQL orders by
@@ -174,8 +190,16 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    val filteredChats = if (query.isBlank()) chats else
-        chats.filter { it.displayName.contains(query, ignoreCase = true) }
+    val filteredChats = chats
+        .filter { query.isBlank() || it.displayName.contains(query, ignoreCase = true) }
+        .filter { statusFilter == null || chatStatusOf(it.lastRunStatus) == statusFilter }
+
+    // Counted over the whole list, never the filtered view: a chip reading
+    // "Failed (0)" only because Failed is selected would be answering its own
+    // question.
+    val statusCounts = ChatStatus.entries.associateWith { s ->
+        chats.count { chatStatusOf(it.lastRunStatus) == s }
+    }
 
     fun exportCsv() {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -247,6 +271,31 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+                // Counts on the chips answer the question without a tap in
+                // most cases; the chips themselves are for the rest. One
+                // scrolling row here -- the Windows panel is a fixed 236dp and
+                // lays the same four out 2x2, which is a geometry difference,
+                // not a wording one.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = statusFilter == null,
+                        onClick = { statusFilter = null },
+                        label = { Text("All (${chats.size})") },
+                    )
+                    ChatStatus.entries.forEach { s ->
+                        FilterChip(
+                            selected = statusFilter == s,
+                            onClick = { statusFilter = if (statusFilter == s) null else s },
+                            label = { Text("${s.chipLabel} (${statusCounts[s] ?: 0})") },
+                        )
+                    }
+                }
             }
             if (chats.isEmpty()) {
                 // An empty screen is the first thing a new user sees, so it
@@ -275,24 +324,44 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                     ) { Text("Import a chat export") }
                 }
             } else if (filteredChats.isEmpty()) {
+                val chip = statusFilter
                 Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        "No chats match \"$query\".",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "The filter matches chat names only, not message text.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    TextButton(
-                        onClick = { query = "" },
-                        modifier = Modifier.padding(top = 12.dp),
-                    ) { Text("Clear filter") }
+                    if (chip != null) {
+                        // The chip is the reason the list is empty, so the
+                        // chip's own words go here -- and the way out is to
+                        // clear it, not to be told about name matching.
+                        Text(chip.emptyTitle, style = MaterialTheme.typography.titleMedium)
+                        if (query.isNotBlank()) {
+                            Text(
+                                "The name filter \"$query\" is also on.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        TextButton(
+                            onClick = { statusFilter = null; query = "" },
+                            modifier = Modifier.padding(top = 12.dp),
+                        ) { Text("Show all chats") }
+                    } else {
+                        Text(
+                            "No chats match \"$query\".",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "The filter matches chat names only, not message text.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        TextButton(
+                            onClick = { query = "" },
+                            modifier = Modifier.padding(top = 12.dp),
+                        ) { Text("Clear filter") }
+                    }
                 }
             } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -305,13 +374,43 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         StatusDot(chat.lastRunStatus)
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(chat.displayName, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                text = "${chat.lastRunStatus ?: "pending"} · ${chat.messagesSynced} messages · " +
-                                    formatSyncTime(chat.lastRunAt),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                            // Was "complete · 142 messages · 3 Aug, 2:14 PM":
+                            // three facts of different kinds strung into one
+                            // sentence. Now when on the left, how much on the
+                            // right, and the status stays in the dot rather
+                            // than being said twice -- except "failed", which
+                            // is spelled out in the error colour, because a
+                            // dot is the wrong amount of emphasis for the one
+                            // row you must not scroll past.
+                            val status = chatStatusOf(chat.lastRunStatus)
+                            val when_ = if (chat.lastRunAt != null)
+                                formatSyncTime(chat.lastRunAt) else ""
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = when (status) {
+                                        ChatStatus.FAILED ->
+                                            if (when_.isNotEmpty()) "Failed · $when_" else "Failed"
+                                        else -> if (when_.isNotEmpty()) when_ else "Not synced yet"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (status == ChatStatus.FAILED)
+                                        MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (chat.messagesSynced > 0) {
+                                    Text(
+                                        "${chat.messagesSynced} messages",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                     HorizontalDivider()

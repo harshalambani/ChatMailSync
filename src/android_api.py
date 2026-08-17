@@ -21,7 +21,14 @@ from src.mail_client import ChunkSize, MailTransport, mailbox_folder_for
 from src.parser import extract_chat_info, parse_file
 from src.state import MailboxNotClearedError, count_archived_messages
 from src.state import delete_chat as state_delete_chat
-from src.state import get_recent_runs, get_sync_summary, init_db, reset_chat, resolve_chat
+from src.state import (
+    get_recent_runs,
+    get_sync_summary,
+    init_db,
+    is_uneventful_run,
+    reset_chat,
+    resolve_chat,
+)
 from src.sync_manager import ProgressSyncManager
 
 # Mirrors gui_worker.py's existing {"type": ..., ...} event vocabulary
@@ -235,9 +242,16 @@ def status() -> list[dict]:
 def sync_log(days: int = 90) -> list[dict]:
     """Return sync runs from the last `days` days as plain dicts, newest
     first, for the Android Sync log screen. See state.get_recent_runs() for
-    why this is a display window rather than a deletion/retention policy."""
+    why this is a display window rather than a deletion/retention policy.
+
+    Each row carries an extra `uneventful` flag -- a run that finished cleanly
+    and uploaded nothing -- so the Sync log can fold the routine no-op runs
+    away without Kotlin restating the rule. See state.is_uneventful_run()."""
     init_db(config.STATE_DB_PATH)
-    return [dict(row) for row in get_recent_runs(days, config.STATE_DB_PATH)]
+    return [
+        {**dict(row), "uneventful": is_uneventful_run(row)}
+        for row in get_recent_runs(days, config.STATE_DB_PATH)
+    ]
 
 
 def reset_preview(chat_id_or_name: str) -> dict:
