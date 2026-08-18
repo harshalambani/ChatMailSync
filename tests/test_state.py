@@ -107,6 +107,54 @@ def test_is_uneventful_run_never_hides_a_failure():
     assert not state.is_uneventful_run({"status": "pending", "messages_synced": 0})
 
 
+def test_summarize_recent_runs_is_empty_before_anything_runs(db_path):
+    """Both home screens hide the status block on this shape rather than
+    showing an outcome that does not exist yet."""
+    summary = state.summarize_recent_runs(db_path=db_path)
+    assert summary["total_runs"] == 0
+    assert summary["failed_runs"] == 0
+    assert summary["last_status"] is None
+    assert summary["window_days"] == 90
+
+
+def test_summarize_recent_runs_reports_the_last_finished_run(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
+    state.complete_sync_run(
+        run_id,
+        last_synced_ts="2025-03-14T09:41:00",
+        last_synced_hash="deadbeef",
+        messages_parsed=5,
+        messages_synced=3,
+        messages_skipped=2,
+        db_path=db_path,
+    )
+
+    summary = state.summarize_recent_runs(db_path=db_path)
+    assert summary["last_status"] == "complete"
+    assert summary["last_display_name"] == "Chat One"
+    assert summary["last_messages_synced"] == 3
+    assert summary["last_messages_skipped"] == 2
+    assert summary["failed_runs"] == 0
+    assert summary["running_runs"] == 0
+
+
+def test_summarize_recent_runs_counts_failures_and_keeps_the_last_outcome(db_path):
+    """A run starting must not blank out the outcome of the one before it --
+    the status block would flip to saying nothing every time a sync began."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    failed = state.start_sync_run("chat1", db_path=db_path)
+    state.fail_sync_run(failed, "network error", db_path)
+    state.start_sync_run("chat1", db_path=db_path)  # still pending
+
+    summary = state.summarize_recent_runs(db_path=db_path)
+    assert summary["total_runs"] == 2
+    assert summary["failed_runs"] == 1
+    assert summary["running_runs"] == 1
+    # The pending run is newer, but it has no outcome to report yet.
+    assert summary["last_status"] == "failed"
+
+
 def test_reset_chat_isolates_other_chats(db_path):
     state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
     state.upsert_chat("chat2", "Chat Two", "chat2.txt", db_path=db_path)

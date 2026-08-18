@@ -75,6 +75,7 @@ from src.state import (
     init_db,
     is_uneventful_run,
     reset_chat,
+    summarize_recent_runs,
 )
 
 # ---------------------------------------------------------------------------
@@ -870,6 +871,43 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             command=self._open_sync_log,
         ).pack(side="right")
 
+        # ── Last-run status ───────────────────────────────────────────
+        # The stats to the left say how much is archived; they cannot say
+        # whether the last attempt to archive anything actually worked. A
+        # watched folder syncs with nobody looking, so a failure could sit
+        # unnoticed until someone thought to open the log. These three widgets
+        # are Windows' half of Home's status block -- the same summary over
+        # the same 90-day window from the same shared query
+        # (state.summarize_recent_runs) as Android's SyncStatusBlock. They sit
+        # here rather than in a box of their own because the answer belongs
+        # beside the button that leads to the detail, not in a fourth place to
+        # look.
+        #
+        # Packed after the button and before each other, because side="right"
+        # stacks inwards: the reading order left-to-right is dot, outcome,
+        # failures, [Sync log ›].
+        self._footer_fail_label = ctk.CTkLabel(
+            stats_row, text="",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=gui_theme.ERROR,
+            anchor="e",
+        )
+        self._footer_fail_label.pack(side="right", padx=(0, 10))
+
+        self._footer_status_label = ctk.CTkLabel(
+            stats_row, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            anchor="e",
+        )
+        self._footer_status_label.pack(side="right")
+
+        self._footer_status_dot = ctk.CTkLabel(
+            stats_row, text="", text_color=gui_theme.STATUS_COLOR[None],
+            font=ctk.CTkFont(size=13), width=14,
+        )
+        self._footer_status_dot.pack(side="right", padx=(8, 2))
+
         # ── Log textbox ───────────────────────────────────────────────
         self._log_box = ctk.CTkTextbox(
             footer, height=118,
@@ -1126,6 +1164,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                  f"{total_msgs} message{'s' if total_msgs != 1 else ''} synced"
                  + last_sync_str
         )
+        self._refresh_footer_status()
 
         if not rows:
             self._add_empty_chat_state(
@@ -1136,6 +1175,46 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         for row in rows:
             self._add_chat_row(row)
+
+    def _refresh_footer_status(self) -> None:
+        """Say whether the last sync worked, and whether anything is failing.
+
+        Blank until something has run: an empty outcome on a fresh install is
+        a line explaining that there is nothing to explain. Mirrors Android,
+        where SyncStatusBlock is absent for the same reason.
+        """
+        try:
+            summary = summarize_recent_runs(90, STATE_DB_PATH)
+        except Exception:
+            # A summary is a convenience. Failing to read it must never be the
+            # reason the chat list stops refreshing.
+            summary = None
+
+        if not summary or not summary.get("total_runs"):
+            self._footer_status_dot.configure(text="")
+            self._footer_status_label.configure(text="")
+            self._footer_fail_label.configure(text="")
+            return
+
+        status = summary.get("last_status")
+        self._footer_status_dot.configure(
+            text="●", text_color=gui_theme.STATUS_COLOR.get(status, gui_theme.OUTLINE),
+        )
+        if status is None:
+            # Runs exist but none has finished - one is going on right now,
+            # and the progress bar two rows up is already saying so.
+            self._footer_status_label.configure(text="Sync in progress")
+        else:
+            headline = "Last sync failed" if status == "failed" else "Last sync"
+            self._footer_status_label.configure(
+                text=f"{headline} {_relative_time(summary.get('last_completed_at'))}"
+                     f"  ·  {_summary_counts_text(summary)}"
+            )
+
+        failed = summary.get("failed_runs") or 0
+        self._footer_fail_label.configure(
+            text=f"{failed} run{'s' if failed != 1 else ''} failed in 90 days" if failed else ""
+        )
 
     def _set_chat_status_filter(self, key: str) -> None:
         if key == getattr(self, "_chat_status_filter", "all"):
@@ -4303,6 +4382,54 @@ def _run_duration(run: dict) -> str:
         return f"{minutes} min {rest} s" if rest else f"{minutes} min"
     hours, rest_min = divmod(minutes, 60)
     return f"{hours} h {rest_min} min" if rest_min else f"{hours} h"
+
+
+def _relative_time(raw: str | None) -> str:
+    """"just now" / "2 hours ago" / "yesterday", falling back to the full date
+    once a count of days stops meaning anything.
+
+    The status line asks "how long ago?"; the sync log answers "at what time?".
+    Mirrors SyncLogScreen.kt's relativeTime so the two front-ends round the
+    same way.
+    """
+    if not raw:
+        return "at an unknown time"
+    try:
+        then = datetime.fromisoformat(raw)
+    except Exception:
+        return raw
+    minutes = int((datetime.now() - then).total_seconds() // 60)
+    if minutes < 0:
+        # A clock that has moved backwards since the run, not a run in the
+        # future. Nothing sensible to say in relative terms, so don't try.
+        return f"on {then.strftime('%b')} {then.day}"
+    if minutes < 2:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes} minutes ago"
+    if minutes < 120:
+        return "an hour ago"
+    if minutes < 60 * 24:
+        return f"{minutes // 60} hours ago"
+    if minutes < 60 * 48:
+        return "yesterday"
+    if minutes < 60 * 24 * 7:
+        return f"{minutes // (60 * 24)} days ago"
+    return f"on {then.strftime('%b')} {then.day}"
+
+
+def _summary_counts_text(summary: dict) -> str:
+    """What the last finished run moved, in the same words the log uses for a
+    single run -- see _run_counts_text, which this deliberately mirrors."""
+    synced = summary.get("last_messages_synced") or 0
+    skipped = summary.get("last_messages_skipped") or 0
+    if summary.get("last_status") == "failed":
+        return f"{synced} synced before it failed" if synced else "nothing uploaded"
+    if not synced and not skipped:
+        return "nothing new"
+    if skipped:
+        return f"{synced} synced, {skipped} already there"
+    return f"{synced} synced"
 
 
 def _first_line(text: str) -> str:

@@ -1122,6 +1122,7 @@ fun ChatMailApp(
                         // the first place -- so nothing to fall back to.
                         backgroundIssueIntent(context, issue)?.let { context.startActivity(it) }
                     },
+                    onOpenSyncLog = { navController.navigate("syncLog") },
                 )
             }
             composable("chats") {

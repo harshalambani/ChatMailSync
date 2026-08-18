@@ -3,6 +3,7 @@
 package com.chatmailsync.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +78,73 @@ private fun BackgroundHealthCard(issue: BackgroundIssue, onAction: () -> Unit) {
     }
 }
 
+/**
+ * Where the archive stands, above the controls that change it.
+ *
+ * Home could say what you can do next but not whether the last attempt
+ * worked: the answer sat one navigation away in the sync log, and the only
+ * thing on this screen resembling history was a transient "Last result" line
+ * that says what *you* just did, not what the app has been doing in the
+ * background. A watched folder syncs without anyone watching, so a failure
+ * could sit unnoticed indefinitely.
+ *
+ * Deliberately not a tab strip. This screen has three top-level tabs under it
+ * already; a second row of them inside Home would have made the history a
+ * place to visit rather than something you simply see on arrival, which is
+ * the whole point.
+ *
+ * Absent entirely until something has run -- an empty summary on a fresh
+ * install is a box explaining that there is nothing to explain.
+ */
+@Composable
+private fun SyncStatusBlock(summary: SyncSummary, onOpenSyncLog: () -> Unit) {
+    val status = summary.lastStatus ?: "pending"
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenSyncLog),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RunStatusDot(status)
+                Text(
+                    text = when (summary.lastStatus) {
+                        "failed" -> "Last sync failed"
+                        "complete" -> "Last sync finished"
+                        // Nothing has finished, but runs exist -- one is going
+                        // on right now. The progress bar says the rest.
+                        else -> "Sync in progress"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("Sync log ›", style = MaterialTheme.typography.labelLarge)
+            }
+            if (summary.lastStatus != null) {
+                Text(
+                    "${relativeTime(summary.lastCompletedAt)} — ${summaryCountsText(summary)}" +
+                        (summary.lastDisplayName?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            // The count is over the same 90-day window the log shows, so
+            // tapping through lands on exactly these runs and not a longer or
+            // shorter history.
+            if (summary.failedRuns > 0) {
+                Text(
+                    "${plural(summary.failedRuns, "run")} failed in the last " +
+                        "${summary.windowDays} days",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
 private val CHUNK_SIZES = listOf("hour", "day", "week")
 private val CHUNK_LABELS = mapOf(
     "hour" to "Hourly emails",
@@ -103,7 +172,20 @@ fun HomeScreen(
     syncInProgress: Boolean,
     backgroundIssues: List<BackgroundIssue> = emptyList(),
     onBackgroundIssueAction: (BackgroundIssue) -> Unit = {},
+    onOpenSyncLog: () -> Unit = {},
 ) {
+    // Re-read whenever a sync starts or stops, so the block is right the
+    // moment a run ends rather than on the next visit to this screen.
+    var summary by remember { mutableStateOf<SyncSummary?>(null) }
+    LaunchedEffect(syncInProgress, lastResult) {
+        summary = try {
+            loadSyncStatus()
+        } catch (_: Exception) {
+            // A summary is a convenience; failing to read it must never be
+            // the reason Home does not render.
+            null
+        }
+    }
     var previewText by remember { mutableStateOf<String?>(null) }
     var chunkMenuOpen by remember { mutableStateOf(false) }
 
@@ -161,6 +243,10 @@ fun HomeScreen(
             // thing meant to send them has been put to sleep.
             backgroundIssues.forEach { issue ->
                 BackgroundHealthCard(issue = issue, onAction = { onBackgroundIssueAction(issue) })
+            }
+
+            summary?.takeIf { it.totalRuns > 0 }?.let {
+                SyncStatusBlock(summary = it, onOpenSyncLog = onOpenSyncLog)
             }
 
             // Inbox + sync — one card: these two are really one workflow

@@ -98,6 +98,45 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
     }
 }
 
+/**
+ * Home's answer to "did the last sync work, and is anything broken?".
+ *
+ * Computed in the shared core (state.summarize_recent_runs) rather than by
+ * folding [loadSyncLog]'s rows here, so the block on Home can never claim a
+ * different history than the log screen it links to -- and so Windows can show
+ * the same summary from the same query.
+ */
+data class SyncSummary(
+    val windowDays: Int,
+    val totalRuns: Int,
+    val failedRuns: Int,
+    val runningRuns: Int,
+    /** The newest run that has *finished*. Null until one has. */
+    val lastStatus: String?,
+    val lastDisplayName: String?,
+    val lastCompletedAt: String?,
+    val lastMessagesSynced: Long,
+    val lastMessagesSkipped: Long,
+)
+
+fun loadSyncStatus(days: Int = 90): SyncSummary {
+    val row = Python.getInstance().getModule("src.android_api").callAttr("sync_status", days)
+    fun getStr(key: String): String? =
+        row.callAttr("get", key)?.toString()?.takeIf { it != "None" }
+    fun getLong(key: String): Long = getStr(key)?.toLongOrNull() ?: 0L
+    return SyncSummary(
+        windowDays = getLong("window_days").toInt(),
+        totalRuns = getLong("total_runs").toInt(),
+        failedRuns = getLong("failed_runs").toInt(),
+        runningRuns = getLong("running_runs").toInt(),
+        lastStatus = getStr("last_status"),
+        lastDisplayName = getStr("last_display_name"),
+        lastCompletedAt = getStr("last_completed_at"),
+        lastMessagesSynced = getLong("last_messages_synced"),
+        lastMessagesSkipped = getLong("last_messages_skipped"),
+    )
+}
+
 /** The one-line summary of what a run moved. A run that uploaded nothing says
  * so in words -- "0 synced, 0 skipped" is the same information and reads as a
  * malfunction. Mirrors gui.py's _run_counts_text. */
@@ -117,6 +156,44 @@ private fun formatRunTimeLong(raw: String?): String {
     } catch (_: Exception) {
         raw
     }
+}
+
+/** "just now" / "2 hours ago" / "yesterday", falling back to the full date once
+ * it is far enough back that a count of days stops meaning anything. Home asks
+ * "how long ago?", not "at what time?" -- the log screen answers the second.
+ * Mirrors gui.py's _relative_time. */
+internal fun relativeTime(raw: String?): String {
+    if (raw == null) return "at an unknown time"
+    val then = try {
+        LocalDateTime.parse(raw)
+    } catch (_: Exception) {
+        return raw
+    }
+    val minutes = java.time.Duration.between(then, LocalDateTime.now()).toMinutes()
+    return when {
+        // A clock that has moved backwards since the run, rather than a run in
+        // the future. Nothing sensible to say in relative terms, so don't try.
+        minutes < 0L -> "on " + formatRunTimeLong(raw)
+        minutes < 2L -> "just now"
+        minutes < 60L -> "$minutes minutes ago"
+        minutes < 120L -> "an hour ago"
+        minutes < 60L * 24 -> "${minutes / 60} hours ago"
+        minutes < 60L * 48 -> "yesterday"
+        minutes < 60L * 24 * 7 -> "${minutes / (60 * 24)} days ago"
+        else -> "on " + formatRunTimeLong(raw)
+    }
+}
+
+/** What the last finished run moved, in the same words the log uses for a
+ * single run -- see [runCountsText], which this deliberately mirrors. */
+internal fun summaryCountsText(summary: SyncSummary): String = when {
+    summary.lastStatus == "failed" ->
+        if (summary.lastMessagesSynced > 0) "${summary.lastMessagesSynced} synced before it failed"
+        else "Nothing uploaded"
+    summary.lastMessagesSynced == 0L && summary.lastMessagesSkipped == 0L -> "Nothing new"
+    summary.lastMessagesSkipped > 0L ->
+        "${summary.lastMessagesSynced} synced, ${summary.lastMessagesSkipped} already there"
+    else -> "${summary.lastMessagesSynced} synced"
 }
 
 /** How long a run took, or null when that cannot be worked out. */
@@ -141,7 +218,7 @@ private fun runDuration(run: SyncRunLogEntry): String? {
 }
 
 @Composable
-private fun RunStatusDot(status: String) {
+internal fun RunStatusDot(status: String) {
     val color = when (status) {
         "complete" -> MaterialTheme.colorScheme.tertiary
         "failed" -> MaterialTheme.colorScheme.error
