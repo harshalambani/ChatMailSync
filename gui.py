@@ -3843,6 +3843,11 @@ class _MailWizardPanel(_Panel):
     def _render(self) -> None:
         for child in self._body.winfo_children():
             child.destroy()
+        # Destroying the children does not move the scroll position, so a step
+        # entered from a scrolled-down one would open partway through itself --
+        # arriving at step 2 already past "I have my app password", which is the
+        # one button that step exists to offer. Every step starts at its top.
+        self._body._parent_canvas.yview_moveto(0)
         self._step_label.configure(
             text=f"Step {self._step + 1} of 4 — {_WIZARD_TITLES[self._step]}"
         )

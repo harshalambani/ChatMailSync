@@ -5,6 +5,7 @@ package com.chatmailsync.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -128,6 +129,11 @@ fun MailSetupWizardScreen(
             ChatMailTopBar(
                 title = "Set up your mailbox",
                 subtitle = "Step ${step + 1} of 4 - ${WIZARD_TITLES[step]}",
+                // The two-line title leaves the pill too little room -- it
+                // clipped to "No" on a 1080-wide screen -- and it is redundant
+                // here anyway: this screen exists to change that very state,
+                // and step 4 reports the outcome in far more detail.
+                showConnection = false,
                 backLabel = if (step == 0) "Back" else "Previous step",
                 onBack = {
                     // Once the check is running there is nothing useful to go
@@ -141,12 +147,18 @@ fun MailSetupWizardScreen(
             )
         },
     ) { padding ->
+        // One scroll state serves all four steps, so moving between them would
+        // otherwise carry the old offset across: arriving at step 2 already
+        // scrolled past "I have my app password", which is the one button that
+        // step exists to offer. Every step starts at its own top instead.
+        val scrollState = rememberScrollState()
+        LaunchedEffect(step) { scrollState.scrollTo(0) }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             when (step) {
@@ -156,16 +168,35 @@ fun MailSetupWizardScreen(
                             "Chat Mail Sync files your chats, and how you get the password it needs.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    imapProviders.forEach { candidate ->
-                        val selected = candidate.key == provider
-                        val onPick = { provider = candidate.key }
-                        if (selected) {
-                            Button(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
-                                Text(candidate.label)
+                    // Two to a row rather than one. Six full-width buttons plus
+                    // the explanation filled the viewport exactly, which pushed
+                    // Next below the fold on a 1080x2340 screen -- the step's
+                    // own primary action was the one thing you could not see.
+                    // Paired rows halve that height and leave the whole step
+                    // visible without scrolling.
+                    imapProviders.chunked(2).forEach { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            pair.forEach { candidate ->
+                                val selected = candidate.key == provider
+                                val onPick = { provider = candidate.key }
+                                if (selected) {
+                                    Button(onClick = onPick, modifier = Modifier.weight(1f)) {
+                                        Text(candidate.label, maxLines = 1)
+                                    }
+                                } else {
+                                    OutlinedButton(onClick = onPick, modifier = Modifier.weight(1f)) {
+                                        Text(candidate.label, maxLines = 1)
+                                    }
+                                }
                             }
-                        } else {
-                            OutlinedButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
-                                Text(candidate.label)
+                            // An odd provider count would otherwise stretch the
+                            // last button across the full width and break the
+                            // grid.
+                            if (pair.size == 1) {
+                                Spacer(Modifier.weight(1f))
                             }
                         }
                     }
