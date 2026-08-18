@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +50,32 @@ private fun displayNameFor(filename: String): String {
     return if (stem.lowercase().startsWith(WA_PREFIX)) stem.substring(WA_PREFIX.length) else stem
 }
 
+/**
+ * One system setting standing between automatic syncing and actually running.
+ *
+ * Deliberately not styled as an error: nothing has failed, and the app has not
+ * been asked to do anything it could not do. It is a warning about a sync that
+ * will quietly not happen later, so it gets `surfaceVariant` -- present and
+ * distinct from the cards around it, without the red that the app reserves for
+ * a run that actually went wrong.
+ *
+ * The button label names the screen it opens rather than promising a fix; see
+ * [BackgroundIssue.actionLabel].
+ */
+@Composable
+private fun BackgroundHealthCard(issue: BackgroundIssue, onAction: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(issue.title, style = MaterialTheme.typography.titleSmall)
+            Text(issue.detail, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onAction) { Text(issue.actionLabel) }
+        }
+    }
+}
+
 private val CHUNK_SIZES = listOf("hour", "day", "week")
 private val CHUNK_LABELS = mapOf(
     "hour" to "Hourly emails",
@@ -74,6 +101,8 @@ fun HomeScreen(
     onSyncNow: () -> Unit,
     lastResult: String,
     syncInProgress: Boolean,
+    backgroundIssues: List<BackgroundIssue> = emptyList(),
+    onBackgroundIssueAction: (BackgroundIssue) -> Unit = {},
 ) {
     var previewText by remember { mutableStateOf<String?>(null) }
     var chunkMenuOpen by remember { mutableStateOf(false) }
@@ -124,6 +153,15 @@ fun HomeScreen(
                 }
             }
             HorizontalDivider()
+
+            // Anything the system is doing that will stop automatic syncing.
+            // Directly under the connection line because it is the same kind of
+            // fact -- whether the app can actually do its job right now -- and
+            // above the inbox because a queue of files means nothing if the
+            // thing meant to send them has been put to sleep.
+            backgroundIssues.forEach { issue ->
+                BackgroundHealthCard(issue = issue, onAction = { onBackgroundIssueAction(issue) })
+            }
 
             // Inbox + sync — one card: these two are really one workflow
             // (what's waiting -> how to push it), not two separate features.

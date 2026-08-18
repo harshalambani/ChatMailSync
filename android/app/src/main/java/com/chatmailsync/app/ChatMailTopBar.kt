@@ -3,15 +3,18 @@
 package com.chatmailsync.app
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ButtonDefaults
@@ -24,7 +27,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,6 +95,51 @@ private fun BackAffordance(label: String, onBack: () -> Unit) {
     }
 }
 
+/**
+ * The connection pill: a coloured dot and two words, at the right-hand end of
+ * the masthead.
+ *
+ * On the banner because that is where it was asked for -- "we need to make the
+ * established connection more visual ... perhaps something on the banner
+ * itself, with a green dot" -- and because the banner is the one surface on
+ * every screen, so the answer to "is this thing actually working" is never
+ * more than a glance away instead of living on the settings screen you would
+ * only visit if you already suspected something was wrong.
+ *
+ * The words carry it, not the colour: a dot alone is a puzzle, and roughly one
+ * man in twelve cannot tell this green from this red. The colour is the fast
+ * path for everyone else, not the message.
+ */
+@Composable
+private fun ConnectionPill(status: ConnectionStatus) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(CircleShape)
+            // A faint wash of the band's own text colour, so the pill reads as
+            // one object rather than a dot that happens to be near a word.
+            .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            // One node to the screen reader, saying the whole thing in a
+            // sentence -- "green, Connected" is not a sentence.
+            .semantics { contentDescription = status.contentDescription },
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(status.dotColor),
+        )
+        Text(
+            status.label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 fun ChatMailTopBar(
     title: String,
@@ -99,6 +151,11 @@ fun ChatMailTopBar(
     // the badge is the least useful of the three.
     backLabel: String? = null,
     onBack: (() -> Unit)? = null,
+    // On by default: the point of putting the connection state on the banner
+    // is that it is on every screen. Screens whose title is arbitrary
+    // user-supplied text -- a chat name -- turn it off, because there the pill
+    // would be competing with the one thing the title is for.
+    showConnection: Boolean = true,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
@@ -117,34 +174,45 @@ fun ChatMailTopBar(
             Box(modifier = androidx.compose.ui.Modifier.height(MastheadHeight), contentAlignment = Alignment.CenterStart) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    // The pill is pushed to the far end of the slot rather than
+                    // trailing the wordmark, so it sits in the same place on
+                    // every screen regardless of how long the title is -- a
+                    // status light that moves is one you have to look for.
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    if (!labelledBack) Image(
-                        painter = painterResource(R.drawable.ic_masthead),
-                        contentDescription = null,
-                        // 56dp, not the old 72dp. The adaptive foreground drew
-                        // its mark at 72/108 of its canvas, so a 72dp box put
-                        // ~48dp of ink on screen. ic_masthead is a full-bleed
-                        // badge, so the same box would render half again as
-                        // large and crowd an 88dp band.
-                        modifier = androidx.compose.ui.Modifier.size(56.dp),
-                    )
-                    Column {
-                        Text(
-                            title,
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (!labelledBack) Image(
+                            painter = painterResource(R.drawable.ic_masthead),
+                            contentDescription = null,
+                            // 56dp, not the old 72dp. The adaptive foreground drew
+                            // its mark at 72/108 of its canvas, so a 72dp box put
+                            // ~48dp of ink on screen. ic_masthead is a full-bleed
+                            // badge, so the same box would render half again as
+                            // large and crowd an 88dp band.
+                            modifier = androidx.compose.ui.Modifier.size(56.dp),
                         )
-                        subtitle?.let {
+                        Column {
                             Text(
-                                it.uppercase(),
-                                fontSize = 10.sp,
+                                title,
+                                fontFamily = FontFamily.Serif,
                                 fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 1.4.sp,
+                                fontSize = 18.sp,
                             )
+                            subtitle?.let {
+                                Text(
+                                    it.uppercase(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 1.4.sp,
+                                )
+                            }
                         }
                     }
+                    if (showConnection) ConnectionPill(ConnectionState.current)
                 }
             }
         },

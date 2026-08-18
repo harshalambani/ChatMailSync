@@ -1216,6 +1216,19 @@ _STAGE_LABELS = {
 }
 
 
+def connection_stage_plan() -> list:
+    """The five stages a UI can draw *before* the check starts, in order.
+
+    A progress list that grows a line at a time hides the one fact that makes
+    it useful -- how much is left -- so both front-ends draw all five greyed
+    out and light them up as check_connection's on_stage callback arrives.
+    This exists so neither front-end has to hardcode the labels: Kotlin reads
+    it over the Chaquopy bridge and Windows imports it, which is what keeps
+    the two apps saying the same five things (PLATFORM-PARITY.md).
+    """
+    return [{"name": name, "label": _STAGE_LABELS[name]} for name in CONNECTION_STAGES]
+
+
 def _gmail_like(host: str, email: str) -> bool:
     """True when a rejected password is most likely a *normal* Google password.
 
@@ -1280,8 +1293,41 @@ def _probe_tls(sock: "socket.socket", host: str) -> None:
     wrapped.close()
 
 
-def check_connection(host: str, port: int, email: str, password: str) -> dict:
+def _emit_stage(on_stage, stage: dict) -> None:
+    """Hand one finished stage to the caller's progress listener, if any.
+
+    Duck-typed on purpose, because the two front-ends pass two different kinds
+    of object: Windows passes a plain Python callable, and Android passes a
+    Java object (a Kotlin ``StageListener``) across the Chaquopy bridge, which
+    arrives here as a wrapper that is not callable but does have the method.
+    Three primitives rather than the dict, since a dict crossing that bridge is
+    a conversion this does not need.
+
+    Never raises. A listener is a progress indicator; a broken one must not be
+    able to fail a connection test that is otherwise fine.
+    """
+    if on_stage is None:
+        return
+    try:
+        fn = getattr(on_stage, "onStage", on_stage)
+        fn(stage["name"], stage["label"], stage["ok"])
+    except Exception:  # noqa: BLE001 — progress is never worth an exception.
+        pass
+
+
+def check_connection(
+    host: str,
+    port: int,
+    email: str,
+    password: str,
+    on_stage=None,
+) -> dict:
     """Run the five connection stages in order and report where it stopped.
+
+    [on_stage], when given, is called as each stage finishes -- name, label,
+    ok -- so a UI can tick them off while the check is still running rather
+    than sitting on a spinner until all five are done. The returned dict is
+    unchanged either way; the callback is strictly additional.
 
     Returns a dict — never raises for a connection problem, because every
     caller here is a UI that wants to *show* the failure:
@@ -1302,7 +1348,9 @@ def check_connection(host: str, port: int, email: str, password: str) -> dict:
     reached = None
 
     def record(name: str, ok: bool) -> None:
-        results.append({"name": name, "label": _STAGE_LABELS[name], "ok": ok})
+        stage = {"name": name, "label": _STAGE_LABELS[name], "ok": ok}
+        results.append(stage)
+        _emit_stage(on_stage, stage)
 
     def outcome(failed: Optional[str], message: str) -> dict:
         return {

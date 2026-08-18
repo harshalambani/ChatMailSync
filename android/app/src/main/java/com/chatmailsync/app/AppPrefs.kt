@@ -46,6 +46,8 @@ object AppPrefs {
     private const val KEY_IMAP_EMAIL = "imap_email"
     private const val KEY_IMAP_PASSWORD_SECRET = "imap_password_secret"
     private const val KEY_PENDING_SYNCED_FILES = "pending_synced_files"
+    private const val KEY_LAST_CONNECTION_OK = "last_connection_ok"
+    private const val KEY_LAST_CONNECTION_AT = "last_connection_at"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -273,6 +275,41 @@ object AppPrefs {
 
     fun hasImapPassword(context: Context): Boolean =
         SecretStore.getSecret(context, KEY_IMAP_PASSWORD_SECRET) != null
+
+    /** Did the last attempt to actually reach the mailbox succeed?
+     *
+     * null means no attempt has ever been made — saved credentials on their
+     * own prove nothing, and until this release nothing in the app recorded
+     * that a connection had ever worked: "Connected as …" only ever meant
+     * "an address is stored". This is the fact behind the banner's status
+     * dot, so an untested account can be told apart from a working one.
+     *
+     * A boolean and a timestamp, nothing else. No host, no address, and
+     * above all no credential ever goes in here. */
+    fun getLastConnectionOk(context: Context): Boolean? =
+        if (!prefs(context).contains(KEY_LAST_CONNECTION_OK)) null
+        else prefs(context).getBoolean(KEY_LAST_CONNECTION_OK, false)
+
+    fun getLastConnectionAt(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_CONNECTION_AT, 0L)
+
+    fun setLastConnectionResult(context: Context, ok: Boolean) {
+        prefs(context).edit()
+            .putBoolean(KEY_LAST_CONNECTION_OK, ok)
+            .putLong(KEY_LAST_CONNECTION_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    /** Forget any verdict — for when the account itself changes underneath
+     * it (password forgotten, backend switched), where keeping the old
+     * verdict would vouch for credentials that are no longer the ones in
+     * use. */
+    fun clearLastConnectionResult(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_LAST_CONNECTION_OK)
+            .remove(KEY_LAST_CONNECTION_AT)
+            .apply()
+    }
 
     /** Inbox filename -> watched-folder source doc URI, recorded at import
      * time and only consumed once WatchFolderWorker.applyPendingSyncedFilePolicies

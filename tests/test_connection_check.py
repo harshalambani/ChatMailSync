@@ -330,10 +330,105 @@ def test_text_on_success_has_no_stage_prefix(monkeypatch, all_probes_pass):
     assert "failed" not in text
 
 
+def test_the_stage_plan_matches_what_actually_runs(monkeypatch, all_probes_pass):
+    # The plan is drawn before the check starts, so a plan that disagreed with
+    # the run would show the user a list that never fills in.
+    _patch_transport(monkeypatch)
+    plan = mail_client.connection_stage_plan()
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD)
+    assert [p["name"] for p in plan] == [s["name"] for s in result["stages"]]
+    assert [p["label"] for p in plan] == [s["label"] for s in result["stages"]]
+
+
 def test_every_stage_has_a_label():
     # A stage without a label would render as a bare "Connecting failed."
     for stage in mail_client.CONNECTION_STAGES:
         assert mail_client._STAGE_LABELS[stage]
+
+
+# ---------------------------------------------------------------------------
+# Live stage reporting (on_stage)
+# ---------------------------------------------------------------------------
+
+
+def test_on_stage_receives_every_stage_in_order(monkeypatch, all_probes_pass):
+    _patch_transport(monkeypatch)
+    seen = []
+    result = check_connection(
+        HOST, PORT, EMAIL, PASSWORD, on_stage=lambda n, l, ok: seen.append((n, l, ok))
+    )
+    assert [n for n, _, _ in seen] == list(mail_client.CONNECTION_STAGES)
+    assert all(ok for _, _, ok in seen)
+    # The label is handed over too, so a caller never has to reach into
+    # _STAGE_LABELS to render the line it was just told about.
+    assert [l for _, l, _ in seen] == [
+        mail_client._STAGE_LABELS[n] for n in mail_client.CONNECTION_STAGES
+    ]
+    # Same stages, same order, as the dict that comes back at the end.
+    assert [n for n, _, _ in seen] == [s["name"] for s in result["stages"]]
+
+
+def test_on_stage_stops_where_the_check_stops(monkeypatch, all_probes_pass):
+    _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
+    seen = []
+    check_connection(
+        HOST, PORT, EMAIL, PASSWORD, on_stage=lambda n, l, ok: seen.append((n, ok))
+    )
+    assert seen == [("DNS", True), ("TCP", True), ("TLS", True), ("LOGIN", False)]
+
+
+def test_a_listener_object_is_called_through_its_onStage_method(
+    monkeypatch, all_probes_pass
+):
+    # Android cannot hand a Python callable across the Chaquopy bridge, so it
+    # passes a Kotlin StageListener instead: not callable, but it has the
+    # method. Modelled here by an object that would raise if it were called.
+    _patch_transport(monkeypatch)
+
+    class _Listener:
+        def __init__(self):
+            self.seen = []
+
+        def onStage(self, name, label, ok):  # noqa: N802 -- Kotlin's name.
+            self.seen.append(name)
+
+    listener = _Listener()
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD, on_stage=listener)
+    assert listener.seen == list(mail_client.CONNECTION_STAGES)
+    assert result["ok"] is True
+
+
+def test_a_broken_listener_cannot_fail_a_good_connection(monkeypatch, all_probes_pass):
+    # A progress indicator is never worth the connection. A UI thread that has
+    # gone away mid-check must not turn a working account into a failed one.
+    _patch_transport(monkeypatch)
+
+    def boom(*_a):
+        raise RuntimeError("the UI went away")
+
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD, on_stage=boom)
+    assert result["ok"] is True
+    assert [s["name"] for s in result["stages"]] == list(mail_client.CONNECTION_STAGES)
+
+
+def test_without_a_listener_nothing_changes(monkeypatch, all_probes_pass):
+    # on_stage is strictly additional: the returned dict is byte-for-byte what
+    # every existing caller already gets.
+    _patch_transport(monkeypatch)
+    plain = check_connection(HOST, PORT, EMAIL, PASSWORD)
+    _patch_transport(monkeypatch)
+    watched = check_connection(HOST, PORT, EMAIL, PASSWORD, on_stage=lambda *_a: None)
+    assert plain == watched
+
+
+def test_incomplete_details_report_no_stages_at_all(monkeypatch):
+    # The early return never records a stage, so it must never emit one
+    # either -- a wizard would otherwise tick "Finding the server" green for
+    # a check that never left the building.
+    seen = []
+    result = check_connection("", PORT, EMAIL, PASSWORD, on_stage=lambda *a: seen.append(a))
+    assert seen == []
+    assert result["stages"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +444,7 @@ def test_worker_test_connection_posts_the_shared_text(monkeypatch):
     monkeypatch.setattr(
         gui_worker,
         "check_connection",
-        lambda h, p, e, pw: {
+        lambda h, p, e, pw, on_stage=None: {
             "ok": False,
             "stage": "LOGIN",
             "failed_stage": "LOGIN",
@@ -363,6 +458,39 @@ def test_worker_test_connection_posts_the_shared_text(monkeypatch):
     assert event["type"] == "test_result"
     assert event["ok"] is False
     assert event["msg"] == "Signing in failed. nope"
+
+
+def test_worker_posts_each_stage_before_the_result(monkeypatch, all_probes_pass):
+    """The wizard's live tick-list, end to end through the real check.
+
+    Ordering is the point, not just presence: a stage event arriving after
+    the result would tick a line green on a panel the user has already been
+    moved off.
+    """
+    import queue
+
+    import gui_worker
+
+    _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
+    q: "queue.Queue" = queue.Queue()
+    gui_worker.test_imap_connection(q, HOST, PORT, EMAIL, PASSWORD)
+
+    events = []
+    while True:
+        try:
+            events.append(q.get_nowait())
+        except queue.Empty:
+            break
+
+    assert [e["type"] for e in events] == [
+        "test_stage", "test_stage", "test_stage", "test_stage", "test_result",
+    ]
+    assert [e["name"] for e in events[:-1]] == ["DNS", "TCP", "TLS", "LOGIN"]
+    assert [e["ok"] for e in events[:-1]] == [True, True, True, False]
+    assert events[0]["label"] == "Finding the server"
+    assert events[-1]["ok"] is False
+    # And the password never rides along on any of them.
+    assert all(PASSWORD not in str(e) for e in events)
 
 
 def test_worker_test_connection_never_raises(monkeypatch):
