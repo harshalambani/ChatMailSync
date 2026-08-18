@@ -28,6 +28,7 @@ from src.state import (
     is_uneventful_run,
     reset_chat,
     resolve_chat,
+    summarize_recent_runs,
 )
 from src.progress import ProgressTracker
 from src.sync_manager import ProgressSyncManager
@@ -261,6 +262,14 @@ def sync_log(days: int = 90) -> list[dict]:
         {**dict(row), "uneventful": is_uneventful_run(row)}
         for row in get_recent_runs(days, config.STATE_DB_PATH)
     ]
+
+
+def sync_status(days: int = 90) -> dict:
+    """One-read summary of the last finished run and the failure count, for
+    Home's status block. See state.summarize_recent_runs() for why the summary
+    is computed in the shared core rather than in either front-end."""
+    init_db(config.STATE_DB_PATH)
+    return summarize_recent_runs(days, config.STATE_DB_PATH)
 
 
 def reset_preview(chat_id_or_name: str) -> dict:

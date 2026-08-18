@@ -403,6 +403,42 @@ def is_uneventful_run(row: Mapping[str, Any]) -> bool:
     return row["status"] == "complete" and not (row["messages_synced"] or 0)
 
 
+def summarize_recent_runs(
+    days: int = 90, db_path: Optional[Path] = None
+) -> dict[str, Any]:
+    """Answer "where do things stand?" in one read, for both home screens.
+
+    The sync log already holds this, but reaching it costs a navigation, and
+    the two questions someone asks on arriving -- did the last sync work, and
+    is anything broken -- deserve an answer before that. The summary lives
+    here rather than in either front-end for the same reason
+    `is_uneventful_run` does: two hand-written summaries over the same table
+    would eventually disagree, and a home screen quietly claiming a different
+    history than the log is worse than no summary at all.
+
+    `last_*` describes the newest run that has *finished*, which is what "the
+    last sync" means to a reader. A run still in flight is reported separately
+    as `running_runs`, so a sync starting does not blank out the outcome of
+    the one before it -- both front-ends show live progress elsewhere.
+    """
+    runs = get_recent_runs(days, db_path)
+    finished = [r for r in runs if r["status"] in ("complete", "failed")]
+    last = finished[0] if finished else None
+    return {
+        "window_days": days,
+        "total_runs": len(runs),
+        "failed_runs": sum(1 for r in runs if r["status"] == "failed"),
+        "running_runs": sum(1 for r in runs if r["status"] == "pending"),
+        "last_run_id": last["run_id"] if last else None,
+        "last_status": last["status"] if last else None,
+        "last_display_name": last["display_name"] if last else None,
+        "last_started_at": last["started_at"] if last else None,
+        "last_completed_at": last["completed_at"] if last else None,
+        "last_messages_synced": (last["messages_synced"] or 0) if last else 0,
+        "last_messages_skipped": (last["messages_skipped"] or 0) if last else 0,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Reset helper
 # ---------------------------------------------------------------------------
