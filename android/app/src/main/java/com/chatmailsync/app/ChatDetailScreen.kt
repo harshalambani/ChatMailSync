@@ -75,6 +75,9 @@ fun ChatDetailScreen(
                 title = chat?.displayName ?: chatId,
                 backLabel = "Chats",
                 onBack = onBack,
+                // The title here is a chat name, which can be long and is the
+                // only thing identifying the screen -- it gets the whole band.
+                showConnection = false,
             )
         },
     ) { padding ->

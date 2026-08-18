@@ -417,9 +417,19 @@ def test_imap_connection(
     while Android did (MailAccountScreen.kt). Nothing is persisted here: this
     is a read-only probe of details the user has typed but may not want to
     save yet, and it never posts the password back in any form.
+
+    Each stage is posted as its own "test_stage" event the moment it finishes,
+    so the wizard can tick the five lines off live instead of sitting on one
+    spinner for the whole run -- LOGIN can take several seconds, and a list
+    that stops moving tells the user *where* it stopped. The final
+    "test_result" event is unchanged, so a UI that ignores the stage events
+    behaves exactly as it did before.
     """
+    def _stage(name: str, label: str, ok: bool) -> None:
+        result_queue.put({"type": "test_stage", "name": name, "label": label, "ok": ok})
+
     try:
-        check = check_connection(host, port, email, password)
+        check = check_connection(host, port, email, password, on_stage=_stage)
         result_queue.put({
             "type": "test_result",
             "ok": check["ok"],

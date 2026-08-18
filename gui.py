@@ -58,7 +58,7 @@ from src.config import (
 )
 from src.app_version import version_label
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
-from src.mail_client import mailbox_folder_for
+from src.mail_client import connection_stage_plan, mailbox_folder_for
 from src.progress import ProgressTracker
 from src.watch_folder import (
     DEFAULT_WATCH_INTERVAL_MINUTES,
@@ -183,6 +183,16 @@ _DEFAULT_SETTINGS = {
     "synced_file_policy":      "leave",
     "imported_source_paths":   [],
     "pending_synced_files":    {},
+    # Did the last real attempt to reach the mailbox succeed? None means no
+    # attempt has ever been recorded -- which is where every existing install
+    # lands on upgrade, and is why this is a tri-state rather than a bool: a
+    # saved credential and a credential known to work are different facts, and
+    # showing the second when we only know the first is the misreport this
+    # exists to stop. Android stores the same pair in AppPrefs under
+    # last_connection_ok / last_connection_at. Nothing about the credential
+    # itself is stored here -- a verdict and a timestamp, nothing more.
+    "last_connection_ok":      None,
+    "last_connection_at":      0,
 }
 
 # Android's WATCH_INTERVAL_LABELS, labels and all, plus one shorter option:
@@ -245,6 +255,52 @@ def _save_settings(settings: dict) -> None:
         _SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
     except Exception:
         pass
+
+
+def _relabel_connected(text: str, lead: str) -> str:
+    """Swap the leading "Connected" of a status line for [lead], keeping any
+    tail. "Connected (a@b.com)" -> "Not tested (a@b.com)".
+
+    The tail is the part worth keeping -- it says *which* account -- while the
+    first word is the only part that was overstating things. Text that does not
+    begin that way is left alone: it is already an explanation of a failure
+    ("Sign-in expired -- reconnect") and rewriting it would lose the reason.
+    """
+    if text.startswith("Connected"):
+        return lead + text[len("Connected"):]
+    return text
+
+
+def _auth_display(valid: bool, text: str, last_ok: "bool | None") -> tuple[str, str]:
+    """(status key, label) for the masthead dot and its words.
+
+    Pure, and separate from the widget call, because this is the whole of
+    Batch G's Windows judgement and it is worth testing without a Tk root.
+    The key is a gui_theme.STATUS_COLOR key, so the band needs no second
+    mapping of its own.
+
+    The three outcomes match Android's four states (see ConnectionStatus.kt);
+    NONE and FAILED-with-no-account collapse into one here because Windows'
+    label already carries the difference in words ("Not connected" vs
+    "Credential error: ...").
+
+      - no credential we can read at all      -> failed, unchanged text
+      - credential, never yet tried           -> pending (amber), "Not tested"
+      - credential, last attempt failed       -> failed, "No connection"
+      - credential, last attempt succeeded    -> complete (green), "Connected"
+
+    Amber is the one that did not exist before: a saved password shows as
+    green "Connected" the moment it is stored, which is what made connecting
+    "feel like a non-event" -- the header said the same thing before and after
+    the mailbox was ever actually reached.
+    """
+    if not valid:
+        return "failed", text
+    if last_ok is None:
+        return "pending", _relabel_connected(text, "Not tested")
+    if last_ok:
+        return "complete", text
+    return "failed", _relabel_connected(text, "No connection")
 
 
 def _should_show_backend_notice(
@@ -1731,13 +1787,31 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         valid, text = check_auth_status()
         self._apply_auth_status(valid, text)
 
+    def _record_connection(self, ok: bool) -> None:
+        """Remember the outcome of a real attempt to reach the mailbox.
+
+        Called only where a login was genuinely tried -- never after a
+        validation failure that stopped before the network, which would record
+        a mailbox verdict on something the mailbox never saw. Mirrors
+        ConnectionState.record() on Android.
+        """
+        self._settings["last_connection_ok"] = ok
+        self._settings["last_connection_at"] = int(datetime.now().timestamp())
+        _save_settings(self._settings)
+
+    def _forget_connection(self) -> None:
+        """The account changed underneath the verdict, so the verdict is no
+        longer about the credentials in use. Mirrors ConnectionState.forget()."""
+        self._settings["last_connection_ok"] = None
+        self._settings["last_connection_at"] = 0
+        _save_settings(self._settings)
+
     def _apply_auth_status(self, valid: bool, text: str) -> None:
-        self._auth_dot.configure(
-            text_color=gui_theme.STATUS_COLOR_ON_BAND[
-                "complete" if valid else "failed"
-            ]
+        status, label = _auth_display(
+            valid, text, self._settings.get("last_connection_ok")
         )
-        self._auth_label.configure(text=text)
+        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND[status])
+        self._auth_label.configure(text=label)
         # command restored alongside the text: while a browser sign-in is
         # outstanding the button is "Cancel" and points at _cancel_connect, and
         # anything that relabels it must take that pairing back with it or the
@@ -1819,10 +1893,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _on_connect_click(self) -> None:
         if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            # IMAP connect is credential-entry based, not a browser flow --
-            # route to Settings where the provider/host/email/password fields
-            # live, rather than trying to run the OAuth dance.
-            self._open_settings()
+            # IMAP connect is credential-entry based, not a browser flow, so
+            # this never runs the OAuth dance. Where it lands depends on
+            # whether there is an account yet: a first setup goes through the
+            # wizard, which walks through getting an app password, while
+            # "Reconnect" on an account that already exists goes to Settings,
+            # since changing one field is faster on the form than four steps.
+            # Android's Home button branches the same way.
+            usable, _status = check_imap_auth_status()
+            if usable:
+                self._open_settings()
+            else:
+                self._push_panel(_MailWizardPanel)
             return
         self._auth_cancelled = False
         # Stays enabled and becomes the way out. Reported live: an abandoned
@@ -1882,6 +1964,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         if event["type"] == "auth_ok":
             self._transport = event["transport"]
+            # A transport in hand is proof the mailbox answered, which is the
+            # strongest evidence any path here produces.
+            self._record_connection(True)
             self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["complete"])
             self._auth_label.configure(text="Connected")
             # command restored: it was pointing at _cancel_connect for the
@@ -1893,6 +1978,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._append_log("Gmail authentication successful.")
         else:
             timed_out = event.get("timeout", False)
+            # Not recorded on a timeout: nobody finished the browser sign-in,
+            # so nothing was ever put to the mailbox to judge. Only a real
+            # rejection counts as a failed attempt.
+            if not timed_out:
+                self._record_connection(False)
             self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
             self._auth_label.configure(
                 text="Sign-in not completed" if timed_out else "Auth failed"
@@ -2106,6 +2196,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         self._transport = None
+        # The verdict belonged to the grant just revoked.
+        self._forget_connection()
         self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Not connected")
         # See _apply_auth_status: relabelling must restore the command too.
@@ -2145,6 +2237,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         self._transport = None
+        # The verdict belonged to the password just deleted.
+        self._forget_connection()
         self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
         self._auth_label.configure(text="Not connected")
         # See _apply_auth_status: relabelling must restore the command too.
@@ -2246,6 +2340,11 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         if new_settings.get("mail_backend") != old_backend:
             # Switching backends invalidates whatever transport we had cached.
             self._transport = None
+            # ...and the connection verdict with it: it was about the other
+            # backend's credentials entirely. _check_auth() below repaints the
+            # header from the cleared value, so the switch lands on amber
+            # "Not tested" rather than keeping the old backend's green.
+            self._forget_connection()
             self._check_auth()
 
     def _update_signout_button_label(self) -> None:
@@ -2671,6 +2770,24 @@ class _SettingsPanel(_Panel):
             variable=self._watch_interval_var, width=130, height=30,
         ).pack(side="left", padx=(8, 0))
 
+        # The Windows half of Batch E. Android warns about the two system
+        # settings that can stop its background worker; Windows has neither, but
+        # it has the same failure -- an automatic check that quietly never runs
+        # -- for its own reason: the timer is a Tk after() call inside this
+        # window, so there is nothing to run once the window is closed. The
+        # constraint is stated next to the switch it constrains rather than only
+        # in the help page, which is where it was.
+        ctk.CTkLabel(
+            body,
+            text=(
+                "Checks run only while this window is open. There is no "
+                "background service — close the app and nothing is checked "
+                "until you open it again (minimised is fine)."
+            ),
+            wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
         wrow3 = ctk.CTkFrame(body, fg_color="transparent")
         wrow3.pack(fill="x", **pad)
         ctk.CTkLabel(wrow3, text="After syncing:", width=130, anchor="w").pack(side="left")
@@ -2689,8 +2806,7 @@ class _SettingsPanel(_Panel):
             body,
             text=(
                 "Only applies to files that came from the watched folder, and "
-                "only once they have actually reached your mailbox. The check "
-                "runs while the app is open."
+                "only once they have actually reached your mailbox."
             ),
             wraplength=380, justify="left", anchor="w",
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
@@ -3055,6 +3171,20 @@ class _MailAccountPanel(_Panel):
         # ── IMAP fields (shown only when backend == imap) ──────────────
         self._imap_frame = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
 
+        # The way back into the guided setup. The wizard runs by itself the
+        # first time, but it is the only place that walks somebody through
+        # getting an app password in order, so it has to stay reachable
+        # afterwards -- a switched provider, or a password the provider has
+        # since revoked, puts an existing user back at exactly the problem it
+        # was written for. Offered here rather than replacing this form, which
+        # is the faster path for fixing a typo. Same button, same words, as
+        # Android's MailAccountScreen.
+        ctk.CTkButton(
+            self._imap_frame, text="Set up again, step by step", height=30,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._app._push_panel(_MailWizardPanel),
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
         prow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
         prow.pack(fill="x", padx=20, pady=(0, 8))
         ctk.CTkLabel(prow, text="Provider:", width=130, anchor="w").pack(side="left")
@@ -3155,6 +3285,33 @@ class _MailAccountPanel(_Panel):
 
         if current_backend == MAIL_BACKEND_IMAP:
             self._help_container.pack(fill="x")
+
+    def on_reveal(self) -> None:
+        """Called by App._pop_panel when the wizard closes back onto this one.
+
+        The wizard writes provider/host/port/email itself, so without this the
+        form underneath would still be showing what was there before -- and its
+        Save reads straight from these widgets, which would quietly undo the
+        setup the user just completed.
+        """
+        settings = self._app._settings
+        self._provider_var.set(
+            _PROVIDER_LABELS.get(
+                settings.get("imap_provider", "gmail"), _PROVIDER_LABELS["gmail"]
+            )
+        )
+        self._email_entry.delete(0, "end")
+        self._email_entry.insert(0, settings.get("imap_email", "") or "")
+        # Rewrites host and port from the provider preset, and re-disables the
+        # host field for a known provider.
+        self._apply_host_field_state()
+        if self._provider_var.get() == _PROVIDER_LABELS["custom"]:
+            self._host_entry.delete(0, "end")
+            self._host_entry.insert(0, settings.get("imap_host", "") or "")
+            self._port_entry.delete(0, "end")
+            self._port_entry.insert(0, str(settings.get("imap_port", 993)))
+        self._status_label.configure(text="", text_color=gui_theme.ON_SURFACE_VARIANT)
+        self._update_test_btn_state()
 
     # ------------------------------------------------------------------
     # IMAP field show/hide + provider-driven host/port autofill
@@ -3332,8 +3489,28 @@ class _MailAccountPanel(_Panel):
             self.after(150, lambda: self._poll_test_connection(result_q))
             return
 
+        # The worker posts each stage as it finishes as well as the final
+        # verdict. This button has one line to say it in, so it names the stage
+        # just reached and keeps waiting -- "Signing in…" is a better answer to
+        # "why is this taking so long" than a static "Testing connection…". The
+        # wizard has room for the whole list and shows all five.
+        if event.get("type") == "test_stage":
+            if event["ok"]:
+                self._status_label.configure(
+                    text=f"{event['label']}…",
+                    text_color=gui_theme.ON_SURFACE_VARIANT,
+                )
+            self.after(50, lambda: self._poll_test_connection(result_q))
+            return
+
         self._test_running = False
         self._update_test_btn_state()
+        # A staged test is a real login attempt, so its verdict is as good as
+        # any -- and this is the one button whose whole purpose is to answer
+        # "does this work", which until now it answered only in a line of text
+        # that vanished with the panel. The header keeps the answer.
+        self._app._record_connection(bool(event["ok"]))
+        self._app._check_auth()
         # Shown in place rather than in a messagebox: the whole point of the
         # staged test is to read the failure while looking at the fields that
         # caused it, and a modal covers them. Also honours the standing "no
@@ -3548,16 +3725,503 @@ class _MailAccountPanel(_Panel):
         if event["type"] == "auth_ok":
             self._status_label.configure(text="")
             self._app._transport = event["transport"]
+            # Recorded after _apply_settings, not before: a backend switch in
+            # the same Save clears the verdict on its way through, and this
+            # attempt is the newer fact of the two.
             self._app._apply_settings(new_settings)
+            self._app._record_connection(True)
             self._app._check_auth()
             self._close()
         else:
             self._save_btn.configure(state="normal")
             self._status_label.configure(text="")
+            # Recorded even though nothing was persisted -- connect_imap
+            # validates before it saves, so the stored account is untouched.
+            # The user just watched the mailbox refuse a login, and a header
+            # still claiming "Connected" through that is the exact
+            # contradiction Batch G exists to remove. Matches Android's
+            # saveImapSettings, which records both outcomes.
+            self._app._record_connection(False)
+            self._app._check_auth()
             messagebox.showerror(
                 "Could not connect",
                 f"Could not connect with those details:\n\n{event['msg']}",
             )
+
+
+# The four wizard steps, in order. Titles only -- each step draws itself in
+# _MailWizardPanel._render. Same four, in the same order, with the same words
+# as Android's MailSetupWizard.kt (PLATFORM-PARITY.md).
+_WIZARD_TITLES = (
+    "Who hosts your email?",
+    "Get an app password",
+    "Sign in",
+    "Connecting",
+)
+
+
+class _MailWizardPanel(_Panel):
+    """The guided four-step path to a working mailbox, as Android's
+    MailSetupWizardScreen.
+
+    It sits next to -- not instead of -- _MailAccountPanel's single-page form.
+    The form is the faster path once you know what the fields mean; this is for
+    the part that actually stops people, which is not the form at all but
+    getting an app password out of their provider, hence that being a step of
+    its own. Reachable on first setup and afterwards from the account screen,
+    because a revoked password or a changed provider puts an existing user back
+    at exactly the problem it was written for.
+
+    Never asks which backend to use: a new account is IMAP, and the demoted
+    Gmail sign-in stays reachable only from the full account screen. Draws in
+    the main window like every other panel -- no pop-ups -- and the way back is
+    the labelled bar button.
+    """
+
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Set up your mailbox", "Back")
+
+        settings = app._settings
+        self._step = 0
+        self._provider_key = settings.get("imap_provider", "gmail")
+        self._email = settings.get("imap_email", "") or ""
+        self._password = ""
+        self._custom_host = ""
+        self._custom_port = "993"
+        # name -> True/False as each stage reports in; a name absent from here
+        # has not been reached yet and draws greyed out.
+        self._stage_results: dict = {}
+        self._connecting = False
+        self._outcome: "tuple[bool, str] | None" = None
+
+        self._step_label = ctk.CTkLabel(
+            self, text="", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._step_label.pack(fill="x", padx=20, pady=(10, 0))
+
+        self._body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._body.pack(fill="both", expand=True)
+
+        self._render()
+
+    # ------------------------------------------------------------------
+    # Step plumbing
+    # ------------------------------------------------------------------
+
+    def _goto(self, step: int) -> None:
+        # A check in flight owns the widgets it is writing into, so the step
+        # buttons that could move out from under it are simply not drawn while
+        # it runs (see step 4). This is the belt to that's braces.
+        if self._connecting:
+            return
+        self._step = step
+        self._render()
+
+    def _provider_info(self) -> dict:
+        return IMAP_PROVIDERS.get(self._provider_key, IMAP_PROVIDERS["custom"])
+
+    def _effective_host(self) -> str:
+        if self._provider_key == "custom":
+            return self._custom_host.strip()
+        return self._provider_info()["host"] or ""
+
+    def _effective_port(self) -> int:
+        if self._provider_key == "custom":
+            try:
+                return int(self._custom_port.strip())
+            except ValueError:
+                return 993
+        return self._provider_info()["port"]
+
+    def _secondary(self, parent, text: str) -> None:
+        ctk.CTkLabel(
+            parent, text=text, wraplength=360, anchor="w", justify="left",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
+    def _render(self) -> None:
+        for child in self._body.winfo_children():
+            child.destroy()
+        self._step_label.configure(
+            text=f"Step {self._step + 1} of 4 — {_WIZARD_TITLES[self._step]}"
+        )
+        (self._render_provider, self._render_help,
+         self._render_credentials, self._render_connect)[self._step]()
+
+    # ------------------------------------------------------------------
+    # Step 1 — provider
+    # ------------------------------------------------------------------
+
+    def _render_provider(self) -> None:
+        self._secondary(
+            self._body,
+            "Pick the service your email address belongs to. It decides where "
+            "Chat Mail Sync files your chats, and how you get the password it needs.",
+        )
+        var = ctk.StringVar(value=_PROVIDER_LABELS.get(self._provider_key, "Gmail"))
+
+        def picked(_v=None) -> None:
+            self._provider_key = _PROVIDER_LABELS_REV.get(var.get(), "gmail")
+            self._render()
+
+        row = ctk.CTkFrame(self._body, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=(8, 8))
+        ctk.CTkLabel(row, text="Provider:", width=110, anchor="w").pack(side="left")
+        ctk.CTkOptionMenu(
+            row, values=list(_PROVIDER_LABELS.values()),
+            variable=var, width=190, height=30, command=picked,
+        ).pack(side="left")
+
+        # For a known provider the server settings are a fact to be told, not a
+        # question to be asked: they are already in IMAP_PROVIDERS, and getting
+        # them wrong is a failure the user cannot diagnose. Only "Other (IMAP)"
+        # gets real fields, and those are on step 3 with everything else that
+        # has to be typed.
+        if self._provider_key != "custom":
+            info = self._provider_info()
+            self._secondary(
+                self._body,
+                f"Chat Mail Sync will use {info['host']}, port {info['port']}. "
+                "Nothing to set up.",
+            )
+
+        ctk.CTkButton(
+            self._body, text="Next", height=32, command=lambda: self._goto(1),
+        ).pack(fill="x", padx=20, pady=(8, 4))
+
+    # ------------------------------------------------------------------
+    # Step 2 — app password help
+    # ------------------------------------------------------------------
+
+    def _render_help(self) -> None:
+        # The primary button sits ABOVE the instructions on purpose. Anybody
+        # who already has an app password -- and second time through, most
+        # people do -- should not have to scroll past a page written for their
+        # first time to say so.
+        ctk.CTkButton(
+            self._body, text="I have my app password", height=32,
+            command=lambda: self._goto(2),
+        ).pack(fill="x", padx=20, pady=(8, 8))
+        self._secondary(
+            self._body,
+            "An app password is a separate password your provider issues for one "
+            "app. It is not your normal password, and you can revoke it without "
+            "touching your account.",
+        )
+        self._render_help_body(self._body)
+        ctk.CTkButton(
+            self._body, text="Back a step", height=30,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._goto(0),
+        ).pack(fill="x", padx=20, pady=(10, 4))
+
+    def _render_help_body(self, parent) -> None:
+        """The per-provider app-password instructions.
+
+        Deliberately the same content the account screen shows under its
+        collapsed help toggle -- both read APP_PASSWORD_HELP_TEXT / _STEPS_* and
+        _build_app_password_prompt, so the two places cannot end up telling
+        people different things. The prompt never carries the email address or
+        the password; see _build_app_password_prompt.
+        """
+        provider_key = self._provider_key
+        provider_label = _PROVIDER_LABELS.get(provider_key, provider_key)
+        host = self._effective_host()
+        help_url = APP_PASSWORD_HELP_URLS.get(provider_key)
+        help_text = APP_PASSWORD_HELP_TEXT.get(provider_key)
+
+        if provider_key == "custom":
+            self._secondary(
+                parent,
+                "Turn on two-factor authentication in your email account first, then look "
+                "for \"App passwords\" or \"App-specific passwords\" in its security settings.",
+            )
+        elif help_text:
+            self._secondary(parent, help_text)
+
+        inline_steps = {
+            "gmail": APP_PASSWORD_STEPS_GMAIL,
+            "outlook": APP_PASSWORD_STEPS_OUTLOOK,
+        }.get(provider_key)
+        if inline_steps:
+            for i, step in enumerate(inline_steps, start=1):
+                self._secondary(parent, f"{i}. {step}")
+            self._secondary(
+                parent,
+                f"Steps checked {APP_PASSWORD_STEPS_REVIEWED}. If they don't match what you "
+                "see, use the buttons below to get the current version.",
+            )
+        if provider_key == "outlook":
+            self._secondary(
+                parent,
+                "Work or school Microsoft 365 accounts often have IMAP access disabled by "
+                "the organisation's administrator — if so, even a correct app password "
+                "will be rejected.",
+            )
+        if provider_key == "icloud":
+            self._secondary(
+                parent,
+                "This must be an app-specific password generated at appleid.apple.com, not "
+                "your main Apple ID password.",
+            )
+
+        link_row = ctk.CTkFrame(parent, fg_color="transparent")
+        link_row.pack(fill="x", padx=20, pady=(4, 0))
+        ctk.CTkButton(
+            link_row, text="Copy question", width=110, height=26,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._copy_prompt(provider_key, provider_label, host),
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(
+            link_row, text="Search for steps", width=120, height=26,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._search_prompt(provider_key, provider_label, host),
+        ).pack(side="left")
+
+        self._help_copied_label = ctk.CTkLabel(
+            parent, text="", text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._help_copied_label.pack(fill="x", padx=20, pady=(2, 0))
+
+        if help_url:
+            ctk.CTkButton(
+                parent, text=f"Open {provider_label}'s help page",
+                height=26, fg_color="transparent", border_width=1,
+                text_color=gui_theme.ON_SURFACE,
+                command=lambda: webbrowser.open(help_url),
+            ).pack(fill="x", padx=20, pady=(4, 0))
+
+    def _copy_prompt(self, provider_key: str, provider_label: str, host: str) -> None:
+        prompt = _build_app_password_prompt(provider_key, provider_label, host)
+        self.clipboard_clear()
+        self.clipboard_append(prompt)
+        self.update()
+        if hasattr(self, "_help_copied_label"):
+            self._help_copied_label.configure(text="Copied — paste it into an AI assistant.")
+
+    def _search_prompt(self, provider_key: str, provider_label: str, host: str) -> None:
+        import urllib.parse
+        prompt = _build_app_password_prompt(provider_key, provider_label, host)
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote_plus(prompt))
+
+    # ------------------------------------------------------------------
+    # Step 3 — the credentials
+    # ------------------------------------------------------------------
+
+    def _render_credentials(self) -> None:
+        if self._provider_key == "custom":
+            hrow = ctk.CTkFrame(self._body, fg_color="transparent")
+            hrow.pack(fill="x", padx=20, pady=(8, 8))
+            ctk.CTkLabel(hrow, text="Host:", width=110, anchor="w").pack(side="left")
+            host_entry = ctk.CTkEntry(hrow, width=190, height=30)
+            host_entry.insert(0, self._custom_host)
+            host_entry.pack(side="left")
+
+            prow = ctk.CTkFrame(self._body, fg_color="transparent")
+            prow.pack(fill="x", padx=20, pady=(0, 8))
+            ctk.CTkLabel(prow, text="Port:", width=110, anchor="w").pack(side="left")
+            port_entry = ctk.CTkEntry(prow, width=190, height=30)
+            port_entry.insert(0, self._custom_port)
+            port_entry.pack(side="left")
+        else:
+            host_entry = port_entry = None
+            self._secondary(
+                self._body,
+                f"Signing in to {_PROVIDER_LABELS.get(self._provider_key, self._provider_key)} "
+                f"at {self._effective_host()}, port {self._effective_port()}.",
+            )
+
+        erow = ctk.CTkFrame(self._body, fg_color="transparent")
+        erow.pack(fill="x", padx=20, pady=(8, 8))
+        ctk.CTkLabel(erow, text="Email address:", width=110, anchor="w").pack(side="left")
+        email_entry = ctk.CTkEntry(erow, width=190, height=30)
+        email_entry.insert(0, self._email)
+        email_entry.pack(side="left")
+
+        pwrow = ctk.CTkFrame(self._body, fg_color="transparent")
+        pwrow.pack(fill="x", padx=20, pady=(0, 8))
+        ctk.CTkLabel(pwrow, text="App password:", width=110, anchor="w").pack(side="left")
+        # Never pre-filled, not even from a saved credential -- same rule as
+        # the account screen's field.
+        password_entry = ctk.CTkEntry(pwrow, width=190, height=30, show="*")
+        password_entry.pack(side="left")
+
+        self._secondary(
+            self._body,
+            "The password is stored encrypted on this PC only. It is never shown "
+            "again, and never written to a log.",
+        )
+        self._error_label = ctk.CTkLabel(
+            self._body, text="", wraplength=360, anchor="w", justify="left",
+            text_color=gui_theme.ERROR, font=("", 11),
+        )
+        self._error_label.pack(fill="x", padx=20, pady=(0, 4))
+
+        def go_connect() -> None:
+            if host_entry is not None:
+                self._custom_host = host_entry.get()
+                self._custom_port = port_entry.get()
+            self._email = email_entry.get().strip()
+            self._password = password_entry.get()
+            if not self._effective_host():
+                self._error_label.configure(text="Enter a host for a custom IMAP server.")
+                return
+            if not self._email or not self._password:
+                self._error_label.configure(
+                    text="Enter the email address and app password to connect with."
+                )
+                return
+            self._goto(3)
+
+        ctk.CTkButton(
+            self._body, text="Connect", height=32, command=go_connect,
+        ).pack(fill="x", padx=20, pady=(4, 4))
+        ctk.CTkButton(
+            self._body, text="I still need an app password", height=30,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._goto(1),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
+    # ------------------------------------------------------------------
+    # Step 4 — the staged connection
+    # ------------------------------------------------------------------
+
+    def _render_connect(self) -> None:
+        self._secondary(
+            self._body,
+            "Checking the connection to "
+            f"{_PROVIDER_LABELS.get(self._provider_key, self._provider_key)}.",
+        )
+        # All five drawn up front, greyed, then lit as the worker reports in: a
+        # list that grows a line at a time hides the one fact that makes it
+        # useful, which is how much is left. The names and labels come from the
+        # Python core so Windows and Android tick off the same five things.
+        self._stage_labels = {}
+        for stage in connection_stage_plan():
+            row = ctk.CTkFrame(self._body, fg_color="transparent")
+            row.pack(fill="x", padx=20, pady=(0, 2))
+            mark = ctk.CTkLabel(row, text="…", width=28, anchor="w",
+                                text_color=gui_theme.ON_SURFACE_VARIANT)
+            mark.pack(side="left")
+            text = ctk.CTkLabel(row, text=stage["label"], anchor="w",
+                                text_color=gui_theme.ON_SURFACE_VARIANT)
+            text.pack(side="left")
+            self._stage_labels[stage["name"]] = (mark, text)
+
+        self._wizard_status = ctk.CTkLabel(
+            self._body, text="", wraplength=360, anchor="w", justify="left",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._wizard_status.pack(fill="x", padx=20, pady=(8, 4))
+        self._wizard_buttons = ctk.CTkFrame(self._body, fg_color="transparent")
+        self._wizard_buttons.pack(fill="x")
+
+        self._start_check()
+
+    def _start_check(self) -> None:
+        self._stage_results = {}
+        self._outcome = None
+        self._connecting = True
+        result_q: queue.Queue = queue.Queue()
+        threading.Thread(
+            target=test_imap_connection,
+            args=(result_q, self._effective_host(), self._effective_port(),
+                  self._email, self._password),
+            daemon=True,
+        ).start()
+        self.after(100, lambda: self._poll_wizard_check(result_q))
+
+    def _poll_wizard_check(self, result_q: "queue.Queue") -> None:
+        # winfo_exists: the panel can be closed with the check still running,
+        # and Tk raises on any widget touched after that.
+        if not self.winfo_exists():
+            return
+        try:
+            event = result_q.get_nowait()
+        except queue.Empty:
+            self.after(100, lambda: self._poll_wizard_check(result_q))
+            return
+
+        if event.get("type") == "test_stage":
+            widgets = self._stage_labels.get(event["name"])
+            if widgets:
+                mark, text = widgets
+                colour = gui_theme.TERTIARY if event["ok"] else gui_theme.ERROR
+                mark.configure(text="✓" if event["ok"] else "✕", text_color=colour)
+                text.configure(text_color=gui_theme.ON_SURFACE)
+            self.after(50, lambda: self._poll_wizard_check(result_q))
+            return
+
+        self._connecting = False
+        self._app._record_connection(bool(event["ok"]))
+        self._app._check_auth()
+        if event["ok"]:
+            # The check proved the details; this is what actually writes them
+            # down. Reusing connect_imap rather than persisting here keeps the
+            # single "validate, then save" path the account screen uses -- the
+            # credential file is written in exactly one place in this app.
+            self._wizard_status.configure(
+                text="Connected. Saving your details…", text_color=gui_theme.ON_SURFACE_VARIANT,
+            )
+            save_q: queue.Queue = queue.Queue()
+            threading.Thread(
+                target=connect_imap,
+                args=(save_q, self._effective_host(), self._effective_port(),
+                      self._email, self._password),
+                daemon=True,
+            ).start()
+            self.after(100, lambda: self._poll_wizard_save(save_q))
+        else:
+            self._wizard_status.configure(text=event["msg"], text_color=gui_theme.ERROR)
+            self._show_retry_buttons()
+
+    def _poll_wizard_save(self, save_q: "queue.Queue") -> None:
+        if not self.winfo_exists():
+            return
+        try:
+            event = save_q.get_nowait()
+        except queue.Empty:
+            self.after(100, lambda: self._poll_wizard_save(save_q))
+            return
+
+        if event["type"] == "auth_ok":
+            new_settings = dict(self._app._settings)
+            new_settings["mail_backend"] = MAIL_BACKEND_IMAP
+            new_settings["imap_provider"] = self._provider_key
+            new_settings["imap_host"] = self._effective_host()
+            new_settings["imap_port"] = self._effective_port()
+            new_settings["imap_email"] = self._email
+            self._app._transport = event["transport"]
+            self._app._apply_settings(new_settings)
+            self._app._record_connection(True)
+            self._app._check_auth()
+            # The password is not kept on the panel any longer than the save
+            # that needed it.
+            self._password = ""
+            self._wizard_status.configure(
+                text=f"Connected — {self._email} is set up.", text_color=gui_theme.TERTIARY,
+            )
+            ctk.CTkButton(
+                self._wizard_buttons, text="Done", height=32, command=self._close,
+            ).pack(fill="x", padx=20, pady=(4, 4))
+        else:
+            self._wizard_status.configure(text=event["msg"], text_color=gui_theme.ERROR)
+            self._show_retry_buttons()
+
+    def _show_retry_buttons(self) -> None:
+        # Back to the fields rather than a blind retry: a failure at the
+        # sign-in stage is almost always a typo, or the normal password used
+        # where the app password belongs.
+        ctk.CTkButton(
+            self._wizard_buttons, text="Check the details and try again", height=32,
+            command=lambda: self._goto(2),
+        ).pack(fill="x", padx=20, pady=(4, 4))
+        ctk.CTkButton(
+            self._wizard_buttons, text="Get a new app password", height=30,
+            fg_color="transparent", border_width=1, text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._goto(1),
+        ).pack(fill="x", padx=20, pady=(0, 4))
 
 
 # ---------------------------------------------------------------------------

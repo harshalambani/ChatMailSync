@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,9 +47,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -340,6 +344,8 @@ fun ChatMailApp(
         accessToken = null
         connectedEmail = null
         AppPrefs.setConnectedAccountEmail(context, null)
+        // The verdict belonged to the account just revoked.
+        ConnectionState.forget(context)
     }
 
     // "Token survives app restart": silently re-check on screen load.
@@ -359,6 +365,12 @@ fun ChatMailApp(
     var imapEmail by remember { mutableStateOf(AppPrefs.getImapEmail(context)) }
     var imapPasswordSaved by remember { mutableStateOf(AppPrefs.hasImapPassword(context)) }
     var imapProviders by remember { mutableStateOf(listOf<ImapProviderInfo>()) }
+    // The five connection stages, in order, so the wizard's last step can draw
+    // the whole list greyed out before the check starts rather than growing it
+    // a line at a time. Read from the Python core rather than hardcoded here,
+    // which is what keeps the two apps naming the same five things
+    // (PLATFORM-PARITY.md).
+    var stagePlan by remember { mutableStateOf(listOf<WizardStage>()) }
 
     // Reads config.IMAP_PROVIDERS via the Python side once per composition —
     // same preset table (host/port per provider) the Windows GUI uses, so
@@ -373,11 +385,38 @@ fun ChatMailApp(
                 port = entry.callAttr("get", "port").toString().toIntOrNull() ?: 993,
             )
         }
+        stagePlan = Python.getInstance().getModule("src.mail_client")
+            .callAttr("connection_stage_plan").asList().map { entry ->
+                WizardStage(
+                    name = entry.callAttr("get", "name").toString(),
+                    label = entry.callAttr("get", "label").toString(),
+                )
+            }
     }
+
+    // Whether there is an account to speak of at all, which means different
+    // things per backend: IMAP has one once a password is in the keystore,
+    // Gmail once there is a live token.
+    val hasMailAccount =
+        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessToken != null
+
+    // The banner's status dot. Recomputed whenever the account situation
+    // changes; the pass/fail half of it is written by the two places that
+    // actually try the mailbox (Save & connect, Test connection).
+    LaunchedEffect(hasMailAccount) { ConnectionState.refresh(context, hasMailAccount) }
 
     fun onMailBackendChange(backend: String) {
         mailBackend = backend
         AppPrefs.setMailBackend(context, backend)
+        // The recorded verdict was about the other backend's credentials, so
+        // it says nothing about these. Dropping it puts the dot back to amber
+        // ("set up, not tested") rather than carrying a green over from an
+        // account that is no longer the one in use.
+        ConnectionState.forget(context)
+        ConnectionState.refresh(
+            context,
+            if (backend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessToken != null,
+        )
     }
 
     fun onImapProviderChange(provider: String) {
@@ -445,6 +484,10 @@ fun ChatMailApp(
                 }
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
+                // A real login was attempted either way by this point -- the
+                // argument checks above return before the thread starts -- so
+                // this outcome is worth recording whichever way it went.
+                ConnectionState.record(context, errorText == null)
                 if (errorText == null) {
                     AppPrefs.setImapProvider(context, provider)
                     AppPrefs.setImapHost(context, effectiveHost)
@@ -464,8 +507,84 @@ fun ChatMailApp(
         }.start()
     }
 
+    /**
+     * The wizard's version of saveImapSettings: the same "only persist after a
+     * real login" contract, but run through check_connection so the five stages
+     * can be reported to the caller as they finish.
+     *
+     * Separate from saveImapSettings rather than a flag on it, because the two
+     * differ in more than progress: this one always has a freshly typed
+     * password (the wizard has no "leave blank to keep the saved one" rule),
+     * and it reports failure in check_connection's words -- which name the
+     * stage that broke -- instead of a bare exception message.
+     */
+    fun connectWithStages(
+        provider: String,
+        host: String,
+        port: Int,
+        email: String,
+        password: String,
+        listener: StageListener,
+        onResult: (Boolean, String) -> Unit,
+    ) {
+        val effectiveHost = if (provider == "custom") host else
+            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+        if (effectiveHost.isBlank()) {
+            onResult(false, "Enter a host for a custom IMAP server.")
+            return
+        }
+        if (email.isBlank() || password.isBlank()) {
+            onResult(false, "Enter the email address and app password to connect with.")
+            return
+        }
+        Thread {
+            var connected = false
+            // check_connection reports a connection problem as a return value,
+            // not an exception, so this catch is only for a bridge-level fault.
+            val text = try {
+                val mailClient = Python.getInstance().getModule("src.mail_client")
+                val outcome = mailClient.callAttr(
+                    "check_connection",
+                    effectiveHost,
+                    port,
+                    email,
+                    password,
+                    listener,
+                )
+                connected = outcome.callAttr("get", "ok").toBoolean()
+                mailClient.callAttr("format_connection_result", outcome).toString()
+            } catch (e: Exception) {
+                redactSecret("Could not connect: ${e.message ?: "unknown error"}", password)
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                ConnectionState.record(context, connected)
+                if (connected) {
+                    // The wizard only ever sets up IMAP (D2), so finishing it
+                    // is also the moment the account becomes an IMAP one --
+                    // otherwise someone who ran it while still on the old Gmail
+                    // path would end up with a saved password nothing uses.
+                    AppPrefs.setMailBackend(context, AppPrefs.MAIL_BACKEND_IMAP)
+                    mailBackend = AppPrefs.MAIL_BACKEND_IMAP
+                    AppPrefs.setImapProvider(context, provider)
+                    AppPrefs.setImapHost(context, effectiveHost)
+                    AppPrefs.setImapPort(context, port)
+                    AppPrefs.setImapEmail(context, email)
+                    SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), password)
+                    imapProvider = provider
+                    imapHost = effectiveHost
+                    imapPort = port
+                    imapEmail = email
+                    imapPasswordSaved = true
+                }
+                onResult(connected, text)
+            }
+        }.start()
+    }
+
     fun forgetImapPassword() {
         AppPrefs.clearImapSettings(context)
+        // The verdict was about the credentials just thrown away.
+        ConnectionState.forget(context)
         imapPasswordSaved = false
         imapProvider = "gmail"
         imapHost = ""
@@ -561,6 +680,35 @@ fun ChatMailApp(
         setAutoWatch(false)
         AppPrefs.setWatchedFolderUri(context, null)
         watchedFolderUri = null
+    }
+
+    // ---- Background health (Batch E) -----------------------------------
+    // Both facts behind this live outside the app, on system screens the user
+    // leaves us to visit, so the only reliable moment to re-read them is coming
+    // back: ON_RESUME. Keyed on autoWatchEnabled as well, because turning the
+    // toggle on is the other moment the answer changes without anyone leaving
+    // the app -- and the effect body recomputes on subscribe, so that case is
+    // covered by the re-keying rather than by a second effect.
+    //
+    // A lifecycle observer rather than LifecycleEventEffect: that lives in
+    // lifecycle-runtime-compose, which this module does not depend on, and one
+    // DisposableEffect is not worth a new dependency.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var backgroundIssues by remember { mutableStateOf(emptyList<BackgroundIssue>()) }
+    DisposableEffect(lifecycleOwner, autoWatchEnabled) {
+        fun recompute() {
+            backgroundIssues = backgroundHealthIssues(
+                autoWatchOn = autoWatchEnabled,
+                batteryExempt = isBatteryExempt(context),
+                notificationsAllowed = notificationsAllowed(context),
+            )
+        }
+        recompute()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) recompute()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // ---- Sync defaults (Phase A5 Home sync controls) -------------------
@@ -938,7 +1086,16 @@ fun ChatMailApp(
                     connectError = connectError,
                     onConnect = {
                         if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                            navController.navigate("settings")
+                            // First setup goes through the wizard (D1); once
+                            // there is a working account this button says
+                            // "Change", and changing one field is faster on the
+                            // single-page form, which is also where the wizard
+                            // can be re-launched from.
+                            if (homeBackendReady) {
+                                navController.navigate("settings")
+                            } else {
+                                navController.navigate("mailWizard")
+                            }
                         } else {
                             connectGmail(silent = false)
                         }
@@ -958,6 +1115,13 @@ fun ChatMailApp(
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
                     lastResult = lastResult,
                     syncInProgress = anySyncRunning,
+                    backgroundIssues = backgroundIssues,
+                    onBackgroundIssueAction = { issue ->
+                        // Null only below API 23, where there is no battery
+                        // exemption to grant and the issue is never raised in
+                        // the first place -- so nothing to fall back to.
+                        backgroundIssueIntent(context, issue)?.let { context.startActivity(it) }
+                    },
                 )
             }
             composable("chats") {
@@ -1024,6 +1188,13 @@ fun ChatMailApp(
                             } else {
                                 Thread {
                                     val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+                                    // check_connection (the dict) rather than
+                                    // check_connection_text (the string it is
+                                    // flattened to): the banner dot needs the
+                                    // pass/fail as a fact, and parsing it back
+                                    // out of display prose would break the
+                                    // moment that prose is reworded.
+                                    var connected = false
                                     // check_connection_text() runs the five stages
                                     // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
                                     // failed, instead of the old labels_list() call whose
@@ -1034,18 +1205,26 @@ fun ChatMailApp(
                                     // failures as a return value rather than an exception,
                                     // so the catch below is only for a bridge-level fault.
                                     val text = try {
-                                        Python.getInstance().getModule("src.mail_client")
-                                            .callAttr(
-                                                "check_connection_text",
-                                                AppPrefs.getImapHost(context),
-                                                AppPrefs.getImapPort(context),
-                                                AppPrefs.getImapEmail(context),
-                                                password,
-                                            ).toString()
+                                        val mailClient = Python.getInstance().getModule("src.mail_client")
+                                        val outcome = mailClient.callAttr(
+                                            "check_connection",
+                                            AppPrefs.getImapHost(context),
+                                            AppPrefs.getImapPort(context),
+                                            AppPrefs.getImapEmail(context),
+                                            password,
+                                        )
+                                        connected = outcome.callAttr("get", "ok").toBoolean()
+                                        // Same formatter check_connection_text
+                                        // uses, so the words are still shared
+                                        // with the Windows button verbatim.
+                                        mailClient.callAttr("format_connection_result", outcome).toString()
                                     } catch (e: Exception) {
                                         redactSecret("Could not connect: ${e.message}", password)
                                     }
-                                    android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(text) }
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        ConnectionState.record(context, connected)
+                                        onResult(text)
+                                    }
                                 }.start()
                             }
                         } else {
@@ -1059,15 +1238,23 @@ fun ChatMailApp(
                                         .callAttr("set_token", t)
                                         .callAttr("labels_list").toString()
                                     var refreshedToken: String? = null
+                                    var connected = true
                                     val text = try {
                                         labelsList(token)
                                     } catch (e: Exception) {
+                                        connected = false
                                         if (e.message?.contains("401") == true) {
                                             val fresh = refreshStaleToken(context as android.app.Activity, token)
                                             if (fresh != null) {
                                                 refreshedToken = fresh
                                                 try {
-                                                    labelsList(fresh)
+                                                    val labels = labelsList(fresh)
+                                                    // The stale token was the
+                                                    // only problem; a refresh
+                                                    // fixed it, so this counts
+                                                    // as reaching the mailbox.
+                                                    connected = true
+                                                    labels
                                                 } catch (e2: Exception) {
                                                     "Could not connect to Gmail after refreshing token: ${e2.message}"
                                                 }
@@ -1080,6 +1267,7 @@ fun ChatMailApp(
                                     }
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                                         refreshedToken?.let { accessToken = it }
+                                        ConnectionState.record(context, connected)
                                         onResult(text)
                                     }
                                 }.start()
@@ -1100,6 +1288,22 @@ fun ChatMailApp(
                     imapPasswordSaved = imapPasswordSaved,
                     onSaveImapSettings = ::saveImapSettings,
                     onForgetImapPassword = ::forgetImapPassword,
+                    onRunWizard = { navController.navigate("mailWizard") },
+                )
+            }
+            composable("mailWizard") {
+                MailSetupWizardScreen(
+                    onExit = { navController.popBackStack() },
+                    // Finishing drops the user back where they came from --
+                    // Home for a first setup, the Mail account screen for a
+                    // re-run -- rather than adding another screen to back out
+                    // of after the job is done.
+                    onDone = { navController.popBackStack() },
+                    imapProviders = imapProviders,
+                    stagePlan = stagePlan,
+                    initialProvider = imapProvider,
+                    initialEmail = imapEmail,
+                    onConnect = ::connectWithStages,
                 )
             }
             composable("help") {
