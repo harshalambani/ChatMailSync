@@ -86,6 +86,8 @@ fun SettingsScreen(
     syncInProgress: Boolean,
     syncedFilePolicy: String,
     onSyncedFilePolicyChange: (String) -> Unit,
+    dryRunDefault: Boolean,
+    onDryRunDefaultChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
@@ -221,6 +223,32 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            HorizontalDivider()
+
+            // Moved off Home. It is a persisted setting, not a per-run choice,
+            // and on Home it sat as a full title-plus-subtitle row directly
+            // above the primary button while silently redefining what that
+            // button does -- the least-used control on the screen given the
+            // most prominent place, with the worst failure mode (leave it on,
+            // and nothing ever reaches the mailbox). Home still says loudly
+            // that it is on, and still offers it once before the first run.
+            Text("Test run", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Rehearse without sending",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "Shows what would happen — writes nothing to your mailbox. " +
+                            "Stays on until you turn it off.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = dryRunDefault, onCheckedChange = onDryRunDefaultChange)
             }
 
             HorizontalDivider()

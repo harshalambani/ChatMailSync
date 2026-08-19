@@ -57,6 +57,9 @@ from src.config import (
     should_latch_oauth,
 )
 from src.app_version import version_label
+# The same function the parser uses to name a chat, so the file list, the chat
+# list and the emails themselves cannot disagree about who a file is from.
+from src.parser import extract_chat_info
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.mail_client import connection_stage_plan, mailbox_folder_for
 from src.progress import ProgressTracker
@@ -810,9 +813,26 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         footer.pack(fill="x", side="bottom", padx=8, pady=(4, 8))
         footer.pack_propagate(False)
 
+        # Test-run banner. A rehearsal mistaken for the real thing is the
+        # worst outcome this app has -- the person believes their chats are in
+        # the mailbox and they are not -- so while it is armed it says so where
+        # the eye already is: directly above the button that starts the run.
+        # Created here, packed and unpacked by _on_dry_run_toggle. Same words
+        # and the same container colour as Android's banner on Home.
+        self._dry_run_banner = ctk.CTkLabel(
+            footer,
+            text="  Test run is on — nothing will be sent to your mailbox",
+            font=ctk.CTkFont(size=11),
+            fg_color=gui_theme.SECONDARY_CONTAINER,
+            text_color=gui_theme.ON_SECONDARY_CONTAINER,
+            corner_radius=6, height=22, anchor="w",
+        )
+
         # ── Sync button + progress bar row ────────────────────────────
         ctrl = ctk.CTkFrame(footer, fg_color="transparent")
         ctrl.pack(fill="x", pady=(8, 4), padx=6)
+        # Kept so the banner can be packed *above* it after the fact.
+        self._sync_ctrl_row = ctrl
 
         self._sync_btn = ctk.CTkButton(
             ctrl, text="▶  Sync Now", width=126, height=36,
@@ -1011,10 +1031,19 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         btn_row = ctk.CTkFrame(drop, fg_color="transparent")
         btn_row.pack(pady=(0, 6))
 
-        ctk.CTkButton(
-            btn_row, text="Browse Files…", width=126, height=30,
-            command=self._browse_files,
-        ).pack(side="left", padx=6)
+        # One way in, not two. This used to be [Browse Files...], which opened
+        # the Explorer dialog straight away; that dialog now lives *inside* the
+        # import screen as its secondary "Pick a file from anywhere...", so the
+        # two never compete for the same tap. Same rule as Android, where a
+        # granted folder replaces the system picker rather than sitting beside
+        # it. The label demotes itself once something is queued -- with files
+        # waiting, Sync Now is the action, and two primary-looking buttons in
+        # one box would argue about which.
+        self._import_btn = ctk.CTkButton(
+            btn_row, text="Choose exports to import", width=182, height=30,
+            command=self._open_import_picker,
+        )
+        self._import_btn.pack(side="left", padx=6)
 
         ctk.CTkButton(
             btn_row, text="Open Inbox Folder", width=148, height=30,
@@ -1051,10 +1080,19 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         opts.pack(fill="x")
         opts.pack_propagate(False)
 
+        # "Test run", not "Dry run": the same words Android uses, and the ones
+        # a person who has never met the term can act on. It stays on the main
+        # window rather than moving into Settings as Android's did, because
+        # this one is deliberately per-session -- see _on_dry_run_toggle.
         self._dry_run_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            opts, text="Dry run (no mailbox writes)",
-            variable=self._dry_run_var, height=28,
+        _tooltip(
+            ctk.CTkCheckBox(
+                opts, text="Test run",
+                variable=self._dry_run_var, height=28,
+                command=self._on_dry_run_toggle,
+            ),
+            "Rehearses the sync and shows what would happen. Writes nothing "
+            "to your mailbox.",
         ).pack(side="left", padx=14, pady=8)
 
         ctk.CTkLabel(opts, text="Chunk size:", font=ctk.CTkFont(size=12)).pack(side="left", padx=(20, 4))
@@ -1467,6 +1505,9 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Update the count label.
         text = f"{n} file{'s' if n != 1 else ''} ready to sync" if n else "Inbox is empty — drop files above"
         self._inbox_label.configure(text=text)
+        self._import_btn.configure(
+            text="Add more exports…" if n else "Choose exports to import"
+        )
 
         # Repopulate the file list.
         for w in self._file_list_frame.winfo_children():
@@ -1478,12 +1519,23 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
             ).pack(anchor="w", padx=4, pady=2)
         else:
+            # The chat name, not the filename. Every WhatsApp export is called
+            # "WhatsApp Chat with <name>", so a column of raw filenames repeats
+            # the same four words down the list and elides the only part that
+            # tells one row from another -- in a 100px-high list, the part that
+            # gets cut is exactly the name. Android's queue has always shown
+            # the stripped name; this is the same rule, from the same shared
+            # function. The real filename is one hover away.
             for f in files:
-                ctk.CTkLabel(
-                    self._file_list_frame,
-                    text=f.name,
-                    font=ctk.CTkFont(size=11),
-                    anchor="w",
+                _, display = extract_chat_info(f.name)
+                _tooltip(
+                    ctk.CTkLabel(
+                        self._file_list_frame,
+                        text=display,
+                        font=ctk.CTkFont(size=11),
+                        anchor="w",
+                    ),
+                    f.name,
                 ).pack(fill="x", anchor="w", padx=4, pady=1)
 
     def _on_files_dropped(self, event) -> None:
@@ -1704,12 +1756,40 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             chunk_size=self._chunk_var.get(),
         )
 
+    def _sync_button_label(self) -> str:
+        """What the run button should say when it is idle.
+
+        The button is the last thing read before a run starts, so it names the
+        run it is about to start rather than always claiming to sync.
+        """
+        return "▶  Run test sync" if self._dry_run_var.get() else "▶  Sync Now"
+
+    def _on_dry_run_toggle(self) -> None:
+        """Keep the run controls honest about which kind of run is armed.
+
+        Deliberate parity exception, agreed rather than drifted into: Android
+        moved this control into Settings because there it is *persisted*, and
+        a persisted rehearsal that nobody notices means nothing ever reaches
+        the mailbox. Windows' box is per-session -- it comes back unticked on
+        every launch -- so it has no such foot-gun, and burying it in Settings
+        would mean persisting it and importing the exact problem that move was
+        meant to remove. What does carry across is the loudness: the same
+        words, in the same place relative to the run button, on both.
+        """
+        self._sync_btn.configure(text=self._sync_button_label())
+        if self._dry_run_var.get():
+            self._dry_run_banner.pack(
+                fill="x", padx=6, pady=(6, 0), before=self._sync_ctrl_row,
+            )
+        else:
+            self._dry_run_banner.pack_forget()
+
     def _begin_sync(
         self, dry_run: bool, chunk_size: str, chat_filter: str | None = None
     ) -> None:
         """Start a sync. Split out of the button handler so the watched folder
         can start a real sync of its own without faking a click (and without
-        inheriting whatever the Dry run box happens to be set to -- an
+        inheriting whatever the Test run box happens to be set to -- an
         automatic run that quietly did nothing would be worse than useless).
 
         chat_filter narrows the run to one chat, which is what the chat detail
@@ -1720,13 +1800,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return  # already running
 
         if not dry_run and self._transport is None:
-            self._append_log("Not connected.  Connect first or enable Dry run.")
+            self._append_log("Not connected.  Connect first, or tick Test run.")
             return
 
         self._last_run_dry_run = dry_run
 
         # Reset UI state.
-        self._sync_btn.configure(state="disabled", text="Syncing…")
+        self._sync_btn.configure(
+            state="disabled", text="Test run…" if dry_run else "Syncing…",
+        )
         self._stop_btn.configure(state="normal")
         self._progress.reset()
         self._progress_bar.set(0)
@@ -1798,7 +1880,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             stats = event["stats"]
             self._append_log("─" * 48)
             self._append_log(str(stats))
-            self._sync_btn.configure(state="normal", text="▶  Sync Now")
+            self._sync_btn.configure(state="normal", text=self._sync_button_label())
             self._stop_btn.configure(state="disabled")
             self._worker = None
             self._refresh_chat_list()
@@ -1808,7 +1890,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         elif t == "error":
             self._append_log(f"ERROR: {event['msg']}")
-            self._sync_btn.configure(state="normal", text="▶  Sync Now")
+            self._sync_btn.configure(state="normal", text=self._sync_button_label())
             self._stop_btn.configure(state="disabled")
             self._worker = None
             self._refresh_chat_list()
@@ -2349,6 +2431,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._panels[-1].focus_set()
             return
         self._push_panel(_SettingsPanel)
+
+    def _open_import_picker(self) -> None:
+        """Show the watched folder's exports in this window, not as a pop-up."""
+        if self._panels:
+            self._panels[-1].focus_set()
+            return
+        self._push_panel(_ImportPickerPanel)
 
     def _open_sync_log(self) -> None:
         """Show the 90-day run history in this window, not as a pop-up."""
@@ -4436,6 +4525,274 @@ def _first_line(text: str) -> str:
     """The first line of an error, for a row that has room for one line."""
     line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
     return line if len(line) <= 120 else line[:117] + "…"
+
+
+def _human_size(num_bytes: int) -> str:
+    """A file size a person can read at a glance, not to the byte."""
+    if num_bytes >= 1024 * 1024:
+        return f"{num_bytes / (1024 * 1024):.1f} MB"
+    if num_bytes >= 1024:
+        return f"{num_bytes / 1024:.0f} KB"
+    return f"{num_bytes} bytes"
+
+
+def _short_when(epoch_seconds: float) -> str:
+    """A file's date, in the same shape the rest of the window uses.
+
+    dt.day rather than the %-d strftime flag, which is not portable.
+    """
+    dt = datetime.fromtimestamp(epoch_seconds)
+    return f"{dt.strftime('%b')} {dt.day}, {dt.strftime('%Y')}"
+
+
+class _ImportPickerPanel(_Panel):
+    """Pick exports out of the watched folder, by chat name.
+
+    Android built this screen because the system file picker truncates every
+    export to "WhatsApp Chat with Bijal…", hiding the only part that tells one
+    file from another. Windows has no such defect -- askopenfilenames is a full
+    Explorer window with names, sizes and dates -- so this is parity of
+    capability, not a port of the fix. What Windows genuinely lacked was any
+    way to take *some* files out of the watched folder: [Check watched folder]
+    is all-or-nothing, and the Explorer dialog opens wherever Explorer last was
+    rather than where the exports live.
+
+    The three states are Android's, deliberately: no folder yet -> choose one;
+    folder gone -> say so and offer to re-pick, because an empty list reads as
+    "you have no exports" and is a dead end; otherwise the list, newest first,
+    with anything already queued shown but not selectable.
+    """
+
+    _EXTENSIONS = (".txt", ".zip")
+
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Import exports", "Back to sync")
+
+        self._vars: dict = {}
+        self._show_all = ctk.BooleanVar(value=False)
+
+        # Actions first, and pinned to the bottom, so a long list cannot push
+        # [Import] off the window -- the same arrangement as the settings and
+        # mail-account screens, for the same reason.
+        actions = ctk.CTkFrame(self, fg_color="transparent")
+        actions.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
+
+        self._import_btn = ctk.CTkButton(
+            actions, text="Import", width=140, height=32,
+            state="disabled", command=self._on_import,
+        )
+        self._import_btn.pack(side="left")
+
+        self._change_btn = ctk.CTkButton(
+            actions, text="Change folder", width=126, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.OUTLINE_VARIANT,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_choose_folder,
+        )
+        self._change_btn.pack(side="left", padx=8)
+
+        # Kept, and kept clearly secondary: exports saved somewhere other than
+        # the watched folder still have to get in somehow.
+        ctk.CTkButton(
+            actions, text="Pick a file from anywhere…", width=196, height=32,
+            fg_color="transparent", border_width=0,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._on_pick_anywhere,
+        ).pack(side="right")
+
+        self._body = ctk.CTkFrame(self, fg_color="transparent")
+        self._body.pack(fill="both", expand=True, padx=20, pady=(14, 0))
+
+        self._render()
+
+    # -- State ---------------------------------------------------------
+
+    def _folder(self):
+        raw = str(self._app._settings.get("watched_folder_path") or "").strip()
+        return Path(raw) if raw else None
+
+    def _queued_names(self) -> set:
+        try:
+            return {f.name for f in INBOX_DIR.iterdir() if f.is_file()}
+        except Exception:
+            return set()
+
+    def _render(self) -> None:
+        for w in self._body.winfo_children():
+            w.destroy()
+        self._vars = {}
+        self._import_btn.configure(state="disabled", text="Import")
+
+        folder = self._folder()
+        if folder is None:
+            self._change_btn.configure(text="Choose folder")
+            self._no_folder_block()
+            return
+
+        self._change_btn.configure(text="Change folder")
+        try:
+            entries = [f for f in folder.iterdir() if f.is_file()]
+        except Exception:
+            self._unreachable_block()
+            return
+
+        show_all = self._show_all.get()
+        hidden = 0
+        files = []
+        for f in entries:
+            if f.suffix.lower() in self._EXTENSIONS or show_all:
+                files.append(f)
+            else:
+                hidden += 1
+        files.sort(key=self._modified_at, reverse=True)
+
+        self._list_block(folder, files, hidden)
+
+    @staticmethod
+    def _modified_at(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    # -- Blocks --------------------------------------------------------
+
+    def _headline(self, text: str, detail: str) -> None:
+        ctk.CTkLabel(
+            self._body, text=text, anchor="w",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=gui_theme.ON_SURFACE,
+        ).pack(fill="x", pady=(4, 4))
+        ctk.CTkLabel(
+            self._body, text=detail, anchor="w", justify="left", wraplength=560,
+            font=ctk.CTkFont(size=12), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x")
+
+    def _no_folder_block(self) -> None:
+        self._headline(
+            "Choose your exports folder",
+            "Point the app at the folder WhatsApp exports are saved into — "
+            "usually Downloads. You do this once; after that every export you "
+            "save there shows up in this list.",
+        )
+
+    def _unreachable_block(self) -> None:
+        self._headline(
+            "Can't reach that folder any more",
+            "It may have been renamed, moved or deleted. Nothing you have "
+            "already synced is affected — choose the folder again to carry on "
+            "importing from it.",
+        )
+        ctk.CTkLabel(
+            self._body, text=str(self._folder()), anchor="w",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(8, 0))
+
+    def _list_block(self, folder: Path, files: list, hidden: int) -> None:
+        ctk.CTkLabel(
+            self._body, text=str(folder), anchor="w",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(0, 6))
+
+        if not files:
+            self._headline(
+                "No exports in this folder",
+                "In WhatsApp, open a chat, then ⋮ → More → Export chat, and "
+                "save the file into this folder.",
+            )
+        else:
+            scroll = ctk.CTkScrollableFrame(self._body, fg_color="transparent")
+            scroll.pack(fill="both", expand=True)
+            queued = self._queued_names()
+            for f in files:
+                self._row(scroll, f, f.name in queued)
+
+        if hidden:
+            ctk.CTkCheckBox(
+                self._body,
+                text=f"Show everything in this folder ({hidden} other file"
+                     f"{'s' if hidden != 1 else ''} hidden)",
+                variable=self._show_all, height=24,
+                font=ctk.CTkFont(size=11),
+                command=self._render,
+            ).pack(anchor="w", pady=(8, 0))
+
+    def _row(self, parent, path: Path, queued: bool) -> None:
+        _, display = extract_chat_info(path.name)
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=1)
+
+        var = ctk.BooleanVar(value=False)
+        box = ctk.CTkCheckBox(
+            row, text=display, variable=var, height=24,
+            font=ctk.CTkFont(size=12),
+            command=self._update_import_btn,
+        )
+        if queued:
+            # Shown rather than hidden: a file missing from the list would send
+            # someone back to WhatsApp to export it a second time.
+            box.configure(state="disabled")
+        else:
+            self._vars[path] = var
+        _tooltip(box, path.name).pack(side="left")
+
+        try:
+            stat = path.stat()
+            detail = f"{_human_size(stat.st_size)}  ·  {_short_when(stat.st_mtime)}"
+        except Exception:
+            detail = ""
+        if queued:
+            detail = (detail + "  ·  " if detail else "") + "already waiting to sync"
+        ctk.CTkLabel(
+            row, text=detail, anchor="e",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="right", padx=(8, 4))
+
+    # -- Actions -------------------------------------------------------
+
+    def _selected(self) -> list:
+        return [p for p, var in self._vars.items() if var.get()]
+
+    def _update_import_btn(self) -> None:
+        n = len(self._selected())
+        self._import_btn.configure(
+            state="normal" if n else "disabled",
+            text="Import" if n <= 1 else f"Import {n} files",
+        )
+
+    def _on_import(self) -> None:
+        chosen = self._selected()
+        if not chosen:
+            return
+        # _copy_to_inbox skips anything already in the inbox and logs what it
+        # did, so the counting and the reporting stay in one place.
+        self._app._copy_to_inbox(chosen)
+        self._close()
+
+    def _on_pick_anywhere(self) -> None:
+        self._close()
+        self._app._browse_files()
+
+    def _on_choose_folder(self) -> None:
+        current = self._folder()
+        chosen = filedialog.askdirectory(
+            title="Choose the folder your WhatsApp exports are saved in",
+            initialdir=str(current) if current else None,
+            parent=self,
+        )
+        if not chosen:
+            return
+        new_settings = dict(self._app._settings)
+        new_settings["watched_folder_path"] = str(Path(chosen))
+        if current is not None and Path(chosen) != current:
+            # A previous folder's ledger says nothing about a new one -- the
+            # same reset the settings screen does when the folder changes.
+            new_settings["imported_source_paths"] = []
+        self._app._apply_settings(new_settings)
+        self._render()
 
 
 class _SyncLogPanel(_Panel):
