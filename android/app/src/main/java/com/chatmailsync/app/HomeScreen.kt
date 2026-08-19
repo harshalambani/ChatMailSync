@@ -29,7 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,7 +47,9 @@ import androidx.compose.ui.unit.dp
 // repeated "WhatsApp Chat with " boilerplate eating the row's limited width.
 private const val WA_PREFIX = "whatsapp chat with "
 
-private fun displayNameFor(filename: String): String {
+// internal, not private: the in-app export picker shows the same names over
+// the same files, and two copies of this rule would eventually disagree.
+internal fun displayNameFor(filename: String): String {
     val stem = filename.substringBeforeLast('.')
     return if (stem.lowercase().startsWith(WA_PREFIX)) stem.substring(WA_PREFIX.length) else stem
 }
@@ -289,10 +291,21 @@ fun HomeScreen(
                             }
                         }
                     }
-                    OutlinedButton(onClick = onImportPick) {
-                        // No count to agree with here - the picker is
-                        // multi-select, so the plural is simply correct.
-                        Text("Import WhatsApp exports…")
+                    // Weighted by what the next step actually is. With an empty
+                    // queue there is nothing to sync and importing IS the
+                    // primary action, so it is filled and full width. Once
+                    // files are queued the primary action becomes Sync now,
+                    // and two filled buttons in one card would compete for the
+                    // same tap. No count to agree with either way -- the
+                    // picker is multi-select, so the plural is simply correct.
+                    if (inboxFiles.isEmpty()) {
+                        Button(onClick = onImportPick, modifier = Modifier.fillMaxWidth()) {
+                            Text("Choose exports to import")
+                        }
+                    } else {
+                        OutlinedButton(onClick = onImportPick, modifier = Modifier.fillMaxWidth()) {
+                            Text("Add more exports…")
+                        }
                     }
 
                     HorizontalDivider()
@@ -315,15 +328,36 @@ fun HomeScreen(
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Test run", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "Shows what would happen — writes nothing to your mailbox",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                    // The switch itself now lives in Settings. It is a
+                    // persisted setting, not a per-run choice, and giving it a
+                    // title-plus-subtitle row directly above the primary button
+                    // made the least-used control on the screen the most
+                    // prominent one. What stays here is the consequence: while
+                    // it is on, that button quietly means something else, and
+                    // leaving it on by accident means nothing ever reaches the
+                    // mailbox. So it is stated where the button is, with the
+                    // way out attached.
+                    if (dryRunDefault) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Test run is on — nothing will be sent to your mailbox",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                TextButton(onClick = { onDryRunDefaultChange(false) }) {
+                                    Text("Turn off")
+                                }
+                            }
                         }
-                        Switch(checked = dryRunDefault, onCheckedChange = onDryRunDefaultChange)
                     }
 
                     Button(
@@ -337,6 +371,17 @@ fun HomeScreen(
                             else if (dryRunDefault) "Run test sync"
                             else "Sync now"
                         )
+                    }
+
+                    // Offered once and then never again: before anything has
+                    // ever run there is a real reason to want a rehearsal, and
+                    // afterwards the setting is in Settings like every other
+                    // setting. Shown as a link, not a switch, because from here
+                    // it is a thing to do rather than a state to maintain.
+                    if (!dryRunDefault && summary?.totalRuns.let { it == null || it == 0 }) {
+                        TextButton(onClick = { onDryRunDefaultChange(true) }) {
+                            Text("Try it first, without sending anything")
+                        }
                     }
                 }
             }

@@ -175,7 +175,7 @@ private val bottomDests = listOf(
  * rather than going blank. */
 private fun tabForRoute(route: String?): String? = when {
     route == null -> null
-    route == "home" || route == "syncProgress" -> "home"
+    route == "home" || route == "syncProgress" || route == "importPicker" -> "home"
     route == "chats" || route.startsWith("chat/") -> "chats"
     route == "settings" || route == "mailAccount" || route == "help" -> "settings"
     route.startsWith("syncLog") -> "settings"
@@ -628,6 +628,39 @@ fun ChatMailApp(
     }
 
     registerImportCallback { uri -> importAndPreview(uri) }
+
+    /**
+     * Import a whole selection at once.
+     *
+     * A per-file preview is the right answer for one file and the wrong one
+     * for six: run through [importAndPreview] and the last file silently
+     * overwrites everyone else's result, so a run where half the selection was
+     * already queued reads as a clean success. One file still gets its
+     * preview; a selection gets counted honestly instead.
+     */
+    fun importMany(uris: List<Uri>) {
+        if (uris.size == 1) {
+            importAndPreview(uris.first())
+            return
+        }
+        var imported = 0
+        var alreadyQueued = 0
+        var failed = 0
+        uris.forEach { uri ->
+            val outcome = ImportManager.importUri(context, uri)
+            when {
+                outcome == null -> failed++
+                outcome.alreadyQueued -> alreadyQueued++
+                else -> imported++
+            }
+        }
+        refreshInbox()
+        lastResult = listOfNotNull(
+            "Imported ${plural(imported, "file")}",
+            "$alreadyQueued already queued".takeIf { alreadyQueued > 0 },
+            "${plural(failed, "file")} could not be read".takeIf { failed > 0 },
+        ).joinToString(" · ")
+    }
 
     // OpenMultipleDocuments (not OpenDocument): the single-select contract
     // was the "only 1 file at a time" bug reported from Home testing.
@@ -1101,7 +1134,11 @@ fun ChatMailApp(
                         }
                     },
                     inboxFiles = inboxFiles,
-                    onImportPick = { pickFile.launch(arrayOf("*/*")) },
+                    // Goes to our own picker, not the system one. The system
+                    // picker is still reachable from inside it, one clearly
+                    // secondary button down, for files outside the granted
+                    // folder.
+                    onImportPick = { navController.navigate("importPicker") },
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
@@ -1173,6 +1210,34 @@ fun ChatMailApp(
                     syncInProgress = anySyncRunning,
                     syncedFilePolicy = syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
+                    dryRunDefault = dryRunDefault,
+                    onDryRunDefaultChange = {
+                        dryRunDefault = it
+                        AppPrefs.setDryRunDefault(context, it)
+                    },
+                )
+            }
+            composable("importPicker") {
+                // Re-read on entry for the same reason Home does: the folder
+                // grant can be changed from Settings, and a file can be shared
+                // in from WhatsApp while this screen sits on the back stack.
+                LaunchedEffect(Unit) { refreshInbox() }
+                ImportPickerScreen(
+                    onBack = { navController.popBackStack() },
+                    watchedFolderUri = watchedFolderUri,
+                    // Names, not uris: what is already queued is a file in our
+                    // inbox directory, and ImportManager keys on the leaf name
+                    // too, so this marks exactly what a second import would
+                    // refuse.
+                    queuedNames = inboxFiles.map { it.first }.toSet(),
+                    onChooseFolder = { folderPicker.launch(null) },
+                    onPickFromAnywhere = { pickFile.launch(arrayOf("*/*")) },
+                    onImport = { uris ->
+                        importMany(uris)
+                        // Back to Home, where the queue and Sync now are. The
+                        // picker's job is done the moment the files are in.
+                        navController.popBackStack()
+                    },
                 )
             }
             composable("mailAccount") {
