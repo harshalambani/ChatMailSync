@@ -451,8 +451,29 @@ only you can do.
 
 > **Use one instance per mailbox.** If you want to archive from more than one place,
 > give each instance its own mailbox or its own account. Replacing an instance is a
-> different case — carry `sync_state.db` across and the new one picks up exactly
-> where the old one stopped.
+> different case — use **Settings -> Move to a new phone or PC** to carry the
+> record across, and the new one picks up exactly where the old one stopped. See
+> the next answer.
+
+---
+
+### Q. I am moving to a new PC or phone. How do I take my history with me?
+
+**A.** On the old one: **Settings -> Move to a new phone or PC -> Save a backup**.
+It writes a small file holding the record of what has already been sent, together
+with your preferences. Put it wherever you like and move it across however you
+normally move a file.
+
+On the new one: install the app, then **Restore from a backup** in the same place,
+before the first sync. Your chats are not in that file and do not need to be —
+they are already in your mailbox, which is the archive. What the backup saves you
+is a second copy of every one of them landing there.
+
+Your mail password is deliberately left out, so the new machine asks for it once.
+A backup taken on Windows restores on Android and the other way round. Restoring
+**merges** rather than replaces, so a restore onto an app that has already synced
+something keeps both sides, and restoring the same backup twice does nothing the
+second time. You will still need to add your export files again on the new machine.
 
 ---
 

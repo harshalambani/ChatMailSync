@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path
 
@@ -340,3 +341,56 @@ def test_format_preview_parsed_but_empty_keeps_the_name_and_the_reason():
         "error": "No messages found.",
     })
     assert text == "Empty\nNo messages found."
+
+
+# ---------------------------------------------------------------------------
+# Device migration façade (P3)
+# ---------------------------------------------------------------------------
+
+
+def test_export_backup_round_trips_through_the_bridge(tmp_root, db_path):
+    """The bridge deals in paths and JSON strings, because SAF gives Kotlin a
+    content:// URI Python cannot open and a heterogeneous settings map is not
+    worth marshalling."""
+    upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    dest = tmp_root / "backup.cmsbackup"
+
+    result = android_api.export_backup(
+        str(dest),
+        json.dumps({"chunk_size": 250, "imap_password": "hunter2"}),
+        "1.16.0",
+    )
+    assert result["ok"]
+    assert dest.exists()
+
+    described = android_api.describe_backup(str(dest))
+    assert described["ok"]
+    assert described["app_version"] == "1.16.0"
+    assert described["chats"] == 1
+
+    # The credential never left, even though the caller handed one over.
+    assert "hunter2" not in dest.read_bytes().decode("latin-1")
+
+
+def test_export_backup_survives_junk_settings_json(tmp_root, db_path):
+    dest = tmp_root / "backup.cmsbackup"
+    assert android_api.export_backup(str(dest), "not json at all")["ok"]
+    assert android_api.export_backup(str(dest), "[1, 2, 3]")["ok"]
+
+
+def test_describe_backup_on_a_file_that_is_not_one(tmp_root):
+    junk = tmp_root / "holiday.jpg"
+    junk.write_bytes(b"nope")
+    result = android_api.describe_backup(str(junk))
+    assert result["ok"] is False
+    assert result["error"]
+
+
+def test_import_backup_returns_settings_in_both_shapes(tmp_root, db_path):
+    dest = tmp_root / "backup.cmsbackup"
+    android_api.export_backup(str(dest), json.dumps({"chunk_size": 250}), "1.16.0")
+
+    result = android_api.import_backup(str(dest))
+    assert result["ok"]
+    # Same bundle, same install: already-imported, and nothing duplicated.
+    assert json.loads(result["settings_json"]) == result["settings"]

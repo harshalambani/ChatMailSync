@@ -132,7 +132,20 @@ private val FAQ = listOf(
         "and re-files every chat you give it. This app can add mail but never remove it, so clearing " +
         "the duplicates afterwards is manual work. Use one instance per mailbox, or give each its own " +
         "account. Replacing an instance is a different case: carry the sync state across and the new " +
-        "one continues where the old one stopped.",
+        "one continues where the old one stopped -- see the next answer.",
+    "I am moving to a new PC or phone. How do I take my history with me?" to
+        "Settings -> Move to a new phone -> \"Save a backup\". It writes a small file holding the " +
+        "record of what has already been sent, plus your preferences; pick anywhere you like to " +
+        "put it, and get it to the new phone however you normally move a file. On the new phone, " +
+        "install the app and use \"Restore from a backup\" in the same place before your first " +
+        "sync. Your chats themselves are not in that file and do not need to be: they are already " +
+        "in your mailbox, which is the archive. What the backup saves you is a second copy of all " +
+        "of them landing there. Your mail password is deliberately not included, so the new phone " +
+        "asks for it once. A backup taken on Windows restores on Android and the other way round, " +
+        "and restoring merges rather than replaces, so a restore onto a phone that has already " +
+        "synced something keeps both sides. Restoring the same backup twice does nothing the " +
+        "second time. You will still need to re-import the export files you want to keep syncing " +
+        "from.",
     "The sync said some media was \"too large to email\"." to
         "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
         "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +

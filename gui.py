@@ -47,6 +47,7 @@ from src.config import (
     MAIL_BACKEND_GMAIL_OAUTH,
     MAIL_BACKEND_IMAP,
     PROCESSED_DIR,
+    PROJECT_ROOT,
     SETTING_OAUTH_UNLOCKED,
     STATE_DB_PATH,
     TOKEN_FILE,
@@ -56,7 +57,10 @@ from src.config import (
     resolve_mail_backend,
     should_latch_oauth,
 )
-from src.app_version import version_label
+from src.app_version import app_version, version_label
+# The same bundle format Android reads and writes, so a backup taken on
+# either front-end restores on the other.
+from src import migration
 # The same function the parser uses to name a chat, so the file list, the chat
 # list and the emails themselves cannot disagree about who a file is from.
 from src.parser import extract_chat_info
@@ -3081,6 +3085,62 @@ class _SettingsPanel(_Panel):
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         ).pack(fill="x", padx=20, pady=(0, 4))
 
+        # ── Move to a new phone / PC ─────────────────────────────────────────
+        # Android's twin, section for section and sentence for sentence. Worth
+        # being explicit about what it is for, because "backup" in an archiving
+        # app invites the wrong reading: the mailbox is the archive and is
+        # already safe on a mail server. What is only here is the record of what
+        # has already been sent -- lose that and nothing is lost, everything is
+        # simply mailed a second time, into a mailbox with no way to tell the
+        # copies apart.
+        self._section(body, "Move to a new phone or PC")
+        ctk.CTkLabel(
+            body,
+            text=(
+                "Saves what this app knows about what it has already sent, so a "
+                "new device carries on instead of mailing everything a second "
+                "time. Your chats are already safe in your mailbox \u2014 this is "
+                "not a copy of them."
+            ),
+            wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        ).pack(fill="x", padx=20, pady=(4, 2))
+
+        mrow = ctk.CTkFrame(body, fg_color="transparent")
+        mrow.pack(fill="x", **pad)
+        self._backup_save_btn = ctk.CTkButton(
+            mrow, text="Save a backup\u2026", width=130, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_save_backup,
+        )
+        self._backup_save_btn.pack(side="left")
+        self._backup_restore_btn = ctk.CTkButton(
+            mrow, text="Restore from a backup\u2026", width=180, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_restore_backup,
+        )
+        self._backup_restore_btn.pack(side="left", padx=(8, 0))
+
+        # In place, under the buttons -- not a message box. Everything this can
+        # say is an outcome to read and none of it needs a decision, so a box
+        # demanding to be dismissed would only add a click.
+        self._backup_status = ctk.CTkLabel(
+            body, text="", wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE, font=("", 11),
+        )
+        self._backup_status.pack(fill="x", padx=20, pady=(0, 2))
+        ctk.CTkLabel(
+            body,
+            text=(
+                "Your mail password is never included. The new device asks for "
+                "it once."
+            ),
+            wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        ).pack(fill="x", padx=20, pady=(0, 4))
+
         # ── About / Help ───────────────────────────────────────────────
         # Named and placed to match Android's last section. The version is
         # here rather than in the main window because that is where Android
@@ -3267,6 +3327,133 @@ class _SettingsPanel(_Panel):
     # ------------------------------------------------------------------
     # Save
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Move to a new phone or PC
+    # ------------------------------------------------------------------
+
+    def _set_backup_busy(self, busy: bool, message: str) -> None:
+        state = "disabled" if busy else "normal"
+        self._backup_save_btn.configure(state=state)
+        self._backup_restore_btn.configure(state=state)
+        self._backup_status.configure(text=message)
+
+    def _run_backup_job(self, work) -> None:
+        """Run [work] off the UI thread and report its sentence in place.
+
+        Off the thread because it opens SQLite databases and walks every row of
+        the ledger; winfo_exists because the panel can be closed while it runs,
+        and Tk raises on any widget touched after that.
+        """
+        def _done(message: str) -> None:
+            if self.winfo_exists():
+                self._set_backup_busy(False, message)
+
+        def _thread() -> None:
+            try:
+                message = work()
+            except Exception as exc:  # noqa: BLE001 - shown, not swallowed
+                message = f"That did not work: {_scrub_paths(str(exc))}"
+            self.after(0, lambda: _done(message))
+
+        threading.Thread(target=_thread, daemon=True).start()
+
+    def _on_save_backup(self) -> None:
+        dest = filedialog.asksaveasfilename(
+            title="Save a Chat Mail Sync backup",
+            defaultextension=migration.BUNDLE_SUFFIX,
+            filetypes=[("Chat Mail Sync backup", "*" + migration.BUNDLE_SUFFIX),
+                       ("All files", "*.*")],
+            initialfile="chat-mail-sync-"
+                        + datetime.now().strftime("%Y-%m-%d")
+                        + migration.BUNDLE_SUFFIX,
+        )
+        if not dest:
+            return  # user cancelled
+        self._set_backup_busy(True, "Saving\u2026")
+
+        # The panel's unsaved edits are deliberately not used: what gets backed
+        # up is what this install is actually running on, not what someone has
+        # half-typed into the form above and may yet cancel.
+        settings = dict(self._app._settings)
+
+        def work() -> str:
+            summary = migration.export_bundle(
+                PROJECT_ROOT, Path(dest), settings, app_version()
+            )
+            if not summary.get("ok"):
+                return str(summary.get("error") or "The backup could not be saved.")
+            counts = summary.get("counts") or {}
+            chats = int(counts.get("chats") or 0)
+            hashes = int(counts.get("hashes") or 0)
+            return (
+                f"Backup saved \u2014 {chats} chat{'' if chats == 1 else 's'}, "
+                f"{hashes} message{'' if hashes == 1 else 's'} already sent. "
+                "Your mail password is not in it; the new device will ask once."
+            )
+
+        self._run_backup_job(work)
+
+    def _on_restore_backup(self) -> None:
+        chosen = filedialog.askopenfilename(
+            title="Restore from a Chat Mail Sync backup",
+            filetypes=[("Chat Mail Sync backup", "*" + migration.BUNDLE_SUFFIX),
+                       ("All files", "*.*")],
+        )
+        if not chosen:
+            return  # user cancelled
+        self._set_backup_busy(True, "Restoring\u2026")
+
+        def work() -> str:
+            result = migration.import_bundle(PROJECT_ROOT, Path(chosen))
+            if not result.get("ok"):
+                return str(result.get("error") or "That backup could not be restored.")
+            if result.get("already_imported"):
+                return "That backup has already been restored here. Nothing changed."
+            self.after(0, lambda: self._apply_restored_settings(result.get("settings") or {}))
+            chats = int(result.get("chats_added") or 0)
+            hashes = int(result.get("hashes_added") or 0)
+            return (
+                f"Restored {chats} chat{'' if chats == 1 else 's'} and "
+                f"{hashes} message{'' if hashes == 1 else 's'} of history \u2014 "
+                "those will not be sent again. Enter your mail password once to "
+                "finish."
+            )
+
+        self._run_backup_job(work)
+
+    def _apply_restored_settings(self, restored: dict) -> None:
+        """Write the restored preferences straight through, and move the form
+        on top of them.
+
+        Saved here rather than left for the Save button: a restore is not a
+        settings edit the user might cancel, and half of what came back
+        (the mail backend and server details) belongs to the mail account
+        screen, which this one does not write for. The widgets that *do* show a
+        restored value are moved with it, so Save cannot then put the old one
+        back.
+        """
+        if not self.winfo_exists():
+            return
+        merged = dict(self._app._settings)
+        merged.update(restored)
+        self._app._settings = merged
+        _save_settings(merged)
+
+        if "chunk_size" in restored:
+            self._chunk_var.set(str(restored["chunk_size"]))
+        if "watch_interval_minutes" in restored:
+            minutes = int(restored["watch_interval_minutes"])
+            label = next(
+                (k for k, v in _WATCH_INTERVAL_OPTIONS.items() if v == minutes), None
+            )
+            if label:
+                self._watch_interval_var.set(label)
+        if "synced_file_policy" in restored:
+            label = _SYNCED_FILE_POLICY_LABELS.get(str(restored["synced_file_policy"]))
+            if label:
+                self._synced_policy_var.set(label)
+        self._render_account_summary()
 
     def _on_save(self) -> None:
         # Start from a full copy of the existing settings so keys this dialog

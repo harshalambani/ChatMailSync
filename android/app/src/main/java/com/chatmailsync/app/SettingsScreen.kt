@@ -89,6 +89,10 @@ fun SettingsScreen(
     onSyncedFilePolicyChange: (String) -> Unit,
     dryRunDefault: Boolean,
     onDryRunDefaultChange: (Boolean) -> Unit,
+    onSaveBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    migrationBusy: Boolean,
+    migrationStatus: String?,
 ) {
     val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
@@ -262,6 +266,49 @@ fun SettingsScreen(
                 }
                 Switch(checked = dryRunDefault, onCheckedChange = onDryRunDefaultChange)
             }
+
+            HorizontalDivider()
+
+            // Getting an install onto a new phone.
+            //
+            // Worth being explicit about what this is for, because "backup" in
+            // an archiving app invites the wrong reading: the mailbox is the
+            // archive, and it is already safe on a mail server. What is only on
+            // this phone is the record of which messages have already been
+            // sent. Lose that and nothing is lost -- everything is sent again,
+            // into a mailbox that has no way to tell the copies apart.
+            Text("Move to a new phone", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Saves what this phone knows about what it has already sent, so a " +
+                    "new phone carries on instead of mailing everything a second time. " +
+                    "Your chats are already safe in your mailbox — this is not a copy " +
+                    "of them.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onSaveBackup, enabled = !migrationBusy) {
+                    Text("Save a backup")
+                }
+                OutlinedButton(onClick = onRestoreBackup, enabled = !migrationBusy) {
+                    Text("Restore from a backup")
+                }
+            }
+            // In place, under the buttons -- not a dialog. Everything this can
+            // say is an outcome to read, and none of it needs a decision, so a
+            // box demanding to be dismissed would only add a tap.
+            migrationStatus?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Text(
+                "Your mail password is never included. The new phone asks for it once.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             HorizontalDivider()
 

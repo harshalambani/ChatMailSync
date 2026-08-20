@@ -668,6 +668,60 @@ fun ChatMailApp(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris -> uris.forEach { importAndPreview(it) } }
 
+    // ---- Move to a new phone (P3) --------------------------------------
+    //
+    // Two launchers rather than one picker with a mode: SAF has two contracts,
+    // and conflating them means asking someone to "choose" a file that does not
+    // exist yet. The work itself is off the main thread -- it opens SQLite
+    // databases and walks every row of the ledger -- on the same Thread/Handler
+    // pattern the rest of this file uses for Python calls.
+    var migrationBusy by remember { mutableStateOf(false) }
+    var migrationStatus by remember { mutableStateOf<String?>(null) }
+
+    val saveBackup = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(Migration.MIME_TYPE),
+    ) { uri ->
+        if (uri != null) {
+            migrationBusy = true
+            migrationStatus = "Saving..."
+            Thread {
+                val message = Migration.exportTo(context, uri)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    migrationStatus = message
+                    migrationBusy = false
+                }
+            }.start()
+        }
+    }
+
+    val restoreBackup = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            migrationBusy = true
+            migrationStatus = "Reading..."
+            Thread {
+                // Described before it is merged, so the line the user reads
+                // names the backup they picked and not only the outcome --
+                // picking the wrong file out of a folder of them is the likely
+                // mistake here, and the merge itself says nothing about which
+                // file it was.
+                val described = Migration.describe(context, uri)
+                if (described != null) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        migrationStatus = "$described - restoring..."
+                    }
+                }
+                val message = Migration.importFrom(context, uri)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    migrationStatus = message
+                    migrationBusy = false
+                    refreshInbox()
+                }
+            }.start()
+        }
+    }
+
     LaunchedEffect(Unit) { refreshInbox() }
 
     // ---- Watched folder (Home feedback: auto-detect new export files) --
@@ -1232,6 +1286,20 @@ fun ChatMailApp(
                         dryRunDefault = it
                         AppPrefs.setDryRunDefault(context, it)
                     },
+                    onSaveBackup = {
+                        migrationStatus = null
+                        saveBackup.launch(Migration.suggestedFileName())
+                    },
+                    onRestoreBackup = {
+                        migrationStatus = null
+                        // Every type, not our own: a bundle that has been round
+                        // -tripped through Drive or Gmail can come back typed as
+                        // something else entirely, and a filter that hides the
+                        // file the user came to pick is worse than no filter.
+                        restoreBackup.launch(arrayOf("*/*"))
+                    },
+                    migrationBusy = migrationBusy,
+                    migrationStatus = migrationStatus,
                 )
             }
             composable("importPicker") {
