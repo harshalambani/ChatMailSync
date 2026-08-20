@@ -183,6 +183,47 @@ def preview(file_path: str) -> dict:
     }
 
 
+def format_preview(info: dict) -> str:
+    """Render preview()'s dict as the few lines a person actually reads.
+
+    Lives beside preview() rather than in either front-end because both of them
+    show it: Android's queue card and Windows' inbox list are the same question
+    asked twice, and a second copy of this wording would drift within a
+    release. (This module is named for Android for historical reasons only --
+    preview() and this function are platform-neutral.)
+    """
+    if not info.get("ok"):
+        return info.get("error") or "This file could not be read."
+
+    name = info.get("display_name") or "This chat"
+    lines = [name]
+
+    if info.get("error"):
+        # ok=True with an error means the file parsed but held nothing.
+        lines.append(info["error"])
+        return "\n".join(lines)
+
+    parts = [
+        "%s message%s" % (info["message_count"], "" if info["message_count"] == 1 else "s"),
+        "%s participant%s" % (info["participant_count"], "" if info["participant_count"] == 1 else "s"),
+    ]
+    if info.get("media_count"):
+        parts.append("%s media" % info["media_count"])
+    lines.append(", ".join(parts))
+
+    first, last = info.get("first_message_ts"), info.get("last_message_ts")
+    if first and last:
+        # Dates only: the timestamps are ISO, and the clock time of the first
+        # message in a three-year chat is not information anyone wants here.
+        lines.append("%s to %s" % (first[:10], last[:10]))
+    return "\n".join(lines)
+
+
+def preview_text(file_path: str) -> str:
+    """preview() + format_preview(), as one call across the Chaquopy bridge."""
+    return format_preview(preview(file_path))
+
+
 
 # Module-level so request_stop() (called from a Compose "Cancel sync" button,
 # on a different thread than the sync itself) can reach the in-flight run —

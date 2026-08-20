@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,6 +47,10 @@ import androidx.compose.ui.unit.dp
 // name shown here matches the display name used everywhere else, without the
 // repeated "WhatsApp Chat with " boilerplate eating the row's limited width.
 private const val WA_PREFIX = "whatsapp chat with "
+
+// How many queued files Home lists before handing off to the Sync queue
+// screen. See the comment at the call site for why there is a cap at all.
+private const val HOME_QUEUE_ROWS = 4
 
 // internal, not private: the in-app export picker shows the same names over
 // the same files, and two copies of this rule would eventually disagree.
@@ -175,6 +180,7 @@ fun HomeScreen(
     backgroundIssues: List<BackgroundIssue> = emptyList(),
     onBackgroundIssueAction: (BackgroundIssue) -> Unit = {},
     onOpenSyncLog: () -> Unit = {},
+    onOpenQueue: () -> Unit = {},
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
@@ -192,14 +198,25 @@ fun HomeScreen(
     var chunkMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { ChatMailTopBar(title = "Chat Mail Sync", subtitle = "Private mail archive") },
     ) { padding ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
+                .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
+                .verticalScrollbar(scrollState)
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Connection chip — compact single row, not a full card, since
@@ -271,7 +288,17 @@ fun HomeScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    inboxFiles.forEach { (name, size) ->
+                    // Capped, and the cap is the whole point. This card sits
+                    // above "Sync now" in a page that scrolls, so a queue long
+                    // enough to be worth managing is exactly a queue long
+                    // enough to push the button that acts on it off the bottom
+                    // of the screen -- thirty exports is roughly three
+                    // screen-heights of rows. Four is what still leaves the
+                    // split control and the button in view on the smallest
+                    // phone we target. Everything past four lives on the Sync
+                    // queue screen, which is also the only place with room for
+                    // removing files in bulk.
+                    inboxFiles.take(HOME_QUEUE_ROWS).forEach { (name, size) ->
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 displayNameFor(name),
@@ -291,6 +318,17 @@ fun HomeScreen(
                             }
                         }
                     }
+                    if (inboxFiles.size > HOME_QUEUE_ROWS) {
+                        // Says how many are hidden rather than just "Show all",
+                        // because the count is the reason to tap it.
+                        TextButton(
+                            onClick = onOpenQueue,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Show all ${inboxFiles.size} \u2013 manage the queue")
+                        }
+                    }
+
                     // Weighted by what the next step actually is. With an empty
                     // queue there is nothing to sync and importing IS the
                     // primary action, so it is filled and full width. Once

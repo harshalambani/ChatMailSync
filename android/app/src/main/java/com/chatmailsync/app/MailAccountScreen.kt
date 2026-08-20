@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -290,6 +291,15 @@ fun MailAccountScreen(
     onRunWizard: () -> Unit,
 ) {
     val context = LocalContext.current
+    // True if a saved password was found unreadable and thrown away since this
+    // was last asked -- a Keystore key can go with a factory-reset-protection
+    // event or a restore onto a new phone, and the app then simply asks for the
+    // password again with nothing anywhere saying why. remember{} so the read
+    // (which clears the flag) happens once per visit to this screen rather than
+    // on every recomposition. This screen is the only reader: the caption has to
+    // be consumed somewhere, and here it sits directly above the field it
+    // explains.
+    val passwordWasLost = remember { SecretStore.consumeSecretLost(context) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var backendMenuOpen by remember { mutableStateOf(false) }
     // Computed from the LIVE screen state, not from prefs alone: mailBackend
@@ -333,6 +343,14 @@ fun MailAccountScreen(
     val saveEnabled = !imapSaveBusy && imapEmail.isNotBlank() && (imapProvider != "custom" || imapHost.isNotBlank())
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatMailTopBar(
                 title = "Mail account",
@@ -341,12 +359,15 @@ fun MailAccountScreen(
             )
         },
     ) { padding ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(14.dp)
-                .verticalScroll(rememberScrollState()),
+                .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
+                .verticalScrollbar(scrollState)
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // One instance per mailbox. Parity with gui.py's mail-account panel,
@@ -484,6 +505,16 @@ fun MailAccountScreen(
                     else "No app password saved yet.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (passwordWasLost && !imapPasswordSaved) {
+                    Text(
+                        "Your saved app password could not be read on this device and " +
+                            "has been cleared — this happens after a device reset or a " +
+                            "restore onto a new phone. Nothing you have already synced " +
+                            "is affected. Enter it once more to reconnect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 Text(
                     "Leave the password field blank to keep the currently saved password. " +
                         "The password is never shown or logged.",

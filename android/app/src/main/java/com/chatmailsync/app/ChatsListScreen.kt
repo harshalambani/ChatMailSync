@@ -3,6 +3,8 @@
 package com.chatmailsync.app
 
 import android.content.Intent
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
@@ -229,6 +231,14 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
     }
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatMailTopBar(
                 title = "Chats",
@@ -249,6 +259,8 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
             )
         },
     ) { padding ->
+        val chipScroll = rememberScrollState()
+        val chatListState = rememberLazyListState()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (chats.isNotEmpty()) {
                 Text(
@@ -279,7 +291,8 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
+                        .horizontalScroll(chipScroll)
+                        .fadingEdgesHorizontal(chipScroll)
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -364,7 +377,13 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                     }
                 }
             } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = chatListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .fadingEdges(chatListState, MaterialTheme.colorScheme.background)
+                    .verticalScrollbar(chatListState),
+            ) {
                 items(filteredChats) { chat ->
                     Row(
                         modifier = Modifier

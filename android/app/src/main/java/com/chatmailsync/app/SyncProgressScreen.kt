@@ -5,6 +5,7 @@ package com.chatmailsync.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -14,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -77,6 +79,14 @@ fun SyncProgressScreen(
         workInfo?.state == WorkInfo.State.ENQUEUED
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             // Only while it is running: once the run is over the only way out
             // is [Done], which also prunes. A back arrow sitting next to that
@@ -172,9 +182,12 @@ fun SyncProgressScreen(
 
                     // Says out loud what the back arrow above now does --
                     // otherwise leaving this screen looks like it might be
-                    // the same thing as cancelling.
+                    // the same thing as cancelling. "The bar at the bottom"
+                    // was ambiguous on a phone that already has two bars of
+                    // its own down there, so the sentence now says where the
+                    // bar comes from and what it is.
                     Text(
-                        "You can leave this screen — the sync keeps running, and the bar at the bottom brings you back.",
+                        "You can leave this screen — the sync keeps running, and a progress bar appears at the bottom of every other screen to bring you back.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -186,13 +199,22 @@ fun SyncProgressScreen(
                     // through.
                     val logLines = workInfo.progress.getString(SyncWorker.KEY_LOG_LINES)
                     if (!logLines.isNullOrBlank()) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
+                        val logScroll = rememberScrollState()
+                        // The card's colour is named rather than defaulted so the
+                        // fade below can be painted in exactly the same ground.
+                        val logGround = MaterialTheme.colorScheme.surfaceContainerLow
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = logGround),
+                        ) {
                             Text(
                                 logLines,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(max = 220.dp)
-                                    .verticalScroll(rememberScrollState())
+                                    .fadingEdges(logScroll, logGround, top = false)
+                                    .verticalScrollbar(logScroll)
+                                    .verticalScroll(logScroll)
                                     .padding(14.dp),
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
