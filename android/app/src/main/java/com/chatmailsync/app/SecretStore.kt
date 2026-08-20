@@ -58,6 +58,17 @@ object SecretStore {
     private const val GCM_TAG_LENGTH_BITS = 128
     private const val PREFS_NAME = "chatmailsync_prefs"
 
+    // Set when getSecret() throws away a blob it could not decrypt, and read
+    // once by whoever next asks the user for their password. Without it the
+    // re-prompt is silent: the password simply is not there any more, the app
+    // asks for it again, and nothing anywhere says why. That happens for real
+    // and for reasons the user did not cause -- a factory-reset-protection
+    // event wipes the Keystore key, and a backup restored onto a new phone
+    // brings the ciphertext but not the key material that could read it.
+    // Storing the fact rather than showing it here keeps this object free of
+    // any opinion about UI, which is what lets it be called from a Worker.
+    private const val KEY_SECRET_LOST = "imap_password_lost"
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -119,7 +130,7 @@ object SecretStore {
         val encoded = prefs(context).getString(key, null) ?: return null
         val parts = encoded.split(":", limit = 2)
         if (parts.size != 2) {
-            clearSecret(context, key)
+            noteSecretLost(context, key)
             return null
         }
         return try {
@@ -129,9 +140,32 @@ object SecretStore {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
             String(cipher.doFinal(ciphertext), Charsets.UTF_8)
         } catch (_: Exception) {
-            clearSecret(context, key)
+            noteSecretLost(context, key)
             null
         }
+    }
+
+    /** Clears an unreadable secret and records that it was *lost* rather than
+     * never set, so the next prompt can say so.
+     *
+     * The distinction matters to exactly one person: someone who knows they
+     * saved a password and is being asked for it again. "Nothing saved yet"
+     * and "what was saved can no longer be read here" look identical from the
+     * outside and want completely different reactions -- the first is setup,
+     * the second is a phone that changed underneath them. */
+    private fun noteSecretLost(context: Context, key: String) {
+        clearSecret(context, key)
+        prefs(context).edit().putBoolean(KEY_SECRET_LOST, true).apply()
+    }
+
+    /** True once, if a saved secret was found unreadable and discarded since
+     * this was last asked. Reading it clears it: the note exists to caption a
+     * single re-prompt, and a caption that outlives the prompt it explains
+     * becomes a nag about something the user has already dealt with. */
+    fun consumeSecretLost(context: Context): Boolean {
+        val lost = prefs(context).getBoolean(KEY_SECRET_LOST, false)
+        if (lost) prefs(context).edit().remove(KEY_SECRET_LOST).apply()
+        return lost
     }
 
     fun clearSecret(context: Context, key: String) {

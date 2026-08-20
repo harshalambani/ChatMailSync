@@ -60,6 +60,14 @@ from src.app_version import version_label
 # The same function the parser uses to name a chat, so the file list, the chat
 # list and the emails themselves cannot disagree about who a file is from.
 from src.parser import extract_chat_info
+# Shared with Android: Preview and the X mean the same thing on both
+# front-ends because they are the same three functions, not two ports of
+# one idea. (The module is named for Android for historical reasons only.)
+from src.android_api import (
+    format_preview,
+    preview as preview_export,
+    remove_from_inbox,
+)
 from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
 from src.mail_client import connection_stage_plan, mailbox_folder_for
 from src.progress import ProgressTracker
@@ -1064,11 +1072,45 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             command=self._on_check_watch_now,
         )
 
-        # File list — shows filenames currently sitting in the inbox folder.
+        # Packed by _refresh_inbox_count only once the queue is long enough to
+        # be worth managing, so it is never a button with nothing behind it.
+        self._queue_btn = ctk.CTkButton(
+            btn_row, text="Manage queue…", width=150, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=lambda: self._push_panel(_QueuePanel),
+        )
+
+        # File list — the files currently sitting in the inbox folder, with
+        # the same two per-row actions Android's queue has.
+        #
+        # It takes the slack in the drop zone rather than staying nailed at
+        # 100px: the drop zone already expands with the window, so the fixed
+        # height meant a maximised window showed six rows and a wide band of
+        # nothing under them. Growing here is safe in a way it is not on
+        # Android -- Sync Now lives outside this box, in the options row below,
+        # so no length of list can push it off the screen. That is also why
+        # this list is not capped at four the way Home's is on the phone.
         self._file_list_frame = ctk.CTkScrollableFrame(
             drop, label_text="Files in inbox", height=100,
         )
-        self._file_list_frame.pack(fill="x", expand=False, padx=10, pady=(0, 6))
+        self._file_list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+
+        # Inline, under the list, hidden until asked for: a preview is a few
+        # lines of fact about one file and does not deserve a window of its
+        # own, and this app does not open pop-ups.
+        self._preview_frame = ctk.CTkFrame(drop, corner_radius=8)
+        self._preview_label = ctk.CTkLabel(
+            self._preview_frame, text="", anchor="w", justify="left",
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE,
+        )
+        self._preview_label.pack(side="left", fill="x", expand=True, padx=(10, 4), pady=6)
+        ctk.CTkButton(
+            self._preview_frame, text="✕", width=26, height=26,
+            fg_color="transparent", hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._hide_preview,
+        ).pack(side="right", padx=(0, 8))
 
         self._inbox_label = ctk.CTkLabel(
             drop, text="", font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
@@ -1526,17 +1568,76 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             # gets cut is exactly the name. Android's queue has always shown
             # the stripped name; this is the same rule, from the same shared
             # function. The real filename is one hover away.
+            #
+            # Preview and remove are per row here for the first time. Android
+            # has had both since the queue existed, and without them the only
+            # way to drop one wrongly-imported export was to open the inbox
+            # folder in Explorer and delete the file by hand.
             for f in files:
                 _, display = extract_chat_info(f.name)
+                row = ctk.CTkFrame(self._file_list_frame, fg_color="transparent")
+                row.pack(fill="x", anchor="w", padx=2, pady=1)
                 _tooltip(
                     ctk.CTkLabel(
-                        self._file_list_frame,
-                        text=display,
-                        font=ctk.CTkFont(size=11),
-                        anchor="w",
+                        row, text=display, font=ctk.CTkFont(size=11), anchor="w",
                     ),
                     f.name,
-                ).pack(fill="x", anchor="w", padx=4, pady=1)
+                ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+                ctk.CTkButton(
+                    row, text="✕", width=24, height=22,
+                    fg_color="transparent", hover_color=gui_theme.NEUTRAL_HOVER,
+                    text_color=gui_theme.ON_SURFACE_VARIANT,
+                    font=ctk.CTkFont(size=11),
+                    command=lambda n=f.name: self._remove_from_inbox(n),
+                ).pack(side="right", padx=(0, 4))
+                ctk.CTkButton(
+                    row, text="Preview", width=58, height=22,
+                    fg_color="transparent", hover_color=gui_theme.NEUTRAL_HOVER,
+                    text_color=gui_theme.ON_SURFACE_VARIANT,
+                    font=ctk.CTkFont(size=11),
+                    command=lambda n=f.name: self._show_preview(n),
+                ).pack(side="right", padx=(0, 2))
+
+        # Bulk actions only appear when there is bulk to act on. Under five
+        # files, removing them one ✕ at a time is faster than a screen change.
+        self._queue_btn.pack_forget()
+        if n > _QUEUE_BULK_THRESHOLD:
+            self._queue_btn.configure(text=f"Manage queue ({n})…")
+            self._queue_btn.pack(side="left", padx=6)
+
+    def _show_preview(self, filename: str) -> None:
+        """Parse one queued export and say what is in it, in place."""
+        try:
+            text = format_preview(preview_export(str(INBOX_DIR / filename)))
+        except Exception as exc:
+            # A preview is a convenience; it must never take the screen with it.
+            text = f"This file could not be read: {exc}"
+        self._show_preview_text(text)
+
+    def _show_preview_text(self, text: str) -> None:
+        self._preview_label.configure(text=text)
+        self._preview_frame.pack(fill="x", padx=10, pady=(0, 6), before=self._inbox_label)
+
+    def _hide_preview(self) -> None:
+        self._preview_frame.pack_forget()
+
+    def _remove_from_inbox(self, filename: str) -> None:
+        """Take one file out of the queue.
+
+        Deliberately not a recycle-bin delete of the user's own export: what
+        this removes is the app's *copy* in its inbox, made at import time from
+        a file still sitting wherever WhatsApp saved it. Android's ✕ has always
+        meant exactly this, through the same function -- the queue screens on
+        both platforms say so in as many words.
+        """
+        result = remove_from_inbox(filename)
+        if not result.get("ok"):
+            self._show_preview_text(
+                f"Could not remove {filename}: {result.get('error')}"
+            )
+            return
+        self._hide_preview()
+        self._refresh_inbox_count()
 
     def _on_files_dropped(self, event) -> None:
         paths = self._parse_dnd_paths(event.data)
@@ -4593,6 +4694,19 @@ class _ImportPickerPanel(_Panel):
         )
         self._change_btn.pack(side="left", padx=8)
 
+        # The folder belongs to WhatsApp, not to us: an export saved while this
+        # screen is open does not announce itself, and re-entering the screen to
+        # see it is a strange thing to have to know. Rescanning is the whole of
+        # _render(), so this is one line of behaviour and no new state.
+        ctk.CTkButton(
+            actions, text="Refresh", width=90, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.OUTLINE_VARIANT,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._render,
+        ).pack(side="left")
+
         # Kept, and kept clearly secondary: exports saved somewhere other than
         # the watched folder still have to get in somehow.
         ctk.CTkButton(
@@ -4621,9 +4735,14 @@ class _ImportPickerPanel(_Panel):
             return set()
 
     def _render(self) -> None:
+        # Carried across the rebuild: Refresh exists to add a newly-saved
+        # export to the list, and losing the ticks you had already made while
+        # doing it would be a worse trade than not offering Refresh at all.
+        keep = {p.name for p in self._selected()}
         for w in self._body.winfo_children():
             w.destroy()
         self._vars = {}
+        self._preselect = keep
         self._import_btn.configure(state="disabled", text="Import")
 
         folder = self._folder()
@@ -4650,6 +4769,7 @@ class _ImportPickerPanel(_Panel):
         files.sort(key=self._modified_at, reverse=True)
 
         self._list_block(folder, files, hidden)
+        self._update_import_btn()
 
     @staticmethod
     def _modified_at(path: Path) -> float:
@@ -4725,7 +4845,7 @@ class _ImportPickerPanel(_Panel):
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", pady=1)
 
-        var = ctk.BooleanVar(value=False)
+        var = ctk.BooleanVar(value=path.name in getattr(self, "_preselect", set()))
         box = ctk.CTkCheckBox(
             row, text=display, variable=var, height=24,
             font=ctk.CTkFont(size=12),
@@ -4793,6 +4913,229 @@ class _ImportPickerPanel(_Panel):
             new_settings["imported_source_paths"] = []
         self._app._apply_settings(new_settings)
         self._render()
+
+
+# Above this many queued files, Home offers the bulk queue screen. Below it,
+# the per-row X is simply faster than changing screens. Android uses the same
+# number for a different job -- there it is how many rows Home shows at all,
+# because on a phone the queue can push Sync Now off the bottom of the screen
+# and here it cannot.
+_QUEUE_BULK_THRESHOLD = 4
+
+
+class _QueuePanel(_Panel):
+    """Everything waiting to sync, with the actions that only make sense in bulk.
+
+    Android reaches the same screen from "Show all N" because its Home card is
+    capped at four rows; Windows reaches it from "Manage queue" because its
+    list is not capped and does not need to be. Different doors, same room --
+    what would break parity is one platform being able to drop twenty exports
+    in a stroke and the other not.
+    """
+
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Sync queue", "Back to sync")
+
+        self._vars: dict = {}
+
+        # Actions pinned to the bottom before the list is built, so a long
+        # queue cannot push them off -- the same arrangement as the import
+        # screen, for the same reason.
+        actions = ctk.CTkFrame(self, fg_color="transparent")
+        actions.pack(side="bottom", fill="x", padx=20, pady=(8, 12))
+
+        self._remove_btn = ctk.CTkButton(
+            actions, text="Remove from queue", width=170, height=32,
+            state="disabled",
+            fg_color=gui_theme.ERROR_CONTAINER,
+            hover_color=gui_theme.ERROR_CONTAINER,
+            text_color=gui_theme.ON_ERROR_CONTAINER,
+            command=self._on_remove,
+        )
+        self._remove_btn.pack(side="left")
+
+        self._select_btn = ctk.CTkButton(
+            actions, text="Select all", width=100, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.OUTLINE_VARIANT,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_select_all,
+        )
+        self._select_btn.pack(side="left", padx=8)
+
+        ctk.CTkButton(
+            actions, text="Add more exports…", width=160, height=32,
+            fg_color="transparent", border_width=0,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._on_add_more,
+        ).pack(side="right")
+
+        # Says what removal does and does not do, permanently rather than on
+        # confirmation: nothing here has been sent yet, and the export in the
+        # folder it came from is untouched. Without that, "remove" reads as if
+        # it might be deleting the user's own file.
+        ctk.CTkLabel(
+            self, text=(
+                "Removing takes files out of this queue only. The exports they were "
+                "imported from are not touched, and nothing already synced is affected."
+            ),
+            anchor="w", justify="left", wraplength=600,
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(side="bottom", fill="x", padx=20, pady=(0, 4))
+
+        self._preview_label = ctk.CTkLabel(
+            self, text="", anchor="w", justify="left", wraplength=600,
+            font=ctk.CTkFont(size=11), text_color=gui_theme.ON_SURFACE,
+        )
+        self._preview_label.pack(side="bottom", fill="x", padx=20, pady=(0, 4))
+
+        self._headline = ctk.CTkLabel(
+            self, text="", anchor="w",
+            font=ctk.CTkFont(size=13), text_color=gui_theme.ON_SURFACE,
+        )
+        self._headline.pack(fill="x", padx=20, pady=(14, 6))
+
+        self._body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._body.pack(fill="both", expand=True, padx=20)
+
+        self._render()
+
+    # -- State ---------------------------------------------------------
+
+    def _files(self) -> list:
+        try:
+            return sorted(
+                (f for f in INBOX_DIR.iterdir()
+                 if f.is_file() and f.suffix in (".txt", ".zip", "")),
+                key=lambda f: f.name.lower(),
+            )
+        except Exception:
+            return []
+
+    def _checked(self) -> list:
+        return [name for name, var in self._vars.items() if var.get()]
+
+    # -- Render --------------------------------------------------------
+
+    def _render(self) -> None:
+        for w in self._body.winfo_children():
+            w.destroy()
+        self._vars = {}
+
+        files = self._files()
+        total = sum(self._size_of(f) for f in files)
+        self._headline.configure(
+            text=(
+                f"{len(files)} file{'s' if len(files) != 1 else ''} - {_human_size(total)}"
+                if files else "The queue is empty."
+            )
+        )
+
+        if not files:
+            ctk.CTkLabel(
+                self._body,
+                text="Imported exports appear here until they are synced.",
+                anchor="w", font=ctk.CTkFont(size=12),
+                text_color=gui_theme.ON_SURFACE_VARIANT,
+            ).pack(fill="x", pady=4)
+            self._update_buttons()
+            return
+
+        for f in files:
+            _, display = extract_chat_info(f.name)
+            row = ctk.CTkFrame(self._body, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+
+            var = ctk.BooleanVar(value=False)
+            self._vars[f.name] = var
+            ctk.CTkCheckBox(
+                row, text="", width=24, variable=var,
+                command=self._update_buttons,
+            ).pack(side="left")
+
+            names = ctk.CTkFrame(row, fg_color="transparent")
+            names.pack(side="left", fill="x", expand=True)
+            _tooltip(
+                ctk.CTkLabel(
+                    names, text=display, anchor="w", font=ctk.CTkFont(size=12),
+                ),
+                f.name,
+            ).pack(fill="x")
+            ctk.CTkLabel(
+                names, text=_human_size(self._size_of(f)), anchor="w",
+                font=ctk.CTkFont(size=10), text_color=gui_theme.ON_SURFACE_VARIANT,
+            ).pack(fill="x")
+
+            ctk.CTkButton(
+                row, text="Preview", width=70, height=26,
+                fg_color="transparent", border_width=0,
+                hover_color=gui_theme.NEUTRAL_HOVER,
+                text_color=gui_theme.ON_SURFACE_VARIANT,
+                font=ctk.CTkFont(size=11),
+                command=lambda n=f.name: self._on_preview(n),
+            ).pack(side="right")
+
+        self._update_buttons()
+
+    @staticmethod
+    def _size_of(path: Path) -> int:
+        try:
+            return path.stat().st_size
+        except Exception:
+            return 0
+
+    def _update_buttons(self) -> None:
+        n = len(self._checked())
+        self._remove_btn.configure(
+            state="normal" if n else "disabled",
+            text=f"Remove {n} from queue" if n else "Remove from queue",
+        )
+        self._select_btn.configure(
+            text="Clear" if self._vars and n == len(self._vars) else "Select all",
+            state="normal" if self._vars else "disabled",
+        )
+
+    # -- Actions -------------------------------------------------------
+
+    def _on_select_all(self) -> None:
+        want = not (self._vars and len(self._checked()) == len(self._vars))
+        for var in self._vars.values():
+            var.set(want)
+        self._update_buttons()
+
+    def _on_preview(self, filename: str) -> None:
+        try:
+            text = format_preview(preview_export(str(INBOX_DIR / filename)))
+        except Exception as exc:
+            text = f"This file could not be read: {exc}"
+        self._preview_label.configure(text=text)
+
+    def _on_remove(self) -> None:
+        # Snapshotted before the first removal: _render() rebuilds self._vars,
+        # and iterating it while it is being replaced would drop every other
+        # file.
+        doomed = list(self._checked())
+        failed = []
+        for name in doomed:
+            if not remove_from_inbox(name).get("ok"):
+                failed.append(name)
+        self._preview_label.configure(
+            text=(
+                "Could not remove: " + ", ".join(failed) if failed
+                else f"Removed {len(doomed)} file{'s' if len(doomed) != 1 else ''} from the queue."
+            )
+        )
+        self._app._refresh_inbox_count()
+        self._render()
+
+    def _on_add_more(self) -> None:
+        # Replaces this panel rather than stacking on it: the import screen is
+        # a sibling of this one, not a step inside it, and Back from a stack
+        # two deep lands somewhere nobody asked to be.
+        self._app._pop_panel()
+        self._app._push_panel(_ImportPickerPanel)
 
 
 class _SyncLogPanel(_Panel):

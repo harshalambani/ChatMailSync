@@ -288,3 +288,55 @@ def test_delete_chat_unknown_returns_error(tmp_root, db_path):
     result = android_api.delete_chat("nonexistent")
     assert result["ok"] is False
     assert result["error"] is not None
+
+
+# --- format_preview ---------------------------------------------------------
+# Both front-ends render this string verbatim, so its shape is a contract:
+# Windows' inline strip and Android's queue card would otherwise drift apart
+# the first time either one "tidied" its own copy of the wording.
+
+
+def test_format_preview_failed_read_uses_the_error():
+    text = android_api.format_preview({"ok": False, "error": "Not a chat export."})
+    assert text == "Not a chat export."
+
+
+def test_format_preview_failed_read_without_an_error_still_says_something():
+    assert android_api.format_preview({"ok": False}) == "This file could not be read."
+
+
+def test_format_preview_lists_counts_and_a_date_range():
+    text = android_api.format_preview({
+        "ok": True,
+        "display_name": "Neha",
+        "message_count": 2,
+        "participant_count": 2,
+        "media_count": 3,
+        "first_message_ts": "2024-01-02T10:11:12",
+        "last_message_ts": "2025-03-04T05:06:07",
+        "error": None,
+    })
+    assert text == "Neha\n2 messages, 2 participants, 3 media\n2024-01-02 to 2025-03-04"
+
+
+def test_format_preview_singular_and_no_media():
+    text = android_api.format_preview({
+        "ok": True,
+        "display_name": "Solo",
+        "message_count": 1,
+        "participant_count": 1,
+        "media_count": 0,
+        "first_message_ts": None,
+        "last_message_ts": None,
+        "error": None,
+    })
+    assert text == "Solo\n1 message, 1 participant"
+
+
+def test_format_preview_parsed_but_empty_keeps_the_name_and_the_reason():
+    text = android_api.format_preview({
+        "ok": True,
+        "display_name": "Empty",
+        "error": "No messages found.",
+    })
+    assert text == "Empty\nNo messages found."

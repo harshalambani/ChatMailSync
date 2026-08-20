@@ -1142,7 +1142,7 @@ fun ChatMailApp(
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview", path).toString()
+                            .callAttr("preview_text", path).toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
                     chunkSize = chunkSize,
@@ -1160,6 +1160,23 @@ fun ChatMailApp(
                         backgroundIssueIntent(context, issue)?.let { context.startActivity(it) }
                     },
                     onOpenSyncLog = { navController.navigate("syncLog") },
+                    onOpenQueue = { navController.navigate("queue") },
+                )
+            }
+            composable("queue") {
+                // Same rule as home: this screen is reached from a list that
+                // may have gone stale while the app was away.
+                LaunchedEffect(Unit) { refreshInbox() }
+                QueueScreen(
+                    files = inboxFiles,
+                    onPreview = { name ->
+                        val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
+                        Python.getInstance().getModule("src.android_api")
+                            .callAttr("preview_text", path).toString()
+                    },
+                    onRemove = { name -> removeInboxFile(name) },
+                    onImportPick = { navController.navigate("importPicker") },
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable("chats") {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -125,6 +126,14 @@ fun MailSetupWizardScreen(
     }
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatMailTopBar(
                 title = "Set up your mailbox",
@@ -158,6 +167,8 @@ fun MailSetupWizardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
+                .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
+                .verticalScrollbar(scrollState)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

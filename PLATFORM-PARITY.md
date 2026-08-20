@@ -381,3 +381,47 @@ reasoning behind each is still the reasoning the code follows.
    redirect, so the CNAME cannot move before the new record exists without
    taking the site down. They cut over after the merge, with the old hostname
    kept alive serving a redirect.
+
+   **The freeze, ratified 2026-08-20 — and it is seven names, not three.**
+   The three Android storage identifiers above have now moved three times
+   each, and every move was affordable for a reason that has expired. From
+   here they are frozen, and so is the `applicationId` beside them:
+
+   - `chatmailsync_prefs` — declared *twice*, in `AppPrefs.kt` and
+     `SecretStore.kt`, against the same file; the two must stay in step.
+   - `chatmailsync_imap_key` — the AndroidKeyStore alias.
+   - `filesDir/chatmailsync` — the python root, which holds `sync_state.db`.
+   - `com.chatmailsync.app` — the `applicationId`/`namespace`, and the worst
+     of the four: the other three reset or strand data *inside* one app,
+     while changing this one makes every existing install a different app
+     that never receives another update.
+
+   Windows has the same class of identifier and had not been written down
+   as such: `AppID=ChatMailSyncPortable` (it fixes the install directory, so
+   changing it orphans `Data\` exactly as a moved python root would),
+   `CHATMAILSYNC_ROOT`, and `_APP_ENTROPY`. Windows is safer, not exempt —
+   `Data\` is user-visible and copyable, and the entropy already has the
+   `_LEGACY_APP_ENTROPY` path described above. The freeze covers all seven.
+
+   `FrozenIdentifiersTest` asserts the four Kotlin literals against their
+   source files and runs in CI (`:app:testDebugUnitTest`), because a rename
+   is otherwise a green build: nothing in either suite referenced these
+   strings before.
+
+   Two findings that closed the remaining questions. First, the old-package
+   problem is empty: `v1.0.1` through `v1.6.0` did publish
+   `WAMailSync-*.apk` under `com.wamailsync.app`, and a public repo made
+   them reachable by anyone — but the download count on every one of those
+   assets is **0**. Nobody is stranded on the old package. Second, the
+   freeze does not foreclose a future rebrand, and the reason is worth
+   stating because it is a constraint on work not yet written: the hard half
+   of any rename is carrying `sync_state.db` across a moved root, which is
+   exactly the primitive the queued device-migration phase already owns. So
+   that phase must take the root **as a parameter** rather than hard-coding
+   the `chatmailsync` literal — otherwise it can move data between devices
+   but not between roots, and this escape hatch silently is not there.
+
+   What was deliberately *not* done: no generic legacy-fallback layer on
+   Android mirroring `_LEGACY_APP_ENTROPY`. There is no pending rebrand, and
+   untested migration code that touches credentials and the sync database is
+   a larger live hazard than the frozen rename it would insure against.

@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -273,6 +275,14 @@ fun SyncLogScreen(
     val blocks = remember(visible, expanded) { foldUneventful(visible, expanded) }
 
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatMailTopBar(
                 title = "Sync log",
@@ -286,12 +296,15 @@ fun SyncLogScreen(
             )
         },
     ) { padding ->
+        val chipScroll = rememberScrollState()
+        val runListState = rememberLazyListState()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (runs.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
+                        .horizontalScroll(chipScroll)
+                        .fadingEdgesHorizontal(chipScroll)
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -338,7 +351,13 @@ fun SyncLogScreen(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = runListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadingEdges(runListState, MaterialTheme.colorScheme.background)
+                        .verticalScrollbar(runListState),
+                ) {
                     items(blocks) { block ->
                         when (block) {
                             is LogBlock.Run -> {
@@ -495,6 +514,14 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
 
     val current = run
     Scaffold(
+        // Zero, deliberately: MainActivity's Scaffold has already padded
+        // this NavHost for the status bar and the bottom bars, and insets
+        // are not consumed by being turned into padding -- so a screen
+        // Scaffold left on the default reserves the same strips a second
+        // time. That silently cost about a row and a half of list height
+        // on every screen, which is how two exports ended up below the
+        // fold on the import picker.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatMailTopBar(
                 title = current?.displayName ?: "Sync run",
@@ -525,11 +552,14 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
             return@Scaffold
         }
 
+        val runScroll = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .fadingEdges(runScroll, MaterialTheme.colorScheme.background)
+                .verticalScrollbar(runScroll)
+                .verticalScroll(runScroll)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

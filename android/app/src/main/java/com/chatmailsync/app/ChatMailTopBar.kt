@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -162,6 +163,10 @@ fun ChatMailTopBar(
     val labelledBack = backLabel != null && onBack != null
     TopAppBar(
         expandedHeight = MastheadHeight,
+        // Zero for the same reason the screen Scaffolds are zero: the
+        // status-bar strip is already paid for by MainActivity's Scaffold,
+        // and paying twice made an 88dp band render nearer 120dp.
+        windowInsets = WindowInsets(0, 0, 0, 0),
         title = {
             // TopAppBar's own vertical placement of the title slot anchors
             // it toward the bottom of expandedHeight (matching Large/Medium
