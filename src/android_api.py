@@ -10,13 +10,14 @@ Every function returns plain JSON-serializable types (dict/list/str/int/
 bool/None) since Chaquopy marshals those most cleanly to Kotlin.
 """
 
+import json
 import platform
 import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable, Optional
 
-from src import config
+from src import config, migration
 from src.mail_client import ChunkSize, MailTransport, mailbox_folder_for
 from src.parser import extract_chat_info, parse_file
 from src.state import MailboxNotClearedError, count_archived_messages
@@ -445,3 +446,68 @@ def delete_chat(chat_id_or_name: str) -> dict:
         "display_name": chat["display_name"],
         "error": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Device migration (P3).
+#
+# Kotlin owns the file, Python owns the contents. SAF hands Kotlin a content://
+# URI, not a path, and Python cannot open one -- so Kotlin copies to a cache
+# file, calls in here with that path, and copies the result back out. The same
+# split lets Windows call these functions with a real path and no adapter.
+# ---------------------------------------------------------------------------
+
+
+def export_backup(dest_path: str, settings_json: str = "{}", app_version: str = "") -> dict:
+    """Write a restore bundle for this install to [dest_path].
+
+    [settings_json] is the front-end's own settings map, JSON-encoded. Only the
+    keys on migration's allow-list survive into the bundle; a credential passed
+    in here is dropped rather than trusted to have been filtered already.
+    """
+    try:
+        settings = json.loads(settings_json or "{}")
+    except ValueError:
+        settings = {}
+    if not isinstance(settings, dict):
+        settings = {}
+    try:
+        return migration.export_bundle(
+            config.PROJECT_ROOT, Path(dest_path), settings, app_version
+        )
+    except migration.BundleError as exc:
+        return {"ok": False, "error": str(exc)}
+    except OSError as exc:
+        return {"ok": False, "error": f"That backup could not be written: {exc}"}
+
+
+def describe_backup(source_path: str) -> dict:
+    """What is in the bundle at [source_path], for showing before restoring."""
+    try:
+        manifest = migration.read_manifest(Path(source_path))
+    except migration.BundleError as exc:
+        return {"ok": False, "error": str(exc)}
+    counts = manifest.get("counts") or {}
+    return {
+        "ok": True,
+        "error": None,
+        "created_at": manifest.get("created_at") or "",
+        "app_version": manifest.get("app_version") or "",
+        "chats": int(counts.get("chats") or 0),
+        "runs": int(counts.get("runs") or 0),
+        "hashes": int(counts.get("hashes") or 0),
+    }
+
+
+def import_backup(source_path: str) -> dict:
+    """Merge the bundle at [source_path] into this install.
+
+    The returned "settings" are the portable ones from the bundle, for the
+    front-end to apply to its own store -- this module does not know where
+    either front-end keeps them. "settings_json" carries the same thing in the
+    form Kotlin can read without marshalling a heterogeneous map.
+    """
+    result = migration.import_bundle(config.PROJECT_ROOT, Path(source_path))
+    if result.get("ok"):
+        result["settings_json"] = json.dumps(result.get("settings") or {})
+    return result

@@ -219,53 +219,63 @@ fun HomeScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Connection chip — compact single row, not a full card, since
-            // it's a status line rather than a distinct feature area.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (backendReady) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    // Was a hardcoded Material green, the one
-                                    // colour in the app that belonged to no
-                                    // palette. tertiary is the same idea, in
-                                    // the app's own muted family, and follows
-                                    // the theme into dark mode.
-                                    .background(MaterialTheme.colorScheme.tertiary, CircleShape),
+            // Only when there is something to do about it.
+            //
+            // This used to be here unconditionally, and in the settled case it
+            // was pure restatement: the masthead carries a connection pill on
+            // every screen in the app, so a second "Connected as ..." line
+            // directly under it said the same thing twice and cost a row of
+            // height at the top of a column whose primary button is at the
+            // bottom. What it is worth keeping for is the unsettled case --
+            // no account yet, or a connection that failed -- where it is not
+            // a status line at all but the next thing to fix, with the button
+            // that fixes it attached. The address itself was never the point
+            // here; it lives on the Mail account screen.
+            val connectionSettled = accountLabel != null && connectError == null
+            if (!connectionSettled) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (backendReady) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        // Was a hardcoded Material green, the one
+                                        // colour in the app that belonged to no
+                                        // palette. tertiary is the same idea, in
+                                        // the app's own muted family, and follows
+                                        // the theme into dark mode.
+                                        .background(MaterialTheme.colorScheme.tertiary, CircleShape),
+                                )
+                            }
+                            Text(
+                                text = accountLabel?.let { "Connected as $it" }
+                                    ?: "Not connected",
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         }
-                        Text(
-                            text = accountLabel?.let { "Connected as $it" }
-                                ?: "Not connected",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        connectError?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
-                    connectError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = onConnect) {
+                        Text(connectActionLabel)
                     }
                 }
-                TextButton(onClick = onConnect) {
-                    Text(connectActionLabel)
-                }
+                HorizontalDivider()
             }
-            HorizontalDivider()
 
             // Anything the system is doing that will stop automatic syncing.
-            // Directly under the connection line because it is the same kind of
-            // fact -- whether the app can actually do its job right now -- and
-            // above the inbox because a queue of files means nothing if the
-            // thing meant to send them has been put to sleep.
+            // Above the inbox because a queue of files means nothing if the
+            // thing meant to send them has been put to sleep. It shares the top
+            // of the column with the connection line for the same reason: both
+            // are the app telling you it cannot do its job, and that is the
+            // only class of thing allowed above the button.
             backgroundIssues.forEach { issue ->
                 BackgroundHealthCard(issue = issue, onAction = { onBackgroundIssueAction(issue) })
-            }
-
-            summary?.takeIf { it.totalRuns > 0 }?.let {
-                SyncStatusBlock(summary = it, onOpenSyncLog = onOpenSyncLog)
             }
 
             // Inbox + sync — one card: these two are really one workflow
@@ -422,6 +432,15 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+
+            // Below the card, not above it. What happened last is history,
+            // and history that sits over the top of the control you came here
+            // to press is history charging rent for the space. Everything
+            // above this line is either something to do or something blocking
+            // it from being done.
+            summary?.takeIf { it.totalRuns > 0 }?.let {
+                SyncStatusBlock(summary = it, onOpenSyncLog = onOpenSyncLog)
             }
 
             previewText?.let {
