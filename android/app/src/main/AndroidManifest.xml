@@ -7,9 +7,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- allowBackup is true since v1.17.0. It was false because "back up an
+         archiver's database" sounds like a privacy question, and the
+         safe-looking answer was no. It is the wrong answer: what this app
+         keeps is the record of what it has already mailed, and a device that
+         loses it mails every chat a second time into a mailbox that cannot
+         tell the copies apart. The two rules files say exactly what travels
+         and what does not - the chat exports themselves never leave, and the
+         mail password cannot be read off the device it was saved on. -->
     <application
         android:name=".ChatMailApplication"
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/full_backup_content"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Chat Mail Sync"

@@ -61,6 +61,23 @@ object Migration {
         put("imap_email", AppPrefs.getImapEmail(context))
     }.toString()
 
+    /** How old a backup has to be before the app stops treating it as cover.
+     *
+     * Thirty days is a judgement, not a rule: it is long enough that someone
+     * who keeps up is never nagged, and short enough that the re-mailing a
+     * lost record would cause is bounded by roughly a month of chats. */
+    const val BACKUP_STALE_AFTER_DAYS = 30L
+
+    fun backupIsStale(atMillis: Long, now: Long = System.currentTimeMillis()): Boolean =
+        atMillis <= 0L || now - atMillis > BACKUP_STALE_AFTER_DAYS * 24L * 60L * 60L * 1000L
+
+    /** "Last backup: 28 Aug 2026", or the plain fact that there isn't one. */
+    fun describeLastBackup(atMillis: Long): String =
+        if (atMillis <= 0L) "No backup saved yet."
+        else "Last backup: " + java.text.SimpleDateFormat(
+            "d MMM yyyy", java.util.Locale.getDefault(),
+        ).format(java.util.Date(atMillis))
+
     /** Write a backup to the picked [uri]. Returns the line to show the user. */
     fun exportTo(context: Context, uri: Uri): String {
         val staged = File(context.cacheDir, "backup-out$SUFFIX")
@@ -78,11 +95,16 @@ object Migration {
                 staged.inputStream().use { it.copyTo(out) }
             } ?: return "That location could not be written to."
 
+            // Only here, where the bytes are known to have reached the file
+            // the user picked -- a stamp written on "Save a backup" being
+            // tapped would tell them they are protected when they are not.
+            AppPrefs.setLastBackupAt(context)
+
             val counts = result.callAttr("get", "counts")
             val chats = counts.callAttr("get", "chats").toString().toIntOrNull() ?: 0
             val hashes = counts.callAttr("get", "hashes").toString().toIntOrNull() ?: 0
             return "Backup saved — ${plural(chats, "chat")}, ${plural(hashes, "message")} " +
-                "already sent. Your mail password is not in it; the new phone will ask once."
+                "already sent. Your mail password is not in it; the restored device asks once."
         } catch (e: Exception) {
             return "The backup could not be saved: ${e.message}"
         } finally {

@@ -208,3 +208,108 @@ def test_reset_chat_allows_reset_when_nothing_archived(db_path):
     state.reset_chat("chat1", db_path)
 
     assert state.get_chat("chat1", db_path)["gmail_thread_id"] is None
+
+
+def _pretend_db_predates_the_sweep(db_path):
+    """The fixture builds its database through init_db, which stamps the
+    schema version -- so a test has to wind it back to look like an install
+    made before the sweep existed, which is the only kind that has duplicates.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA user_version = 0")
+    conn.commit()
+    conn.close()
+
+
+def _clone_run(db_path, run_id):
+    """Append a byte-identical copy of an existing run, the way the pre-fix
+    bundle merge did."""
+    import sqlite3
+
+    cols = ", ".join(state.RUN_NATURAL_KEY)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        f"SELECT {cols} FROM sync_runs WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    cur = conn.execute(
+        f"INSERT INTO sync_runs ({cols}) VALUES ({', '.join('?' * len(state.RUN_NATURAL_KEY))})",
+        tuple(row[c] for c in state.RUN_NATURAL_KEY),
+    )
+    new_id = int(cur.lastrowid)
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def test_init_db_sweeps_runs_an_old_restore_duplicated(db_path):
+    """A restore onto the phone the backup came from doubled the whole sync
+    log, and nothing in the app could tell a copy from the original. Merging
+    no longer does that, but the rows it already wrote have to go -- once, on
+    the next start, without taking any hashes down with them."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
+    h = state.compute_message_hash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+    state.insert_message_hashes([(h, "chat1", "2025-03-14T09:41:00", run_id)], db_path)
+    state.complete_sync_run(
+        run_id, last_synced_ts="2025-03-14T09:41:00", last_synced_hash=h,
+        messages_parsed=1, messages_synced=1, messages_skipped=0, db_path=db_path,
+    )
+
+    copy_id = _clone_run(db_path, run_id)
+    # A hash hanging off the copy must survive, repointed -- a sweep that
+    # silently dropped archived messages would re-send them.
+    h2 = state.compute_message_hash("chat1", "2025-03-14T09:42:00", "Alice", "Again")
+    state.insert_message_hashes([(h2, "chat1", "2025-03-14T09:42:00", copy_id)], db_path)
+    assert len(state.get_recent_runs(db_path=db_path)) == 2
+
+    _pretend_db_predates_the_sweep(db_path)
+    state.init_db(db_path)
+
+    runs = state.get_recent_runs(db_path=db_path)
+    assert len(runs) == 1
+    assert int(runs[0]["run_id"]) == run_id      # the original is the one kept
+    assert state.hash_exists(h, db_path)
+    assert state.hash_exists(h2, db_path)
+    assert state.get_hashes_for_run(run_id, db_path) == {h, h2}
+
+
+def test_a_real_second_run_is_not_mistaken_for_a_duplicate(db_path):
+    """Two runs of the same chat that genuinely happened differ in their
+    timestamps, and the sweep must never collapse them -- the sync log is the
+    only record the user has of what the app did."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    first = state.start_sync_run("chat1", db_path=db_path)
+    state.complete_sync_run(
+        first, last_synced_ts="2025-03-14T09:41:00", last_synced_hash="a",
+        messages_parsed=1, messages_synced=1, messages_skipped=0, db_path=db_path,
+    )
+    second = state.start_sync_run("chat1", db_path=db_path)
+    state.complete_sync_run(
+        second, last_synced_ts="2025-03-15T09:41:00", last_synced_hash="b",
+        messages_parsed=2, messages_synced=1, messages_skipped=1, db_path=db_path,
+    )
+
+    _pretend_db_predates_the_sweep(db_path)
+    state.init_db(db_path)
+
+    assert len(state.get_recent_runs(db_path=db_path)) == 2
+
+
+def test_the_sweep_runs_once_not_on_every_start(db_path):
+    """It is a repair, not a rule. A duplicate written after the sweep has run
+    is a different bug, and quietly eating it would hide that."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
+    state.complete_sync_run(
+        run_id, last_synced_ts="2025-03-14T09:41:00", last_synced_hash="a",
+        messages_parsed=1, messages_synced=1, messages_skipped=0, db_path=db_path,
+    )
+    state.init_db(db_path)                        # sweep happens here
+
+    _clone_run(db_path, run_id)
+    state.init_db(db_path)
+
+    assert len(state.get_recent_runs(db_path=db_path)) == 2

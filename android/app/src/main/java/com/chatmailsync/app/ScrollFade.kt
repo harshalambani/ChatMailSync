@@ -145,6 +145,42 @@ fun Modifier.fadingEdgesHorizontal(
 private val ScrollbarWidth = 4.dp
 private val ScrollbarMinThumb = 24.dp
 
+// The thumb alone answers "how far down am I" but not "how far down does this
+// go" -- with nothing behind it there is no scale for it to be a fraction of,
+// and on a long list a short thumb floating in the margin was being read as a
+// stray mark rather than a position. The track supplies the scale. It has to
+// stay faint: at the thumb's own weight the two stop being figure and ground
+// and the bar reads as a solid rule down the edge of every screen.
+private const val ScrollbarThumbAlpha = 0.35f
+private const val ScrollbarTrackAlpha = 0.10f
+
+/** Track and thumb: same width, same radius, same inset, drawn as one. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawScrollbar(
+    color: Color,
+    alpha: Float,
+    thumbTop: Float,
+    thumbHeight: Float,
+) {
+    val barWidth = ScrollbarWidth.toPx()
+    val inset = 2.dp.toPx()
+    val x = size.width - barWidth - inset
+    val radius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f)
+    // Full height, not the thumb's travel: the track is the whole document,
+    // and stopping it short of either end would misstate where the ends are.
+    drawRoundRect(
+        color = color.copy(alpha = alpha * (ScrollbarTrackAlpha / ScrollbarThumbAlpha)),
+        topLeft = Offset(x, 0f),
+        size = Size(barWidth, size.height),
+        cornerRadius = radius,
+    )
+    drawRoundRect(
+        color = color.copy(alpha = alpha),
+        topLeft = Offset(x, thumbTop),
+        size = Size(barWidth, thumbHeight),
+        cornerRadius = radius,
+    )
+}
+
 @Composable
 fun Modifier.verticalScrollbar(
     state: LazyListState,
@@ -153,7 +189,7 @@ fun Modifier.verticalScrollbar(
     // Persistent, but only once there is something to say: on a list that fits,
     // a permanently parked full-height thumb is noise that means nothing.
     val visible by animateFloatAsState(
-        targetValue = if (state.canScrollForward || state.canScrollBackward) 0.35f else 0f,
+        targetValue = if (state.canScrollForward || state.canScrollBackward) ScrollbarThumbAlpha else 0f,
         label = "scrollbar",
     )
     return this.drawWithContent {
@@ -178,14 +214,7 @@ fun Modifier.verticalScrollbar(
             0f
         }
         val top = travel * progress.coerceIn(0f, 1f)
-        val barWidth = ScrollbarWidth.toPx()
-        val inset = 2.dp.toPx()
-        drawRoundRect(
-            color = color.copy(alpha = visible),
-            topLeft = Offset(size.width - barWidth - inset, top),
-            size = Size(barWidth, thumb),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f),
-        )
+        drawScrollbar(color, visible, top, thumb)
     }
 }
 
@@ -203,7 +232,7 @@ fun Modifier.verticalScrollbar(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ): Modifier {
     val visible by animateFloatAsState(
-        targetValue = if (state.maxValue > 0) 0.35f else 0f,
+        targetValue = if (state.maxValue > 0) ScrollbarThumbAlpha else 0f,
         label = "scrollbarPlain",
     )
     return this.drawWithContent {
@@ -215,13 +244,6 @@ fun Modifier.verticalScrollbar(
         val thumb = (viewport * (viewport / content)).coerceAtLeast(minThumb).coerceAtMost(viewport)
         val travel = viewport - thumb
         val top = travel * (state.value.toFloat() / state.maxValue).coerceIn(0f, 1f)
-        val barWidth = ScrollbarWidth.toPx()
-        val inset = 2.dp.toPx()
-        drawRoundRect(
-            color = color.copy(alpha = visible),
-            topLeft = Offset(size.width - barWidth - inset, top),
-            size = Size(barWidth, thumb),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f),
-        )
+        drawScrollbar(color, visible, top, thumb)
     }
 }

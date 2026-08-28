@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The same allow-list as data_extraction_rules.xml, in the older schema that
+  API 24-30 reads. Both are declared on <application>; each platform version
+  ignores the one that is not its own, so the two files have to be kept in
+  step by hand. See data_extraction_rules.xml for why this list is what it is.
+-->
+<full-backup-content>
+    <include domain="file" path="chatmailsync/data/sync_state.db" />
+    <include domain="sharedpref" path="chatmailsync_prefs.xml" />
+    <exclude domain="file" path="chatmailsync/data/sync_state.db-wal" />
+    <exclude domain="file" path="chatmailsync/data/sync_state.db-shm" />
+</full-backup-content>

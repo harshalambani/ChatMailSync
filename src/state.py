@@ -67,6 +67,23 @@ CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
 """
 
 
+# A run has no id of its own that survives leaving the database, so the row
+# is its own identity: the same chat, started and finished at the same second,
+# by the same trigger, with the same three counts and the same outcome is one
+# run, not two that happen to agree in every particular. Restoring a bundle
+# leans on this to tell a run it already has from one it does not.
+RUN_NATURAL_KEY = (
+    "chat_id", "status", "trigger", "last_synced_ts", "last_synced_hash",
+    "messages_parsed", "messages_synced", "messages_skipped", "error_message",
+    "started_at", "completed_at",
+)
+
+# Bumped when a one-time repair has to run against databases that already
+# exist. Distinct from the bundle version in migration.py, which describes a
+# file rather than a database.
+_SCHEMA_VERSION = 1
+
+
 # ---------------------------------------------------------------------------
 # Connection context manager
 # ---------------------------------------------------------------------------
@@ -102,6 +119,52 @@ def init_db(db_path: Optional[Path] = None) -> None:
             conn.execute("ALTER TABLE sync_runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        if version < 1:
+            # Restoring a bundle used to append every run it carried, so a
+            # restore onto the phone the backup came from doubled the whole
+            # sync log -- 81 rows where 41 runs had happened. Merging stopped
+            # doing that, but the rows it already wrote are still sitting in
+            # the log, and nothing in the app can tell the copy from the
+            # original. Sweep them once.
+            _dedupe_sync_runs(conn)
+        if version < _SCHEMA_VERSION:
+            conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+
+
+def _dedupe_sync_runs(conn: sqlite3.Connection) -> int:
+    """Collapse runs that are identical on every column but run_id.
+
+    Keeps the lowest run_id of each set -- the one the app wrote first -- and
+    repoints any message hashes hanging off the copies before dropping them,
+    so nothing is orphaned even where a copy did carry hashes of its own.
+    Returns how many rows were removed.
+    """
+    cols = ", ".join(RUN_NATURAL_KEY)
+    seen: dict[tuple, int] = {}
+    doomed: list[tuple[int, int]] = []          # (copy, original)
+    for row in conn.execute(
+        f"SELECT run_id, {cols} FROM sync_runs ORDER BY run_id"
+    ).fetchall():
+        key = tuple(row[c] for c in RUN_NATURAL_KEY)
+        original = seen.get(key)
+        if original is None:
+            seen[key] = int(row["run_id"])
+        else:
+            doomed.append((int(row["run_id"]), original))
+
+    for copy, original in doomed:
+        conn.execute(
+            "UPDATE message_hashes SET run_id = ? WHERE run_id = ?", (original, copy)
+        )
+    if doomed:
+        ids = [copy for copy, _ in doomed]
+        conn.execute(
+            "DELETE FROM sync_runs WHERE run_id IN (%s)" % ", ".join("?" * len(ids)),
+            ids,
+        )
+    return len(doomed)
 
 
 # ---------------------------------------------------------------------------

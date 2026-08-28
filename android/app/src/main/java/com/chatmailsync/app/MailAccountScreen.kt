@@ -396,7 +396,7 @@ fun MailAccountScreen(
                     "remembered by this copy of the app, not by your mailbox, so any " +
                     "second instance using the same account — another phone, a PC, or " +
                     "a reinstall — will archive the same chats again, unless you carry " +
-                    "that record across with Settings -> Move to a new phone.",
+                    "that record across with Settings -> Backup & restore.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

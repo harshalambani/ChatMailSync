@@ -110,6 +110,17 @@ class MainActivity : ComponentActivity() {
 
     private var onImported: ((Uri) -> Unit)? = null
 
+    // A share that arrives on a cold start has nowhere to go yet. setContent
+    // does not compose in onCreate -- the composition is created when the
+    // view attaches to the window, which is after onCreate returns -- so the
+    // callback the UI registers does not exist when handleIncomingIntent runs
+    // and the Uri was simply dropped. Sharing an export from WhatsApp opened
+    // the app and did nothing whatsoever. Park it until someone can take it.
+    private var pendingImport: Uri? = null
+
+    /** Hands over a share that arrived before the UI was listening, once. */
+    fun takePendingImport(): Uri? = pendingImport.also { pendingImport = null }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -155,7 +166,8 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_SEND) return
         @Suppress("DEPRECATION")
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
-        onImported?.invoke(uri)
+        val handler = onImported
+        if (handler == null) pendingImport = uri else handler(uri)
     }
 }
 
@@ -631,7 +643,25 @@ fun ChatMailApp(
         lastResult = "Imported ${outcome.file.name}\n\n$preview"
     }
 
-    registerImportCallback { uri -> importAndPreview(uri) }
+    /** A shared export lands in the queue on Home, and the panel that says so
+     * is on Home -- arriving from WhatsApp onto whichever screen was last open
+     * is indistinguishable from nothing having happened, which is how it was
+     * reported. Go where the result is. */
+    fun receiveSharedExport(uri: Uri) {
+        importAndPreview(uri)
+        navController.navigate("home") {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+        }
+    }
+
+    registerImportCallback { uri -> receiveSharedExport(uri) }
+
+    // Collect a share that reached the activity before this callback existed.
+    // In the composition, not in onCreate: importAndPreview writes state.
+    LaunchedEffect(Unit) {
+        (context as? MainActivity)?.takePendingImport()?.let { receiveSharedExport(it) }
+    }
 
     /**
      * Import a whole selection at once.
@@ -672,7 +702,7 @@ fun ChatMailApp(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris -> uris.forEach { importAndPreview(it) } }
 
-    // ---- Move to a new phone (P3) --------------------------------------
+    // ---- Backup & restore (P3) -----------------------------------------
     //
     // Two launchers rather than one picker with a mode: SAF has two contracts,
     // and conflating them means asking someone to "choose" a file that does not
@@ -1172,6 +1202,13 @@ fun ChatMailApp(
                 } else {
                     if (homeBackendReady) "Reconnect" else "Connect"
                 }
+                // Re-read on entry (remember is recreated when this
+                // destination is re-composed after navigation) and whenever a
+                // save reports back, so walking Settings -> save -> Home
+                // clears the line rather than leaving it lying.
+                val lastBackupAt = remember(migrationStatus) {
+                    AppPrefs.getLastBackupAt(context)
+                }
                 HomeScreen(
                     accountLabel = homeAccountLabel,
                     backendReady = homeBackendReady,
@@ -1221,6 +1258,8 @@ fun ChatMailApp(
                     },
                     onOpenSyncLog = { navController.navigate("syncLog") },
                     onOpenQueue = { navController.navigate("queue") },
+                    onOpenBackup = { navController.navigate("settings") },
+                    lastBackupAt = lastBackupAt,
                 )
             }
             composable("queue") {
