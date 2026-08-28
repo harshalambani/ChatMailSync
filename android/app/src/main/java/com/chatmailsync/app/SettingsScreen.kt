@@ -305,7 +305,7 @@ fun SettingsScreen(
                 )
             }
             Text(
-                "Your mail password is never included. The new phone asks for it once.",
+                "Your mail password is never included in a backup.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

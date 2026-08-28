@@ -1818,7 +1818,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         if self._worker is not None:
             return  # a sync is already running; it will pick these up
-        if self._transport is None:
+        # A rehearsal writes nothing and needs no connection, so it is neither
+        # blocked by a missing transport nor allowed to become a real send --
+        # the toggle says it stays on until turned off, and this path is the
+        # one the user is least likely to be watching when it does not.
+        dry_run = bool(self._dry_run_var.get())
+        if self._transport is None and not dry_run:
             # Same shape as WatchFolderWorker's "connect in the app to sync"
             # branch -- say it plainly rather than starting a run that is
             # certain to fail. The files stay in the inbox for the next try.
@@ -1828,7 +1833,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                     "to your mailbox to sync them."
                 )
             return
-        self._begin_sync(dry_run=False, chunk_size=self._chunk_var.get())
+        self._begin_sync(dry_run=dry_run, chunk_size=self._chunk_var.get())
 
     def _apply_synced_file_policies(self) -> None:
         """Act on sources whose inbox copy has since been delivered.
@@ -3134,8 +3139,7 @@ class _SettingsPanel(_Panel):
         ctk.CTkLabel(
             body,
             text=(
-                "Your mail password is never included. The new device asks for "
-                "it once."
+                "Your mail password is never included in a backup."
             ),
             wraplength=380, justify="left", anchor="w",
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
@@ -3365,7 +3369,7 @@ class _SettingsPanel(_Panel):
             filetypes=[("Chat Mail Sync backup", "*" + migration.BUNDLE_SUFFIX),
                        ("All files", "*.*")],
             initialfile="chat-mail-sync-"
-                        + datetime.now().strftime("%Y-%m-%d")
+                        + datetime.now().strftime("%Y-%m-%d-%H%M")
                         + migration.BUNDLE_SUFFIX,
         )
         if not dest:
@@ -3413,11 +3417,18 @@ class _SettingsPanel(_Panel):
             self.after(0, lambda: self._apply_restored_settings(result.get("settings") or {}))
             chats = int(result.get("chats_added") or 0)
             hashes = int(result.get("hashes_added") or 0)
+            # The password sentence is a next step, not a fact, and it is only a
+            # next step when there is no connection yet -- restoring onto a
+            # machine that is already connected was asking for something the app
+            # already had.
+            finish = (
+                "" if self._transport is not None
+                else " Enter your mail password once to finish."
+            )
             return (
                 f"Restored {chats} chat{'' if chats == 1 else 's'} and "
                 f"{hashes} message{'' if hashes == 1 else 's'} of history \u2014 "
-                "those will not be sent again. Enter your mail password once to "
-                "finish."
+                f"those will not be sent again.{finish}"
             )
 
         self._run_backup_job(work)
@@ -3580,7 +3591,8 @@ class _MailAccountPanel(_Panel):
                 "remembered by this copy of the app, not by your mailbox, so "
                 "any second instance using the same account — another PC, "
                 "a phone, or a second copy here — will archive the same "
-                "chats again."
+                "chats again, unless you carry that record across with "
+                "Settings -> Move to a new phone or PC."
             ),
             wraplength=360, justify="left", anchor="w",
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),

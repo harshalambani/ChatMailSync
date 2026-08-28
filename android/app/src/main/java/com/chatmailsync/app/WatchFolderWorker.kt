@@ -274,14 +274,23 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         // doWork() found an undelivered backlog from a previous run, say so
         // instead of the misleading "Imported 0 new file(s)".
         val lead = if (importedCount > 0) "Imported $importedCount new file(s)" else "Syncing previously imported file(s)"
+        // "Rehearse without sending ... stays on until you turn it off" has to
+        // mean every path, not just the Sync now button. This one was pinned to
+        // false, so importing anything while the toggle was on quietly mailed it
+        // for real -- the one promise the toggle makes, broken by the one path
+        // the user is not watching.
+        val dryRun = AppPrefs.isDryRunDefault(applicationContext)
         val backend = AppPrefs.resolveMailBackend(applicationContext)
         val dataBuilder = Data.Builder()
-            .putBoolean(SyncWorker.KEY_DRY_RUN, false)
+            .putBoolean(SyncWorker.KEY_DRY_RUN, dryRun)
             .putString(SyncWorker.KEY_CHUNK_SIZE, AppPrefs.getChunkSize(applicationContext))
             .putString(SyncWorker.KEY_TRIGGER, "watched_folder")
             .putString(SyncWorker.KEY_MAIL_BACKEND, backend)
 
-        if (backend == AppPrefs.MAIL_BACKEND_IMAP) {
+        if (dryRun) {
+            // A rehearsal never opens a connection, so it needs no password and
+            // no token -- and must not be blocked by the absence of either.
+        } else if (backend == AppPrefs.MAIL_BACKEND_IMAP) {
             // No token to fetch — SyncWorker reads host/email from AppPrefs
             // and the password from SecretStore itself. Only check here that
             // *something* is saved, so a clear notification fires instead of
@@ -330,7 +339,8 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         // IMAP user archiving into Fastmail was being told their mail was on its
         // way to Gmail. The backend-specific messages above are the place to
         // name a provider; this one is shared.
-        return "$lead — syncing to your mailbox…"
+        return if (dryRun) "$lead — test run only, nothing will be sent"
+        else "$lead — syncing to your mailbox…"
     }
 
     private fun notify(text: String) {

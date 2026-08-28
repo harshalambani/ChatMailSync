@@ -621,9 +621,13 @@ fun ChatMailApp(
             lastResult = "${outcome.file.name} is already queued — remove it first (X) to re-import."
             return
         }
+        // preview() returns a dict; interpolating it printed the repr --
+        // "{'ok': True, 'display_name': ..., 'media_count': 15, ...}" -- straight
+        // into the user-facing result panel. preview_text() is the same call with
+        // format_preview() applied, and is what every other call site already uses.
         val preview = Python.getInstance()
             .getModule("src.android_api")
-            .callAttr("preview", outcome.file.absolutePath)
+            .callAttr("preview_text", outcome.file.absolutePath)
         lastResult = "Imported ${outcome.file.name}\n\n$preview"
     }
 
@@ -953,7 +957,9 @@ fun ChatMailApp(
     LaunchedEffect(syncWorkInfo?.state) {
         when (syncWorkInfo?.state) {
             WorkInfo.State.SUCCEEDED -> {
-                val label = if (lastSyncWasDryRun) "Dry-run sync result" else "Sync result"
+                // "Test run" everywhere else on both platforms; "Dry-run" was the one
+                // place the developer word leaked into the user-facing panel.
+                val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
                 lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
             }
