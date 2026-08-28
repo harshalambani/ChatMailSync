@@ -116,6 +116,33 @@ def test_importing_the_same_bundle_twice_is_a_no_op(tmp_path):
     assert _counts(migration._db_path(new)) == before
 
 
+def test_a_second_bundle_of_the_same_history_does_not_double_the_log(tmp_path):
+    """The already-imported guard only catches the *same* bundle file. Saving a
+    fresh backup and restoring that -- the obvious thing to do when a first
+    restore looked wrong, or when restoring onto the phone the history came
+    from -- used to append every run again, and the sync log showed each one
+    twice with nothing to say which was real."""
+    old = tmp_path / "old"
+    new_dev = tmp_path / "new"
+    _device(old)
+
+    first_bundle = tmp_path / ("backup-1" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, first_bundle, settings={})
+    assert migration.import_bundle(new_dev, first_bundle)["runs_added"] == 1
+    before = _counts(migration._db_path(new_dev))
+
+    # A different file, same history inside it.
+    second_bundle = tmp_path / ("backup-2" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, second_bundle, settings={})
+    second = migration.import_bundle(new_dev, second_bundle)
+
+    assert second["ok"]
+    assert second["already_imported"] is False
+    assert second["runs_added"] == 0
+    assert second["hashes_added"] == 0
+    assert _counts(migration._db_path(new_dev)) == before
+
+
 def test_no_credential_reaches_the_bundle(tmp_path):
     old = tmp_path / "old"
     _device(old)

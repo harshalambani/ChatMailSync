@@ -33,7 +33,7 @@ object Migration {
     const val MIME_TYPE = "application/octet-stream"
 
     fun suggestedFileName(): String {
-        val stamp = android.text.format.DateFormat.format("yyyy-MM-dd", System.currentTimeMillis())
+        val stamp = android.text.format.DateFormat.format("yyyy-MM-dd-HHmm", System.currentTimeMillis())
         return "chat-mail-sync-$stamp$SUFFIX"
     }
 
@@ -115,8 +115,17 @@ object Migration {
 
             val chats = result.callAttr("get", "chats_added").toString().toIntOrNull() ?: 0
             val hashes = result.callAttr("get", "hashes_added").toString().toIntOrNull() ?: 0
+            // "Enter your mail password once to finish" is a next step, not a
+            // fact -- and it is only a next step when there is no password yet.
+            // Restoring onto a phone that is already connected was telling the
+            // user to supply something the app already had.
+            val connected =
+                if (AppPrefs.resolveMailBackend(context) == AppPrefs.MAIL_BACKEND_IMAP)
+                    AppPrefs.hasImapPassword(context)
+                else AppPrefs.getConnectedAccountEmail(context) != null
+            val finish = if (connected) "" else " Enter your mail password once to finish."
             return "Restored ${plural(chats, "chat")} and ${plural(hashes, "message")} of " +
-                "history — those will not be sent again. Enter your mail password once to finish."
+                "history — those will not be sent again.$finish"
         } catch (e: Exception) {
             return "That backup could not be restored: ${e.message}"
         } finally {

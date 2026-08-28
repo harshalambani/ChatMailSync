@@ -382,6 +382,7 @@ def _merge_db(target: Path, incoming: Path) -> dict:
     src = sqlite3.connect(incoming)
     src.row_factory = sqlite3.Row
     dst = sqlite3.connect(target)
+    dst.row_factory = sqlite3.Row
     try:
         dst.execute("PRAGMA foreign_keys = ON")
 
@@ -400,17 +401,36 @@ def _merge_db(target: Path, incoming: Path) -> dict:
         # AUTOINCREMENT primary key, so the incoming ids almost certainly
         # collide with local ones that mean something completely different --
         # keeping them would attach the old phone's hashes to this phone's runs.
+        # Restoring the same bundle twice -- or restoring onto the phone the
+        # backup came from -- used to append every run a second time, and the
+        # sync log showed each one twice with no way to tell which was real.
+        # The row itself is the natural key: same chat, same trigger, same
+        # start and finish, same counts is the same run, not a second one that
+        # happens to be identical. A run already here is skipped and its
+        # incoming id mapped onto the local row, so the hashes underneath it
+        # still repoint correctly instead of being dropped.
         run_cols = ", ".join(_RUN_COLUMNS)
+        existing_runs = {
+            tuple(row[c] for c in _RUN_COLUMNS): int(row["run_id"])
+            for row in dst.execute(
+                "SELECT run_id, " + run_cols + " FROM sync_runs"
+            ).fetchall()
+        }
         run_id_map = {}
         runs_added = 0
         for row in src.execute("SELECT run_id, " + run_cols + " FROM sync_runs").fetchall():
-            cur = dst.execute(
-                "INSERT INTO sync_runs (" + run_cols + ") "
-                "VALUES (" + _placeholders(_RUN_COLUMNS) + ")",
-                tuple(row[c] for c in _RUN_COLUMNS),
-            )
-            run_id_map[int(row["run_id"])] = int(cur.lastrowid)
-            runs_added += 1
+            key = tuple(row[c] for c in _RUN_COLUMNS)
+            local = existing_runs.get(key)
+            if local is None:
+                cur = dst.execute(
+                    "INSERT INTO sync_runs (" + run_cols + ") "
+                    "VALUES (" + _placeholders(_RUN_COLUMNS) + ")",
+                    key,
+                )
+                local = int(cur.lastrowid)
+                existing_runs[key] = local
+                runs_added += 1
+            run_id_map[int(row["run_id"])] = local
 
         hashes_added = 0
         rows = src.execute(
