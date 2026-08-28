@@ -209,6 +209,11 @@ _DEFAULT_SETTINGS = {
     # itself is stored here -- a verdict and a timestamp, nothing more.
     "last_connection_ok":      None,
     "last_connection_at":      0,
+    # Bookkeeping, not a preference: when a backup was last written, epoch
+    # seconds, 0 for never. Only keys named here survive a reload, so an
+    # undeclared one would be saved and then quietly thrown away. Android
+    # keeps the same fact in AppPrefs as last_backup_at, in millis.
+    "last_backup_at":          0,
 }
 
 # Android's WATCH_INTERVAL_LABELS, labels and all, plus one shorter option:
@@ -271,6 +276,34 @@ def _save_settings(settings: dict) -> None:
         _SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
     except Exception:
         pass
+
+
+# Thirty days is a judgement, not a rule: long enough that someone who keeps up
+# is never nagged, short enough that what a lost record would re-mail is about a
+# month of chats. Android's Migration.BACKUP_STALE_AFTER_DAYS says the same.
+_BACKUP_STALE_AFTER_DAYS = 30
+
+
+def _backup_is_stale(at: int, now: "float | None" = None) -> bool:
+    """True when there is no backup, or the last one is old enough to matter.
+
+    [at] is epoch seconds -- Android's twin works in millis, because that is
+    what each platform's own clock hands out; the boundary is the same.
+    """
+    if at <= 0:
+        return True
+    now = datetime.now().timestamp() if now is None else now
+    return now - at > _BACKUP_STALE_AFTER_DAYS * 24 * 60 * 60
+
+
+def _describe_last_backup(at: int) -> str:
+    """"Last backup: 28 Aug 2026", or the plain fact that there isn't one."""
+    if at <= 0:
+        return "No backup saved yet."
+    # Built by hand rather than with strftime: "%-d" is a glibc extension and
+    # raises on Windows, which is the only platform this file runs on.
+    when = datetime.fromtimestamp(at)
+    return "Last backup: %d %s %d" % (when.day, when.strftime("%b"), when.year)
 
 
 def _relabel_connected(text: str, lead: str) -> str:
@@ -429,6 +462,20 @@ def _help_html_path() -> "Path | None":
     return None
 
 
+def _plain_color(color):
+    """Resolve a CustomTkinter (light, dark) pair for a bare tkinter widget.
+
+    gui_theme states every colour as a pair and CTk widgets pick from it by
+    appearance mode. Plain tkinter cannot: handed the tuple it raises
+    TclError. That is how a hover used to strand a blank white 200x200
+    Toplevel on top of the window -- the Label raised before the window was
+    recorded, so nothing was left holding it to close it.
+    """
+    if isinstance(color, (tuple, list)):
+        return color[1] if ctk.get_appearance_mode() == "Dark" else color[0]
+    return color
+
+
 class _Tooltip:
     """A hover label for a button whose whole text is one glyph.
 
@@ -492,20 +539,26 @@ class _Tooltip:
         except tkinter.TclError:
             return
         win = tkinter.Toplevel(self._widget)
+        # Held from here on, not after the label: an overrideredirect Toplevel
+        # that nobody has a reference to cannot be closed by anything, and an
+        # empty one is a bare white 200x200 square pinned topmost over the app.
+        self._window = win
         win.wm_overrideredirect(True)                   # no title bar, no border
         win.wm_geometry(f"+{x}+{y}")
         try:
             win.wm_attributes("-topmost", True)
         except tkinter.TclError:
             pass
-        tkinter.Label(
-            win, text=self._text,
-            background=gui_theme.SURFACE_CONTAINER_HIGH,
-            foreground=gui_theme.ON_SURFACE,
-            borderwidth=1, relief="solid",
-            padx=7, pady=3,
-        ).pack()
-        self._window = win
+        try:
+            tkinter.Label(
+                win, text=self._text,
+                background=_plain_color(gui_theme.SURFACE_CONTAINER_HIGH),
+                foreground=_plain_color(gui_theme.ON_SURFACE),
+                borderwidth=1, relief="solid",
+                padx=7, pady=3,
+            ).pack()
+        except tkinter.TclError:
+            self._hide()
 
     def _hide(self, _event=None) -> None:
         self._cancel()
@@ -940,6 +993,34 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self._footer_status_dot.pack(side="right", padx=(8, 2))
 
+        # ── Backup staleness ─────────────────────────────
+        # A line, in the window, with the fix attached -- not a dialog and not
+        # a banner over the sync button. Nothing here is urgent, but the cost
+        # of never reading it is every chat mailed a second time after a
+        # reinstall into a mailbox that cannot tell the copies apart. Android
+        # carries the identical line on Home, under its status block.
+        self._backup_row = ctk.CTkFrame(footer, fg_color="transparent")
+
+        self._backup_stale_label = ctk.CTkLabel(
+            self._backup_row, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            anchor="w", justify="left",
+        )
+        self._backup_stale_label.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkButton(
+            self._backup_row, text="Back up", width=70, height=22,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=1,
+            border_color=gui_theme.OUTLINE_VARIANT,
+            hover_color=gui_theme.NEUTRAL_HOVER,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._open_settings,
+        ).pack(side="right")
+
+        self._refresh_backup_staleness()
+
         # ── Log textbox ───────────────────────────────────────────────
         self._log_box = ctk.CTkTextbox(
             footer, height=118,
@@ -1299,6 +1380,34 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._footer_fail_label.configure(
             text=f"{failed} run{'s' if failed != 1 else ''} failed in 90 days" if failed else ""
         )
+
+    def _refresh_backup_staleness(self) -> None:
+        """Show the line only when there is something to say.
+
+        Hidden entirely once a recent backup exists: a permanent "you are
+        fine" row is one more thing to stop reading, and the row that matters
+        then reads as furniture.
+        """
+        row = getattr(self, "_backup_row", None)
+        if row is None or not row.winfo_exists():
+            return
+        at = int(self._settings.get("last_backup_at") or 0)
+        if not _backup_is_stale(at):
+            row.pack_forget()
+            return
+        self._backup_stale_label.configure(
+            text="No backup yet. Without one, a reinstall makes the app mail "
+                 "every chat again."
+            if at <= 0 else
+            _describe_last_backup(at) + " - old enough to be worth refreshing."
+        )
+        # Above the log box wherever it is shown from -- packing plain would
+        # put a row that only appears later underneath it.
+        box = getattr(self, "_log_box", None)
+        if box is not None and box.winfo_exists():
+            row.pack(fill="x", padx=10, pady=(0, 4), before=box)
+        else:
+            row.pack(fill="x", padx=10, pady=(0, 4))
 
     def _set_chat_status_filter(self, key: str) -> None:
         if key == getattr(self, "_chat_status_filter", "all"):
@@ -3090,7 +3199,7 @@ class _SettingsPanel(_Panel):
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
         ).pack(fill="x", padx=20, pady=(0, 4))
 
-        # ── Move to a new phone / PC ─────────────────────────────────────────
+        # ── Backup & restore ──────────────────────────────────────────
         # Android's twin, section for section and sentence for sentence. Worth
         # being explicit about what it is for, because "backup" in an archiving
         # app invites the wrong reading: the mailbox is the archive and is
@@ -3098,14 +3207,18 @@ class _SettingsPanel(_Panel):
         # has already been sent -- lose that and nothing is lost, everything is
         # simply mailed a second time, into a mailbox with no way to tell the
         # copies apart.
-        self._section(body, "Move to a new phone or PC")
+        # Headed "Move to a new phone or PC" until v1.17.0, which hid it
+        # from everyone who was not moving: the same file is what gets you
+        # back after a reinstall or a wiped machine.
+        self._section(body, "Backup & restore")
         ctk.CTkLabel(
             body,
             text=(
-                "Saves what this app knows about what it has already sent, so a "
-                "new device carries on instead of mailing everything a second "
-                "time. Your chats are already safe in your mailbox \u2014 this is "
-                "not a copy of them."
+                "Saves what this app knows about what it has already sent. Keep "
+                "one, and a reinstall or another device carries on from here "
+                "instead of mailing everything a second time. Your chats are "
+                "already safe in your mailbox \u2014 this is not a copy "
+                "of them."
             ),
             wraplength=380, justify="left", anchor="w",
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
@@ -3127,6 +3240,16 @@ class _SettingsPanel(_Panel):
             command=self._on_restore_backup,
         )
         self._backup_restore_btn.pack(side="left", padx=(8, 0))
+
+        # A backup nobody can date is a backup nobody trusts, and "I think I
+        # did one" is exactly the belief that costs a mailbox a second copy of
+        # everything. Android carries the identical line.
+        self._backup_age = ctk.CTkLabel(
+            body, text="", wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._backup_age.pack(fill="x", padx=20, pady=(4, 0))
+        self._refresh_backup_age()
 
         # In place, under the buttons -- not a message box. Everything this can
         # say is an outcome to read and none of it needs a decision, so a box
@@ -3333,7 +3456,7 @@ class _SettingsPanel(_Panel):
     # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------
-    # Move to a new phone or PC
+    # Backup & restore
     # ------------------------------------------------------------------
 
     def _set_backup_busy(self, busy: bool, message: str) -> None:
@@ -3341,6 +3464,35 @@ class _SettingsPanel(_Panel):
         self._backup_save_btn.configure(state=state)
         self._backup_restore_btn.configure(state=state)
         self._backup_status.configure(text=message)
+
+    # Thirty days: long enough that someone who keeps up is never nagged,
+    # short enough that what a lost record would re-mail is about a month of
+    # chats. Android's Migration.BACKUP_STALE_AFTER_DAYS says the same.
+    _BACKUP_STALE_AFTER_DAYS = 30
+
+    def _record_backup_saved(self) -> None:
+        """Remember when, so the app can say how old the last backup is.
+
+        Deliberately not *where*: the file goes wherever the save dialog put
+        it, which may not exist any more, and a stale path claiming to be a
+        backup is worse than no path at all.
+        """
+        self._app._settings["last_backup_at"] = int(datetime.now().timestamp())
+        _save_settings(self._app._settings)
+        self._refresh_backup_age()
+        # The line on Home is about this exact fact; leaving it lying after a
+        # save is the app telling the user their work did not count.
+        self._app._refresh_backup_staleness()
+
+    def _refresh_backup_age(self) -> None:
+        if not hasattr(self, "_backup_age") or not self._backup_age.winfo_exists():
+            return
+        at = int(self._app._settings.get("last_backup_at") or 0)
+        stale = _backup_is_stale(at)
+        self._backup_age.configure(
+            text=_describe_last_backup(at),
+            text_color=gui_theme.ERROR if stale else gui_theme.ON_SURFACE_VARIANT,
+        )
 
     def _run_backup_job(self, work) -> None:
         """Run [work] off the UI thread and report its sentence in place.
@@ -3393,10 +3545,19 @@ class _SettingsPanel(_Panel):
             return (
                 f"Backup saved \u2014 {chats} chat{'' if chats == 1 else 's'}, "
                 f"{hashes} message{'' if hashes == 1 else 's'} already sent. "
-                "Your mail password is not in it; the new device will ask once."
+                "Your mail password is not in it; the restored device asks once."
             )
 
-        self._run_backup_job(work)
+        def work_and_stamp() -> str:
+            message = work()
+            # Only on the way out of a save that reported ok -- a stamp written
+            # when the button was clicked would tell someone they are covered
+            # when the file never got written.
+            if message.startswith("Backup saved"):
+                self.after(0, self._record_backup_saved)
+            return message
+
+        self._run_backup_job(work_and_stamp)
 
     def _on_restore_backup(self) -> None:
         chosen = filedialog.askopenfilename(
@@ -3592,7 +3753,7 @@ class _MailAccountPanel(_Panel):
                 "any second instance using the same account — another PC, "
                 "a phone, or a second copy here — will archive the same "
                 "chats again, unless you carry that record across with "
-                "Settings -> Move to a new phone or PC."
+                "Settings -> Backup & restore."
             ),
             wraplength=360, justify="left", anchor="w",
             text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),

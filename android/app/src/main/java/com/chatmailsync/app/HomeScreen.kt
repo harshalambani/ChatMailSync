@@ -181,6 +181,8 @@ fun HomeScreen(
     onBackgroundIssueAction: (BackgroundIssue) -> Unit = {},
     onOpenSyncLog: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
+    lastBackupAt: Long = 0L,
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
@@ -441,6 +443,34 @@ fun HomeScreen(
             // it from being done.
             summary?.takeIf { it.totalRuns > 0 }?.let {
                 SyncStatusBlock(summary = it, onOpenSyncLog = onOpenSyncLog)
+            }
+
+            // A line, in the window, with the fix attached -- not a dialog and
+            // not a banner at the top. Nothing here is urgent enough to stand
+            // over the sync button, but it is worth saying, because the cost of
+            // never reading it is every chat mailed a second time after a reset
+            // into a mailbox that cannot tell the copies apart.
+            //
+            // Passed in rather than read here: a save happens on another
+            // screen, and MainActivity re-reads it on the way back, so this
+            // stays a screen that renders what it is given.
+            if (Migration.backupIsStale(lastBackupAt)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (lastBackupAt <= 0L)
+                            "No backup yet. Without one, a reset or a reinstall makes the app " +
+                                "mail every chat again."
+                        else Migration.describeLastBackup(lastBackupAt) +
+                            " - old enough to be worth refreshing.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onOpenBackup) { Text("Back up") }
+                }
             }
 
             previewText?.let {

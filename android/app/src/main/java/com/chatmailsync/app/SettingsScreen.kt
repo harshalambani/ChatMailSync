@@ -269,20 +269,23 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // Getting an install onto a new phone.
-            //
             // Worth being explicit about what this is for, because "backup" in
             // an archiving app invites the wrong reading: the mailbox is the
             // archive, and it is already safe on a mail server. What is only on
             // this phone is the record of which messages have already been
             // sent. Lose that and nothing is lost -- everything is sent again,
             // into a mailbox that has no way to tell the copies apart.
-            Text("Move to a new phone", style = MaterialTheme.typography.titleMedium)
+            //
+            // Headed "Move to a new phone" until v1.17.0, which hid it from
+            // everyone who was not moving: the same file is what gets you back
+            // after a reset, a reinstall or Clear data, and those happen to
+            // people who never buy a phone.
+            Text("Backup & restore", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Saves what this phone knows about what it has already sent, so a " +
-                    "new phone carries on instead of mailing everything a second time. " +
-                    "Your chats are already safe in your mailbox — this is not a copy " +
-                    "of them.",
+                "Saves what this phone knows about what it has already sent. Keep one, " +
+                    "and a reset, a reinstall or another device carries on from here " +
+                    "instead of mailing everything a second time. Your chats are already " +
+                    "safe in your mailbox — this is not a copy of them.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -294,6 +297,20 @@ fun SettingsScreen(
                     Text("Restore from a backup")
                 }
             }
+            // Re-read whenever the migration state moves, which is what a save
+            // finishing looks like from here -- a backup nobody can date is a
+            // backup nobody trusts, and "I think I did one" is exactly the
+            // belief that costs a mailbox its second copy of everything.
+            val lastBackupAt = remember(migrationBusy, migrationStatus) {
+                AppPrefs.getLastBackupAt(context)
+            }
+            Text(
+                Migration.describeLastBackup(lastBackupAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (Migration.backupIsStale(lastBackupAt))
+                    MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             // In place, under the buttons -- not a dialog. Everything this can
             // say is an outcome to read, and none of it needs a decision, so a
             // box demanding to be dismissed would only add a tap.

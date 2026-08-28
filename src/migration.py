@@ -366,11 +366,10 @@ _CHAT_COLUMNS = (
     "chat_id", "display_name", "gmail_thread_id", "gmail_label_id",
     "anchor_message_id", "source_filename", "created_at", "updated_at",
 )
-_RUN_COLUMNS = (
-    "chat_id", "status", "trigger", "last_synced_ts", "last_synced_hash",
-    "messages_parsed", "messages_synced", "messages_skipped", "error_message",
-    "started_at", "completed_at",
-)
+# One definition, in state.py, next to the table it describes -- two copies of
+# a natural key drift, and a merge that disagrees with the sweep about what
+# makes a run the same run would put the duplicates straight back.
+_RUN_COLUMNS = state.RUN_NATURAL_KEY
 
 
 def _placeholders(columns) -> str:

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What Android is allowed to carry off this device, for API 31+.
+
+  The app is a one-way archiver: the mailbox holds the chats and is safe
+  wherever the phone ends up. What lives only here is the record of what has
+  already been sent, and losing that does not lose anything - it makes the app
+  mail every chat a second time, into a mailbox with no way to tell the copies
+  apart. That record is sync_state.db, and it is the whole reason this file
+  exists.
+
+  Allow-list, not a deny-list: naming any <include> switches the whole domain
+  to opt-in, so anything not listed here is excluded by construction rather
+  than by remembering to exclude it. That matters most for data/inbox and
+  data/processed, which hold the user's actual chat exports - hundreds of
+  megabytes of message text that has no business leaving the device, and that
+  would blow past Auto Backup's 25 MB quota anyway.
+
+  sync_state.db without its -wal: in WAL mode the main file is always a valid
+  database on its own, merely a little behind. Restoring a -wal taken at a
+  different instant than the -db it belongs to is the one way to end up with a
+  file that will not open at all, and "a few messages sent twice" is a far
+  cheaper failure than "the record is unreadable". They are excluded by
+  omission; the exclude entries below are there to say so out loud.
+
+  chatmailsync_prefs also carries the Keystore-encrypted mail password. The
+  ciphertext travels; the key does not - Keystore key material is
+  non-exportable and never leaves the device it was generated on. On the
+  restored device SecretStore.getSecret() fails its GCM tag check, clears the
+  dead blob and sets imap_password_lost, which is the path the app already
+  takes after a factory-reset-protection event. The user enters the password
+  once, and it is the only thing they have to re-enter.
+
+  What a restore therefore exposes to whoever holds the backup: chat display
+  names, one-way message hashes, run history, the mail address, the IMAP host
+  and the watched-folder path. Not message text, and not the password. On
+  modern devices Auto Backup is end-to-end encrypted with a key derived from
+  the lock-screen secret, so Google cannot read it either.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="chatmailsync/data/sync_state.db" />
+        <include domain="sharedpref" path="chatmailsync_prefs.xml" />
+        <exclude domain="file" path="chatmailsync/data/sync_state.db-wal" />
+        <exclude domain="file" path="chatmailsync/data/sync_state.db-shm" />
+    </cloud-backup>
+    <!-- Smart Switch and the other cable/Wi-Fi device-to-device transfers.
+         Same set: nothing here is worth carrying that is not worth backing
+         up, and a phone-to-phone move is the case the manual bundle was
+         written for, so the two must agree about what a move preserves. -->
+    <device-transfer>
+        <include domain="file" path="chatmailsync/data/sync_state.db" />
+        <include domain="sharedpref" path="chatmailsync_prefs.xml" />
+        <exclude domain="file" path="chatmailsync/data/sync_state.db-wal" />
+        <exclude domain="file" path="chatmailsync/data/sync_state.db-shm" />
+    </device-transfer>
+</data-extraction-rules>

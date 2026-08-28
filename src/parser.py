@@ -150,6 +150,16 @@ def extract_chat_info(filename: str) -> tuple[str, str]:
     prefix = "whatsapp chat with "
     display_name = stem[len(prefix):] if stem.lower().startswith(prefix) else stem
 
+    # A chat's identity is derived from this name, so a copy that Downloads
+    # renamed -- "WhatsApp Chat with Bijal (1).txt", which is what you get when
+    # the same export arrives a second time -- used to become a second chat
+    # with its own thread, and every message mailed again on top of the first
+    # copy. The same export reaching the watched folder and the Share sheet is
+    # exactly how that happens. Nobody names a chat "Bijal (1)".
+    stripped = re.sub(r"\s*\(\d+\)$", "", display_name).strip()
+    if stripped:
+        display_name = stripped
+
     # Normalize: ASCII alphanumeric only, spaces collapsed to underscores.
     chat_id = re.sub(r"[^a-z0-9\s]", "", display_name.lower())
     chat_id = re.sub(r"\s+", "_", chat_id.strip()).strip("_")

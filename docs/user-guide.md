@@ -451,7 +451,7 @@ only you can do.
 
 > **Use one instance per mailbox.** If you want to archive from more than one place,
 > give each instance its own mailbox or its own account. Replacing an instance is a
-> different case — use **Settings -> Move to a new phone or PC** to carry the
+> different case — use **Settings -> Backup & restore** to carry the
 > record across, and the new one picks up exactly where the old one stopped. See
 > the next answer.
 
@@ -459,7 +459,7 @@ only you can do.
 
 ### Q. I am moving to a new PC or phone. How do I take my history with me?
 
-**A.** On the old one: **Settings -> Move to a new phone or PC -> Save a backup**.
+**A.** On the old one: **Settings -> Backup & restore -> Save a backup**.
 It writes a small file holding the record of what has already been sent, together
 with your preferences. Put it wherever you like and move it across however you
 normally move a file.
@@ -474,6 +474,23 @@ A backup taken on Windows restores on Android and the other way round. Restoring
 **merges** rather than replaces, so a restore onto an app that has already synced
 something keeps both sides, and restoring the same backup twice does nothing the
 second time. You will still need to add your export files again on the new machine.
+
+---
+
+### Q. What happens if I reinstall the app or reset my device?
+
+**A.** Your chats are safe either way — they are in your mailbox, and nothing that
+happens on the device can take them out of it. What a reset, a reinstall, a wiped
+machine or a deleted `Data\` folder destroys is the record of what has already
+been sent, and without that record the app mails every chat a second time, into a
+mailbox that has no way to tell the copies apart.
+
+The protection is **Settings -> Backup & restore -> Save a backup**. It writes that
+record to a file you keep somewhere else — not inside the app folder, which is the
+thing that goes missing. Keep a recent one; the section tells you when the last one
+was taken. The same file works on either platform, and on Android the system's own
+backup carries the record as well. Your mail password is in neither, so you enter
+it once after a restore.
 
 ---
 

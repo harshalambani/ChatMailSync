@@ -142,6 +142,30 @@ def test_extract_chat_info(filename, expected_chat_id, expected_display_name):
     assert display_name == expected_display_name
 
 
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "WhatsApp Chat with Jane Doe (1).txt",
+        "WhatsApp Chat with Jane Doe (2).zip",
+        "Jane Doe (12).txt",
+    ],
+)
+def test_a_downloads_renamed_copy_is_the_same_chat(filename):
+    """Downloading the same export twice gets you "... (1)", and the chat's
+    identity comes from the filename -- so without this the second copy is a
+    whole new chat and every message is mailed again alongside the first. It
+    is the one way the watched folder and the Share sheet can duplicate each
+    other."""
+    assert extract_chat_info(filename) == ("jane_doe", "Jane Doe")
+
+
+def test_a_number_in_brackets_mid_name_is_left_alone():
+    """Only a trailing counter is a counter."""
+    chat_id, display_name = extract_chat_info("WhatsApp Chat with Team (2) Sales.txt")
+    assert display_name == "Team (2) Sales"
+    assert chat_id == "team_2_sales"
+
+
 def test_extract_chat_info_normalizes_punctuation_to_ascii():
     chat_id, display_name = extract_chat_info("WhatsApp Chat with Jane's Café 😀.txt")
     assert chat_id.isascii()

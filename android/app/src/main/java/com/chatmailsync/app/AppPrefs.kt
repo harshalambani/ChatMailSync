@@ -48,6 +48,7 @@ object AppPrefs {
     private const val KEY_PENDING_SYNCED_FILES = "pending_synced_files"
     private const val KEY_LAST_CONNECTION_OK = "last_connection_ok"
     private const val KEY_LAST_CONNECTION_AT = "last_connection_at"
+    private const val KEY_LAST_BACKUP_AT = "last_backup_at"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -298,6 +299,23 @@ object AppPrefs {
             .putBoolean(KEY_LAST_CONNECTION_OK, ok)
             .putLong(KEY_LAST_CONNECTION_AT, System.currentTimeMillis())
             .apply()
+    }
+
+    /** When a backup was last written, epoch millis, 0 if never.
+     *
+     * The record of what has already been sent lives only on this device, and
+     * losing it means every chat is mailed a second time into a mailbox that
+     * cannot tell the copies apart. A backup is only protection if it is
+     * recent, so the app has to be able to say how old the last one is
+     * instead of leaving the user to remember. Nothing about *where* the
+     * backup went is stored: the file goes wherever the SAF picker put it,
+     * which may not exist any more, and a stale path would be worse than no
+     * path. */
+    fun getLastBackupAt(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_BACKUP_AT, 0L)
+
+    fun setLastBackupAt(context: Context, atMillis: Long = System.currentTimeMillis()) {
+        prefs(context).edit().putLong(KEY_LAST_BACKUP_AT, atMillis).apply()
     }
 
     /** Forget any verdict — for when the account itself changes underneath

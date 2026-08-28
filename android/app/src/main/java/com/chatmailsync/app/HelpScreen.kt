@@ -134,7 +134,7 @@ private val FAQ = listOf(
         "account. Replacing an instance is a different case: carry the sync state across and the new " +
         "one continues where the old one stopped -- see the next answer.",
     "I am moving to a new PC or phone. How do I take my history with me?" to
-        "Settings -> Move to a new phone -> \"Save a backup\". It writes a small file holding the " +
+        "Settings -> Backup & restore -> \"Save a backup\". It writes a small file holding the " +
         "record of what has already been sent, plus your preferences; pick anywhere you like to " +
         "put it, and get it to the new phone however you normally move a file. On the new phone, " +
         "install the app and use \"Restore from a backup\" in the same place before your first " +
@@ -146,6 +146,17 @@ private val FAQ = listOf(
         "synced something keeps both sides. Restoring the same backup twice does nothing the " +
         "second time. You will still need to re-import the export files you want to keep syncing " +
         "from.",
+    "What happens if I reinstall the app or reset my device?" to
+        "Your chats are safe either way: they are in your mailbox, and nothing that happens on this " +
+        "phone can take them out of it. What a reset, an uninstall or \"Clear data\" destroys is the " +
+        "record of what has already been sent -- and without that record the app mails every chat a " +
+        "second time, into a mailbox that has no way to tell the copies apart. Two things stand " +
+        "between you and that. Android's own backup now includes this app, so a restore from Google " +
+        "One or Smart Switch brings the record back by itself. And Settings -> Backup & restore -> " +
+        "\"Save a backup\" writes the same record to a file you keep yourself -- the only route that " +
+        "works between Android and Windows, and the only one whose timing is up to you. Keep a recent " +
+        "one. Your mail password is in neither: it never leaves this phone's Keystore, so you enter " +
+        "it once after any restore.",
     "The sync said some media was \"too large to email\"." to
         "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
         "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +

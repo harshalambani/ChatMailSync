@@ -274,7 +274,16 @@ _WIDGET_DEFAULTS: "dict[str, dict[str, object]]" = {
     "CTkScrollbar": {
         "corner_radius": 1000,
         "border_spacing": 4,
-        "fg_color": "transparent",
+        # A track, not "transparent". The thumb alone says how far down you
+        # are but not how far down it goes -- with nothing behind it there is
+        # no scale for it to be a fraction of, and a short thumb floating in
+        # the margin of a long list reads as a stray mark rather than a
+        # position. One step off the surface and one step short of the thumb:
+        # any nearer the thumb and the two stop being figure and ground.
+        # Android draws the same thing at 0.10 alpha behind its 0.35 thumb
+        # (ScrollFade.kt) -- tkinter has no alpha, so the pair is expressed as
+        # colours instead.
+        "fg_color": SURFACE_CONTAINER_HIGH,
         "button_color": OUTLINE_VARIANT,
         "button_hover_color": OUTLINE,
     },
