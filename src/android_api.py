@@ -2,9 +2,9 @@
 Thin façade module for Kotlin/Chaquopy calls (Phase A1+).
 
 Deliberately minimal — see the Phase A0 plan for what's still intentionally
-deferred: a wrapper around config.set_root() or mail_client.set_token()
-(Kotlin calls those directly, one line each), and any threads.get/
-messages.list wiring (no caller exists for those yet).
+deferred: a wrapper around config.set_root() (Kotlin calls it directly,
+one line), and any threads.get/messages.list wiring (no caller exists for
+those yet).
 
 Every function returns plain JSON-serializable types (dict/list/str/int/
 bool/None) since Chaquopy marshals those most cleanly to Kotlin.
@@ -251,7 +251,7 @@ def sync(
     """Run one full sync pass over data/inbox/ (or the caller's configured root).
 
     `transport` is an already-built MailTransport (e.g. from
-    mail_client.set_token() on Android), not a raw service or bearer token —
+    mail_client.build_imap_transport() on Android), not credentials —
     this keeps the façade decoupled from how the transport was constructed.
 
     `trigger` is recorded on each sync_runs row for the Android Sync log

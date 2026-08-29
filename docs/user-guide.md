@@ -43,25 +43,26 @@ your real password.
    (top-left), or the Escape key, returns you to the sync view.
 3. Under **Mail account**, click **Change…**. That opens the Mail account screen
    the same way, with **Back to settings** to come out of it.
-4. Leave **Connect via** set to *Email app password (IMAP)*.
-5. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
+4. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
-6. Enter your email address and the app password, then **Save**.
-7. The indicator turns **green** and says **Connected**.
+5. Enter your email address and the app password, then **Save**.
+6. The indicator turns **green** and says **Connected**.
 
 This does not expire. To disconnect later, click **Forget saved password**.
 
 ### A note on Google sign-in
 
-Earlier versions connected to Gmail through a Google account instead of an app
-password. That route is closed to new setups: the app has not been through
-Google's verification process, so Google only lets accounts that were manually
-added as test users sign in at all — there is no way to add yourself. An app
-password reaches Gmail perfectly well and does not expire.
+Earlier versions could connect to Gmail through a Google account instead of an
+app password. **That route was removed in version 2.0.0.** It never worked for
+most people: the app has not been through Google's verification process, so
+Google only let accounts that had been added by hand as test users sign in at
+all — there was no way to add yourself — and the sign-in expired roughly every
+seven days.
 
-If you are already signed in with Google, nothing changes. The app keeps you
-there, will not ask you for an app password, and the option stays visible on
-your setup — including after you try IMAP, so switching is not a one-way door.
+If you were signed in with Google, the app says so once on the next start and
+then asks for an app password. Nothing already in your mailbox is affected, and
+nothing already synced is re-sent. An app password reaches Gmail perfectly well
+and does not expire.
 
 ---
 
@@ -272,9 +273,6 @@ Either way, each chat is a single **conversation thread**. Opening it shows the
 messages laid out like WhatsApp, with photos shown inline and other files
 attached for download.
 
-> **Shortcut (Gmail only):** In the app's chat list, click the **↗** icon next to
-> a chat to jump straight to its Gmail thread in your browser.
-
 ---
 
 ## 8. Troubleshooting & FAQ
@@ -307,17 +305,13 @@ land in your own mailbox and nobody else receives anything.
 
 ### Q. What stops it reading or deleting my mail?
 
-**A.** With an **email app password** — how you connect unless you were already
-using Google sign-in — no provider can issue a password limited to one
-operation: any password that can add mail can technically do anything. There the
-guarantee is the app's own code, which uses only four mail commands: list
-folders, create a folder, subscribe to it, and add a message. None of them can
-open or remove a message, and because the app never opens a folder for reading
-it never reaches the state where that would be possible. The source is public if
-you or anyone else wants to verify it. On the older **Google sign-in**, Google
-enforces it instead: the app is granted permission to insert mail and nothing
-else, checked at Google's end on every request, so it would be refused even if
-the app asked.
+**A.** The app's own code, and it is worth being plain about that. No provider
+can issue a password limited to one operation: any password that can add mail
+can technically do anything. What the app does with it is use four mail commands
+and no others: list folders, create a folder, subscribe to it, and add a
+message. None of them can open or remove a message, and because the app never
+opens a folder for reading it never reaches the state where that would be
+possible. The source is public if you or anyone else wants to verify it.
 
 ---
 
@@ -335,26 +329,23 @@ line or an error message.
 
 ### Q. The app says "Not connected", or authorising fails.
 
-**A.** If you're using **Email app password (IMAP)**, double-check the email
-address and app password under **Settings → Mail account → Change…**, and that
-the app password hasn't been revoked by your provider. App passwords are the
-usual culprit — they are revoked if you turn off two-factor authentication, and
-some providers expire them. If you were already using **Google sign-in**, click
-**Connect** and complete the sign-in in your browser, making sure you pick the
-right Google account and approve the permission request. If it still fails,
-click **Sign Out**, then **Connect** again to start fresh.
+**A.** Double-check the email address and app password under **Settings → Mail
+account → Change…**, and that the app password hasn't been revoked by your
+provider. The app password is the usual culprit — providers revoke it if you
+turn off two-factor authentication, and some expire it on their own.
 
 ---
 
-### Q. Why does it ask me to reconnect every week?
+### Q. I used to sign in with Google. Why is it asking for an app password?
 
-**A.** Only if you are on **Google sign-in**. The app has not been through
-Google's app-verification process, so Google treats it as "Testing": the sign-in
-expires roughly every 7 days, and only accounts added by hand as test users can
-use it at all. That is Google's rule for unverified apps and cannot be extended
-from inside the app — and it is why Google sign-in is no longer offered to new
-setups (section 2). An app password reaches Gmail perfectly well and does not
-expire; switching to one loses nothing already synced.
+**A.** Google sign-in was removed in version 2.0.0. It could never be offered to
+more than 100 people: the app has not been through Google's app-verification
+process, so Google treated it as "Testing", which caps the account list and
+expires the sign-in roughly every 7 days — the weekly reconnect. That is
+Google's rule for unverified apps and cannot be extended from inside the app. An
+app password reaches Gmail perfectly well, does not expire, and works the same
+on every other provider. Nothing already synced is lost or re-sent; see section
+2 for the setup.
 
 ---
 
@@ -525,8 +516,8 @@ the practical ceiling for a single file is around 18 MB on a 25 MB provider.
 it in the chats list. Either way you get a screen for that one chat, inside the
 same window, showing when it last synced, how many messages have gone out,
 whether a mail thread already exists for it and which export file it came from.
-The same four actions are on it: open it in Gmail, sync just that one chat, reset
-it, or delete it from the list.
+The same three actions are on it: sync just that one chat, reset it, or delete
+it from the list.
 
 **Sync just this chat** runs a normal sync limited to that chat, instead of
 everything waiting in the inbox — the same job as the command line's `--chat`

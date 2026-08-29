@@ -1,5 +1,5 @@
 """
-Gmail API wrapper: OAuth2 authentication, label management, and message insert.
+IMAP mail transport: label/folder management and message append.
 
 Uses gmail.users.messages.insert() — not send() — so messages land directly
 in the mailbox without SMTP side-effects and without consuming send quota.
@@ -37,31 +37,17 @@ from email.utils import formataddr, parsedate_to_datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, Protocol, Union, runtime_checkable
 
-# google-auth-oauthlib / googleapiclient are desktop-OAuth-flow dependencies,
-# used only by get_credentials()/build_service()/DiscoveryTransport below.
-# They're imported lazily inside those functions (not here at module level)
-# so that importing this module — and anything that imports it, like
-# android_api.py — never requires those packages to be installed. Android
-# never calls get_credentials()/build_service() at all (it does its own
-# OAuth in Kotlin and calls set_token() instead), so it only needs
-# python-dateutil (via src.parser) to import this module successfully.
-if TYPE_CHECKING:
-    from google.oauth2.credentials import Credentials
-
 from src.config import (
     API_CALL_DELAY_SECONDS,
     BACKOFF_BASE_DELAY,
     BACKOFF_MAX_ATTEMPTS,
-    CREDENTIALS_FILE,
     DEFAULT_MAX_MESSAGE_BYTES,
-    GMAIL_SCOPES,
-    GMAIL_SOCKET_TIMEOUT,
     IMAP_PROVIDERS,
     LABEL_MAX_LENGTH,
     LABEL_PARENT,
+    MAIL_SOCKET_TIMEOUT,
     MESSAGE_SIZE_SAFETY_FACTOR,
     PROVIDER_MAX_MESSAGE_BYTES,
-    TOKEN_FILE,
 )
 from src.html_renderer import (
     MediaOmission,
@@ -79,20 +65,6 @@ from src.media_extractor import MediaExtractor
 from src.parser import ParsedMessage
 
 log = logging.getLogger(__name__)
-
-# How long the local redirect server waits for the browser to come back before
-# giving up. Long enough to find the right Google account, pick it, and read a
-# consent screen without being rushed; short enough that an abandoned sign-in
-# does not strand the UI. Without it the wait is unbounded -- see
-# get_credentials().
-OAUTH_BROWSER_TIMEOUT_SECONDS = 180
-
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
-
-# gmail.users.messages.insert() resource handle
-_GmailService = object  # googleapiclient Resource — typed loosely to avoid import gymnastics
 
 # ---------------------------------------------------------------------------
 # Auth
@@ -163,13 +135,12 @@ def _restrict_auth_dir_acl(auth_dir: Path) -> bool:
     """Restrict the auth directory's NTFS ACL to the current user only (Windows).
 
     Strips inherited permissions and grants full control solely to the
-    logged-in user, so token.json / credentials.json (live client_secret)
-    aren't readable by other local accounts. (OI)(CI) makes that grant the
+    logged-in user, so the saved IMAP credentials file is not readable by
+    other local accounts. (OI)(CI) makes that grant the
     inherited default for files created in the directory afterwards.
 
-    Best-effort for the OAuth callers: they ignore the return value so a
-    failure never blocks authentication. Callers persisting a plaintext
-    password must check it.
+    Callers persisting a credential must check the return value; the
+    directory grant itself is best-effort.
     """
     return _restrict_acl(auth_dir, "(OI)(CI)F")
 
@@ -183,132 +154,13 @@ def _restrict_file_acl(path: Path) -> bool:
     return _restrict_acl(path, "F")
 
 
-def get_credentials(
-    credentials_file: Path = CREDENTIALS_FILE,
-    token_file: Path = TOKEN_FILE,
-) -> "Credentials":
-    """Load cached OAuth2 credentials or run the browser-based auth flow.
-
-    On first run the browser opens for the user to grant access; the token is
-    then persisted to token_file for all subsequent runs.
-
-    Windows/desktop-only — Android never calls this (see module docstring note).
-
-    Raises:
-        FileNotFoundError: if credentials_file doesn't exist.
-        TimeoutError: if the browser flow is abandoned -- see
-            OAUTH_BROWSER_TIMEOUT_SECONDS.
-    """
-    from google.auth.exceptions import RefreshError
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
-
-    if not credentials_file.exists():
-        raise FileNotFoundError(
-            f"credentials.json not found at {credentials_file}.\n"
-            "Download it from Google Cloud Console → APIs & Services → Credentials."
-        )
-
-    creds: Optional[Credentials] = None
-
-    if token_file.exists():
-        creds = Credentials.from_authorized_user_file(str(token_file), GMAIL_SCOPES)
-
-    if not creds or not creds.valid:
-        refreshed = False
-        if creds and creds.expired and creds.refresh_token:
-            log.debug("Refreshing expired OAuth2 token")
-            try:
-                creds.refresh(Request())
-                refreshed = True
-            except RefreshError as refresh_err:
-                # The grant is gone at Google's end, not merely expired: the
-                # refresh token was revoked, the app's OAuth client is still
-                # unverified and hit the ~7-day "Testing" expiry, or the user
-                # removed access from their Google account. Google answers all
-                # of these with "invalid_grant".
-                #
-                # Letting this propagate is what made the app unrecoverable:
-                # the stored token satisfies `expired and refresh_token`
-                # forever, so every Connect took this branch, raised, and never
-                # reached the browser flow below. The only escape was deleting
-                # token.json by hand -- for the one expiry the app's own help
-                # tells users to expect roughly every week.
-                #
-                # A dead refresh token has exactly one meaning, "sign in
-                # again", so do that rather than reporting a library error.
-                log.info(
-                    "Stored token could not be refreshed (%s); re-authorising",
-                    refresh_err,
-                )
-                creds = None
-        if not refreshed:
-            log.info("Opening browser for OAuth2 authorisation…")
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(credentials_file), GMAIL_SCOPES
-            )
-            try:
-                creds = flow.run_local_server(
-                    port=0, timeout_seconds=OAUTH_BROWSER_TIMEOUT_SECONDS
-                )
-            except WSGITimeoutError:
-                # Reported live: the browser was opened and closed again a few
-                # seconds later, and the app sat on "Connecting…" for good.
-                # run_local_server() defaults to timeout_seconds=None, which
-                # waits on the redirect forever -- and nothing about closing
-                # the browser tells the local server anything, so "forever" is
-                # exactly what an abandoned sign-in costs. Bounded, the caller
-                # gets an error it can show and the Connect button comes back.
-                raise TimeoutError(
-                    "Browser sign-in wasn't completed within "
-                    f"{OAUTH_BROWSER_TIMEOUT_SECONDS // 60} minutes. "
-                    "Click Connect to try again."
-                ) from None
-
-        token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(creds.to_json())
-        # Restrict the auth directory to the current user only, so token.json
-        # and credentials.json aren't readable by other local accounts.
-        if os.name != "nt":
-            try:
-                os.chmod(token_file, 0o600)
-            except OSError as _chmod_err:
-                log.warning("Could not set permissions on token file: %s", _chmod_err)
-        else:
-            _restrict_auth_dir_acl(token_file.parent)
-        log.debug("Token saved to %s", token_file)
-
-    return creds
-
-
-def build_service(creds: Optional["Credentials"] = None) -> _GmailService:
-    """Return an authenticated Gmail API service object.
-
-    Uses a transport-specific timeout on the Gmail API HTTP client only,
-    rather than the global socket.setdefaulttimeout() which would affect all
-    network I/O in the process.  Both httplib2 and google-auth-httplib2 are
-    hard dependencies of google-api-python-client and always present.
-
-    Windows/desktop-only — Android never calls this (see module docstring note).
-    """
-    if creds is None:
-        creds = get_credentials()
-    import httplib2
-    from google_auth_httplib2 import AuthorizedHttp
-    from googleapiclient.discovery import build as _build
-    http = AuthorizedHttp(creds, http=httplib2.Http(timeout=GMAIL_SOCKET_TIMEOUT))
-    return _build("gmail", "v1", http=http)
-
-
 # ---------------------------------------------------------------------------
 # Transport interface
 #
-# Centralizes the 3 Gmail operations this app actually uses (labels.list,
-# labels.create, messages.insert) behind a small structural interface, so a
-# future Android build can swap in a direct-REST implementation (no
-# google-api-python-client dependency) without changing get_or_create_label /
-# push_chunks / _insert_with_backoff at all.
+# Centralizes the 3 mail operations this app actually uses (list folders,
+# create folder, append message) behind a small structural interface, so an
+# alternative implementation can be swapped in without changing
+# get_or_create_label / push_chunks / _insert_with_backoff at all.
 #
 # threads.get and messages.list are not modeled here — nothing calls them
 # today; add them if/when a caller needs them (e.g. future multi-device
@@ -425,116 +277,11 @@ def is_too_large(exc: BaseException) -> bool:
     return False
 
 
-class DiscoveryTransport:
-    """Wraps a googleapiclient `service` object (today's only Windows path).
-
-    Windows/desktop-only — Android never constructs this (it uses
-    RestTransport via set_token() instead), so googleapiclient is imported
-    lazily here rather than at module level (see module docstring note).
-    """
-
-    def __init__(self, service: _GmailService) -> None:
-        self.service = service
-
-    def labels_list(self) -> dict:
-        from googleapiclient.errors import HttpError
-
-        try:
-            return self.service.users().labels().list(userId="me").execute()
-        except HttpError as exc:
-            raise MailTransportError(str(exc), status=exc.resp.status) from exc
-
-    def labels_create(self, body: dict) -> dict:
-        from googleapiclient.errors import HttpError
-
-        try:
-            return self.service.users().labels().create(userId="me", body=body).execute()
-        except HttpError as exc:
-            raise MailTransportError(str(exc), status=exc.resp.status) from exc
-
-    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
-        from googleapiclient.errors import HttpError
-
-        if thread_id:
-            body = {**body, "threadId": thread_id}
-        try:
-            return (
-                self.service.users()
-                .messages()
-                .insert(userId="me", body=body, internalDateSource="dateHeader")
-                .execute()
-            )
-        except HttpError as exc:
-            raise MailTransportError(str(exc), status=exc.resp.status) from exc
-
-
-def build_transport(creds: Optional["Credentials"] = None) -> MailTransport:
-    """Build the default (googleapiclient-based) transport. Windows-only path."""
-    return DiscoveryTransport(build_service(creds))
-
-
-_GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
-
-
-class RestTransport:
-    """Direct-REST transport over a plain bearer token.
-
-    No get_credentials(), no token file I/O, no InstalledAppFlow — an Android
-    caller does its own OAuth in Kotlin (AppAuth) and hands Python a bearer
-    token via set_token(). Has no callers on Windows today; it exists here,
-    fully unit-tested, so a later Android phase can wire it up with a
-    one-line integration instead of a redesign.
-    """
-
-    def __init__(self, access_token: str) -> None:
-        self._access_token = access_token
-
-    def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self._access_token}"}
-
-    def _request(self, method: str, url: str, **kwargs) -> dict:
-        import requests
-
-        try:
-            resp = requests.request(method, url, headers=self._headers(), **kwargs)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else None
-            raise MailTransportError(str(exc), status=status) from exc
-        except requests.RequestException as exc:
-            raise MailTransportError(str(exc)) from exc
-
-    def labels_list(self) -> dict:
-        return self._request("GET", f"{_GMAIL_API_BASE}/labels")
-
-    def labels_create(self, body: dict) -> dict:
-        return self._request("POST", f"{_GMAIL_API_BASE}/labels", json=body)
-
-    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
-        if thread_id:
-            body = {**body, "threadId": thread_id}
-        return self._request(
-            "POST",
-            f"{_GMAIL_API_BASE}/messages",
-            params={"internalDateSource": "dateHeader"},
-            json=body,
-        )
-
-
-def set_token(access_token: str) -> MailTransport:
-    """Build a transport from a plain OAuth2 bearer token (Android entry point)."""
-    return RestTransport(access_token)
-
-
 # ---------------------------------------------------------------------------
-# IMAP APPEND transport (Road B, phase 1) — purely additive alongside the two
-# OAuth transports above. Realizes a Gmail "label" as an IMAP folder and
-# messages.insert() as IMAP APPEND, for providers/accounts where OAuth/API
-# access isn't available but IMAP + an app password is (see
-# 2026-07-30-road-b-imap-append-plan.md). Nothing above this point is touched
-# by this backend; OAuth stays the permanent default (see MAIL_BACKEND_* in
-# config.py — Phase 1 only adds the vocabulary, wiring is Phase 2).
+# IMAP APPEND transport — the only backend since v2.0.0. Realizes a Gmail
+# "label" as an IMAP folder and messages.insert() as IMAP APPEND, against
+# any provider that accepts IMAP + an app password (see
+# 2026-07-30-road-b-imap-append-plan.md).
 # ---------------------------------------------------------------------------
 
 
@@ -573,8 +320,8 @@ def _is_already_exists_response(data) -> bool:
 
 def _status_for_imap_text(text: str) -> int:
     """Map an IMAP response-code/error string to an HTTP-style status so it
-    can flow through the same MailTransportError(.status) retry policy the
-    OAuth transports use (_insert_with_backoff retries 429/500/502/503/504).
+    can flow through the MailTransportError(.status) retry policy
+    (_insert_with_backoff retries 429/500/502/503/504).
 
     Transient (server-side, worth a retry) -> 503.
     Permanent (auth/policy/quota/bad-request, retrying won't help) -> 401/403/400.
@@ -768,12 +515,9 @@ def _internaldate_from_message(msg: "_email.message.Message") -> Optional[float]
     """Derive an APPEND internaldate (epoch seconds) from the message's own
     Date: header — never from the clock.
 
-    This mirrors what the two OAuth transports already do: DiscoveryTransport
-    passes internalDateSource="dateHeader" and RestTransport passes
-    internaldatesource=dateheader as a query param (see
-    RestTransport.messages_insert and tests/test_gmail_transport.py::
-    test_rest_transport_messages_insert_merges_thread_id_and_query_param).
-    Both force Gmail to use the message's Date: header as the mailbox
+    The removed Gmail API transports did the same thing by passing
+    internalDateSource="dateHeader"; APPEND's internaldate is this
+    transport's equivalent lever. It forces Gmail to use the message's Date: header as the mailbox
     timestamp instead of the upload time, which matters here because a
     years-old WhatsApp archive must land dated when it was actually sent.
     IMAP has no equivalent "use the Date header" flag — the caller must
@@ -821,10 +565,9 @@ def imap_tls_context() -> "ssl.SSLContext":
 
 
 class ImapTransport:
-    """IMAP APPEND transport (Road B phase 1): app-password IMAP instead of
-    Gmail OAuth. Implements the same 3-method MailTransport Protocol as
-    DiscoveryTransport / RestTransport, so get_or_create_label(),
-    _insert_with_backoff(), and push_chunks() all work against it unmodified.
+    """IMAP APPEND transport: the app's only mail backend. Implements the
+    3-method MailTransport Protocol, so get_or_create_label(),
+    _insert_with_backoff(), and push_chunks() all work against it.
 
     A Gmail "label" maps to an IMAP folder; the folder's path *is* its id
     (get_or_create_label uses the returned id verbatim as the next call's
@@ -877,13 +620,13 @@ class ImapTransport:
         # timeout is keyword-only and is applied to the underlying socket, so
         # it bounds every later read too, not just the connect. Without it a
         # server that accepts the TCP connection and then never replies hangs
-        # the worker thread forever. Same value the OAuth path already uses.
+        # the worker thread forever.
         try:
             conn = imaplib.IMAP4_SSL(
                 self._host,
                 self._port,
                 ssl_context=imap_tls_context(),
-                timeout=GMAIL_SOCKET_TIMEOUT,
+                timeout=MAIL_SOCKET_TIMEOUT,
             )
         except ssl.SSLError as exc:
             raise MailTransportError(
@@ -895,7 +638,7 @@ class ImapTransport:
             ) from exc
         except OSError as exc:
             # socket.timeout is an OSError subclass, so a connect that hangs
-            # past GMAIL_SOCKET_TIMEOUT lands here rather than blocking.
+            # past MAIL_SOCKET_TIMEOUT lands here rather than blocking.
             raise MailTransportError(
                 f"Could not connect to {self._host}:{self._port}: "
                 f"{_strip_secret(str(exc), self._password)}",
@@ -1186,12 +929,10 @@ class ImapTransport:
 
 
 def build_imap_transport(host: str, port: int, email: str, password: str) -> MailTransport:
-    """Build the IMAP APPEND transport (Road B, phase 1 backend).
+    """Build the IMAP APPEND transport -- the app's only transport.
 
-    Purely additive alongside build_transport() (OAuth/Discovery, Windows)
-    and set_token() (OAuth/REST, Android) — none of those are touched. See
-    IMAP_PROVIDERS / MAIL_BACKEND_* in src/config.py for the (not-yet-wired;
-    phase 2) preset/selection vocabulary this pairs with.
+    See IMAP_PROVIDERS in src/config.py for the host/port presets the
+    setup UI offers, and DEFAULT_MAIL_BACKEND for the backend vocabulary.
     """
     return ImapTransport(host=host, port=port, email=email, password=password)
 
@@ -1282,7 +1023,7 @@ def _probe_dns(host: str, port: int) -> None:
 
 
 def _probe_tcp(host: str, port: int) -> "socket.socket":
-    return socket.create_connection((host, port), timeout=GMAIL_SOCKET_TIMEOUT)
+    return socket.create_connection((host, port), timeout=MAIL_SOCKET_TIMEOUT)
 
 
 def _probe_tls(sock: "socket.socket", host: str) -> None:

@@ -66,9 +66,8 @@ object ConnectionState {
         private set
 
     /** Recompute from what is currently stored. [hasAccount] is passed in
-     *  rather than derived here because "is there an account" means different
-     *  things per backend (a saved app password vs a live OAuth token), and
-     *  that logic already exists in the app shell. */
+     *  rather than derived here because that logic already exists in the app
+     *  shell. */
     fun refresh(context: Context, hasAccount: Boolean) {
         current = connectionStatusOf(hasAccount, AppPrefs.getLastConnectionOk(context))
     }

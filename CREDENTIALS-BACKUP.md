@@ -22,13 +22,18 @@ script can help you.
 | **Android release keystore** | `android/app/release.jks` | **Irreplaceable** | Back up off-machine. See below. |
 | **Keystore passwords** | `android/keystore.properties` | **Irreplaceable** | Back up **separately** from the `.jks`. |
 | Windows dev signing cert | `CN=ChatMailSync Dev`, `Cert:\CurrentUser\My` | Regenerable | Do not back up. Re-run the create-and-trust script. |
-| Google OAuth client secret | `auth/credentials.json` | Re-downloadable | Fetch again from Google Cloud Console. |
-| Google OAuth token | `auth/token.json` | Regenerable | Sign in again. Expires roughly weekly anyway while the app is unverified. |
 | IMAP app password | `auth/imap_credentials.json` (Windows), Android Keystore | Regenerable | Revoke at the provider and issue a new one. |
 | GitHub token | Windows credential manager / `gh` keyring | Regenerable | Re-authenticate `gh`. |
 
 `auth/` and `data/` are gitignored and hold live credentials and real chat
 exports. Nothing in them belongs in the repository, in a paste, or in a log.
+
+Version 2.0.0 removed Google sign-in, so `auth/credentials.json` (the OAuth
+client secret) and `auth/token.json` are no longer created or read. If a machine
+set up before 2.0.0 still has them, they are dead files: delete them, and revoke
+the leftover grant at <https://myaccount.google.com/permissions>. Restoring the
+feature is a source change, documented in `docs/RESTORING-OAUTH.md`, not a
+backup you need to hold.
 
 ## Why `release.jks` is the one that matters
 
@@ -85,8 +90,6 @@ If this machine is lost or rebuilt, none of the following needs a backup:
   the publisher warning **on the build machine only** and makes the exe
   tamper-evident. It buys no SmartScreen reputation - only a purchased OV/EV
   certificate from a CA does that.
-- **Google OAuth client secret.** Download the client JSON again from the Google
-  Cloud Console project.
 - **IMAP app password.** Revoke the old one at the mail provider and issue a new
   one. Revoking is the correct move on a lost machine regardless of backups.
 - **Everything in `auth/`.** Reconnecting the app recreates all of it.
@@ -95,8 +98,7 @@ If this machine is lost or rebuilt, none of the following needs a backup:
 
 In order:
 
-1. **Revoke the IMAP app password** at the mail provider, and revoke the Google
-   OAuth grant at <https://myaccount.google.com/permissions>. On Windows the IMAP
+1. **Revoke the IMAP app password** at the mail provider. On Windows the
    password is protected only by an NTFS ACL - see `PLATFORM-PARITY.md` on the
    accepted per-platform divergence - so assume it is readable by anyone holding
    the disk.

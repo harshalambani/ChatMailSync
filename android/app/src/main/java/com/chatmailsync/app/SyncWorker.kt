@@ -20,11 +20,7 @@ import kotlinx.coroutines.launch
 /**
  * Phase A4: runs one real (non-dry-run) sync pass — inbox -> parse -> dedup
  * -> mail insert/append -> processed — via the shared Python core, as a foreground
- * service so Android doesn't kill it mid-sync. The access token is handed in
- * as plain WorkManager input data: short-lived (Google access tokens expire
- * in ~1h) and this worker always runs immediately after being enqueued from
- * a live Activity that just held the token, never persisted or scheduled for
- * later.
+ * service so Android doesn't kill it mid-sync.
  *
  * Phase A5: reports live progress by polling android_api.get_progress() on a
  * timer while sync() runs on another thread — Chaquopy has no supported way
@@ -32,21 +28,18 @@ import kotlinx.coroutines.launch
  * Kotlin object with a __call__ method raised "is not callable" when tried
  * in Phase A4), so a push-callback bridge isn't an option.
  *
- * IMAP app-password support: unlike the OAuth access token, the IMAP
- * password deliberately never travels through inputData. WorkManager
- * persists a request's Data to an on-disk Room database (WorkDatabase) for
- * the lifetime of the request, unencrypted — fine for a short-lived OAuth
- * token, not acceptable for a durable account password. Instead, only the
- * backend name goes in KEY_MAIL_BACKEND; when it's MAIL_BACKEND_IMAP this
- * worker reads host/port/email from AppPrefs and the password from
- * SecretStore (Keystore-encrypted) itself, inside withDispatcherIO, each
- * time it runs.
+ * The IMAP password deliberately never travels through inputData.
+ * WorkManager persists a request's Data to an on-disk Room database
+ * (WorkDatabase) for the lifetime of the request, unencrypted — not
+ * acceptable for a durable account password. Instead, only the backend name
+ * goes in KEY_MAIL_BACKEND; this worker reads host/port/email from AppPrefs
+ * and the password from SecretStore (Keystore-encrypted) itself, inside
+ * withDispatcherIO, each time it runs.
  */
 class SyncWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
 
     companion object {
-        const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_MAIL_BACKEND = "mail_backend"
         const val KEY_DRY_RUN = "dry_run"
         const val KEY_CHUNK_SIZE = "chunk_size"
@@ -75,17 +68,12 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         val dryRun = inputData.getBoolean(KEY_DRY_RUN, false)
         val backend = inputData.getString(KEY_MAIL_BACKEND)
             ?: AppPrefs.resolveMailBackend(applicationContext)
-        // A dry run touches no mail server on either backend, so no credentials
-        // are needed at
+        // A dry run touches no mail server, so no credentials are needed at
         // all — only a real sync requires them. Previously Home's dry-run
         // button called android_api.sync() directly on the click handler
         // (blocking the UI thread for however long a large export took, no
         // Stop button, no progress); routing it through this same Worker
         // fixes that for free, same as the real-sync path.
-        val token = inputData.getString(KEY_ACCESS_TOKEN)
-        if (backend == AppPrefs.MAIL_BACKEND_GMAIL_OAUTH && token == null && !dryRun) {
-            return Result.failure(workDataOf(KEY_ERROR to "Missing access token"))
-        }
         if (backend == AppPrefs.MAIL_BACKEND_IMAP && !dryRun) {
             val host = AppPrefs.getImapHost(applicationContext)
             val email = AppPrefs.getImapEmail(applicationContext)
@@ -170,7 +158,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             }
             try {
                 val statsResult =
-                    withDispatcherIO(backend, token, chunkSize, dryRun, trigger, chatFilter, androidApi)
+                    withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, androidApi)
                 val label = if (dryRun) "Test run complete" else "Sync complete"
                 notify("$label — ${statsResult.messagesSynced} message(s) synced")
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
@@ -197,7 +185,6 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
     private suspend fun withDispatcherIO(
         backend: String,
-        token: String?,
         chunkSize: String?,
         dryRun: Boolean,
         trigger: String,
@@ -217,9 +204,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 Python.getInstance().getModule("src.mail_client")
                     .callAttr("build_imap_transport", host, port, email, password)
             }
-            else -> token?.let {
-                Python.getInstance().getModule("src.mail_client").callAttr("set_token", it)
-            }
+            else -> null
         }
         try {
             val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, chatFilter, null, trigger)

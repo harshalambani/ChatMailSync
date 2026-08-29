@@ -62,8 +62,8 @@ fun SyncProgressScreen(
     // it did nothing while the current file finishes.
     var stopRequested by remember { mutableStateOf(false) }
 
-    // The sync request's input Data (including the OAuth access token) sits
-    // in WorkManager's own SQLite DB until pruned. pruneWork() deletes the
+    // The sync request's input Data sits in WorkManager's own SQLite DB
+    // until pruned. pruneWork() deletes the
     // finished work's row outright, so calling it while this screen is still
     // observing that same workId's Flow makes the next emission come back
     // null -- which the screen below reads as "not started yet" and gets

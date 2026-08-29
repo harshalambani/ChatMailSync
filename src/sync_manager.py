@@ -29,7 +29,7 @@ from typing import Any, Optional
 
 from src import config
 from src.config import DEFAULT_CHUNK_SIZE
-from src.mail_client import ChunkSize, DiscoveryTransport, MailTransport, push_chat
+from src.mail_client import ChunkSize, MailTransport, push_chat
 from src.parser import ParsedMessage, extract_chat_info, parse_file
 from src.state import (
     complete_sync_run,
@@ -156,7 +156,6 @@ class SyncStats:
 class SyncManager:
     def __init__(
         self,
-        service=None,                     # authenticated googleapiclient Gmail service (or None for dry-run)
         chunk_size: ChunkSize = DEFAULT_CHUNK_SIZE,
         dry_run: bool = False,
         db_path: Optional[Path] = None,
@@ -165,20 +164,14 @@ class SyncManager:
         transport: Optional[MailTransport] = None,
         trigger: str = "manual",
     ) -> None:
-        """`service` (existing googleapiclient Resource) and `transport` (an
-        already-built MailTransport, e.g. from mail_client.set_token() on
-        Android) are mutually exclusive — pass at most one. `service` is
-        wrapped in a DiscoveryTransport internally so callers below this
-        class never touch a raw service object.
+        """`transport` is an already-built MailTransport (see
+        mail_client.build_imap_transport). None means dry-run: the manager
+        parses and plans but sends nothing.
 
         `trigger` is recorded on each opened sync_runs row (e.g. "manual",
         "watched_folder") — purely descriptive, for the Android Sync log.
         """
-        if service is not None and transport is not None:
-            raise ValueError("Pass at most one of service= or transport=, not both")
-        self.transport = transport if transport is not None else (
-            DiscoveryTransport(service) if service is not None else None
-        )
+        self.transport = transport
         self.chunk_size = chunk_size
         self.dry_run = dry_run
         self.trigger = trigger
@@ -613,18 +606,64 @@ class SyncManager:
     # ------------------------------------------------------------------
 
     def _move_to_processed(self, filepath: Path, run_id: Optional[int]) -> None:
-        """Move a file from inbox/ to processed/ after a successful sync."""
-        from datetime import datetime as _dt
+        """Move a file from inbox/ to processed/, keeping one export per chat.
+
+        processed/ is not an archive of everything ever imported. It exists
+        for exactly one job: reset-and-resync. Both front ends restore a chat
+        by looking for `chats.source_filename` -- the *inbox* name, written
+        once on first import and deliberately never updated -- inside
+        processed/. So the only file in here that anything can ever read back
+        is the one at the canonical name, and only the newest copy of it is
+        worth having: WhatsApp re-exports the whole history every time, so a
+        later export of a chat is a strict superset of the earlier one.
+
+        Until v2.0.0 a same-named re-export was parked alongside the original
+        under a `_dup_<timestamp>` suffix. Nothing ever read those files back
+        -- resolve went by source_filename, which never carries the suffix --
+        so they only grew the folder, on Android in app-private storage the
+        user cannot even see. The newer export now takes the canonical name
+        and the copy it supersedes goes, including any `_dup_` leftovers an
+        older version wrote for this chat.
+        """
         dest = self.processed_dir / filepath.name
+        superseded = [p for p in self._superseded_exports(filepath.name) if p != filepath]
         if dest.exists():
-            # Collision: use a timestamp suffix so the renamed file is clearly
-            # artificial and cannot be mistaken for a real chat name if moved
-            # back to inbox (e.g. _dup_20250531_143022 vs the old _{run_id}
-            # which produced names like "John Doe_11").
-            suffix = _dt.now().strftime("_dup_%Y%m%d_%H%M%S")
-            dest = self.processed_dir / f"{filepath.stem}{suffix}{filepath.suffix}"
+            dest.unlink()
         shutil.move(str(filepath), str(dest))
         log.info("Moved %s → processed/%s", filepath.name, dest.name)
+        for stale in superseded:
+            if stale == dest:
+                continue
+            try:
+                stale.unlink()
+                log.info("Pruned superseded export processed/%s", stale.name)
+            except OSError as exc:
+                # Never fail a completed sync over housekeeping: the messages
+                # are already delivered and recorded by this point.
+                log.warning("Could not prune processed/%s: %s", stale.name, exc)
+
+    def _superseded_exports(self, filename: str) -> list:
+        """Every processed/ file that a fresh import of `filename` replaces.
+
+        That is the canonical name itself plus the `_dup_<timestamp>` variants
+        older versions created for it. Matching is deliberately narrow -- stem
+        + "_dup_" + same suffix -- so an unrelated chat whose real name merely
+        starts the same way is never touched.
+        """
+        stem, suffix = Path(filename).stem, Path(filename).suffix
+        out = []
+        try:
+            entries = list(self.processed_dir.iterdir())
+        except OSError:
+            return out
+        for path in entries:
+            if not path.is_file():
+                continue
+            if path.name == filename:
+                out.append(path)
+            elif path.suffix == suffix and path.stem.startswith(f"{stem}_dup_"):
+                out.append(path)
+        return out
 
 
 # ---------------------------------------------------------------------------

@@ -40,8 +40,8 @@ android {
         // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
         // only, so the phone build was stamped as released without ever being
         // published. v1.4.1 is the first release to carry both.
-        versionCode = 30
-        versionName = "1.17.0"
+        versionCode = 31
+        versionName = "2.0.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
@@ -164,7 +164,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
-    implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
@@ -172,9 +171,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // JVM unit tests only -- no Robolectric, no androidTest runtime. The one
-    // thing tested here (AppPrefs.oauthIsVisible) is Context-free on purpose,
-    // which is what lets a plain JUnit assertion check the same truth table
-    // tests/test_config.py checks on the Python side. Adding an Android test
-    // runtime to assert one boolean would cost more than it proves.
+    // things tested here are Context-free on purpose, which is what lets
+    // plain JUnit assertions check the same truths their Python twins check.
+    // Adding an Android test runtime to assert them would cost more than it
+    // proves.
     testImplementation("junit:junit:4.13.2")
 }

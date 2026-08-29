@@ -50,19 +50,16 @@ import java.util.Calendar
 data class ImapProviderInfo(val key: String, val label: String, val host: String, val port: Int)
 
 // Matches gui.py's _BACKEND_LABELS exactly, so the two apps describe the
-// same choice with the same words. Moved here with the rest of the account
+// same thing with the same words. Moved here with the rest of the account
 // UI it labels; MainActivity.kt uses it too (mail-account summary line).
 //
-// Both labels name the SCOPE of the choice, not just its mechanism. The old
-// pair ("Google sign-in (OAuth)" / "Email app password (IMAP)") described how
-// you authenticate but left the thing that actually decides the choice unsaid:
-// the OAuth path can only ever reach a Gmail mailbox. It is built on Gmail API
-// scopes (gmail.insert / gmail.labels, see MainActivity.kt's scope list), so
-// picking it with an Outlook or Fastmail address in mind is a dead end the UI
-// used to let you walk into.
+// The label names the SCOPE, not just the mechanism. Since v2.0.0 there is
+// one entry, because there is one backend -- Google sign-in was removed (see
+// AppPrefs.LEGACY_MAIL_BACKEND_GMAIL_OAUTH). The map shape is kept rather
+// than collapsed to a constant so a second backend is an added line here
+// rather than a UI rewrite.
 val BACKEND_LABELS = mapOf(
     AppPrefs.MAIL_BACKEND_IMAP to "Any provider (IMAP app password)",
-    AppPrefs.MAIL_BACKEND_GMAIL_OAUTH to "Gmail only (Google sign-in)",
 )
 
 // Official, human-verified "create an app password" pages, one per
@@ -269,13 +266,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
 @Composable
 fun MailAccountScreen(
     onBack: () -> Unit,
-    connectedEmail: String?,
-    onDisconnect: () -> Unit,
-    onReconnect: () -> Unit,
-    accessTokenAvailable: Boolean,
     onTestConnection: ((String) -> Unit) -> Unit,
-    mailBackend: String,
-    onMailBackendChange: (String) -> Unit,
     imapProviders: List<ImapProviderInfo>,
     imapProvider: String,
     onImapProviderChange: (String) -> Unit,
@@ -301,20 +292,6 @@ fun MailAccountScreen(
     // explains.
     val passwordWasLost = remember { SecretStore.consumeSecretLost(context) }
     var testResult by remember { mutableStateOf<String?>(null) }
-    var backendMenuOpen by remember { mutableStateOf(false) }
-    // Computed from the LIVE screen state, not from prefs alone: mailBackend
-    // and connectedEmail are what this screen is currently showing, and a user
-    // who just picked OAuth must not have the picker vanish from under them
-    // mid-edit. Only the unlock flag is read from storage. Deliberately not
-    // remembered -- it is cheap, and it has to follow those two values.
-    //
-    // The latch that makes this durable runs in MainActivity; see
-    // AppPrefs.latchOauthIfInUse.
-    val oauthVisible = AppPrefs.oauthIsVisible(
-        mailBackend,
-        connectedEmail,
-        AppPrefs.isOauthUnlocked(context),
-    )
     var providerMenuOpen by remember { mutableStateOf(false) }
     // Password is deliberately never pre-filled from a saved value — Compose
     // state here is plain (unencrypted) memory, and re-displaying a saved
@@ -326,7 +303,7 @@ fun MailAccountScreen(
     var imapPasswordInput by remember { mutableStateOf("") }
     var imapSaveBusy by remember { mutableStateOf(false) }
     var imapSaveStatus by remember { mutableStateOf<String?>(null) }
-    val backendUsable = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessTokenAvailable
+    val backendUsable = imapPasswordSaved
     // Collapsed by default. Expanded inline this runs to roughly a screen and a
     // half of text, and it used to sit between the password field and "Save &
     // connect" — so the one control every user needs was pushed off-screen by
@@ -402,210 +379,158 @@ fun MailAccountScreen(
             )
 
             Text("Mail backend", style = MaterialTheme.typography.titleMedium)
-            if (oauthVisible) {
-                Box {
-                    OutlinedButton(onClick = { backendMenuOpen = true }) {
-                        Text(BACKEND_LABELS[mailBackend] ?: mailBackend)
-                    }
-                    DropdownMenu(expanded = backendMenuOpen, onDismissRequest = { backendMenuOpen = false }) {
-                        BACKEND_LABELS.forEach { (backend, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = { onMailBackendChange(backend); backendMenuOpen = false },
-                            )
-                        }
+            // A statement of fact, not a choice: there is one backend, and a
+            // one-item dropdown is the worse lie -- it implies something else
+            // is behind it. Matches the static label gui.py now shows in the
+            // same spot; see docs/RESTORING-OAUTH.md if a second one ever
+            // comes back.
+            Text(BACKEND_LABELS[AppPrefs.MAIL_BACKEND_IMAP]!!)
+
+            // The way back into the guided setup. The wizard runs by itself
+            // the first time, but it is the only place that walks somebody
+            // through getting an app password in order, so it has to stay
+            // reachable afterwards -- switching provider, or a password the
+            // provider has since revoked, puts an existing user back at
+            // exactly the problem the wizard was written for.
+            //
+            // Offered here rather than replacing this screen: this form is
+            // the faster path once you know what the fields are, and taking
+            // it away to force everyone back through four steps would be the
+            // wrong trade for the person who just needs to fix a typo.
+            OutlinedButton(onClick = onRunWizard, modifier = Modifier.fillMaxWidth()) {
+                Text("Set up again, step by step")
+            }
+            Box {
+                OutlinedButton(onClick = { providerMenuOpen = true }) {
+                    Text(imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider)
+                }
+                DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { providerMenuOpen = false }) {
+                    imapProviders.forEach { info ->
+                        DropdownMenuItem(
+                            text = { Text(info.label) },
+                            onClick = { onImapProviderChange(info.key); providerMenuOpen = false },
+                        )
                     }
                 }
-            } else {
-                // One way in, so this states a fact instead of offering a
-                // choice. A one-item dropdown would be the worse lie: it
-                // implies something else is behind it. Matches the static
-                // label gui.py falls back to in the same situation.
-                //
-                // The Gmail sign-in path is demoted, not removed -- it still
-                // runs for anyone using it. It is simply not offered to
-                // someone who has never used it, because Google's "Testing"
-                // publishing status expires that consent 7 days after it is
-                // granted (see AppPrefs.oauthIsVisible).
-                Text(BACKEND_LABELS[AppPrefs.MAIL_BACKEND_IMAP]!!)
+            }
+            OutlinedTextField(
+                value = imapHost,
+                onValueChange = onImapHostChange,
+                label = { Text(if (imapProvider == "custom") "Host *" else "Host") },
+                enabled = imapProvider == "custom",
+                isError = hostIsError,
+                supportingText = {
+                    if (hostIsError) Text("Required")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (!it.isFocused) hostTouched = true },
+            )
+            OutlinedTextField(
+                value = imapPort.toString(),
+                onValueChange = { it.toIntOrNull()?.let(onImapPortChange) },
+                label = { Text("Port") },
+                enabled = imapProvider == "custom",
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = imapEmail,
+                onValueChange = onImapEmailChange,
+                label = { Text("Email address *") },
+                isError = emailIsError,
+                supportingText = {
+                    if (emailIsError) Text("Required")
+                },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (!it.isFocused) emailTouched = true },
+            )
+            OutlinedTextField(
+                value = imapPasswordInput,
+                onValueChange = { imapPasswordInput = it },
+                label = { Text("App password") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Text(
+                if (imapPasswordSaved) "An app password is saved for $imapEmail."
+                else "No app password saved yet.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (passwordWasLost && !imapPasswordSaved) {
+                Text(
+                    "Your saved app password could not be read on this device and " +
+                        "has been cleared — this happens after a device reset or a " +
+                        "restore onto a new phone. Nothing you have already synced " +
+                        "is affected. Enter it once more to reconnect.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Text(
+                "Leave the password field blank to keep the currently saved password. " +
+                    "The password is never shown or logged.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    enabled = saveEnabled,
+                    onClick = {
+                        imapSaveBusy = true
+                        imapSaveStatus = null
+                        onSaveImapSettings(imapProvider, imapHost, imapPort, imapEmail, imapPasswordInput) { success, message ->
+                            imapSaveBusy = false
+                            imapSaveStatus = message
+                            if (success) imapPasswordInput = ""
+                        }
+                    },
+                ) { Text(if (imapSaveBusy) "Connecting…" else "Save & connect") }
+                if (imapPasswordSaved) {
+                    TextButton(
+                        onClick = onForgetImapPassword,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) { Text("Forget saved password") }
+                }
+            }
+            imapSaveStatus?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+
+            // Contextual app-password help, keyed off the selected provider.
+            // Deliberately placed *after* "Save & connect" and collapsed:
+            // it is reference material for a once-per-account task, and
+            // sitting above the button it pushed the only control that
+            // matters off the bottom of the screen.
+            //
+            // Every static URL here was fetched and eyeballed as the
+            // provider's own current "create an app password" page before
+            // being hardcoded — this is the one place in this screen that
+            // sends the user off-app, so it's worth the extra care.
+            // Provider console menus drift over time though, which is why
+            // this also offers a live "ask an AI / search" path rather than
+            // relying solely on a static link.
+            HorizontalDivider()
+            val providerLabel = imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider
+
+            TextButton(onClick = { helpExpanded = !helpExpanded }) {
+                Text(
+                    if (helpExpanded) "Hide app password help"
+                    else "Not sure how to get an app password?",
+                )
             }
 
-            if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                // The way back into the guided setup. The wizard runs by itself
-                // the first time, but it is the only place that walks somebody
-                // through getting an app password in order, so it has to stay
-                // reachable afterwards -- switching provider, or a password the
-                // provider has since revoked, puts an existing user back at
-                // exactly the problem the wizard was written for.
-                //
-                // Offered here rather than replacing this screen: this form is
-                // the faster path once you know what the fields are, and taking
-                // it away to force everyone back through four steps would be the
-                // wrong trade for the person who just needs to fix a typo.
-                OutlinedButton(onClick = onRunWizard, modifier = Modifier.fillMaxWidth()) {
-                    Text("Set up again, step by step")
-                }
-                Box {
-                    OutlinedButton(onClick = { providerMenuOpen = true }) {
-                        Text(imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider)
-                    }
-                    DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { providerMenuOpen = false }) {
-                        imapProviders.forEach { info ->
-                            DropdownMenuItem(
-                                text = { Text(info.label) },
-                                onClick = { onImapProviderChange(info.key); providerMenuOpen = false },
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = imapHost,
-                    onValueChange = onImapHostChange,
-                    label = { Text(if (imapProvider == "custom") "Host *" else "Host") },
-                    enabled = imapProvider == "custom",
-                    isError = hostIsError,
-                    supportingText = {
-                        if (hostIsError) Text("Required")
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { if (!it.isFocused) hostTouched = true },
-                )
-                OutlinedTextField(
-                    value = imapPort.toString(),
-                    onValueChange = { it.toIntOrNull()?.let(onImapPortChange) },
-                    label = { Text("Port") },
-                    enabled = imapProvider == "custom",
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = imapEmail,
-                    onValueChange = onImapEmailChange,
-                    label = { Text("Email address *") },
-                    isError = emailIsError,
-                    supportingText = {
-                        if (emailIsError) Text("Required")
-                    },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { if (!it.isFocused) emailTouched = true },
-                )
-                OutlinedTextField(
-                    value = imapPasswordInput,
-                    onValueChange = { imapPasswordInput = it },
-                    label = { Text("App password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text(
-                    if (imapPasswordSaved) "An app password is saved for $imapEmail."
-                    else "No app password saved yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (passwordWasLost && !imapPasswordSaved) {
-                    Text(
-                        "Your saved app password could not be read on this device and " +
-                            "has been cleared — this happens after a device reset or a " +
-                            "restore onto a new phone. Nothing you have already synced " +
-                            "is affected. Enter it once more to reconnect.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Text(
-                    "Leave the password field blank to keep the currently saved password. " +
-                        "The password is never shown or logged.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Button(
-                        enabled = saveEnabled,
-                        onClick = {
-                            imapSaveBusy = true
-                            imapSaveStatus = null
-                            onSaveImapSettings(imapProvider, imapHost, imapPort, imapEmail, imapPasswordInput) { success, message ->
-                                imapSaveBusy = false
-                                imapSaveStatus = message
-                                if (success) imapPasswordInput = ""
-                            }
-                        },
-                    ) { Text(if (imapSaveBusy) "Connecting…" else "Save & connect") }
-                    if (imapPasswordSaved) {
-                        TextButton(
-                            onClick = onForgetImapPassword,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) { Text("Forget saved password") }
-                    }
-                }
-                imapSaveStatus?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
-
-                // Contextual app-password help, keyed off the selected provider.
-                // Deliberately placed *after* "Save & connect" and collapsed:
-                // it is reference material for a once-per-account task, and
-                // sitting above the button it pushed the only control that
-                // matters off the bottom of the screen.
-                //
-                // Every static URL here was fetched and eyeballed as the
-                // provider's own current "create an app password" page before
-                // being hardcoded — this is the one place in this screen that
-                // sends the user off-app, so it's worth the extra care.
-                // Provider console menus drift over time though, which is why
-                // this also offers a live "ask an AI / search" path rather than
-                // relying solely on a static link.
-                HorizontalDivider()
-                val providerLabel = imapProviders.firstOrNull { it.key == imapProvider }?.label ?: imapProvider
-
-                TextButton(onClick = { helpExpanded = !helpExpanded }) {
-                    Text(
-                        if (helpExpanded) "Hide app password help"
-                        else "Not sure how to get an app password?",
-                    )
-                }
-
-                if (helpExpanded) {
-                    AppPasswordHelpBody(
-                        providerKey = imapProvider,
-                        providerLabel = providerLabel,
-                        host = imapHost,
-                    )
-                }
-            } else {
-                Text("Account", style = MaterialTheme.typography.titleMedium)
-                Text(connectedEmail ?: "Not connected", style = MaterialTheme.typography.bodyLarge)
-                if (connectedEmail == null) {
-                    Button(onClick = onReconnect) { Text("Connect") }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedButton(onClick = onReconnect) { Text("Reconnect") }
-                        TextButton(
-                            onClick = onDisconnect,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) { Text("Disconnect") }
-                    }
-                }
-                // Business reason IMAP exists at all: this app hasn't been
-                // through Google's paid annual CASA verification, so it stays
-                // in "Testing" mode — see HelpScreen for the full explanation.
-                Text(
-                    "Google sign-in is limited to 100 test users and expires roughly every 7 " +
-                        "days while this app is in Google's \"Testing\" publishing mode. See " +
-                        "Help & FAQ for details, or switch to \"Email app password (IMAP)\" above " +
-                        "to avoid both limits.",
-                    style = MaterialTheme.typography.bodySmall,
+            if (helpExpanded) {
+                AppPasswordHelpBody(
+                    providerKey = imapProvider,
+                    providerLabel = providerLabel,
+                    host = imapHost,
                 )
             }
 

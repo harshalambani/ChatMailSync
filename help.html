@@ -149,7 +149,7 @@
       <li>Shown as a tidy, WhatsApp-style conversation, with photos and files included (if you exported them).</li>
     </ul>
     <p>It <strong>adds</strong> the messages to your mailbox. It never sends anything, never deletes anything, and never posts anything back to WhatsApp.</p>
-    <p>How that is guaranteed depends on how you connect. With <strong>Google sign-in</strong>, Google enforces it &mdash; the app is granted permission to add mail and nothing else, so a request to read your mail would be refused at Google's end. With an <strong>email app password</strong> (the default), no provider offers a limited password: any password that can add mail can technically do anything. There the guarantee is the app's own code, which uses only four mail commands, none of which can open or remove a message. The source is public and anyone can check it.</p>
+    <p>What guarantees that is the app's own code. No provider issues a password limited to one operation &mdash; any password that can add mail can technically do anything &mdash; so the assurance has to come from what the app actually does: it uses only four mail commands, none of which can open or remove a message. The source is public and anyone can check it.</p>
   </section>
 
   <section id="setup">
@@ -162,7 +162,6 @@
       <li>Create an app password with your provider. For Gmail: Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App passwords. (Most providers require two-factor authentication to be on first.)</li>
       <li>Open the app and click the <strong>gear icon</strong> (top-right) to open Settings. It opens inside the main window &mdash; <strong>Back to sync</strong> (top-left), or the Escape key, returns you to the sync view.</li>
       <li>Under <strong>Mail account</strong>, click <strong>Change&hellip;</strong>. That opens the Mail account screen the same way, with <strong>Back to settings</strong> to come out of it.</li>
-      <li>Leave <strong>Connect via</strong> set to <em>Email app password (IMAP)</em>.</li>
       <li>Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom IMAP server &mdash; host and port fill in automatically for the known ones).</li>
       <li>Enter your email address and the app password, then <strong>Save</strong>.</li>
       <li>The indicator turns <span class="pill">● green</span> and says <strong>Connected</strong>.</li>
@@ -170,8 +169,8 @@
     <p>This does not expire. To disconnect later, click <strong>Forget saved password</strong>.</p>
 
     <h3>A note on Google sign-in</h3>
-    <p>Earlier versions connected to Gmail through a Google account instead of an app password. That route is closed to new setups: the app has not been through Google&rsquo;s verification process, so Google only lets accounts that were manually added as test users sign in at all &mdash; there is no way to add yourself. An app password reaches Gmail perfectly well and does not expire.</p>
-    <p>If you are already signed in with Google, nothing changes. The app keeps you there, will not ask you for an app password, and the option stays visible on your setup &mdash; including after you try IMAP, so switching is not a one-way door.</p>
+    <p>Earlier versions could connect to Gmail through a Google account instead of an app password. <strong>That route was removed in version 2.0.0.</strong> It never worked for most people: the app has not been through Google&rsquo;s verification process, so Google only let accounts that had been added by hand as test users sign in at all &mdash; there was no way to add yourself &mdash; and the sign-in expired roughly every seven days.</p>
+    <p>If you were signed in with Google, the app says so once on the next start and then asks for an app password. Nothing already in your mailbox is affected, and nothing already synced is re-sent. An app password reaches Gmail perfectly well and does not expire.</p>
   </section>
 
   <section id="export">
@@ -298,7 +297,6 @@
     </ul>
     <p><strong>On Gmail</strong> these are labels, not folders, and they show in the labels list down the left-hand side. Everything else works the same.</p>
     <p>Each chat is a single <strong>conversation thread</strong>. Opening it shows the messages laid out like WhatsApp, with photos inline and other files attached for download.</p>
-    <div class="note"><strong>Shortcut (Google sign-in only):</strong> In the app's chat list, click the <strong>↗</strong> icon next to a chat to jump straight to its Gmail thread in your browser. The button is hidden on IMAP, where there is no web address to open.</div>
   </section>
 
   <section id="faq">
@@ -311,17 +309,16 @@
       <dd>Because nothing is being sent. The app uses the mail command that <em>adds</em> a message to a mailbox (IMAP APPEND), which is how your mail client saves a draft or a copy of an outgoing mail. Your chats land in your own mailbox and nobody else receives anything.</dd>
 
       <dt>What stops it reading or deleting my mail?</dt>
-      <dd>With an <strong>email app password</strong> &mdash; how everyone connects unless they were already using Google sign-in &mdash; no provider can issue a password limited to one operation: any password that can add mail can technically do anything. There the guarantee is the app's own code, which uses only four mail commands: list folders, create a folder, subscribe to it, and add a message. None of them can open or remove a message, and the source is public for anyone who wants to check. On the older <strong>Google sign-in</strong>, Google enforces it instead: the app is granted permission to add mail and nothing else, so a request to read your mail would be refused at Google's end.</dd>
+      <dd>The app's own code, and it is worth being plain about that. No provider can issue a password limited to one operation: any password that can add mail can technically do anything. What the app does with it is use four mail commands and no others &mdash; list folders, create a folder, subscribe to it, and add a message. None of them can open or remove a message, and the source is public for anyone who wants to check.</dd>
 
       <dt>Where is my email app password kept?</dt>
       <dd>Encrypted at rest on this PC, with Windows DPAPI, using a key derived from your Windows login and on top of a file only your account can open. It is never written into the app's settings file, never shown back to you in the password box after saving, and never included in a log line or an error message. (The Android edition does the same thing with a key held in the phone's Android Keystore.)</dd>
 
       <dt>The app says "Not connected", or authorising fails.</dt>
-      <dd><strong>On IMAP</strong> (the default): open <strong>Settings &rarr; Mail account &rarr; Change&hellip;</strong> and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. App passwords are the usual culprit &mdash; they are revoked if you turn off two-factor authentication, and some providers expire them.<br>
-      <strong>On Google sign-in:</strong> click <strong>Connect</strong> and complete the sign-in in your browser. Pick the right account and approve the permission request. If it still fails, click <strong>Sign Out</strong>, then <strong>Connect</strong> again to start fresh.</dd>
+      <dd>Open <strong>Settings &rarr; Mail account &rarr; Change&hellip;</strong> and check the host, port and email address, then re-enter your app password and <strong>Save</strong>. The app password is the usual culprit &mdash; providers revoke it if you turn off two-factor authentication, and some expire it on their own.</dd>
 
-      <dt>Why does it ask me to reconnect every week?</dt>
-      <dd>Only if you are on <strong>Google sign-in</strong>. The app has not been through Google's app-verification process, so Google treats it as "Testing": the sign-in expires roughly every 7 days, and only accounts added by hand as test users can use it at all. That is Google's rule for unverified apps and cannot be extended from inside the app &mdash; and it is why Google sign-in is no longer offered to new setups (section 2). An app password reaches Gmail perfectly well and does not expire; switching to one loses nothing already synced.</dd>
+      <dt>I used to sign in with Google. Why is it asking for an app password?</dt>
+      <dd>Google sign-in was removed in version 2.0.0. It could never be offered to more than 100 people: the app has not been through Google's app-verification process, so Google treated it as "Testing", which caps the account list and expires the sign-in roughly every 7 days &mdash; the weekly reconnect. That is Google's rule for unverified apps and cannot be extended from inside the app. An app password reaches Gmail perfectly well, does not expire, and works the same on every other provider. Nothing already synced is lost or re-sent; see section 2 for the setup.</dd>
 
       <dt>I moved the app to another PC, or set it up on a new phone, and it wants the password again.</dt>
       <dd>That is expected, not a fault. Windows encrypts the saved app password with a key tied to your Windows account on that particular machine, so a copy of the app carried to a different PC &mdash; or opened under a different Windows user &mdash; cannot unlock it. Nobody who picks up the folder can read your password either, which is the point. Your app password is still valid at your provider: enter it again under <strong>Settings &rarr; Mail account</strong> on the new machine.</dd>
@@ -365,7 +362,7 @@
       <p>One thing that surprises people: a 20 MB video does not make a 20 MB email. Email cannot carry raw files, so everything is re-encoded on the way out, which adds about a third &mdash; a 20 MB video arrives as a roughly 27 MB email. That is why the practical ceiling for a single file is around 18 MB on a 25 MB provider.</p></dd>
 
       <dt>Where do I see everything about one chat?</dt>
-      <dd>Click the chat's row in the list. Its own screen opens inside the window and shows when it last synced, how many messages have gone out, whether a mail thread already exists for it and which export file it came from &mdash; with the same four actions on it: open it in Gmail, sync just that one chat, reset it, or delete it from the list. The small icons on the list row are shortcuts to those same actions; hover over any of them to see what it does.
+      <dd>Click the chat's row in the list. Its own screen opens inside the window and shows when it last synced, how many messages have gone out, whether a mail thread already exists for it and which export file it came from &mdash; with the same three actions on it: sync just that one chat, reset it, or delete it from the list. The small icons on the list row are shortcuts to the last two; hover over either to see what it does.
       <p><strong>Sync just this chat</strong> runs a normal sync limited to that one chat, instead of everything waiting in the inbox. It is the same thing as the command line's <code>--chat</code> option, and it does the same job on the Android app's chat screen.</p></dd>
 
       <dt>I want to re-do a chat from scratch. What does Reset do?</dt>

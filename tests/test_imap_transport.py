@@ -15,11 +15,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.mail_client import (
-    DiscoveryTransport,
     MailTransport,
     MailTransportError,
     ImapTransport,
-    RestTransport,
     _build_html_mime_message,
     _insert_with_backoff,
     get_or_create_label,
@@ -108,12 +106,8 @@ def _real_message_body(label_id="WhatsApp/Alice", message_id="<anchor@local>"):
 # Conformance
 # ---------------------------------------------------------------------------
 
-def test_all_transports_satisfy_gmail_transport_protocol():
-    discovery = DiscoveryTransport(MagicMock())
-    rest = RestTransport("token")
+def test_imap_transport_satisfies_the_mail_transport_protocol():
     imap, _ = _make_transport()
-    assert isinstance(discovery, MailTransport)
-    assert isinstance(rest, MailTransport)
     assert isinstance(imap, MailTransport)
 
 

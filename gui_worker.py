@@ -9,7 +9,7 @@ Events posted to SyncWorker.q (all plain dicts):
   {"type": "done",        "stats": SyncStats}
   {"type": "error",       "msg": str}
 
-Events posted to the queue passed into connect_gmail()/connect_imap():
+Events posted to the queue passed into connect_imap():
   {"type": "auth_ok",    "transport": MailTransport}
   {"type": "auth_error", "msg": str}
 
@@ -27,27 +27,17 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from google.auth.exceptions import RefreshError
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-
 from src.config import (
-    CREDENTIALS_FILE,
-    GMAIL_SCOPES,
     IMAP_CREDENTIALS_FILE,
-    MAIL_BACKEND_IMAP,
-    TOKEN_FILE,
     resolve_mail_backend,
 )
 from src.mail_client import (
     ChunkSize,
-    DiscoveryTransport,
     MailTransport,
     MailTransportError,
     _restrict_auth_dir_acl,
     _restrict_file_acl,
     build_imap_transport,
-    build_service,
     check_connection,
     format_connection_result,
     login_failure_hint,
@@ -180,9 +170,8 @@ def _load_mail_backend_settings() -> dict:
 def _save_imap_credentials(host: str, port: int, email: str, password: str) -> None:
     """Persist IMAP connection details to the ACL-hardened auth/ file.
 
-    Reuses mail_client._restrict_auth_dir_acl -- the exact same hardening
-    OAuth's token.json already gets -- rather than inventing a second
-    mechanism. The password lives ONLY here, never in .settings.json, never
+    Reuses mail_client._restrict_auth_dir_acl to lock the whole auth/ folder
+    down to this Windows account, rather than inventing a second mechanism. The password lives ONLY here, never in .settings.json, never
     logged, never echoed back into the UI after saving.
 
     On Windows, the password is additionally encrypted at rest with DPAPI
@@ -270,53 +259,21 @@ def check_auth_status() -> tuple[bool, str]:
     Never opens a browser and never makes a network call for IMAP: a stored
     credential that this machine can still read counts as "connected", and a
     password that is merely *wrong* only surfaces on the next actual
-    connect/sync attempt, same as an expired OAuth token without a
-    refresh_token would need a real reconnect. See check_imap_auth_status()
-    for what "can still read" now means and why it is more than it was.
+    connect/sync attempt -- only the server can judge a wrong password. See
+    check_imap_auth_status() for what "can still read" now means and why it
+    is more than it was.
+
+    IMAP is the only backend since v2.0.0, so this is a thin alias kept for
+    the call sites (and for the day a second backend arrives).
     """
-    settings = _load_mail_backend_settings()
-    if settings["mail_backend"] == MAIL_BACKEND_IMAP:
-        return check_imap_auth_status()
-    return _check_gmail_auth_status()
-
-
-def _check_gmail_auth_status() -> tuple[bool, str]:
-    """Silently refreshes an expired token if a refresh_token is present."""
-    if not CREDENTIALS_FILE.exists():
-        return False, "No credentials.json"
-    if not TOKEN_FILE.exists():
-        return False, "Not connected"
-    try:
-        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), GMAIL_SCOPES)
-        if creds.valid:
-            return True, "Connected"
-        if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            TOKEN_FILE.write_text(creds.to_json())
-            # Restrict token file to owner read/write only (skip on Windows).
-            if os.name != "nt":
-                try:
-                    os.chmod(TOKEN_FILE, 0o600)
-                except OSError:
-                    pass
-            return True, "Connected"
-        return False, "Sign-in expired — reconnect"
-    except RefreshError:
-        # Google revoked the grant (the unverified-app 7-day expiry, most
-        # often). Reported as the plain fact rather than as
-        # "('invalid_grant: Bad Request', {...})", which told the user nothing
-        # and read like a fault in the app. Clicking Connect fixes it:
-        # get_credentials() falls back to the browser flow for exactly this.
-        return False, "Sign-in expired — reconnect"
-    except Exception as exc:
-        return False, f"Auth error: {exc}"
+    return check_imap_auth_status()
 
 
 def check_imap_auth_status() -> tuple[bool, str]:
     """Is there a credential here that can actually be used? Local checks only.
 
-    Public, unlike its Gmail sibling, because the Settings screen's account
-    summary needs this same judgement for the IMAP backend and must not
+    Public, because the Settings screen's account summary needs this same
+    judgement for the IMAP backend and must not
     re-derive it -- re-deriving it is precisely how that summary ended up
     file-existence-based while this function moved on.
 
@@ -357,19 +314,6 @@ def check_imap_auth_status() -> tuple[bool, str]:
     return True, (f"Connected ({email})" if email else "Connected")
 
 
-def connect_gmail(result_queue: queue.Queue) -> None:
-    """Run the full OAuth2 browser flow in a thread; post result to result_queue."""
-    try:
-        service = build_service()
-        result_queue.put({"type": "auth_ok", "transport": DiscoveryTransport(service)})
-    except TimeoutError as exc:
-        # An abandoned browser sign-in, not a failure of anything -- flagged so
-        # the UI can say "not completed" rather than "auth failed".
-        result_queue.put({"type": "auth_error", "msg": str(exc), "timeout": True})
-    except Exception as exc:
-        result_queue.put({"type": "auth_error", "msg": str(exc)})
-
-
 def connect_imap(
     result_queue: queue.Queue,
     host: str,
@@ -379,7 +323,7 @@ def connect_imap(
 ) -> None:
     """Validate IMAP credentials (login + a LIST call), then persist them.
 
-    Mirrors connect_gmail()'s queue-event contract so gui.py's poll loop can
+    Posts the same queue-event contract gui.py's poll loop expects:
     treat both the same way. The password is never persisted unless the
     validation call succeeds, and it is never included in the posted event
     or in the error message (mail_client's ImapTransport already scrubs the
@@ -523,22 +467,16 @@ def resolve_imap_password(data: dict) -> str:
 def build_transport_for_active_backend() -> Optional[MailTransport]:
     """Build a transport for whichever backend .settings.json says is active.
 
-    Used by cli.py (headless) and available to gui.py too. For Gmail OAuth
-    this runs the normal build_service() flow (may raise FileNotFoundError
-    if credentials.json is missing, same as before). For IMAP there is no
-    CLI-driven setup flow -- if no saved app password exists yet, this
-    raises RuntimeError telling the user to configure it once via the
-    desktop app's Settings panel.
+    Used by cli.py (headless) and available to gui.py too. There is no
+    CLI-driven setup flow -- if no saved app password exists yet, this raises
+    RuntimeError telling the user to configure it once via the desktop app's
+    Settings panel, because an app password can only come from the user.
     """
-    settings = _load_mail_backend_settings()
-    if settings["mail_backend"] == MAIL_BACKEND_IMAP:
-        if not IMAP_CREDENTIALS_FILE.exists():
-            raise RuntimeError(
-                "IMAP backend selected but no saved app password found. "
-                "Open the desktop app's Settings to connect an IMAP account first."
-            )
-        data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
-        password = resolve_imap_password(data)
-        return build_imap_transport(data["host"], data["port"], data["email"], password)
-    service = build_service()
-    return DiscoveryTransport(service)
+    if not IMAP_CREDENTIALS_FILE.exists():
+        raise RuntimeError(
+            "No saved app password found. Open the desktop app's Settings to "
+            "connect your mail account first."
+        )
+    data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
+    password = resolve_imap_password(data)
+    return build_imap_transport(data["host"], data["port"], data["email"], password)
