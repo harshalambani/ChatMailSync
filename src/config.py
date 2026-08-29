@@ -49,8 +49,9 @@ def _apply_root(root: Path) -> None:
     g["INBOX_DIR"] = g["DATA_DIR"] / "inbox"
     g["PROCESSED_DIR"] = g["DATA_DIR"] / "processed"
     g["STATE_DB_PATH"] = g["DATA_DIR"] / "sync_state.db"
-    g["CREDENTIALS_FILE"] = g["AUTH_DIR"] / "credentials.json"
-    g["TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
+    # Retained only to recognise (and clean up after) a pre-v2.0.0 Google
+    # sign-in user; nothing authenticates with it. See is_legacy_oauth_user.
+    g["LEGACY_TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
     # IMAP backend (Road B, phase 1): the confirmed storage decision is an
     # ACL-locked file (Windows NTFS ACL hardening on top of a scheme that
     # also has to work on Android, which has neither NTFS ACLs nor DPAPI —
@@ -78,160 +79,62 @@ def set_root(path: str | Path) -> None:
 _apply_root(_compute_root())
 
 # ---------------------------------------------------------------------------
-# Gmail OAuth2 scopes
-# ---------------------------------------------------------------------------
-
-GMAIL_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.insert",
-    "https://www.googleapis.com/auth/gmail.labels",
-]
-
-# ---------------------------------------------------------------------------
 # Mail backend selection
 #
-# Both backends are fully supported and user-selectable in Settings. IMAP is
-# the default for NEW installs: the OAuth client stays in Google's "Testing"
-# publishing status (verification stalled on an annual paid CASA assessment
-# that isn't worth it for a personal tool), and Testing status caps the app at
-# 100 explicitly-listed test users AND expires every consent 7 days after it
-# is granted. IMAP + an app password has neither limit.
+# IMAP + an app password is the only backend. The Gmail OAuth path was removed
+# in v2.0.0: its OAuth client never left Google's "Testing" publishing status
+# (verification stalled on an annual paid CASA assessment that is not worth it
+# for a personal tool), and Testing status caps the app at 100 explicitly
+# listed test users AND expires every consent 7 days after it is granted.
+# Shipping a door that locks itself after a week -- and declaring Google
+# account access to an app store to do it -- was worse than not shipping it.
 #
-# This is a default, not a deprecation -- gmail_oauth remains selectable and
-# its code path is unchanged. See resolve_mail_backend() for why flipping the
-# default does not disturb anyone already signed in with Google.
+# The constant below is retained ONLY so an existing settings file that still
+# says "gmail_oauth" can be recognised and migrated. Nothing builds an OAuth
+# transport any more. See docs/RESTORING-OAUTH.md if it ever has to come back.
 # ---------------------------------------------------------------------------
 
-MAIL_BACKEND_GMAIL_OAUTH = "gmail_oauth"
+LEGACY_MAIL_BACKEND_GMAIL_OAUTH = "gmail_oauth"
 MAIL_BACKEND_IMAP = "imap"
 DEFAULT_MAIL_BACKEND = MAIL_BACKEND_IMAP
 
 
-def resolve_mail_backend(saved: dict) -> str:
-    """Pick the backend for a settings dict that may predate the setting.
+def is_legacy_oauth_user(saved: dict) -> bool:
+    """Whether this settings file belonged to a Google sign-in user.
 
-    Shared by gui.py and gui_worker.py precisely so the two cannot drift into
-    disagreeing about which backend a given settings file means -- they read
-    the same file and must reach the same answer or a sync would run against
-    a different transport than the UI is showing.
+    True on either of the two pieces of evidence the OAuth era left behind: a
+    saved backend of "gmail_oauth", or a token.json still sitting in auth/.
+    Callers use it to show a one-time explanation rather than silently
+    demanding an app password the user has never created -- being moved onto a
+    different mail backend without being told is the failure this exists to
+    prevent.
 
-    An explicit saved value always wins. The interesting case is its absence,
-    which means a settings file written before the setting existed. Those
-    users were, by definition, on OAuth and may have a working token; falling
-    through to DEFAULT_MAIL_BACKEND would silently move them to IMAP on
-    upgrade, ignore that token, and demand an app password they have never
-    created. An existing token.json is the evidence that this is such a user,
-    so it pins them to gmail_oauth and only genuinely new installs get the
-    new default.
-
-    TOKEN_FILE is read from the module globals at call time rather than
+    LEGACY_TOKEN_FILE is read from the module globals at call time rather than
     captured at import, because _apply_root() rebinds it when CHATMAILSYNC_ROOT
     moves the storage root out from under us.
     """
+    if saved.get("mail_backend") == LEGACY_MAIL_BACKEND_GMAIL_OAUTH:
+        return True
+    return globals()["LEGACY_TOKEN_FILE"].exists()
+
+
+def resolve_mail_backend(saved: dict) -> str:
+    """Pick the backend for a settings dict, which may predate or postdate OAuth.
+
+    Shared by gui.py and gui_worker.py precisely so the two cannot drift into
+    disagreeing about which backend a given settings file means -- they read
+    the same file and must reach the same answer or a sync would run against a
+    different transport than the UI is showing.
+
+    There is only one answer now. A saved "gmail_oauth" is deliberately NOT
+    honoured: returning it would hand gui_worker a backend name nothing can
+    build a transport for, and the user would meet a crash instead of an
+    explanation. is_legacy_oauth_user() above is how the UI knows to explain.
+    """
     backend = saved.get("mail_backend")
-    if backend:
+    if backend and backend != LEGACY_MAIL_BACKEND_GMAIL_OAUTH:
         return backend
-    if globals()["TOKEN_FILE"].exists():
-        return MAIL_BACKEND_GMAIL_OAUTH
     return DEFAULT_MAIL_BACKEND
-
-
-# ---------------------------------------------------------------------------
-# Gmail OAuth visibility (v1.6.0)
-#
-# The OAuth path is DEMOTED, not deleted. Everything below the transport
-# Protocol is unchanged and resolve_mail_backend() above is untouched -- what
-# changes is only whether the choice is OFFERED. Someone who has never used
-# OAuth should never be shown it, because picking it leads somewhere we cannot
-# make work for them: the client is in Google's "Testing" publishing status
-# (see the note above resolve_mail_backend), so consent expires 7 days after it
-# is granted and only 100 pre-listed accounts can sign in at all. Offering a
-# door that locks itself after a week is worse than not offering it.
-#
-# Visibility is gated; BEHAVIOUR is not. A backend that resolves to gmail_oauth
-# still builds the OAuth transport exactly as before, whether or not the option
-# would be offered to a fresh user.
-# ---------------------------------------------------------------------------
-
-OAUTH_UNLOCK_ENV = "CHATMAILSYNC_ENABLE_OAUTH"
-SETTING_OAUTH_UNLOCKED = "oauth_unlocked"
-
-# Accepted truthy spellings for OAUTH_UNLOCK_ENV. Deliberately a small closed
-# set rather than "any non-empty string": `CHATMAILSYNC_ENABLE_OAUTH=0` and
-# `=false` read to a human as "off", and honouring them as "on" because they
-# are non-empty is the kind of surprise that costs an afternoon.
-_ENV_TRUTHY = {"1", "true", "yes", "on"}
-
-
-def oauth_is_visible(saved_backend, token_exists: bool, unlocked: bool) -> bool:
-    """Whether the Gmail OAuth option should be offered at all.
-
-    Deliberately pure -- three plain values in, a bool out, no file access and
-    no settings dict. Its Kotlin twin, AppPrefs.oauthIsVisible, is pure for a
-    sharper reason: AppPrefs needs a Context for SharedPreferences, and there is
-    no Kotlin test source set in this repo, so a Context-free function is the
-    only part of the Android gate that can be unit tested without adding a
-    whole Android test runtime to assert one boolean. Keeping the Python side
-    the same shape is what lets both platforms test the identical truth table.
-
-    True on any of three grounds:
-
-    a. the user has explicitly saved gmail_oauth -- they chose it;
-    b. `token_exists` -- evidence of prior OAuth use. On Android the equivalent
-       evidence is a non-null connected account email;
-    c. `unlocked` -- the advanced flag (see oauth_visible for the two ways it
-       gets set).
-
-    (a) and (b) are what keep an existing OAuth user working. Hiding the option
-    from someone actively using it would strand them: the UI would show a
-    backend they cannot see, or silently offer to move them to IMAP and demand
-    an app password they have never created.
-    """
-    return bool(
-        saved_backend == MAIL_BACKEND_GMAIL_OAUTH or token_exists or unlocked
-    )
-
-
-def oauth_visible(saved: dict) -> bool:
-    """oauth_is_visible() for a real settings dict on this machine.
-
-    The unlock flag is honoured from either the settings file or the
-    environment. The env var exists for headless and CLI use, where there is no
-    version label to click; note that cli.py never selects a backend itself, so
-    this is a convenience rather than a gate the CLI has to enforce.
-
-    TOKEN_FILE is read from module globals at call time for the same reason
-    resolve_mail_backend does it: _apply_root() rebinds it when CHATMAILSYNC_ROOT
-    moves the storage root out from under us, and a value captured at import
-    would point at the old root.
-    """
-    env = os.environ.get(OAUTH_UNLOCK_ENV, "").strip().lower()
-    return oauth_is_visible(
-        saved.get("mail_backend"),
-        globals()["TOKEN_FILE"].exists(),
-        bool(saved.get(SETTING_OAUTH_UNLOCKED)) or env in _ENV_TRUTHY,
-    )
-
-
-def should_latch_oauth(saved: dict) -> bool:
-    """Whether to persist the unlock flag because OAuth is already in use.
-
-    Without this latch there is a one-way trap: an existing OAuth user opens
-    Settings, switches to IMAP to try it, saves -- and the OAuth option
-    disappears behind them, because the saved backend is no longer gmail_oauth.
-    On desktop token.json would usually still be there to rescue them, but on
-    Android signing out clears the connected account email and the evidence is
-    gone for good.
-
-    So the first time we see OAuth actually in use, we write the flag down.
-    It costs one boolean in a file that is already being written, and it means
-    the option can never vanish from under someone who was using it.
-
-    Returns False when the flag is already set, so callers can use it directly
-    as "is a write needed" without re-writing the settings file on every load.
-    """
-    if saved.get(SETTING_OAUTH_UNLOCKED):
-        return False
-    return oauth_visible(saved)
 
 
 # ---------------------------------------------------------------------------
@@ -263,14 +166,12 @@ IMAP_PROVIDERS = {
 def is_gmail_mailbox(saved: dict) -> bool:
     """Whether the destination mailbox is Gmail, however we authenticate to it.
 
-    Wider than `resolve_mail_backend(...) == MAIL_BACKEND_GMAIL_OAUTH`: IMAP is
-    the default backend now, and most IMAP users here point it at
-    imap.gmail.com with an app password. Both land on the same mailbox with
-    the same label semantics, so anything that depends on Gmail's behaviour
-    rather than on our auth method has to ask this question instead.
+    IMAP is the only backend, and most users here point it at imap.gmail.com
+    with an app password. The question that matters is which mailbox the mail
+    lands in, not how we signed in to it, because Gmail's label semantics
+    differ from a real IMAP folder tree; anything that depends on Gmail's
+    behaviour has to ask this rather than inspect the backend name.
     """
-    if resolve_mail_backend(saved) == MAIL_BACKEND_GMAIL_OAUTH:
-        return True
     host = (saved.get("imap_host") or "").lower()
     return "gmail" in host or "googlemail" in host
 
@@ -477,12 +378,12 @@ MAX_ZIP_DECOMPRESSED_BYTES = 500 * 1_048_576  # 500 MiB
 # Rate limiting
 # ---------------------------------------------------------------------------
 
-# Socket timeout for Gmail API calls (seconds).
-# Large HTML emails with embedded images can take many seconds to upload;
-# the httplib2 default (~60 s) is too tight for those cases.
-GMAIL_SOCKET_TIMEOUT = 180  # 3 minutes
+# Socket timeout for mail-server calls (seconds).
+# Large HTML emails with embedded images can take many seconds to upload, and
+# a minute -- the usual library default -- is too tight for those cases.
+MAIL_SOCKET_TIMEOUT = 180  # 3 minutes
 
-# Pause between consecutive Gmail API insert calls (seconds)
+# Pause between consecutive APPEND calls (seconds)
 API_CALL_DELAY_SECONDS = 0.1
 
 # Exponential backoff: base delay and maximum attempts on 429 / 5xx

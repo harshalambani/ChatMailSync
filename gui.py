@@ -32,30 +32,24 @@ from gui_worker import (
     _scrub_paths,
     check_auth_status,
     check_imap_auth_status,
-    connect_gmail,
     connect_imap,
     resolve_imap_password,
     test_imap_connection,
 )
 from src.config import (
-    CREDENTIALS_FILE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_MAIL_BACKEND,
     IMAP_CREDENTIALS_FILE,
     IMAP_PROVIDERS,
     INBOX_DIR,
-    MAIL_BACKEND_GMAIL_OAUTH,
     MAIL_BACKEND_IMAP,
     PROCESSED_DIR,
     PROJECT_ROOT,
-    SETTING_OAUTH_UNLOCKED,
     STATE_DB_PATH,
-    TOKEN_FILE,
     is_gmail_mailbox,
+    is_legacy_oauth_user,
     mailbox_clear_steps,
-    oauth_visible,
     resolve_mail_backend,
-    should_latch_oauth,
 )
 from src.app_version import app_version, version_label
 # The same bundle format Android reads and writes, so a backup taken on
@@ -72,7 +66,7 @@ from src.android_api import (
     preview as preview_export,
     remove_from_inbox,
 )
-from src.mail_client import DiscoveryTransport, build_imap_transport, build_service
+from src.mail_client import build_imap_transport
 from src.mail_client import connection_stage_plan, mailbox_folder_for
 from src.progress import ProgressTracker
 from src.watch_folder import (
@@ -183,11 +177,9 @@ _DEFAULT_SETTINGS = {
     # intentionally NOT in this dict; it only ever lives in
     # IMAP_CREDENTIALS_FILE (see gui_worker._save_imap_credentials).
     "backend_notice_shown": False,
-    # Advanced unlock for the demoted Gmail OAuth option (v1.6.0). False on
-    # every fresh install, which is the entire point: a new user is never
-    # offered a sign-in Google expires 7 days after granting it. Latched to
-    # True the first time OAuth is seen in use -- see config.should_latch_oauth.
-    "oauth_unlocked":      False,
+    # One-time "Google sign-in has been removed" notice (v2.0.0). Shown only
+    # to someone who actually had it -- see _should_show_oauth_removed_notice.
+    "oauth_removed_notice_shown": False,
     # Watched folder -- the desktop half of Android's WatchFolderWorker. Key
     # names deliberately match AppPrefs' so the two platforms' state is
     # readable side by side. See src/watch_folder.py for the rules; the two
@@ -255,18 +247,9 @@ def _load_settings() -> dict:
     except Exception:
         pass
     # Resolved separately from the plain merge above because a settings file
-    # written before mail_backend existed needs the token.json guard, not the
-    # bare default. gui_worker calls the same helper on the same file.
+    # may still say "gmail_oauth", a backend that no longer exists.
+    # gui_worker calls the same helper on the same file.
     settings["mail_backend"] = resolve_mail_backend(saved)
-    # Latch the OAuth unlock the first time we see OAuth actually in use, so the
-    # option can never vanish from under someone who was using it -- see
-    # config.should_latch_oauth for the trap this closes. Writes only on the
-    # transition, never on the common path, and a failed write is not worth
-    # complaining about: the evidence that latched it (token.json, or the saved
-    # backend) is still there to latch it again next launch.
-    if should_latch_oauth(saved):
-        settings[SETTING_OAUTH_UNLOCKED] = True
-        _save_settings(settings)
     return settings
 
 
@@ -352,28 +335,36 @@ def _auth_display(valid: bool, text: str, last_ok: "bool | None") -> tuple[str, 
     return "failed", _relabel_connected(text, "No connection")
 
 
-def _should_show_backend_notice(
-    settings: dict, settings_file_exists: bool, token_file_exists: bool
-) -> bool:
-    """Decide whether to show the one-time "IMAP backend now available" notice.
+def _legacy_oauth_evidence() -> bool:
+    """Whether this install belonged to a Google sign-in user.
 
-    Per the human's explicit decision (Road B phase 2, §6a): existing users
-    keep defaulting to gmail_oauth with zero behaviour change, but must see a
-    one-time, purely informational notice pointing at the new option in
-    Settings. A genuinely fresh install (no prior settings file, no prior
-    token.json) must NOT see it -- there is nothing "new" relative to what it
-    never had.
-
-    Prior-state condition: settings_file_exists OR token_file_exists, checked
-    against the raw pre-merge file state (not the post-merge settings dict,
-    which always "exists" once defaults are applied). Either file alone is
-    sufficient evidence of a prior install: a user could have a settings file
-    without ever having connected, or (in principle) a token without a saved
-    settings file.
+    Read from the RAW settings file, before defaults are merged in: once
+    _load_settings has run, mail_backend has already been resolved to "imap"
+    and the evidence is gone. Purely informational -- it decides whether the
+    one-time "Google sign-in has been removed" notice is warranted, and
+    nothing else.
     """
-    if settings.get("backend_notice_shown", False):
+    try:
+        saved = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        saved = {}
+    if not isinstance(saved, dict):
+        saved = {}
+    return is_legacy_oauth_user(saved)
+
+
+def _should_show_oauth_removed_notice(settings: dict, was_oauth_user: bool) -> bool:
+    """Decide whether to show the one-time "Google sign-in removed" notice.
+
+    Shown once, and only to someone who has the evidence of having used it: a
+    saved gmail_oauth backend or a leftover token.json. A fresh install never
+    sees it -- there is nothing to explain to someone who never had the thing
+    that was taken away, and saying it anyway advertises a path they cannot
+    take.
+    """
+    if settings.get("oauth_removed_notice_shown", False):
         return False
-    return settings_file_exists or token_file_exists
+    return was_oauth_user
 
 
 def _inbox_has_files() -> bool:
@@ -479,7 +470,7 @@ def _plain_color(color):
 class _Tooltip:
     """A hover label for a button whose whole text is one glyph.
 
-    Nine controls on this window say ⚙ ? ☽ ☀ ⟳ ↗ ↺ ✕ and CSV, several of them
+    Eight controls on this window say ⚙ ? ☽ ☀ ⟳ ↺ ✕ and CSV, several of them
     22x20 -- a set of symbols the user has to click to learn. Android says what
     each of its equivalents does in words on the button itself; Windows has no
     room for that on a 22px target in a 236px column, so it says it on hover
@@ -620,11 +611,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         init_db(STATE_DB_PATH)
 
-        # Raw prior-state check, BEFORE loading settings (which always
-        # "exists" once defaults are merged in) -- used only to decide
-        # whether to show the one-time backend notice below.
-        _had_settings_file = _SETTINGS_FILE.exists()
-        _had_token_file = TOKEN_FILE.exists()
+        # Raw prior-state check, BEFORE loading settings (which resolves
+        # mail_backend and so erases the evidence) -- used only to decide
+        # whether to show the one-time OAuth-removed notice below.
+        _was_oauth_user = _legacy_oauth_evidence()
 
         # Load persisted settings.
         _settings = _load_settings()
@@ -645,8 +635,6 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._watch_scanning = False
         self._watch_after_id = None
         self._last_run_dry_run = False
-        self._auth_wait_after = None
-        self._auth_cancelled = False
         # What the bar and its label say, derived by the shared core rather
         # than by this window -- see src/progress.py.
         self._progress = ProgressTracker()
@@ -680,7 +668,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._check_auth_deferred()
         self._refresh_chat_list()
         self._refresh_inbox_count()
-        self._maybe_show_backend_notice(_had_settings_file, _had_token_file)
+        self._maybe_show_oauth_removed_notice(_was_oauth_user)
 
         # Schedule periodic inbox refresh (0 = Off).
         if self._auto_refresh_ms > 0:
@@ -1535,29 +1523,6 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             anchor="w",
         ).pack(side="left", fill="x", expand=True, padx=(4, 4))
 
-        # ↗ Open Gmail thread button. Gated on the *backend*, not just on a
-        # thread existing: under IMAP the stored gmail_thread_id column holds
-        # the RFC 822 Message-ID we generated (that's what IMAP threads on via
-        # References/In-Reply-To), so it is always populated and the mail.
-        # google.com/#all/<id> deep link would always render — pointing at
-        # Gmail for someone who archives to Outlook or Fastmail, and at a
-        # thread id Gmail has never heard of. Hidden rather than disabled:
-        # there is no cross-provider equivalent of this deep link, so on IMAP
-        # there is nothing the user could do to enable it.
-        gmail_thread_id = row.get("gmail_thread_id")
-        if gmail_thread_id and self._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
-            url = f"https://mail.google.com/mail/u/0/#all/{gmail_thread_id}"
-            # Same words as _ChatDetailPanel's button for the same action --
-            # these three glyphs are shortcuts to that panel's actions, and a
-            # shortcut that names its destination differently is a third thing
-            # to learn rather than a faster way to the first.
-            _tooltip(ctk.CTkButton(
-                top, text="↗", width=22, height=20,
-                font=ctk.CTkFont(size=11),
-                fg_color="transparent", hover_color=gui_theme.TERTIARY_CONTAINER,
-                text_color=gui_theme.ON_SURFACE_VARIANT,
-                command=lambda u=url: webbrowser.open(u),
-            ), "Open in Gmail").pack(side="right", padx=(0, 2))
 
         # Resync button (only for chats that have been processed before).
         if synced:
@@ -2125,18 +2090,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _check_auth_deferred(self) -> None:
         """Run the *startup* auth check off the main thread.
 
-        _check_auth() is synchronous, and under the Gmail backend it can go to
-        the network: _check_gmail_auth_status() refreshes an expired token via
-        ``creds.refresh(Request())``, and google-auth's default timeout there
-        is 120 seconds. Called inline from __init__ -- so, before mainloop() --
-        that put an effectively unbounded round trip on the path to the first
-        window: a user with an expired token and a slow or blocked connection
-        got no window at all until it resolved, which looks like a hung launch
-        rather than a network problem.
+        _check_auth() is synchronous, and it was once able to go to the
+        network: the removed Gmail path refreshed an expired token inline from
+        __init__ -- so, before mainloop() -- on google-auth's 120-second
+        default timeout. A user with an expired token and a slow connection
+        got no window at all until it resolved, which reads as a hung launch
+        rather than a network problem. The check is file-only now, but it stays
+        off the main thread: nothing on the path to the first window should be
+        able to block it, and the next backend added here may not be local.
 
         Measured 2026-08-08 on the frozen 1.0.1 portable build, warm start
-        3.0s -- but only on the IMAP backend, which is file-only and never
-        touches the network in this check. The Gmail path had no such bound.
+        3.0s on the IMAP backend, which is file-only and never touches the
+        network in this check.
 
         Same shape as _silent_build_transport() below: do the blocking part on
         a daemon thread, hand the result back through a queue, and let the
@@ -2192,9 +2157,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND[status])
         self._auth_label.configure(text=label)
-        # command restored alongside the text: while a browser sign-in is
-        # outstanding the button is "Cancel" and points at _cancel_connect, and
-        # anything that relabels it must take that pairing back with it or the
+        # command restored alongside the text, not just the label: anything
+        # that relabels this button must take its command with it or the
         # button ends up saying one thing and doing another.
         self._auth_btn.configure(
             text="Reconnect" if valid else "Connect", command=self._on_connect_click
@@ -2207,21 +2171,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         """"normal" if there is anything stored to sign out of.
 
         Not "normal only while the connection is valid", which is what this
-        used to be and which had it backwards: Sign Out is the *repair* for a
-        broken connection -- it revokes and deletes the stored token -- so
-        greying it out whenever auth failed removed the one control that could
-        clear a bad credential. Neither branch of the sign-out path needs a
-        working connection: the revoke call already treats a network failure as
-        non-fatal, and deleting a local file needs nothing at all.
+        used to be and which had it backwards: forgetting the saved password
+        is the *repair* for a broken connection, so greying it out whenever
+        auth failed removed the one control that could clear a bad credential.
+        It needs no working connection -- deleting a local file needs nothing
+        at all.
         """
-        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            return "normal" if IMAP_CREDENTIALS_FILE.exists() else "disabled"
-        return "normal" if TOKEN_FILE.exists() else "disabled"
+        return "normal" if IMAP_CREDENTIALS_FILE.exists() else "disabled"
 
     def _silent_build_transport(self) -> None:
         """Build the transport object in the background after a valid auth-status check.
 
-        "Silent" means no dialog and no browser, not "no evidence". This used
+        "Silent" means no dialog, not "no evidence". This used
         to end in a bare ``except Exception: pass``, and on 2026-08-12 that
         produced the worst possible outcome on a real install: the header said
         "Connected (<address>)" in green while Sync answered "Not connected",
@@ -2247,15 +2208,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         thread and Tk is not thread-safe.
         """
         try:
-            if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-                if IMAP_CREDENTIALS_FILE.exists():
-                    data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
-                    password = resolve_imap_password(data)
-                    self._transport = build_imap_transport(
-                        data["host"], data["port"], data["email"], password
-                    )
-            else:
-                self._transport = DiscoveryTransport(build_service())
+            if IMAP_CREDENTIALS_FILE.exists():
+                data = json.loads(IMAP_CREDENTIALS_FILE.read_text())
+                password = resolve_imap_password(data)
+                self._transport = build_imap_transport(
+                    data["host"], data["port"], data["email"], password
+                )
         except Exception as exc:
             # str(exc) is safe to show: mail_client scrubs the app password out
             # of any login/connection error before it propagates, and
@@ -2272,109 +2230,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._signout_btn.configure(state=self._signout_state())
 
     def _on_connect_click(self) -> None:
-        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            # IMAP connect is credential-entry based, not a browser flow, so
-            # this never runs the OAuth dance. Where it lands depends on
-            # whether there is an account yet: a first setup goes through the
-            # wizard, which walks through getting an app password, while
-            # "Reconnect" on an account that already exists goes to Settings,
-            # since changing one field is faster on the form than four steps.
-            # Android's Home button branches the same way.
-            usable, _status = check_imap_auth_status()
-            if usable:
-                self._open_settings()
-            else:
-                self._push_panel(_MailWizardPanel)
-            return
-        self._auth_cancelled = False
-        # Stays enabled and becomes the way out. Reported live: an abandoned
-        # sign-in left the header on "Connecting…" for the full three-minute
-        # bound, which reads exactly like a hang no matter what the label says.
-        # The wait itself is inside the OAuth library and can't be interrupted,
-        # but the UI can be handed back the instant the user gives up.
-        self._auth_btn.configure(
-            state="normal", text="Cancel", command=self._cancel_connect
-        )
-        self._auth_label.configure(text="Opening browser…")
-        # "Opening browser…" stops being true the moment the browser is up, and
-        # what follows is a wait on the user, not on the app. Saying so is the
-        # difference between "it is working" and "it is stuck" -- which is how
-        # an abandoned sign-in read before.
-        self._auth_wait_after = self.after(
-            6000,
-            lambda: self._auth_label.configure(text="Waiting for sign-in…"),
-        )
-        auth_q: queue.Queue = queue.Queue()
-        threading.Thread(target=connect_gmail, args=(auth_q,), daemon=True).start()
-        self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
+        """Where "Connect"/"Reconnect" goes. Never a browser flow.
 
-    def _cancel_connect(self) -> None:
-        """Give up on a browser sign-in without waiting out the timeout.
-
-        The blocking wait lives in a daemon thread inside the OAuth library, so
-        it can't be stopped from here -- it ends on its own bound and posts to a
-        queue nobody reads any more. What can be returned immediately is the
-        UI, which is the entire complaint.
+        IMAP connect is credential entry, so where it lands depends on whether
+        there is an account yet: a first setup goes through the wizard, which
+        walks through getting an app password, while "Reconnect" on an account
+        that already exists goes to Settings, since changing one field is
+        faster on the form than four steps. Android's Home button branches the
+        same way.
         """
-        self._auth_cancelled = True
-        if self._auth_wait_after is not None:
-            self.after_cancel(self._auth_wait_after)
-            self._auth_wait_after = None
-        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
-        self._auth_label.configure(text="Sign-in cancelled")
-        self._auth_btn.configure(
-            state="normal", text="Connect", command=self._on_connect_click
-        )
-        self._signout_btn.configure(state=self._signout_state())
-
-    def _poll_auth_queue(self, auth_q: queue.Queue) -> None:
-        # Cancelled: stop polling and leave the header as _cancel_connect left
-        # it, rather than overwriting it minutes later when the bound expires.
-        if self._auth_cancelled:
-            return
-        try:
-            event = auth_q.get_nowait()
-        except queue.Empty:
-            self.after(_AUTH_POLL_MS, lambda: self._poll_auth_queue(auth_q))
-            return
-
-        if self._auth_wait_after is not None:
-            self.after_cancel(self._auth_wait_after)
-            self._auth_wait_after = None
-
-        if event["type"] == "auth_ok":
-            self._transport = event["transport"]
-            # A transport in hand is proof the mailbox answered, which is the
-            # strongest evidence any path here produces.
-            self._record_connection(True)
-            self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["complete"])
-            self._auth_label.configure(text="Connected")
-            # command restored: it was pointing at _cancel_connect for the
-            # duration of the wait.
-            self._auth_btn.configure(
-                state="normal", text="Reconnect", command=self._on_connect_click
-            )
-            self._signout_btn.configure(state="normal")
-            self._append_log("Gmail authentication successful.")
+        usable, _status = check_imap_auth_status()
+        if usable:
+            self._open_settings()
         else:
-            timed_out = event.get("timeout", False)
-            # Not recorded on a timeout: nobody finished the browser sign-in,
-            # so nothing was ever put to the mailbox to judge. Only a real
-            # rejection counts as a failed attempt.
-            if not timed_out:
-                self._record_connection(False)
-            self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
-            self._auth_label.configure(
-                text="Sign-in not completed" if timed_out else "Auth failed"
-            )
-            self._auth_btn.configure(
-                state="normal", text="Connect", command=self._on_connect_click
-            )
-            # Same reasoning as _signout_state(): a failed connect is when a
-            # stored token most needs clearing out, not when the button for
-            # doing it should disappear.
-            self._signout_btn.configure(state=self._signout_state())
-            self._append_log(f"Auth error: {event['msg']}")
+            self._push_panel(_MailWizardPanel)
 
     def _on_delete_chat(self, chat_id: str, display_name: str, synced: bool) -> None:
         """Remove a chat entry from the DB. Confirms first if it was ever synced."""
@@ -2537,55 +2406,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._worker.stop()
 
     def _on_signout_click(self) -> None:
-        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            self._on_forget_imap_password_click()
-            return
-        self._on_oauth_signout_click()
-
-    def _on_oauth_signout_click(self) -> None:
-        """Revoke the OAuth2 token on Google's servers, then delete the local token.json."""
-        import json as _json
-        import urllib.parse
-        import urllib.request
-
-        # ── Step 1: revoke on Google's side ───────────────────────────────────
-        if TOKEN_FILE.exists():
-            try:
-                token_data = _json.loads(TOKEN_FILE.read_text())
-                # Prefer refresh_token (revokes entire grant); fall back to access token.
-                revoke_token = token_data.get("refresh_token") or token_data.get("token")
-                if revoke_token:
-                    params = urllib.parse.urlencode({"token": revoke_token}).encode()
-                    req = urllib.request.Request(
-                        "https://oauth2.googleapis.com/revoke",
-                        data=params,
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                        method="POST",
-                    )
-                    urllib.request.urlopen(req, timeout=10)
-            except Exception as exc:
-                # Network failure is non-fatal — we still delete the local file.
-                self._append_log(f"Token revocation warning (continuing sign-out): {exc}")
-
-        # ── Step 2: delete local token regardless of revocation outcome ────────
-        try:
-            if TOKEN_FILE.exists():
-                TOKEN_FILE.unlink()
-        except Exception as exc:
-            self._append_log(f"Sign out error: {exc}")
-            return
-
-        self._transport = None
-        # The verdict belonged to the grant just revoked.
-        self._forget_connection()
-        self._auth_dot.configure(text_color=gui_theme.STATUS_COLOR_ON_BAND["failed"])
-        self._auth_label.configure(text="Not connected")
-        # See _apply_auth_status: relabelling must restore the command too.
-        self._auth_btn.configure(
-            state="normal", text="Connect", command=self._on_connect_click
-        )
-        self._signout_btn.configure(state="disabled")
-        self._append_log("Signed out. Token revoked and deleted — connect again to re-authorise.")
+        self._on_forget_imap_password_click()
 
     def _on_forget_imap_password_click(self) -> None:
         """Delete the saved IMAP app password locally. No network call.
@@ -2637,7 +2458,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         messagebox.showinfo(
             "Help",
             "Quick start:\n\n"
-            "1. Click Connect (top-right) and sign in to Google.\n"
+            "1. Click Connect (top-right) and set up your mail account.\n"
             "2. Drag a WhatsApp .txt or .zip export onto the window.\n"
             "3. Click Sync Now.\n\n"
             "Your synced chats appear in your mailbox under the WhatsApp label.\n\n"
@@ -2735,23 +2556,30 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._check_auth()
 
     def _update_signout_button_label(self) -> None:
-        """"Sign Out" (OAuth) vs "Forget saved password" (IMAP) -- wider button
-        for the longer IMAP label so the text isn't clipped."""
-        if self._settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            self._signout_btn.configure(text="Forget saved password", width=170)
-        else:
-            self._signout_btn.configure(text="Sign Out", width=80)
+        """Wide enough for "Forget saved password" so the text isn't clipped.
 
-    def _maybe_show_backend_notice(self, had_settings_file: bool, had_token_file: bool) -> None:
-        """Show the one-time "IMAP backend now available" notice, if warranted.
-
-        Informational only -- messagebox.showinfo, not askyesno/askquestion.
-        Does not ask the user to pick a backend; dismissing it leaves
-        mail_backend untouched (still gmail_oauth for anyone who had it
-        before). See _should_show_backend_notice()'s docstring for the exact
-        prior-state condition.
+        Kept as a method rather than set once at build time because the label
+        is a property of the active backend, and the button is rebuilt from
+        several places that must not each re-derive its width.
         """
-        if not _should_show_backend_notice(self._settings, had_settings_file, had_token_file):
+        self._signout_btn.configure(text="Forget saved password", width=170)
+
+    def _maybe_show_oauth_removed_notice(self, was_oauth_user: bool) -> None:
+        """Explain, once, that Google sign-in is gone -- to those who had it.
+
+        Being moved onto a different mail backend without being told is the
+        failure this exists to prevent: the alternative is an existing user
+        opening the app to a "Not connected" header and a form demanding an
+        app password they have never created, with nothing anywhere saying
+        why. Informational only -- showinfo, not a question. Dismissing it
+        changes nothing; the backend was already resolved to IMAP on load
+        (config.resolve_mail_backend), because there is nothing else to
+        resolve it to.
+
+        Nobody else sees it. A fresh install has never had Google sign-in, and
+        telling them it was removed only advertises a path they cannot take.
+        """
+        if not _should_show_oauth_removed_notice(self._settings, was_oauth_user):
             return
         # This modal is raised from __init__, i.e. before mainloop() and
         # without waiting for <Map>, so the splash may still be up -- and it is
@@ -2761,15 +2589,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # finds no splash window and returns harmlessly.
         dismiss_launcher_splash()
         messagebox.showinfo(
-            "New: IMAP / app-password option",
-            "You can now optionally connect using an email provider's IMAP "
-            "app password (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a "
-            "custom IMAP server) instead of signing in with Google.\n\n"
-            "This is entirely optional -- you're still connected the same way "
-            "as before, and nothing changes unless you choose to switch it "
-            "in Settings (gear icon, top-right).",
+            "Google sign-in has been removed",
+            "This version connects to your mailbox with an email app password "
+            "over IMAP, and Google sign-in is no longer offered.\n\n"
+            "The sign-in never completed Google's app verification, so it "
+            "stayed in Google's \"Testing\" mode: it expired about every 7 "
+            "days and only pre-listed accounts could use it at all. An app "
+            "password has neither limit and works with Gmail, Outlook, Yahoo, "
+            "iCloud, Fastmail or any IMAP server.\n\n"
+            "Nothing already archived is affected, and none of your sync "
+            "history was touched. To carry on, open Settings (gear icon, "
+            "top-right) -> Mail account and set up an app password -- the "
+            "screen walks you through getting one.",
         )
-        self._settings["backend_notice_shown"] = True
+        self._settings["oauth_removed_notice_shown"] = True
         _save_settings(self._settings)
 
     def _on_toggle_theme(self) -> None:
@@ -2812,26 +2645,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 # Settings modal
 # ---------------------------------------------------------------------------
 
-# Both labels name the SCOPE of the choice, not just its mechanism. The old
-# pair ("Google sign-in (OAuth)" / "Email app password (IMAP)") described how
-# you authenticate but left the thing that actually decides the choice unsaid:
-# the OAuth path can only ever reach a Gmail mailbox. It is built on Gmail API
-# scopes (gmail.insert / gmail.labels, see src/config.py), so picking it with an
-# Outlook or Fastmail address in mind is a dead end the UI used to let you walk
-# into. Kept in step with android/.../MailAccountScreen.kt's BACKEND_LABELS --
-# see PLATFORM-PARITY.md, do not edit one side without the other.
+# One entry, because there is one backend. Kept as a mapping rather than
+# collapsed to a bare string so that adding a second backend is a data change
+# here and in android/.../MailAccountScreen.kt's BACKEND_LABELS, not a
+# structural one across two front-ends -- see PLATFORM-PARITY.md, do not edit
+# one side without the other.
 #
-# IMAP first, deliberately: it is DEFAULT_MAIL_BACKEND, it is what Android
-# lists first, and it is the path that reaches any mailbox. Listing the
-# Gmail-only path at the top made it the thing a user's eye and a stray Save
-# both landed on -- which is how a settings file with imap_host, imap_email and
-# imap_provider all filled in still ended up stamped mail_backend=gmail_oauth,
-# sending Connect into a browser flow the account was never set up for.
+# The label names the SCOPE of the choice, not its mechanism: what a user
+# needs to know is that any provider works, not that the wire protocol is
+# IMAP.
 _BACKEND_LABELS = {
-    MAIL_BACKEND_IMAP:        "Any provider (IMAP app password)",
-    MAIL_BACKEND_GMAIL_OAUTH: "Gmail only (Google sign-in)",
+    MAIL_BACKEND_IMAP: "Any provider (IMAP app password)",
 }
-_BACKEND_LABELS_REV = {v: k for k, v in _BACKEND_LABELS.items()}
 
 _PROVIDER_LABELS = {key: info["label"] for key, info in IMAP_PROVIDERS.items()}
 _PROVIDER_LABELS_REV = {v: k for k, v in _PROVIDER_LABELS.items()}
@@ -3279,84 +3104,6 @@ class _SettingsPanel(_Panel):
             text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
-        # Seven clicks here toggle the Gmail sign-in option on the mail account
-        # screen -- reveal it, and seven more hide it again. Deliberately
-        # undiscoverable: it is for the maintainer and for recovering an
-        # existing OAuth user, not a feature. Bound on the label
-        # rather than a button because a button would advertise itself, and on
-        # the version line specifically so it matches Android's twin gesture in
-        # SettingsScreen -- the same gesture in the same place on both.
-        self._version_label.bind("<Button-1>", self._on_version_click)
-        self._version_clicks = 0
-
-    _VERSION_CLICKS_TO_UNLOCK = 7
-
-    def _on_version_click(self, _event=None) -> None:
-        """Toggle the demoted Gmail sign-in option every seven clicks.
-
-        Seven, and with no counter shown, because nobody arrives here by
-        accident and anyone who has been told about it can count.
-
-        It is a toggle, not a one-way reveal: seven more clicks put the option
-        back out of sight. Without that the only way to undo a reveal was to
-        hand-edit the settings file, or -- on Android, where there is no file
-        to edit -- to wipe the app's data, which also takes the mailbox
-        credential and the sync state with it. An undo that costs more than
-        the thing it undoes is not an undo.
-
-        What it cannot do is hide the option from someone who is actually
-        using OAuth. It clears only the manual flag; config.oauth_visible
-        still returns True from a saved gmail_oauth backend, an existing
-        token.json, or the env var, and the dialog says so rather than
-        claiming a hide that did not happen.
-
-        Saving immediately -- rather than on the Save button -- keeps this
-        independent of the rest of the screen: the click is not a settings
-        edit the user might cancel, and the mail account screen reads the flag
-        the next time it is opened.
-        """
-        self._version_clicks += 1
-        if self._version_clicks < self._VERSION_CLICKS_TO_UNLOCK:
-            return
-        self._version_clicks = 0
-
-        unlocking = not self._app._settings.get(SETTING_OAUTH_UNLOCKED)
-        self._app._settings[SETTING_OAUTH_UNLOCKED] = unlocking
-        _save_settings(self._app._settings)
-
-        if unlocking:
-            messagebox.showinfo(
-                "Advanced option shown",
-                "Google sign-in is now offered on the Mail account screen.\n\n"
-                "It is hidden by default because this app has not completed "
-                "Google's verification for the permission it needs to add "
-                "mail, so sign-in expires about every 7 days and only "
-                "accounts pre-listed in the Google Cloud project can use it "
-                "at all. An app password over IMAP has neither limit.\n\n"
-                "Seven more clicks here hide it again.",
-                parent=self,
-            )
-        elif oauth_visible(self._app._settings):
-            messagebox.showinfo(
-                "Advanced option still shown",
-                "Google sign-in stays on the Mail account screen because it "
-                "is in use on this machine -- it is either the saved backend "
-                "or there is a saved Google sign-in.\n\n"
-                "Hiding it from someone using it would strand them, so the "
-                "app will not do that. Switch to an app password first if "
-                "you want it gone.",
-                parent=self,
-            )
-        else:
-            messagebox.showinfo(
-                "Advanced option hidden",
-                "Google sign-in is hidden again. The Mail account screen is "
-                "back to an app password only.\n\n"
-                "Nothing else changed: no credential was removed and no "
-                "setting other than this one was touched. Seven more clicks "
-                "here bring it back.",
-                parent=self,
-            )
 
     # ------------------------------------------------------------------
     # Mail account (its own window -- Android's MailAccountScreen)
@@ -3376,19 +3123,11 @@ class _SettingsPanel(_Panel):
         which account you are on.
         """
         settings = self._app._settings
-        if settings.get("mail_backend") == MAIL_BACKEND_IMAP:
-            email = str(settings.get("imap_email") or "").strip()
-            usable, _status = check_imap_auth_status()
-            text = email if (email and usable) else "Not connected"
-        elif TOKEN_FILE.exists():
-            # The main window's auth label is the desktop's authority on the
-            # Google side -- it already distinguishes "Connected" from
-            # "Sign-in expired — reconnect", and duplicating that judgement
-            # here is how the two would drift.
-            text = str(self._app._auth_label.cget("text"))
-        else:
-            text = "Not connected"
-        self._account_summary.configure(text=text)
+        email = str(settings.get("imap_email") or "").strip()
+        usable, _status = check_imap_auth_status()
+        self._account_summary.configure(
+            text=email if (email and usable) else "Not connected"
+        )
 
     def _open_mail_account(self) -> None:
         # Pushed over this screen, which stays alive underneath: any settings
@@ -3706,12 +3445,12 @@ class _MailAccountPanel(_Panel):
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True)
 
-        # Backend menu, IMAP form and help all live in _mail_frame with
+        # Backend line, IMAP form and help all live in _mail_frame with
         # nothing packed after them. That is load-bearing: pack_forget drops a
         # widget out of the packing order and a later bare pack() appends it at
         # the end of its parent, so while these shared a parent with Save/Cancel
-        # every OAuth -> IMAP round trip re-packed the form underneath its own
-        # buttons. Their own container makes the order true by construction.
+        # any show/hide re-packed the form underneath its own buttons. Their
+        # own container makes the order true by construction.
         self._mail_frame = ctk.CTkFrame(body, fg_color="transparent")
         self._mail_frame.pack(fill="x")
 
@@ -3733,10 +3472,9 @@ class _MailAccountPanel(_Panel):
         # Windows-vs-Android would read as an exhaustive list and quietly bless
         # the other cases.
         #
-        # Packed before row3 and never pack_forget'd, so it survives the
-        # OAuth <-> IMAP re-packing that the comment above describes, and it is
-        # deliberately outside _imap_frame: the limitation is a property of the
-        # local state file, not of either backend.
+        # Packed before row3 and never pack_forget'd, and deliberately
+        # outside _imap_frame: the limitation is a property of the local state
+        # file, not of the mail backend.
         #
         # Weighting, decided deliberately: this is ONE quiet line on a screen
         # the user visits perhaps twice, in the same muted style as every other
@@ -3762,40 +3500,14 @@ class _MailAccountPanel(_Panel):
         row3 = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
         row3.pack(fill="x", **pad)
         ctk.CTkLabel(row3, text="Connect via:", width=130, anchor="w").pack(side="left")
-        current_backend = settings.get("mail_backend", DEFAULT_MAIL_BACKEND)
-        self._backend_var = ctk.StringVar(
-            # Falls back to the configured default, not to OAuth. An unreadable
-            # or absent setting is not evidence that the user wants the
-            # Gmail-only path -- and this fallback is what silently wrote it.
-            value=_BACKEND_LABELS.get(current_backend, _BACKEND_LABELS[DEFAULT_MAIL_BACKEND])
-        )
-        if oauth_visible(settings):
-            # 240, not the 190 the provider menu below uses: the backend labels
-            # now carry the Gmail-only/any-provider distinction and the longer of
-            # them clips at 190.
-            ctk.CTkOptionMenu(
-                row3, values=list(_BACKEND_LABELS.values()),
-                variable=self._backend_var, width=240, height=30,
-                command=lambda _v: self._on_backend_changed(),
-            ).pack(side="left")
-        else:
-            # Only one way in, so this is a statement of fact rather than a
-            # choice -- and a one-item dropdown is a worse lie than a label,
-            # because it implies there is something else behind it. The Gmail
-            # sign-in path still exists and still runs; it is just not offered
-            # to someone who has never used it, because Google's "Testing"
-            # status expires that consent 7 days after granting it (see
-            # config.oauth_is_visible). The unlock is seven clicks on the
-            # version line at the bottom of Settings.
-            ctk.CTkLabel(
-                row3, text=_BACKEND_LABELS[MAIL_BACKEND_IMAP], anchor="w",
-            ).pack(side="left")
-        # A CTkOptionMenu fires its command on every pick, including picking
-        # the value already selected. Without something to compare against,
-        # re-choosing the current backend tore the IMAP form down and built it
-        # back up for no change at all -- the other half of the resizing the
-        # user saw. _on_backend_changed compares against this.
-        self._last_backend = self._backend_var.get()
+        # A statement of fact, not a choice: there is one backend, and a
+        # one-item dropdown is a worse lie than a label because it implies
+        # there is something else behind it. Google sign-in was removed in
+        # v2.0.0 -- see src/config.py for why, and docs/RESTORING-OAUTH.md if
+        # it ever has to come back.
+        ctk.CTkLabel(
+            row3, text=_BACKEND_LABELS[MAIL_BACKEND_IMAP], anchor="w",
+        ).pack(side="left")
 
         # ── IMAP fields (shown only when backend == imap) ──────────────
         self._imap_frame = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
@@ -3881,8 +3593,7 @@ class _MailAccountPanel(_Panel):
 
         self._apply_host_field_state()
         self._update_test_btn_state()
-        if current_backend == MAIL_BACKEND_IMAP:
-            self._imap_frame.pack(fill="x")
+        self._imap_frame.pack(fill="x")
 
         # ── App-password help (collapsed by default) ───────────────────
         # This used to sit inside _imap_frame, between the password field
@@ -3892,8 +3603,7 @@ class _MailAccountPanel(_Panel):
         # needs (Save) off the bottom. It stays behind a toggle, mirroring
         # where Android ended up after the same correction; Save/Cancel now
         # sit outside the scrolling body, so no amount of help text can
-        # reach them. See _on_backend_changed for how it shows and hides
-        # along with _imap_frame.
+        # reach them.
         self._help_expanded = False
         self._help_container = ctk.CTkFrame(self._mail_frame, fg_color="transparent")
 
@@ -3912,8 +3622,7 @@ class _MailAccountPanel(_Panel):
         # links are all provider-specific.
         self._help_frame = ctk.CTkFrame(self._help_container, fg_color="transparent")
 
-        if current_backend == MAIL_BACKEND_IMAP:
-            self._help_container.pack(fill="x")
+        self._help_container.pack(fill="x")
 
     def on_reveal(self) -> None:
         """Called by App._pop_panel when the wizard closes back onto this one.
@@ -3943,75 +3652,8 @@ class _MailAccountPanel(_Panel):
         self._update_test_btn_state()
 
     # ------------------------------------------------------------------
-    # IMAP field show/hide + provider-driven host/port autofill
+    # Provider-driven host/port autofill
     # ------------------------------------------------------------------
-
-    def _on_backend_changed(self) -> None:
-        # Re-picking the backend that is already selected is not a change, and
-        # treating it as one meant tearing the form down and rebuilding it --
-        # visible as the window resizing under the user's cursor for no reason.
-        chosen = self._backend_var.get()
-        if chosen == self._last_backend:
-            return
-        self._last_backend = chosen
-
-        if chosen == _BACKEND_LABELS[MAIL_BACKEND_IMAP]:
-            # Order matters and is guaranteed here only because _mail_frame
-            # holds these two and nothing else: pack_forget drops a widget out
-            # of the packing order, and a bare pack() appends it, so re-packing
-            # the form before the help block restores exactly the original
-            # arrangement. See the _mail_frame comment in __init__.
-            self._imap_frame.pack(fill="x")
-            self._help_container.pack(fill="x")
-        else:
-            self._imap_frame.pack_forget()
-            self._help_container.pack_forget()
-            self._warn_oauth_is_limited()
-        self._update_test_btn_state()
-
-    def _warn_oauth_is_limited(self) -> None:
-        """Warn, once per Mail account window, that the OAuth path is limited.
-
-        The Google Cloud project this app's OAuth client lives in is in
-        "Testing" publishing status and is staying there: publishing it would
-        require Google's verification for the restricted gmail.insert scope,
-        which now hinges on an annual paid CASA security assessment. Testing
-        status has two consequences a user will otherwise hit as unexplained
-        breakage -- sign-in only works for accounts pre-listed as test users
-        (100 max), and Google expires every consent, refresh token included,
-        7 days after it is granted. That 7-day expiry is a property of Testing
-        status itself: it applies even when the client is configured for a 30-
-        or 180-day token duration, so it cannot be tuned away.
-
-        Fires only when the user actively picks OAuth from the dropdown (the
-        OptionMenu command does not fire on initial render), and is not
-        blocking -- OAuth remains fully supported and selectable, and anyone
-        already signed in is unaffected.
-
-        Since v1.6.0 the dropdown itself only exists for someone the option is
-        visible to (config.oauth_visible), so this now warns two audiences: a
-        user who deliberately unlocked it, and an existing OAuth user who is
-        switching back. Both benefit from the reminder; neither is surprised
-        by it.
-        """
-        if getattr(self, "_oauth_warning_shown", False):
-            return
-        self._oauth_warning_shown = True
-        messagebox.showinfo(
-            "Google sign-in is limited",
-            "Google sign-in still works, but this app has not completed "
-            "Google's app verification, so it stays in Google's \"Testing\" "
-            "mode. That means:\n\n"
-            "  -  Only accounts added as test users in the Google Cloud "
-            "project can sign in (100 maximum).\n"
-            "  -  Google expires the sign-in about every 7 days, so you will "
-            "have to reconnect roughly weekly.\n\n"
-            "The 7-day limit is set by Google for unverified apps and cannot "
-            "be extended from here.\n\n"
-            "If you would rather not deal with that, choose \"Email app "
-            "password (IMAP)\" instead -- it has neither limit.",
-            parent=self,
-        )
 
     def _on_provider_changed(self) -> None:
         self._apply_host_field_state()
@@ -4047,15 +3689,14 @@ class _MailAccountPanel(_Panel):
     def _update_test_btn_state(self) -> None:
         """Enable [Test connection] only when there is something to test.
 
-        Called from three places because the fields move under three
-        different hands: the user typing, the provider menu autofilling host
-        and port, and the backend menu switching the whole form away.
+        Called from two places because the fields move under two different
+        hands: the user typing, and the provider menu autofilling host and
+        port.
         """
         if getattr(self, "_test_running", False):
             return
         usable = (
-            self._backend_var.get() == _BACKEND_LABELS[MAIL_BACKEND_IMAP]
-            and bool(self._host_entry.get().strip())
+            bool(self._host_entry.get().strip())
             and bool(self._port_entry.get().strip())
             and bool(self._email_entry.get().strip())
         )
@@ -4288,10 +3929,10 @@ class _MailAccountPanel(_Panel):
         # its own Save, so neither can silently revert the other.
         new_settings = dict(self._app._settings)
 
-        # Same reasoning as the StringVar above: an unrecognised label means we
-        # do not know what was chosen, and writing gmail_oauth on that basis is
-        # how mail_backend flipped under a Save that touched something else.
-        backend = _BACKEND_LABELS_REV.get(self._backend_var.get(), DEFAULT_MAIL_BACKEND)
+        # Written on every Save, not carried through: a settings file left
+        # over from the OAuth era still says "gmail_oauth", and saving this
+        # screen is the moment that stops being true of it.
+        backend = MAIL_BACKEND_IMAP
         new_settings["mail_backend"] = backend
 
         password = self._password_entry.get()
@@ -5932,18 +5573,13 @@ class _ChatDetailPanel(_Panel):
         return btn
 
     def _render_actions(self) -> None:
-        thread_id = self._row.get("gmail_thread_id")
-        # Gated on the backend, not just on a thread existing -- same reasoning
-        # as the list row's glyph: the deep link only means anything for a
-        # mailbox Gmail actually hosts.
-        if self._app._settings.get("mail_backend") == MAIL_BACKEND_GMAIL_OAUTH:
-            url = f"https://mail.google.com/mail/u/0/#all/{thread_id}"
-            self._action(
-                "Open in Gmail",
-                lambda u=url: webbrowser.open(u),
-                enabled=bool(thread_id),
-            )
-
+        # No "Open in Gmail" action. Under IMAP the stored gmail_thread_id is
+        # the RFC 822 Message-ID this app generated (that is what IMAP threads
+        # on), not a Gmail thread id, so the mail.google.com/#all/<id> deep
+        # link would point at a thread Gmail has never heard of -- and at
+        # Gmail at all for someone archiving to Outlook or Fastmail. There is
+        # no cross-provider equivalent, so the action is gone rather than
+        # disabled.
         syncing = self._app._worker is not None
         self._action(
             "Current sync is on" if syncing else "Sync just this chat",

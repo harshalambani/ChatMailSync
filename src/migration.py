@@ -56,7 +56,7 @@ _SETTINGS_NAME = "settings.json"
 #   - No credential of any kind. The IMAP app password is sealed by the
 #     Keystore on Android and by DPAPI on Windows, both of them to *that*
 #     device; a portable copy is a plaintext password in a file the user will
-#     mail to themselves. The new device asks once. Same for token.json.
+#     mail to themselves. The new device asks once.
 #   - No watched folder. An Android SAF grant does not transfer, and a Windows
 #     path is unlikely to exist on the machine being restored onto -- it would
 #     come back as a permission the new device does not hold, and the app would

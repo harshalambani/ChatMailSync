@@ -164,7 +164,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
-    implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
@@ -172,9 +171,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // JVM unit tests only -- no Robolectric, no androidTest runtime. The one
-    // thing tested here (AppPrefs.oauthIsVisible) is Context-free on purpose,
-    // which is what lets a plain JUnit assertion check the same truth table
-    // tests/test_config.py checks on the Python side. Adding an Android test
-    // runtime to assert one boolean would cost more than it proves.
+    // things tested here are Context-free on purpose, which is what lets
+    // plain JUnit assertions check the same truths their Python twins check.
+    // Adding an Android test runtime to assert them would cost more than it
+    // proves.
     testImplementation("junit:junit:4.13.2")
 }

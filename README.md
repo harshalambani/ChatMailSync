@@ -5,8 +5,8 @@ becomes an email thread under a `WhatsApp/<Chat Name>` label/folder, with messag
 rendered as a readable, WhatsApp-style HTML conversation (inline images, attached
 media). Mail is delivered over IMAP with an app password, which works with any
 provider — Gmail, Outlook, Yahoo, iCloud, Fastmail, and more. A Gmail-only
-Google sign-in path also exists but is no longer offered by default; see
-[Why IMAP is the default](#why-imap-is-the-default).
+Google sign-in path existed until v2.0.0; see
+[Why Google sign-in was removed](#why-google-sign-in-was-removed).
 
 Currently supports WhatsApp chat exports. The name does not box the app in —
 other chat sources can be added without another rename.
@@ -22,15 +22,14 @@ A packaged, portable `.exe` build is also available (see [Building the portable 
 ## Architecture at a glance
 
 Messages flow from a drop folder, through a parser and deduplication layer, into
-your mailbox via the active backend (Gmail API or IMAP):
+your mailbox over IMAP:
 
 ```
-data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (Gmail API / IMAP)  →  data/processed/
+data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (IMAP APPEND)  →  data/processed/
 ```
 
-- On Gmail, messages are pushed with `gmail.users.messages.insert()` (not
-  `send()`); on IMAP, with `APPEND`. Either way nothing leaves your mailbox and
-  no sending quota is consumed.
+- Messages are added with `APPEND`, never `send()`. Nothing leaves your mailbox
+  and no sending quota is consumed.
 - Per-chat sync state lives in `data/sync_state.db`; re-running a sync only pushes
   new messages. **That state is per-instance, not per-mailbox** — it sits next to
   the instance that wrote it, and nothing about it reaches the mailbox. Use one
@@ -78,15 +77,14 @@ help text), which is most of a typical feature.
 .
 ├── src/
 │   ├── parser.py            # WhatsApp .txt parsing engine (timestamp formats, multi-line)
-│   ├── mail_client.py       # Mail backend wrapper (Gmail API + IMAP: auth, insert/append, threads, labels)
+│   ├── mail_client.py       # IMAP transport (connect, append, folders, chunking)
 │   ├── sync_manager.py      # Orchestrator: incremental sync, dedup, recovery
 │   ├── state.py             # SQLite state tracker
 │   ├── media_extractor.py   # Resolve attachment filename → bytes + mime type
 │   ├── html_renderer.py     # Build HTML email body + inline/attached MIME parts
 │   └── config.py            # Constants, paths, label naming, chunk defaults
 ├── auth/
-│   ├── credentials.json     # You provide this (from Google Cloud Console)
-│   └── token.json           # Auto-generated after first OAuth2 flow
+│   └── imap_credentials.json  # Written on first connect; password DPAPI-encrypted
 ├── data/
 │   ├── inbox/               # Drop zone: put exported .txt / .zip files here
 │   ├── processed/           # Files land here after a successful sync
@@ -94,7 +92,6 @@ help text), which is most of a typical feature.
 ├── cli.py                   # Command-line entry point
 ├── gui.py                   # Desktop GUI entry point
 ├── gui_worker.py            # Background-thread bridge from GUI to SyncManager
-├── setup_auth.py            # One-time OAuth2 setup helper
 ├── requirements.txt
 ├── requirements-lock.txt    # Hash-pinned, reproducible install (used by build_portable.ps1)
 ├── chat-mail-sync.spec      # PyInstaller build spec
@@ -123,10 +120,10 @@ cd "<repo root>"
 pip install -r requirements.txt
 ```
 
-`requirements.txt` covers both the CLI core (`google-auth`,
-`google-auth-oauthlib`, `google-api-python-client`, `python-dateutil`) and the GUI
-(`customtkinter`, `tkinterdnd2`). PyInstaller is only needed for building the exe
-and is listed (commented) for dev use.
+`requirements.txt` covers both the CLI core (`python-dateutil`) and the GUI
+(`customtkinter`, `tkinterdnd2`). Everything else — IMAP, MIME, zip
+handling, DPAPI — is standard library. PyInstaller is only needed for building
+the exe and is listed (commented) for dev use.
 
 `requirements.txt` is the human-edited source of truth. For a reproducible install
 (matching exactly what the portable build ships), use the hash-pinned lockfile
@@ -143,29 +140,24 @@ pip install pip-tools
 pip-compile --generate-hashes --output-file=requirements-lock.txt requirements.txt
 ```
 
-### 3. Obtain `auth/credentials.json`
+### 3. Connect a mailbox
 
-1. Go to <https://console.cloud.google.com/>.
-2. Create a project (or select an existing one).
-3. Enable the **Gmail API**.
-4. Create **OAuth 2.0 credentials** of type **Desktop app**.
-5. Download the JSON and save it as `auth/credentials.json` in the project root.
-
-The app requests these scopes (see `src/config.py`):
-
-- `https://www.googleapis.com/auth/gmail.insert`
-- `https://www.googleapis.com/auth/gmail.labels`
-
-### 4. First-run OAuth2
+There is nothing to obtain from a provider console. Create an app-specific
+password at your mail provider (Gmail: <https://myaccount.google.com/apppasswords>),
+then run the GUI:
 
 ```
 cd "<repo root>"
-python setup_auth.py
+python gui.py
 ```
 
-This opens a browser for consent and caches the token at `auth/token.json`.
-Subsequent runs refresh it automatically. (The GUI can also trigger this flow via
-its **Connect** button — `setup_auth.py` is just the headless equivalent.)
+Open **Settings › Mail account**, pick your provider (which fills in host and
+port), enter the address and the app password, and click **Connect**. That
+writes `auth/imap_credentials.json`, DPAPI-encrypted on Windows, and the CLI
+uses it from then on.
+
+There is deliberately no headless setup path: an app password can only come
+from you, so `cli.py` refuses to invent one and points here instead.
 
 ---
 
@@ -244,18 +236,17 @@ backend.
 
 | Backend | Secret at rest | File |
 |---|---|---|
-| `imap` (default) | App-specific password, **DPAPI-encrypted** on Windows | `auth/imap_credentials.json` |
-| `gmail_oauth` | OAuth refresh token | `auth/token.json` |
+| `imap` (the only backend) | App-specific password, **DPAPI-encrypted** on Windows | `auth/imap_credentials.json` |
 
 On Android neither file holds a password at all — see *Android* below.
 
-### Why IMAP is the default
+### Why Google sign-in was removed
 
-Not because it is more secure — a scoped, revocable refresh token is still the
-better *kind* of secret, whatever it is encrypted with. IMAP is the default
-because the OAuth path is **practically** limited:
+Not because it was less secure — a scoped, revocable refresh token is still the
+better *kind* of secret, whatever it is encrypted with. It went because it was
+**practically** unusable:
 
-The OAuth client stays in Google's **Testing** publishing status. Publishing it
+The OAuth client never left Google's **Testing** publishing status. Publishing it
 would require Google's verification for the restricted `gmail.insert` scope,
 which hinges on an annual paid CASA security assessment — not worth it for a
 personal tool. Testing status imposes two hard limits Google does not let you
@@ -267,23 +258,22 @@ tune:
   This applies even if the client is configured for a 30- or 180-day token
   duration ([Google Cloud Console Help](https://support.google.com/cloud/answer/15549945?hl=en)).
 
-So OAuth means reconnecting roughly weekly. IMAP has neither limit.
+So Google sign-in meant reconnecting roughly weekly, for at most 100 people.
+IMAP has neither limit.
 
-Since **v1.6.0** the OAuth option is therefore **demoted, not removed**. It is
-no longer offered to someone who has never used it — offering a door that locks
-itself after a week is worse than not offering it — but nothing below the
-transport layer changed, and it still runs unaltered for anyone using it. The
-option stays visible when the saved backend is `gmail_oauth`, when an
-`auth/token.json` exists, or when the advanced unlock is set: seven clicks on
-the version line at the bottom of Settings, or `CHATMAILSYNC_ENABLE_OAUTH=1`
-(desktop only; Android has no user-settable environment variable, so the tap
-gesture is the mechanism on both). The first time OAuth is seen in use the
-unlock is latched, so the option cannot disappear from under an existing user
-who tries IMAP (`config.should_latch_oauth`).
+It was **demoted** in v1.6.0 (hidden from anyone who had never used it) and
+**removed** in v2.0.0. The trigger for removal was the Galaxy Store submission:
+a live `GoogleAuthUtil` call forces a Google-account entry in the store's
+data-safety declaration, and there is no "declared but dormant" category — so
+the app would have had to declare a capability nobody could use.
 
-**Existing users are not migrated:** a settings file predating the backend
-setting is pinned back to `gmail_oauth` when an `auth/token.json` is present
-(`config.resolve_mail_backend`).
+**Anyone who was on it is told, once.** A saved `mail_backend` of
+`gmail_oauth`, or a leftover `auth/token.json`, is evidence
+(`config.is_legacy_oauth_user`); `config.resolve_mail_backend` hands back
+`imap` rather than echoing a backend nothing can build, and a one-time notice
+on each front-end explains why the app is asking for an app password.
+
+Putting it back is documented in [docs/RESTORING-OAUTH.md](docs/RESTORING-OAUTH.md).
 
 ### How the IMAP app password is protected
 
@@ -355,23 +345,22 @@ is a small price for a credential that is useless to anyone reading the disk.
 never your account password — it reaches only the mail service rather than your
 whole account, and it can be revoked at the provider without changing anything
 else. Note what it is *not*: it is not scoped to a subset of mail operations.
-See *How the write-only guarantee is enforced* below. If you are willing to live
-with the weekly reconnect described above, `gmail_oauth` is still the stronger
-choice at rest: a refresh token is revocable and genuinely scope-limited in a way
-a password is not. On a shared machine, use separate Windows accounts.
+See *How the write-only guarantee is enforced* below. Google sign-in, while it
+lasted, was the stronger credential at rest — a refresh token is revocable and
+genuinely scope-limited in a way a password is not — but the weekly expiry made
+it unusable, so an app password with a small command surface is what is left.
+On a shared machine, use separate Windows accounts.
 
 ### How the write-only guarantee is enforced
 
-The app only ever adds mail — it does not read, delete, move or send. That is
-true on both backends, but **what enforces it differs**, and the difference is
-worth stating rather than glossing.
+The app only ever adds mail — it does not read, delete, move or send. Since
+v2.0.0 **the app's own code is what enforces that**, and it is worth stating
+plainly rather than glossing: under the removed Google sign-in the scope was
+checked server-side on every call, so the guarantee held even against a tampered
+build of this app. It no longer does. What replaces it is a command surface
+small enough to audit by eye.
 
-**On `gmail_oauth`, Google enforces it.** The app requests `gmail.insert` and
-nothing else. The scope is checked server-side on every call, so an attempt to
-read a message would be refused by Google. The guarantee survives even a
-tampered build of this app.
-
-**On `imap` (the default), the app's own code is what enforces it.** An
+An
 app-specific password is a *bearer* credential — no provider lets you restrict
 one to "append only". Anything holding it can, as far as the protocol is
 concerned, read and delete freely. What backs the claim here is structural and
@@ -382,10 +371,10 @@ anywhere in the file, and without `SELECT` the connection never enters the IMAP
 state in which a message can be read or flagged at all. The protocol itself
 gates it; the source is public and it takes about a minute to verify.
 
-So: on OAuth the guarantee is a promise the provider keeps for you. On IMAP it
-is a promise this code keeps, backed by a command surface small enough to audit.
-Both are honest descriptions of the shipped behaviour; only one holds if you
-stop trusting the app.
+So the guarantee is now a promise this code keeps, backed by a command surface
+small enough to audit — not a promise the provider keeps on your behalf. That is
+an honest description of the shipped behaviour, and the weaker of the two; it is
+the price of a sign-in that does not expire every seven days.
 
 ### Other credential handling
 
@@ -426,6 +415,6 @@ Build internals:
   bundle's `Data\` folder so the frozen exe resolves `auth/` and `data/` correctly.
   It is the only variable honoured; the pre-rename `WAGMAIL_ROOT` fallback was
   removed on 2026-08-08.
-- `Data\` is never wiped on rebuild, so OAuth tokens and synced state survive
-  updates. Place `credentials.json` in `Data\auth\` before first run.
+- `Data\` is never wiped on rebuild, so saved credentials and synced state
+  survive updates.
 ```

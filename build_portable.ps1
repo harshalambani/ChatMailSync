@@ -365,28 +365,33 @@ foreach ($sub in @("auth", "data\inbox", "data\processed")) {
 # without ever copying it. Note that the PortableApps launcher always sets
 # CHATMAILSYNC_ROOT to its own Data\, so this applies to running the app
 # directly, not to launching ChatMailSyncPortable.exe.
+# v2.0.0 removed the OAuth backend, so credentials.json and token.json are no
+# longer created or read and there is nothing there to seed. The saved IMAP
+# app password took their place. Its DPAPI blob is bound to this machine and
+# this Windows user, so it is useless to anyone else - but it is still a live
+# credential and still must never leave dist\, which the stale check below and
+# the staging-tree leak guard in the packaging step both enforce.
 if ($SeedCredentials) {
-    Write-Host "   -SeedCredentials: copying LIVE credentials into dist\ - do not distribute this folder." -ForegroundColor Yellow
-    foreach ($authFile in @("credentials.json", "token.json")) {
-        $src  = Join-Path $ProjectRoot "auth\$authFile"
-        $dest = Join-Path $DataDir "auth\$authFile"
-        if (Test-Path $src) {
-            if (-not (Test-Path $dest)) {
-                Copy-Item $src $dest
-                Write-Host "   Seeded Data\auth\$authFile" -ForegroundColor Yellow
-            } else {
-                Write-Host "   Kept existing Data\auth\$authFile (not overwritten)" -ForegroundColor DarkGray
-            }
-        } elseif ($authFile -eq "credentials.json") {
-            Write-Host "   WARNING: auth\credentials.json not found - nothing to seed." -ForegroundColor Yellow
+    Write-Host "   -SeedCredentials: copying the LIVE saved app password into dist\ - do not distribute this folder." -ForegroundColor Yellow
+    $authFile = "imap_credentials.json"
+    $src  = Join-Path $ProjectRoot "auth\$authFile"
+    $dest = Join-Path $DataDir "auth\$authFile"
+    if (Test-Path $src) {
+        if (-not (Test-Path $dest)) {
+            Copy-Item $src $dest
+            Write-Host "   Seeded Data\auth\$authFile" -ForegroundColor Yellow
+        } else {
+            Write-Host "   Kept existing Data\auth\$authFile (not overwritten)" -ForegroundColor DarkGray
         }
+    } else {
+        Write-Host "   WARNING: auth\$authFile not found - nothing to seed." -ForegroundColor Yellow
     }
 }
 
 # Credentials from an earlier build survive in Data\ because Step 2 preserves
 # it. Flag them rather than removing them - they may be a live token the user
 # is mid-test with, and deleting user data is never this script's call.
-$stale = @("credentials.json", "token.json") |
+$stale = @("imap_credentials.json", "credentials.json", "token.json") |
     ForEach-Object { Join-Path $DataDir "auth\$_" } |
     Where-Object { Test-Path $_ }
 if ($stale -and -not $SeedCredentials) {
@@ -529,7 +534,8 @@ if ($Installer -or $Zip) {
     # Belt and braces: prove nothing secret rode along in App\ before we
     # hand the tree to the packager.
     $leaked = Get-ChildItem $StageDir -Recurse -File -Include `
-        "credentials.json", "token.json", "*.jks", "keystore.properties", "sync_state.db"
+        "imap_credentials.json", "credentials.json", "token.json", "*.jks", `
+        "keystore.properties", "sync_state.db"
     if ($leaked) {
         $leaked | ForEach-Object { Write-Host "   LEAK: $($_.FullName)" -ForegroundColor Red }
         Write-Error "Refusing to package: credential or user-data files are present in the staging tree (listed above)."
@@ -637,9 +643,9 @@ if ($Zip) {
     Write-Host "    Portable zip    : $ZipPath"
 }
 Write-Host ""
-Write-Host "    Data\ ships empty. The app prompts for mail settings on first run;"
-Write-Host "    for the Gmail API backend, drop credentials.json into Data\auth\ first."
+Write-Host "    Data\ ships empty. The app prompts for the mail account on first run:"
+Write-Host "    an email address and an app password, for any IMAP provider."
 if (-not $SeedCredentials) {
-    Write-Host "    (-SeedCredentials copies this machine's live credentials in, for testing only.)" -ForegroundColor DarkGray
+    Write-Host "    (-SeedCredentials copies this machine's saved app password in, for testing only.)" -ForegroundColor DarkGray
 }
 Write-Host ""

@@ -164,7 +164,6 @@ fun HomeScreen(
     accountLabel: String?,
     backendReady: Boolean,
     connectActionLabel: String,
-    connectError: String?,
     onConnect: () -> Unit,
     inboxFiles: List<Pair<String, Long>>,
     onImportPick: () -> Unit,
@@ -233,7 +232,7 @@ fun HomeScreen(
             // a status line at all but the next thing to fix, with the button
             // that fixes it attached. The address itself was never the point
             // here; it lives on the Mail account screen.
-            val connectionSettled = accountLabel != null && connectError == null
+            val connectionSettled = accountLabel != null
             if (!connectionSettled) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -258,9 +257,6 @@ fun HomeScreen(
                                     ?: "Not connected",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
-                        }
-                        connectError?.let {
-                            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     TextButton(onClick = onConnect) {

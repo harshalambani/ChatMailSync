@@ -2,8 +2,6 @@
 
 package com.chatmailsync.app
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -49,11 +47,7 @@ fun ChatDetailScreen(
     var archivedCount by remember { mutableStateOf(0) }
     var mailboxFolder by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val isGmailBackend = remember {
-        AppPrefs.resolveMailBackend(context) == AppPrefs.MAIL_BACKEND_GMAIL_OAUTH
-    }
-    // Whether the *mailbox* is Gmail, which is a wider question than whether we
-    // authenticated with OAuth: IMAP is now the default backend, and most IMAP
+    // Whether the *mailbox* is Gmail. IMAP is the only backend, and many
     // users here point it at imap.gmail.com with an app password. It matters
     // for the reset instructions, because Gmail has no real folders - an IMAP
     // folder is a label, and deleting a label does not delete the mail, it
@@ -61,7 +55,7 @@ fun ChatDetailScreen(
     // folder" is therefore the one instruction that will make a Gmail user
     // answer "yes, I deleted it" honestly and still get duplicates.
     val isGmailMailbox = remember {
-        isGmailBackend || AppPrefs.getImapHost(context).lowercase().let {
+        AppPrefs.getImapHost(context).lowercase().let {
             it.contains("gmail") || it.contains("googlemail")
         }
     }
@@ -138,32 +132,6 @@ fun ChatDetailScreen(
                 c.sourceFilename?.let { DetailField("Export file", it) }
 
                 DetailSection("Actions")
-
-                // Gated on the *backend*, not just on a thread existing: under
-                // IMAP the stored thread id is the RFC 822 Message-ID we
-                // generated (that's what IMAP threads on via References/
-                // In-Reply-To), so hasThread is always true there and this
-                // button used to always render — pointing at Gmail for someone
-                // who archives to Outlook or Fastmail, and at a thread id
-                // Gmail has never heard of. Hidden rather than disabled: there
-                // is no cross-provider equivalent of this deep link, so on IMAP
-                // there is nothing the user could do to enable it.
-                if (isGmailBackend) {
-                    OutlinedButton(
-                        onClick = {
-                            // Same #all/{thread_id} deep link the Windows GUI uses
-                            // (gui.py) — direct thread-ID jump, which is reliable
-                            // where label/search URL fragments were not when tried
-                            // on mobile Gmail web.
-                            val uri = Uri.parse("https://mail.google.com/mail/u/0/#all/${c.gmailThreadId}")
-                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = c.hasThread,
-                    ) {
-                        Text("Open in Gmail")
-                    }
-                }
 
                 // android_api.sync()'s chat_filter param already existed but
                 // nothing on Android called it with one — every sync always

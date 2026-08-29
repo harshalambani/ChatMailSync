@@ -33,8 +33,6 @@ added_data = []
 # customtkinter ships its own theme JSON and image assets
 added_data += collect_data_files("customtkinter")
 
-# Google API client ships discovery cache JSON
-added_data += collect_data_files("googleapiclient")
 
 # Ship the user help page next to the exe so the in-app Help button works
 added_data += [("help.html", ".")]
@@ -67,16 +65,9 @@ added_binaries += collect_dynamic_libs("tkinterdnd2")
 # ---------------------------------------------------------------------------
 
 hidden_imports = [
-    # google-auth / oauthlib
-    "google.auth.transport.requests",
-    "google_auth_oauthlib.flow",
-    # google-api-python-client discovery
-    "googleapiclient.discovery",
-    "googleapiclient.http",
-    # httplib2 + google-auth-httplib2 are hard deps of google-api-python-client
-    # but PyInstaller's static analyser misses them (dynamic import in build_service).
-    "httplib2",
-    "google_auth_httplib2",
+    # The Google client libraries were listed here until v2.0.0 removed the
+    # OAuth backend. They are no longer installed, and PyInstaller warns on a
+    # hidden import it cannot resolve. See docs/RESTORING-OAUTH.md.
     # tkinterdnd2 internal
     "tkinterdnd2",
 ]

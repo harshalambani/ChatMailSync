@@ -274,6 +274,14 @@ reasoning behind each is still the reasoning the code follows.
    third-party IMAP server, which has been wrong since IMAP became the default.
    Google-scope text and the registered consent-screen name were left untouched.
 
+   **Superseded 2026-08-29 by P4 below.** The Google sign-in backend itself is
+   gone, so the ~460 deliberate "gmail" hits counted here no longer stand: the
+   OAuth scopes, the `gmail_oauth` backend value as a live choice, the
+   Gmail-gated deep-link and the Gmail API limits all went with it. What
+   survives is the provider-specific set that was always legitimate —
+   `imap.gmail.com`, the Gmail app-password instructions, the `gmail_thread_id`
+   / `gmail_label_id` columns, and repository URLs.
+
    Three help texts (`help.html`, `HelpScreen.kt`, `docs/user-guide.md`) still
    described the pre-v0.2.4 reset behaviour and were corrected to describe the
    confirmation gate.
@@ -425,3 +433,37 @@ reasoning behind each is still the reasoning the code follows.
    Android mirroring `_LEGACY_APP_ENTROPY`. There is no pending rebrand, and
    untested migration code that touches credentials and the sync database is
    a larger live hazard than the frozen rename it would insure against.
+
+4. **P4 — Google sign-in removed. v2.0.0 (2026-08-29).** IMAP over an app
+   password is now the only way to connect, on both platforms in one branch.
+   Parity mattered here more than usual, because the tempting cheap version of
+   this task — hide the button on Android to keep a Google account out of the
+   Galaxy Store data-safety declaration, leave Windows alone — is exactly the
+   divergence this document exists to refuse. It would also not have worked:
+   the declaration follows the code that ships, not the UI that is reachable,
+   and Samsung has no "declared but dormant" category.
+
+   Why it went rather than stayed: the OAuth client never left Google's
+   *Testing* publishing status, because verification stalled on an annual paid
+   CASA assessment. Testing caps the app at 100 hand-listed users and expires
+   consent seven days after each grant, so the feature was unusable by anyone
+   who was not added by hand, and irritating for the one person who was.
+
+   Removed on both sides in the same commit: `play-services-auth` from
+   `android/app/build.gradle.kts`, the three Google pip packages from
+   `requirements.txt` and the lock, and every OAuth code path in
+   `src/mail_client.py`, `gui.py`, `gui_worker.py`, `src/config.py` and the
+   Kotlin screens and workers. The backend selector is gone from both front
+   ends rather than reduced to a single-entry dropdown.
+
+   What deliberately stayed, and it is the parity-sensitive half: a
+   *one-time* legacy notice on first start after upgrade, on both platforms,
+   for anyone whose settings or leftover `auth/token.json` show they were an
+   OAuth user. It states that the route is gone and asks for an app password.
+   Nothing already synced is re-sent, because `sync_state.db` is untouched by
+   any of this. `is_legacy_oauth_user()` in `src/config.py` is the single
+   shared test both front ends ask.
+
+   Restoring it is a source change, not a setting: `docs/RESTORING-OAUTH.md`
+   records the exact pre-strip commit, the per-file removal tables, and the
+   Google Cloud prerequisites that are not in the repository and never were.

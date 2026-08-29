@@ -1,6 +1,5 @@
 package com.chatmailsync.app
 
-import android.accounts.Account
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -19,7 +18,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.google.android.gms.auth.GoogleAuthUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -260,14 +258,11 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
      * user's mailbox — Home feedback made clear watched-folder automation should be
      * hands-off end to end, not "import automatically, then still have to
      * open the app and tap Sync now." This runs headless (no Activity, and
-     * possibly after the app process was killed), so it can't use
-     * AuthorizationClient's interactive consent flow. GoogleAuthUtil.getToken
-     * is the classic blocking API that works from a plain Context and
-     * returns a token non-interactively if the account already granted these
-     * scopes, or throws (UserRecoverableAuthException / GoogleAuthException)
-     * if interactive consent would be required — in which case this just
-     * skips the auto-sync and tells the user to reconnect in the app,
-     * instead of crashing or hanging. */
+     * possibly after the app process was killed), so it checks only that a
+     * usable IMAP account is saved and lets SyncWorker read the password
+     * from SecretStore itself. If nothing is saved it skips the auto-sync
+     * and says so in a notification, instead of enqueuing a run that is
+     * guaranteed to fail. */
     private suspend fun triggerAutoSync(importedCount: Int): String {
         // "Imported N new file(s)" only makes sense when this run actually
         // imported something — when it's 0 and we're only here because
@@ -288,34 +283,17 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             .putString(SyncWorker.KEY_MAIL_BACKEND, backend)
 
         if (dryRun) {
-            // A rehearsal never opens a connection, so it needs no password and
-            // no token -- and must not be blocked by the absence of either.
+            // A rehearsal never opens a connection, so it needs no password
+            // -- and must not be blocked by the absence of one.
         } else if (backend == AppPrefs.MAIL_BACKEND_IMAP) {
-            // No token to fetch — SyncWorker reads host/email from AppPrefs
-            // and the password from SecretStore itself. Only check here that
+            // SyncWorker reads host/email from AppPrefs and the password
+            // from SecretStore itself. Only check here that
             // *something* is saved, so a clear notification fires instead of
             // silently enqueuing a run that's guaranteed to fail.
             if (!AppPrefs.hasImapPassword(applicationContext) || AppPrefs.getImapHost(applicationContext).isBlank()) {
                 notify("$lead — open Settings > Mail account and save your IMAP app password to sync")
                 return "$lead — save an IMAP app password in Settings > Mail account to sync"
             }
-        } else {
-            val email = AppPrefs.getConnectedAccountEmail(applicationContext)
-            if (email == null) {
-                notify("$lead — open the app to connect Gmail and sync")
-                return "$lead — connect Gmail in the app to sync"
-            }
-
-            val scopeString = "oauth2:" + GMAIL_SCOPES.joinToString(" ") { it.scopeUri }
-            val token = try {
-                withContext(Dispatchers.IO) {
-                    GoogleAuthUtil.getToken(applicationContext, Account(email, "com.google"), scopeString)
-                }
-            } catch (e: Exception) {
-                notify("$lead — reconnect Gmail in the app to sync them")
-                return "$lead — reconnect Gmail to sync"
-            }
-            dataBuilder.putString(SyncWorker.KEY_ACCESS_TOKEN, token)
         }
 
         val request = OneTimeWorkRequestBuilder<SyncWorker>()

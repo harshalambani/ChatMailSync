@@ -36,18 +36,15 @@ private val FAQ = listOf(
         "and export them together — each one has to be exported from inside that chat. This app has " +
         "no such limit; once the files are here you can import and sync as many as you like at once.",
     "Why doesn't the app \"send\" my messages anywhere?" to
-        "It uses your mail provider's insert API (Gmail's insert API, or IMAP APPEND for other " +
-        "providers), which adds mail directly into your own mailbox without actually sending " +
-        "anything. Nobody else receives these emails — they only appear in your mailbox.",
+        "It uses IMAP APPEND, the mail command that adds a message straight into a mailbox — the " +
+        "same one your mail app uses to save a draft. Nothing is sent, no sending quota is used, " +
+        "and nobody else receives these emails: they only appear in your own mailbox.",
     "What stops it reading or deleting my mail?" to
-        "With an email app password — how everyone connects unless they were already using Google " +
-        "sign-in — the guarantee is the app's own code, because no provider can give out a limited " +
-        "password: any password that can add mail can technically do anything. The app uses only " +
-        "four mail commands — list folders, create a folder, subscribe to it, and add a message. " +
-        "None of them can open or remove a message, and the source is public for anyone who wants " +
-        "to check. On the older Google sign-in, Google enforces it instead: the app is granted " +
-        "permission to add mail and nothing else, so a request to read your mail is refused at " +
-        "Google's end — it would be refused even if the app tried.",
+        "The app's own code, and it is worth being plain about that. No provider can give out a " +
+        "limited password: any password that can add mail can technically do anything. What the " +
+        "app does with it is use four mail commands and no others — list folders, create a " +
+        "folder, subscribe to it, and add a message. None of them can open or remove a message, " +
+        "and the source is public for anyone who wants to check.",
     "Where is my email app password kept?" to
         "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
         "phone's secure hardware. It's never written into the app's settings, never shown in the " +
@@ -55,20 +52,17 @@ private val FAQ = listOf(
         "(The Windows edition does the same thing with Windows DPAPI, tied to your Windows account " +
         "on that PC.)",
     "The app says \"Not connected\", or authorising fails." to
-        "On an email app password (the default): open Settings -> Mail account and check the host, " +
-        "port and email address, then enter your app password again and save. The password is the " +
-        "usual culprit — providers revoke it if you turn off two-factor authentication, and some " +
-        "expire it on their own. On the older Google sign-in: sign in again and make sure you pick " +
-        "the right account and approve the permission request; if it still fails, sign out and " +
-        "connect again from scratch.",
-    "Why does it ask me to reconnect every week?" to
-        "Only if you're using Google sign-in — the app hasn't gone through Google's app-" +
-        "verification process, so Google treats it as \"Testing\": sign-in expires roughly every 7 days " +
-        "and only accounts added as test users (up to 100) can connect. This is Google's rule for " +
-        "unverified apps and can't be extended from within the app. That's why Google sign-in is no " +
-        "longer offered to new setups: an email app password connects to any provider, Gmail " +
-        "included, and doesn't expire. You can switch to it any time from Settings without losing " +
-        "anything already synced.",
+        "Open Settings -> Mail account and check the host, port and email address, then enter " +
+        "your app password again and save. The app password is the usual culprit — providers " +
+        "revoke it if you turn off two-factor authentication, and some expire it on their own.",
+    "I used to sign in with Google. Why is it asking for an app password?" to
+        "Google sign-in was removed in version 2.0.0. It could never be offered to more than 100 " +
+        "people: the app hasn't gone through Google's app-verification process, so Google treated " +
+        "it as \"Testing\", which caps the account list and expires the sign-in roughly every 7 " +
+        "days — the weekly reconnect. That's Google's rule for unverified apps and can't be " +
+        "extended from within the app. An email app password reaches Gmail perfectly well, doesn't " +
+        "expire, and works the same on every other provider. Nothing already synced is lost or " +
+        "re-sent.",
     "I moved the app to another PC, or set it up on a new phone, and it wants the password again." to
         "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
         "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +
@@ -171,8 +165,8 @@ private val FAQ = listOf(
     "Where do I see everything about one chat?" to
         "Tap the chat in the chats list. Its own screen shows when it last synced, how many messages " +
         "have gone out, whether a mail thread already exists for it and which export file it came " +
-        "from — with the same four actions on it: open it in Gmail, sync just that one chat, reset " +
-        "it, or delete it from the list. \"Sync just this chat\" runs a normal sync limited to that " +
+        "from — with the same three actions on it: sync just that one chat, reset it, or " +
+        "delete it from the list. \"Sync just this chat\" runs a normal sync limited to that " +
         "one chat instead of everything waiting in the inbox. The Windows app has the same screen: " +
         "click a chat's row in the list.",
     "I want to re-do a chat from scratch. What does Reset do?" to

@@ -49,8 +49,6 @@ def _configure_logging(verbose: bool) -> None:
     )
     # Silence noisy third-party loggers unless verbose.
     if not verbose:
-        logging.getLogger("googleapiclient").setLevel(logging.WARNING)
-        logging.getLogger("google_auth_oauthlib").setLevel(logging.WARNING)
         logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
@@ -88,10 +86,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
         print("DRY RUN — no mail API calls will be made, no state will be written.\n")
 
     # Authenticate (skipped in dry-run only if no credentials exist yet, to
-    # allow offline testing; the push path would fail anyway). Backend
-    # (Gmail OAuth vs IMAP) is whatever the desktop app's Settings panel has
-    # saved to .settings.json; gui_worker has no tkinter import so this stays
-    # a plain, GUI-free dependency.
+    # allow offline testing; the push path would fail anyway). The IMAP
+    # account comes from whatever the desktop app's Settings panel has saved;
+    # gui_worker has no tkinter import so this stays a GUI-free dependency.
     transport = None
     if not args.dry_run:
         from gui_worker import build_transport_for_active_backend

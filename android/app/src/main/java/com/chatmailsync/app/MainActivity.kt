@@ -9,7 +9,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -25,6 +24,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -34,6 +34,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
@@ -67,44 +68,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.chaquo.python.Python
-import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.auth.api.identity.RevokeAccessRequest
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Scope
-import com.google.android.gms.tasks.Tasks
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.UUID
-
-// Matches src/config.py's GMAIL_SCOPES, plus userinfo.email so the app can
-// show "Connected as <email>" — AuthorizationResult itself carries only the
-// access token, not account identity (see Phase A3 plan). Not private:
-// WatchFolderWorker (headless, no Activity) needs these too, to build the
-// "oauth2:<scopes>" string GoogleAuthUtil.getToken() expects.
-val GMAIL_SCOPES = listOf(
-    Scope("https://www.googleapis.com/auth/gmail.insert"),
-    Scope("https://www.googleapis.com/auth/gmail.labels"),
-    Scope("https://www.googleapis.com/auth/userinfo.email"),
-)
-
-/** Play Services caches OAuth tokens per-account independently of this
- * app's own storage. If Gmail rejects a token with 401 (revoked, expired,
- * or otherwise invalidated on Google's side), silently re-authorizing just
- * hands back the same stale cached token until that cache entry is
- * explicitly dropped via GoogleAuthUtil.clearToken(). Blocks synchronously
- * (Tasks.await) — call only from a background thread. */
-private fun refreshStaleToken(activity: android.app.Activity, staleToken: String): String? {
-    return try {
-        GoogleAuthUtil.clearToken(activity, staleToken)
-        val request = AuthorizationRequest.builder().setRequestedScopes(GMAIL_SCOPES).build()
-        Tasks.await(Identity.getAuthorizationClient(activity).authorize(request)).accessToken
-    } catch (_: Exception) {
-        null
-    }
-}
 
 class MainActivity : ComponentActivity() {
 
@@ -123,14 +87,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Before any UI reads the flag: write down that OAuth is in use, if it
-        // is. Otherwise an existing OAuth user who switches to IMAP loses the
-        // option behind them -- and signing out clears the connected email, so
-        // on Android that evidence is gone for good rather than merely hidden.
-        // Writes only on the transition. The desktop twin runs in
-        // gui.py:_load_settings, also at startup.
-        AppPrefs.latchOauthIfInUse(this)
 
         setContent {
             var themeMode by remember { mutableStateOf(AppPrefs.getThemeMode(this)) }
@@ -279,89 +235,41 @@ fun ChatMailApp(
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // ---- Connection state (Phase A3) --------------------------------
-    var connectedEmail by remember { mutableStateOf<String?>(null) }
-    var accessToken by remember { mutableStateOf<String?>(null) }
-
-    fun fetchEmail(token: String) {
-        Thread {
-            val email = try {
-                val conn = URL("https://www.googleapis.com/oauth2/v3/userinfo")
-                    .openConnection() as HttpURLConnection
-                conn.setRequestProperty("Authorization", "Bearer $token")
-                val body = conn.inputStream.bufferedReader().use { it.readText() }
-                JSONObject(body).optString("email").ifBlank { null }
-            } catch (_: Exception) {
-                null
-            }
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                connectedEmail = email ?: "connected (email lookup failed)"
-                if (email != null) AppPrefs.setConnectedAccountEmail(context, email)
-            }
-        }.start()
+    // ---- Legacy Google sign-in notice (v2.0.0) ----------------------
+    // Google sign-in was removed in v2.0.0. Someone who had it gets one
+    // explanation, once -- see AppPrefs.isLegacyOauthUser, and gui.py's
+    // _maybe_show_oauth_removed_notice for the desktop twin.
+    var showOauthRemovedNotice by remember {
+        mutableStateOf(
+            AppPrefs.isLegacyOauthUser(context) &&
+                !AppPrefs.wasOauthRemovedNoticeShown(context)
+        )
     }
-
-    var connectError by remember { mutableStateOf<String?>(null) }
-
-    val authLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartIntentSenderForResult(),
-    ) { activityResult ->
-        try {
-            val result = Identity.getAuthorizationClient(context)
-                .getAuthorizationResultFromIntent(activityResult.data)
-            accessToken = result.accessToken
-            result.accessToken?.let { fetchEmail(it) }
-        } catch (e: ApiException) {
-            connectError = "Authorization failed: ${e.message}"
-        }
+    if (showOauthRemovedNotice) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Google sign-in has been removed") },
+            text = {
+                Text(
+                    "This app used to offer signing in with Google. That option " +
+                        "is gone from version 2.0.0 onwards: its Google sign-in " +
+                        "was never verified by Google, so consent expired every " +
+                        "7 days and only 100 listed accounts could use it at " +
+                        "all.\n\nNothing already archived is affected -- your " +
+                        "chats stay in your mailbox exactly as they are.\n\nTo " +
+                        "keep syncing, open Settings > Mail account and connect " +
+                        "with an app password instead."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    AppPrefs.setOauthRemovedNoticeShown(context, true)
+                    AppPrefs.setConnectedAccountEmail(context, null)
+                    showOauthRemovedNotice = false
+                }) { Text("OK") }
+            },
+        )
     }
-
-    fun connectGmail(silent: Boolean) {
-        val request = AuthorizationRequest.builder().setRequestedScopes(GMAIL_SCOPES).build()
-        Identity.getAuthorizationClient(context as android.app.Activity)
-            .authorize(request)
-            .addOnSuccessListener { result ->
-                if (result.hasResolution()) {
-                    if (!silent) {
-                        val pendingIntent = result.pendingIntent
-                        authLauncher.launch(IntentSenderRequest.Builder(pendingIntent!!.intentSender).build())
-                    }
-                } else {
-                    accessToken = result.accessToken
-                    result.accessToken?.let { fetchEmail(it) }
-                }
-            }
-            .addOnFailureListener { e ->
-                if (!silent) connectError = "Authorization failed: ${e.message}"
-            }
-    }
-
-    // Disconnect must revoke the grant in Play Services itself, not just
-    // clear our own state — Play Services caches "this app is authorized
-    // for this account" independently of anything the app stores, so a
-    // local-only disconnect left the next Connect silently re-authorizing
-    // the same account with no picker/consent screen (see 2026-07 account-
-    // switch bug). revokeAccess() clears both the grant and its cached
-    // tokens so the next authorize() call comes back with hasResolution().
-    fun disconnectGmail() {
-        val email = connectedEmail
-        if (email != null) {
-            val account = android.accounts.Account(email, "com.google")
-            val request = RevokeAccessRequest.builder()
-                .setAccount(account)
-                .setScopes(GMAIL_SCOPES)
-                .build()
-            Identity.getAuthorizationClient(context as android.app.Activity).revokeAccess(request)
-        }
-        accessToken = null
-        connectedEmail = null
-        AppPrefs.setConnectedAccountEmail(context, null)
-        // The verdict belonged to the account just revoked.
-        ConnectionState.forget(context)
-    }
-
-    // "Token survives app restart": silently re-check on screen load.
-    LaunchedEffect(Unit) { connectGmail(silent = true) }
 
     // ---- Mail backend: IMAP app password parity with Windows -----------
     // mailBackend/imapProvider/imapHost/imapPort/imapEmail mirror AppPrefs
@@ -406,30 +314,14 @@ fun ChatMailApp(
             }
     }
 
-    // Whether there is an account to speak of at all, which means different
-    // things per backend: IMAP has one once a password is in the keystore,
-    // Gmail once there is a live token.
-    val hasMailAccount =
-        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessToken != null
+    // Whether there is an account to speak of at all: with IMAP the only
+    // backend, that is exactly "a password is in the keystore".
+    val hasMailAccount = imapPasswordSaved
 
     // The banner's status dot. Recomputed whenever the account situation
     // changes; the pass/fail half of it is written by the two places that
     // actually try the mailbox (Save & connect, Test connection).
     LaunchedEffect(hasMailAccount) { ConnectionState.refresh(context, hasMailAccount) }
-
-    fun onMailBackendChange(backend: String) {
-        mailBackend = backend
-        AppPrefs.setMailBackend(context, backend)
-        // The recorded verdict was about the other backend's credentials, so
-        // it says nothing about these. Dropping it puts the dot back to amber
-        // ("set up, not tested") rather than carrying a green over from an
-        // account that is no longer the one in use.
-        ConnectionState.forget(context)
-        ConnectionState.refresh(
-            context,
-            if (backend == AppPrefs.MAIL_BACKEND_IMAP) imapPasswordSaved else accessToken != null,
-        )
-    }
 
     fun onImapProviderChange(provider: String) {
         imapProvider = provider
@@ -850,106 +742,43 @@ fun ChatMailApp(
           notification permission only means the user won't see progress. */ }
 
     fun startRealSync(chatFilter: String? = null) {
-        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-            // No OAuth dance at all for IMAP — SyncWorker reads host/email
-            // from AppPrefs and the password from SecretStore itself, same
-            // as the watched-folder auto-sync path.
-            if (!imapPasswordSaved) {
-                lastResult = "Save your IMAP app password in Settings > Mail account first."
-                return
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED
-            ) {
-                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setInputData(
-                    Data.Builder()
-                        .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                        .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
-                        .putString(SyncWorker.KEY_TRIGGER, "manual")
-                        .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
-                        .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_IMAP)
-                        .build()
-                )
-                .setConstraints(
-                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                )
-                .build()
-            lastSyncWasDryRun = false
-            workManager.enqueueUniqueWork(
-                SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
-                ExistingWorkPolicy.REPLACE,
-                request,
-            )
-            navController.navigate("syncProgress")
+        // SyncWorker reads host/email from AppPrefs and the password from
+        // SecretStore itself, same as the watched-folder auto-sync path.
+        if (!imapPasswordSaved) {
+            lastResult = "Save your IMAP app password in Settings > Mail account first."
             return
         }
-        if (connectedEmail == null) {
-            lastResult = "Connect your mailbox first."
-            return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        // Re-authorize right before enqueuing, rather than trusting whatever
-        // `accessToken` was captured at — Google access tokens expire in
-        // roughly an hour, but this Activity/composition can stay alive far
-        // longer than that (screen just locked, not force-stopped), and the
-        // one-shot LaunchedEffect(Unit) silent check only ever runs once per
-        // process lifetime. Using a stale token here produced a 401 on the
-        // first Gmail API call that actually needed one (creating a label
-        // for a brand-new chat) even though the user had "just" synced.
-        val authRequest = AuthorizationRequest.builder().setRequestedScopes(GMAIL_SCOPES).build()
-        Identity.getAuthorizationClient(context as android.app.Activity)
-            .authorize(authRequest)
-            .addOnSuccessListener { result ->
-                if (result.hasResolution()) {
-                    lastResult = "Your Gmail connection needs to be renewed — tap Reconnect, then try again."
-                    return@addOnSuccessListener
-                }
-                val token = result.accessToken
-                if (token == null) {
-                    lastResult = "Connect your mailbox first."
-                    return@addOnSuccessListener
-                }
-                accessToken = token
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED
-                ) {
-                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                val request = OneTimeWorkRequestBuilder<SyncWorker>()
-                    .setInputData(
-                        Data.Builder()
-                            .putString(SyncWorker.KEY_ACCESS_TOKEN, token)
-                            .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                            .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
-                            .putString(SyncWorker.KEY_TRIGGER, "manual")
-                            .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
-                            .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_GMAIL_OAUTH)
-                            .build()
-                    )
-                    // Sync always needs the network; if WorkManager ever defers
-                    // this (e.g. system under memory/battery pressure right as
-                    // it's enqueued) this stops it burning a wakeup with no
-                    // connectivity instead of starting and failing immediately.
-                    .setConstraints(
-                        Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                    )
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putBoolean(SyncWorker.KEY_DRY_RUN, false)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_TRIGGER, "manual")
+                    .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
+                    .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_IMAP)
                     .build()
-                lastSyncWasDryRun = false
-                workManager.enqueueUniqueWork(
-                    SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
-                    ExistingWorkPolicy.REPLACE,
-                    request,
-                )
-                navController.navigate("syncProgress")
-            }
-            .addOnFailureListener { e ->
-                lastResult = "Could not refresh Gmail connection: ${e.message}"
-            }
+            )
+            // Sync always needs the network; if WorkManager ever defers
+            // this (e.g. system under memory/battery pressure right as
+            // it's enqueued) this stops it burning a wakeup with no
+            // connectivity instead of starting and failing immediately.
+            .setConstraints(
+                Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+            )
+            .build()
+        lastSyncWasDryRun = false
+        workManager.enqueueUniqueWork(
+            SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        navController.navigate("syncProgress")
     }
 
     // Previously ran android_api.sync() directly on the Compose click
@@ -1183,25 +1012,11 @@ fun ChatMailApp(
                 // WorkManager id), the list would keep showing already-synced
                 // files. Re-check every time this screen is (re)entered.
                 LaunchedEffect(Unit) { refreshInbox() }
-                // Backend-neutral pair for HomeScreen's connection chip/Sync-now
-                // gating — OAuth's connectedEmail/ready-token pair and IMAP's
-                // saved-email/password-saved pair collapse to the same shape
-                // rather than plumbing five OAuth-specific params through.
-                val homeAccountLabel = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                    imapEmail.ifBlank { null }
-                } else {
-                    connectedEmail
-                }
-                val homeBackendReady = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                    imapPasswordSaved && imapHost.isNotBlank()
-                } else {
-                    connectedEmail != null
-                }
-                val homeConnectActionLabel = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                    if (homeBackendReady) "Change" else "Set up"
-                } else {
-                    if (homeBackendReady) "Reconnect" else "Connect"
-                }
+                // The pair HomeScreen's connection chip and Sync-now gating
+                // are driven by.
+                val homeAccountLabel = imapEmail.ifBlank { null }
+                val homeBackendReady = imapPasswordSaved && imapHost.isNotBlank()
+                val homeConnectActionLabel = if (homeBackendReady) "Change" else "Set up"
                 // Re-read on entry (remember is recreated when this
                 // destination is re-composed after navigation) and whenever a
                 // save reports back, so walking Settings -> save -> Home
@@ -1213,21 +1028,16 @@ fun ChatMailApp(
                     accountLabel = homeAccountLabel,
                     backendReady = homeBackendReady,
                     connectActionLabel = homeConnectActionLabel,
-                    connectError = connectError,
                     onConnect = {
-                        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                            // First setup goes through the wizard (D1); once
-                            // there is a working account this button says
-                            // "Change", and changing one field is faster on the
-                            // single-page form, which is also where the wizard
-                            // can be re-launched from.
-                            if (homeBackendReady) {
-                                navController.navigate("settings")
-                            } else {
-                                navController.navigate("mailWizard")
-                            }
+                        // First setup goes through the wizard (D1); once there
+                        // is a working account this button says "Change", and
+                        // changing one field is faster on the single-page
+                        // form, which is also where the wizard can be
+                        // re-launched from.
+                        if (homeBackendReady) {
+                            navController.navigate("settings")
                         } else {
-                            connectGmail(silent = false)
+                            navController.navigate("mailWizard")
                         }
                     },
                     inboxFiles = inboxFiles,
@@ -1303,11 +1113,8 @@ fun ChatMailApp(
                 // row — SettingsScreen no longer receives the backend params
                 // it would need to compute this itself now that the account
                 // UI lives on its own screen.
-                val mailAccountSummary = if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
+                val mailAccountSummary =
                     if (imapPasswordSaved) imapEmail else "Not connected"
-                } else {
-                    connectedEmail ?: "Not connected"
-                }
                 SettingsScreen(
                     mailAccountSummary = mailAccountSummary,
                     onOpenMailAccount = { navController.navigate("mailAccount") },
@@ -1373,105 +1180,52 @@ fun ChatMailApp(
             composable("mailAccount") {
                 MailAccountScreen(
                     onBack = { navController.popBackStack() },
-                    connectedEmail = connectedEmail,
-                    onDisconnect = ::disconnectGmail,
-                    onReconnect = { connectGmail(silent = false) },
-                    accessTokenAvailable = accessToken != null,
                     onTestConnection = { onResult ->
-                        if (mailBackend == AppPrefs.MAIL_BACKEND_IMAP) {
-                            if (!imapPasswordSaved) {
-                                onResult("Save an IMAP app password first.")
-                            } else {
-                                Thread {
-                                    val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
-                                    // check_connection (the dict) rather than
-                                    // check_connection_text (the string it is
-                                    // flattened to): the banner dot needs the
-                                    // pass/fail as a fact, and parsing it back
-                                    // out of display prose would break the
-                                    // moment that prose is reworded.
-                                    var connected = false
-                                    // check_connection_text() runs the five stages
-                                    // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
-                                    // failed, instead of the old labels_list() call whose
-                                    // only two outcomes were a raw folder dump or "Could
-                                    // not connect". It lives in src/mail_client.py so this
-                                    // screen and the Windows [Test connection] button say
-                                    // the same words -- see PLATFORM-PARITY.md. It reports
-                                    // failures as a return value rather than an exception,
-                                    // so the catch below is only for a bridge-level fault.
-                                    val text = try {
-                                        val mailClient = Python.getInstance().getModule("src.mail_client")
-                                        val outcome = mailClient.callAttr(
-                                            "check_connection",
-                                            AppPrefs.getImapHost(context),
-                                            AppPrefs.getImapPort(context),
-                                            AppPrefs.getImapEmail(context),
-                                            password,
-                                        )
-                                        connected = outcome.callAttr("get", "ok").toBoolean()
-                                        // Same formatter check_connection_text
-                                        // uses, so the words are still shared
-                                        // with the Windows button verbatim.
-                                        mailClient.callAttr("format_connection_result", outcome).toString()
-                                    } catch (e: Exception) {
-                                        redactSecret("Could not connect: ${e.message}", password)
-                                    }
-                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                        ConnectionState.record(context, connected)
-                                        onResult(text)
-                                    }
-                                }.start()
-                            }
+                        if (!imapPasswordSaved) {
+                            onResult("Save an IMAP app password first.")
                         } else {
-                            val token = accessToken
-                            if (token == null) {
-                                onResult("Connect your mailbox first.")
-                            } else {
-                                Thread {
-                                    fun labelsList(t: String) = Python.getInstance()
-                                        .getModule("src.mail_client")
-                                        .callAttr("set_token", t)
-                                        .callAttr("labels_list").toString()
-                                    var refreshedToken: String? = null
-                                    var connected = true
-                                    val text = try {
-                                        labelsList(token)
-                                    } catch (e: Exception) {
-                                        connected = false
-                                        if (e.message?.contains("401") == true) {
-                                            val fresh = refreshStaleToken(context as android.app.Activity, token)
-                                            if (fresh != null) {
-                                                refreshedToken = fresh
-                                                try {
-                                                    val labels = labelsList(fresh)
-                                                    // The stale token was the
-                                                    // only problem; a refresh
-                                                    // fixed it, so this counts
-                                                    // as reaching the mailbox.
-                                                    connected = true
-                                                    labels
-                                                } catch (e2: Exception) {
-                                                    "Could not connect to Gmail after refreshing token: ${e2.message}"
-                                                }
-                                            } else {
-                                                "Could not connect to Gmail: ${e.message} (token refresh also failed)"
-                                            }
-                                        } else {
-                                            "Could not connect to Gmail: ${e.message}"
-                                        }
-                                    }
-                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                        refreshedToken?.let { accessToken = it }
-                                        ConnectionState.record(context, connected)
-                                        onResult(text)
-                                    }
-                                }.start()
-                            }
+                            Thread {
+                                val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+                                // check_connection (the dict) rather than
+                                // check_connection_text (the string it is
+                                // flattened to): the banner dot needs the
+                                // pass/fail as a fact, and parsing it back
+                                // out of display prose would break the
+                                // moment that prose is reworded.
+                                var connected = false
+                                // check_connection_text() runs the five stages
+                                // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
+                                // failed, instead of the old labels_list() call whose
+                                // only two outcomes were a raw folder dump or "Could
+                                // not connect". It lives in src/mail_client.py so this
+                                // screen and the Windows [Test connection] button say
+                                // the same words -- see PLATFORM-PARITY.md. It reports
+                                // failures as a return value rather than an exception,
+                                // so the catch below is only for a bridge-level fault.
+                                val text = try {
+                                    val mailClient = Python.getInstance().getModule("src.mail_client")
+                                    val outcome = mailClient.callAttr(
+                                        "check_connection",
+                                        AppPrefs.getImapHost(context),
+                                        AppPrefs.getImapPort(context),
+                                        AppPrefs.getImapEmail(context),
+                                        password,
+                                    )
+                                    connected = outcome.callAttr("get", "ok").toBoolean()
+                                    // Same formatter check_connection_text
+                                    // uses, so the words are still shared
+                                    // with the Windows button verbatim.
+                                    mailClient.callAttr("format_connection_result", outcome).toString()
+                                } catch (e: Exception) {
+                                    redactSecret("Could not connect: ${e.message}", password)
+                                }
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    ConnectionState.record(context, connected)
+                                    onResult(text)
+                                }
+                            }.start()
                         }
                     },
-                    mailBackend = mailBackend,
-                    onMailBackendChange = ::onMailBackendChange,
                     imapProviders = imapProviders,
                     imapProvider = imapProvider,
                     onImapProviderChange = ::onImapProviderChange,

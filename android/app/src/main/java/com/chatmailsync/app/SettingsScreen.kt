@@ -3,8 +3,6 @@
 package com.chatmailsync.app
 
 import android.net.Uri
-import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,13 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-// Taps on the version line needed to reveal the demoted Gmail sign-in option.
-// Seven, with no counter and no hint, matching gui.py's
-// _SettingsPanel._VERSION_CLICKS_TO_UNLOCK: nobody arrives here by accident,
-// and anyone who has been told about it can count. There is deliberately no
-// re-lock -- clearing app data is the reset, which is proportionate for a
-// maintainer-facing switch.
-private const val VERSION_TAPS_TO_UNLOCK = 7
 
 private val THEME_LABELS = mapOf(
     "system" to "Match system",
@@ -97,9 +88,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
-    // Not remembered across leaving the screen: a half-finished tap run should
-    // not survive a trip elsewhere and complete itself later.
-    var versionTaps by remember { mutableStateOf(0) }
     var policyMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -128,8 +116,8 @@ fun SettingsScreen(
             // (MailAccountScreen) — it was the single longest section here
             // and the one users revisit least often once configured, so this
             // screen now just shows a status summary and a way in, instead
-            // of making everyone scroll past the full IMAP/OAuth form to
-            // reach Theme and Watched folder.
+            // of making everyone scroll past the full IMAP form to reach
+            // Theme and Watched folder.
             OutlinedButton(
                 onClick = onOpenMailAccount,
                 modifier = Modifier.fillMaxWidth(),
@@ -340,53 +328,9 @@ fun SettingsScreen(
             // `adb shell dumpsys package` reports and the one the store orders
             // by, so it is what actually answers "am I on the current build?".
             //
-            // Seven taps here toggle the Gmail sign-in option on the mail
-            // account screen -- the twin of the click gesture on gui.py's
-            // version label, in the same place for the same reason. It is
-            // undiscoverable on purpose: the option is for the maintainer and
-            // for recovering an existing OAuth user, not a feature to find.
-            //
-            // A toggle rather than a one-way reveal because there is no undo
-            // otherwise: desktop can hand-edit settings.json, but the only way
-            // to clear this flag on a phone was `pm clear`, which also destroys
-            // the Keystore mail credential, the sync state and the watched
-            // folder grant. Seven more taps is a cheaper undo than losing all
-            // of that.
-            //
-            // Clearing the flag cannot hide the option from someone actually
-            // using OAuth: oauthIsVisible still returns true from a saved
-            // gmail_oauth backend or a connected account, and latchOauthIfInUse
-            // will set the flag again on next launch. The Toast says so rather
-            // than claiming a hide that did not happen.
             Text(
                 "Chat Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
                     if (BuildConfig.DEBUG) " — debug build" else "",
-                modifier = Modifier.clickable {
-                    versionTaps += 1
-                    if (versionTaps >= VERSION_TAPS_TO_UNLOCK) {
-                        versionTaps = 0
-                        val unlocking = !AppPrefs.isOauthUnlocked(context)
-                        AppPrefs.setOauthUnlocked(context, unlocking)
-                        // Kept to two short lines on purpose: a Toast is
-                        // clipped, not scrolled, and the first draft lost its
-                        // final clause to an ellipsis on a 1080px device. The
-                        // reason it is hidden is spelled out in full on the
-                        // Mail account screen, next to the choice itself,
-                        // which is where it can actually be read -- this only
-                        // has to say where to go.
-                        val message = when {
-                            unlocking ->
-                                "Google sign-in is now offered on the " +
-                                    "Mail account screen."
-                            AppPrefs.isOauthVisible(context) ->
-                                "Google sign-in stays shown: it is in use " +
-                                    "on this phone."
-                            else ->
-                                "Google sign-in is hidden again."
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    }
-                },
             )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
             TextButton(onClick = onOpenSyncLog) { Text("Sync log") }

@@ -76,9 +76,12 @@
   <p class="eyebrow">Privacy Policy</p>
   <h1>Chat Mail Sync</h1>
   <p class="updated">
-    Last updated: August 6, 2026 &mdash; previously published as
-    &ldquo;WhatsApp Chat Sync to Gmail&rdquo;; the app is the same, renamed
-    because it is no longer Gmail-only.
+    Last updated: August 29, 2026 &mdash; revised for version 2.0.0, which
+    removed the optional Google sign-in. The app no longer requests, receives
+    or stores any Google user data, so the sections describing it are gone
+    rather than reworded. Previously published as &ldquo;WhatsApp Chat Sync to
+    Gmail&rdquo;; the app is the same, renamed because it is no longer
+    Gmail-only.
   </p>
 
   <h2>Summary</h2>
@@ -90,62 +93,16 @@
     your messages, your mail, or your accounts.
   </p>
   <p>
-    There are two ways to connect, and which one you choose determines what
-    the sections below apply to:
-  </p>
-  <ul>
-    <li>
-      <strong>An email app password (IMAP)</strong> &mdash; the default. Works
-      with any IMAP provider, including Gmail, Outlook, Yahoo, iCloud and
-      Fastmail. No Google account or Google user data is involved unless the
-      IMAP server you point it at happens to be Gmail's.
-    </li>
-    <li>
-      <strong>Google sign-in (OAuth)</strong> &mdash; Gmail only. The
-      Google-specific sections below apply to this option.
-    </li>
-  </ul>
-
-  <h2>What Google user data the app accesses</h2>
-  <p>
-    The app accesses the following Google user data, and nothing else. Each item
-    is obtained through the Google OAuth scope named beside it, which you grant on
-    Google's own consent screen:
-  </p>
-  <ul>
-    <li>
-      <strong>Write access to add new messages to your Gmail mailbox</strong>
-      (<code>https://www.googleapis.com/auth/gmail.insert</code>).
-      This permission allows the app to <em>add</em> a message to your mailbox. It
-      grants no ability to read, search, modify, delete, or send any mail that is
-      already in your account, and the app does not receive the contents of your
-      mailbox through it.
-    </li>
-    <li>
-      <strong>The list of Gmail labels in your account, and the ability to create
-      labels</strong>
-      (<code>https://www.googleapis.com/auth/gmail.labels</code>).
-      The app reads the names and IDs of your existing labels only so that it can
-      tell whether the label it needs already exists, and creates the label if it
-      does not. Label names and IDs are the only Google user data read here; no
-      message content is accessed by this scope.
-    </li>
-    <li>
-      <strong>The email address of the Google account you connect</strong>
-      (<code>https://www.googleapis.com/auth/userinfo.email</code>, Android app only).
-      This is the address string only &mdash; no name, profile photo, contacts, or
-      any other profile field.
-    </li>
-  </ul>
-  <p>
-    The app requests <strong>no read scope for your mail</strong>, and no access to
-    Google Contacts, Google Drive, Calendar, or any other Google service.
+    There is one way to connect: an <strong>email app password over IMAP</strong>,
+    which works with any IMAP provider, including Gmail, Outlook, Yahoo, iCloud
+    and Fastmail. No Google account, Google sign-in or Google user data is
+    involved &mdash; not even when the IMAP server you point it at is Gmail's,
+    because that connection is IMAP over TLS like any other.
   </p>
 
-  <h2>If you connect with an email app password (IMAP)</h2>
+  <h2>How connecting to your mailbox works</h2>
   <p>
-    On this option no Google user data is accessed and no OAuth token exists.
-    Instead:
+    No account is created, and nothing is registered with the developer:
   </p>
   <ul>
     <li>
@@ -168,10 +125,9 @@
       whether they already exist. It does not fetch, search, modify or delete any
       message already in your mailbox, and it never sends mail. To be exact about
       what enforces this: an app password is not something your provider can
-      restrict to a subset of operations, so on this backend the limit is the
+      restrict to a subset of operations, so the limit is the
       app's own code, whose entire mail command surface is the four commands just
-      described. On the Google sign-in backend the equivalent limit is enforced by
-      Google, which grants this app permission to insert mail only.
+      described. The source is public and the check takes about a minute.
     </li>
   </ul>
   <p>
@@ -180,66 +136,13 @@
     provider's own privacy policy, not this one.
   </p>
 
-  <h2>How the app uses Google user data</h2>
-  <p>
-    Google user data is used for one purpose only: to place the WhatsApp chat
-    export that <em>you</em> supply into <em>your own</em> Gmail account as
-    ordinary, organised emails. Specifically:
-  </p>
-  <ul>
-    <li>
-      The <strong>Gmail write (insert) permission</strong> is used to add each
-      rendered WhatsApp message &mdash; with its original text, timestamps, sender
-      names, and any photos, videos, or documents from the export &mdash; into your
-      mailbox as a new email. This is the app's core and only feature. The app
-      deliberately does not use <code>gmail.send</code>, so nothing is ever
-      transmitted to any recipient; the message simply appears in your own mailbox.
-    </li>
-    <li>
-      The <strong>label data</strong> is used to find or create a parent
-      <code>WhatsApp</code> label and a child label named after the chat (for
-      example <code>WhatsApp/Mom</code>), and to apply that label to the messages
-      the app adds, so your archive is browsable and searchable in Gmail.
-    </li>
-    <li>
-      The <strong>email address</strong> is displayed inside the app as
-      "Connected as &lt;address&gt;", so you can confirm you are archiving into the
-      intended mailbox before you start a sync. It is used for display only.
-    </li>
-  </ul>
-  <p>
-    Google user data is never used for advertising, never used to build a profile
-    of you, never used to train any machine-learning or AI model, never sold, and
-    never used for any purpose other than the ones stated above.
-  </p>
-
-  <h2>How the app shares Google user data</h2>
-  <p>
-    It does not. Google user data is not transferred to the developer or to any
-    other person, company, or service. It moves only between your own device and
-    Google's own API endpoints. There is no developer-operated server, no
-    analytics provider, no crash-reporting service, and no third-party SDK that
-    receives it. The only circumstance in which any of it would be disclosed is if
-    <em>you</em> choose to do so from your own Gmail account.
-  </p>
-
-  <h2>Limited Use disclosure</h2>
-  <p>
-    The app's use and transfer of information received from Google APIs adheres to
-    the <a href="https://developers.google.com/terms/api-services-user-data-policy">
-    Google API Services User Data Policy</a>, including the
-    <a href="https://developers.google.com/terms/api-services-user-data-policy#additional-requirements-for-specific-api-scopes">
-    Limited Use</a> requirements.
-  </p>
-
   <h2>Data retention and deletion</h2>
   <p>
-    The developer retains no Google user data, because the developer never
-    receives any. On your own device, the OAuth token is stored until you
-    disconnect or uninstall, and the local dedup database (message hashes only,
-    no message content) is stored until you uninstall or clear the app's data.
-    On the IMAP option there is no token; the saved app password is kept until
-    you clear it in the app or uninstall.
+    The developer retains nothing, because the developer never receives
+    anything. On your own device, the saved app password is kept until you clear
+    it in the app or uninstall, and the local dedup database (message hashes
+    only, no message content) is stored until you uninstall or clear the app's
+    data.
     Emails the app has added to your mailbox are yours &mdash; delete them like any
     other message at any time.
   </p>
@@ -249,10 +152,9 @@
     Nowhere but your own device and your own mailbox. The WhatsApp
     export file you share or import is copied into the app's private
     storage on your device, parsed there, and sent directly from your device
-    to your mail provider &mdash; Google's Gmail API over HTTPS on Google
-    sign-in, or your provider's IMAP server over TLS on an app password. In
-    neither case is there an intermediate server operated by the developer that
-    your messages, attachments, or credentials ever pass through.
+    to your mail provider's IMAP server over TLS. There is no intermediate
+    server operated by the developer that your messages, attachments, or
+    credentials ever pass through.
   </p>
   <p>
     The app keeps a small local database on your device (message hashes and
@@ -267,50 +169,49 @@
   </p>
   <ul>
     <li><strong>Encrypted in transit.</strong> Every network request the app
-      makes &mdash; the OAuth sign-in and every Gmail API call, or every IMAP
-      connection &mdash; goes directly to your mail provider over TLS. Your
-      messages, attachments, access tokens, and app passwords are never sent
-      over an unencrypted connection.</li>
+      makes goes directly to your mail provider's IMAP server over TLS. Your
+      messages, attachments and app password are never sent over an unencrypted
+      connection.</li>
     <li><strong>No developer server, ever.</strong> There is no backend operated
       by the developer. Your data travels only between your own device and your
       own mail provider's servers, so there is no third-party system that could
       store, log, or leak it.</li>
-    <li><strong>Credentials stay on your device.</strong> The OAuth access and
-      refresh tokens are cached only in local app storage on your device
-      (<code>auth/token.json</code> on Windows; app-private storage on Android).
-      They are never transmitted anywhere except to Google's own OAuth endpoints
-      to obtain access.</li>
+    <li><strong>Credentials stay on your device.</strong> The app password is
+      stored only in local app storage, encrypted with a key tied to that device
+      (Windows DPAPI on Windows; the Android Keystore on Android). It is never
+      transmitted anywhere except to the IMAP server you named, and never
+      written to a log line or an error message.</li>
     <li><strong>Minimal local footprint.</strong> The only thing the app keeps is
       a small on-device database of message hashes and sync status, used purely
       to avoid re-sending the same message. It contains no message content and
       never leaves your device.</li>
-    <li><strong>You control access and can revoke it instantly.</strong> Access
-      is limited to the narrow scopes listed above and can be withdrawn at any
-      time (see the next section), which immediately invalidates the stored
-      tokens.</li>
+    <li><strong>You control access and can revoke it instantly.</strong> An app
+      password is issued by your provider for one application and can be revoked
+      there at any time, without changing your real password (see the next
+      section).</li>
   </ul>
   <p>
-    Because your data lives only on your own device and in your own Google
-    account, we recommend protecting both with the usual safeguards &mdash; a
-    device lock/OS-level encryption, and two-step verification on your Google
-    account.
+    Because your data lives only on your own device and in your own mailbox, we
+    recommend protecting both with the usual safeguards &mdash; a device
+    lock/OS-level encryption, and two-step verification on your mail account.
   </p>
 
   <h2>Account connection &amp; revoking access</h2>
   <p>
-    <strong>Google sign-in.</strong> You can disconnect the app at any time from
-    within the app itself (Settings &rarr; Disconnect), or by visiting your Google
-    Account's <a href="https://myaccount.google.com/permissions">third-party access
-    page</a> and removing it from the list. It is listed there under the name
-    registered on Google's consent screen, "WhatsApp Chat Sync to Gmail".
+    Clear the saved password in the app (Settings &rarr; Forget saved password),
+    and revoke the app password with your mail provider so it cannot be used
+    again.
   </p>
   <p>
-    <strong>Email app password (IMAP).</strong> Clear the saved password in the
-    app (Settings &rarr; Forget saved password), and revoke the app password with
-    your mail provider so it cannot be used again.
+    If you used the Google sign-in offered by earlier versions, that grant may
+    still be listed on your Google Account's
+    <a href="https://myaccount.google.com/permissions">third-party access
+    page</a>, under the name registered on the consent screen, &ldquo;WhatsApp Chat
+    Sync to Gmail&rdquo;. Version 2.0.0 no longer uses it and never will again;
+    removing it there is tidy-up, and safe to do.
   </p>
   <p>
-    Either way, revoking access does not delete anything already synced
+    Revoking access does not delete anything already synced
     &mdash; those are ordinary emails in your mailbox and are yours to keep
     or delete like any other message.
   </p>
@@ -318,8 +219,8 @@
   <h2>Third parties</h2>
   <p>
     None. The app does not share, sell, or transmit any data to any third
-    party. The only network calls it makes are to Google's own OAuth and
-    Gmail API endpoints, directly from your device.
+    party. The only network calls it makes are to the IMAP server you name,
+    directly from your device.
   </p>
 
   <h2>Changes to this policy</h2>

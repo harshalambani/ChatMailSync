@@ -13,8 +13,7 @@ def test_set_root_rebinds_all_derived_paths(tmp_path):
         assert config.INBOX_DIR == tmp_path / "data" / "inbox"
         assert config.PROCESSED_DIR == tmp_path / "data" / "processed"
         assert config.STATE_DB_PATH == tmp_path / "data" / "sync_state.db"
-        assert config.CREDENTIALS_FILE == tmp_path / "auth" / "credentials.json"
-        assert config.TOKEN_FILE == tmp_path / "auth" / "token.json"
+        assert config.LEGACY_TOKEN_FILE == tmp_path / "auth" / "token.json"
     finally:
         config.set_root(Path(__file__).parent.parent)
 
@@ -25,7 +24,7 @@ def test_sync_manager_picks_up_root_set_before_construction(tmp_path):
     root, not whatever was current at src.sync_manager's import time."""
     config.set_root(tmp_path)
     try:
-        mgr = SyncManager(service=None, dry_run=True)
+        mgr = SyncManager(dry_run=True)
         assert mgr.db_path == tmp_path / "data" / "sync_state.db"
         assert mgr.inbox_dir == tmp_path / "data" / "inbox"
         assert mgr.processed_dir == tmp_path / "data" / "processed"
@@ -34,134 +33,72 @@ def test_sync_manager_picks_up_root_set_before_construction(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Gmail OAuth visibility (v1.6.0 demotion)
+# Legacy Google sign-in (removed in v2.0.0)
 #
-# The truth table below is the contract, and it is deliberately the SAME four
-# rows the Kotlin twin asserts against AppPrefs.oauthIsVisible. If a row here
-# changes without the matching row there changing, the two platforms disagree
-# about who is offered Google sign-in and exactly one of them is wrong.
+# Google sign-in is gone, but installs that used it are not. The two helpers
+# below are the whole of what survives, and the rows here are deliberately the
+# SAME rows the Kotlin twin asserts against AppPrefs.isLegacyOauthUser and
+# AppPrefs.resolveMailBackend. If a row changes here without the matching row
+# changing there, the two platforms disagree about who gets an explanation and
+# exactly one of them is wrong.
 # ---------------------------------------------------------------------------
 
 
-def test_a_fresh_user_is_never_offered_oauth(tmp_path, monkeypatch):
-    """The whole point of the demotion. No saved choice, no prior token, no
-    unlock -> the option does not exist for this person."""
-    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+def test_a_fresh_user_is_not_treated_as_a_legacy_oauth_user(tmp_path):
     config.set_root(tmp_path)
     try:
-        assert config.oauth_visible({}) is False
+        assert config.is_legacy_oauth_user({}) is False
     finally:
         config.set_root(Path(__file__).parent.parent)
 
 
-def test_the_unlock_flag_reveals_oauth(tmp_path, monkeypatch):
-    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+def test_a_saved_gmail_oauth_backend_is_evidence(tmp_path):
     config.set_root(tmp_path)
     try:
-        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: True}) is True
+        saved = {"mail_backend": config.LEGACY_MAIL_BACKEND_GMAIL_OAUTH}
+        assert config.is_legacy_oauth_user(saved) is True
     finally:
         config.set_root(Path(__file__).parent.parent)
 
 
-def test_an_existing_token_reveals_oauth_and_still_resolves_to_it(tmp_path, monkeypatch):
-    """Case (c): someone already signed in with Google must be untouched.
-
-    Both halves matter. The option has to stay visible, AND the backend has to
-    still resolve to gmail_oauth -- hiding the option is a demotion, resolving
-    them onto IMAP would be a silent migration that demands an app password
-    they have never created."""
-    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+def test_a_leftover_token_json_is_evidence_on_its_own(tmp_path):
+    """Someone who signed out, or whose settings file was reset, still has the
+    file OAuth left in auth/ — and still deserves the explanation."""
     config.set_root(tmp_path)
     try:
-        config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-        config.TOKEN_FILE.write_text("{}")
-        assert config.oauth_visible({}) is True
-        assert config.resolve_mail_backend({}) == config.MAIL_BACKEND_GMAIL_OAUTH
+        config.LEGACY_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.LEGACY_TOKEN_FILE.write_text("{}", encoding="utf-8")
+        assert config.is_legacy_oauth_user({}) is True
     finally:
         config.set_root(Path(__file__).parent.parent)
 
 
-def test_switching_a_latched_oauth_user_to_imap_does_not_hide_the_option(
-    tmp_path, monkeypatch
-):
-    """The one-way trap the latch exists to close.
+def test_a_saved_gmail_oauth_backend_resolves_to_imap_not_itself(tmp_path):
+    """The deliberate reversal of the v1.6.0 behaviour.
 
-    An OAuth user tries IMAP. Their saved backend is now imap and -- on Android,
-    where signing out clears the connected email -- the evidence of prior OAuth
-    use is gone for good. Without the latched flag they could never switch
-    back, because the option that would let them has disappeared."""
-    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+    Before the strip, a gmail_oauth user resolved to gmail_oauth so they were
+    never silently migrated. Nothing can build that transport now, so honouring
+    it would hand the sync worker a backend name it cannot serve and the user
+    would meet a crash instead of an explanation. is_legacy_oauth_user() is
+    what gets them the explanation."""
     config.set_root(tmp_path)
     try:
-        saved = {"mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH}
-        assert config.should_latch_oauth(saved) is True
-        saved[config.SETTING_OAUTH_UNLOCKED] = True
-
-        # Already latched -- no second write needed.
-        assert config.should_latch_oauth(saved) is False
-
-        saved["mail_backend"] = config.MAIL_BACKEND_IMAP
-        assert config.oauth_visible(saved) is True
+        saved = {"mail_backend": config.LEGACY_MAIL_BACKEND_GMAIL_OAUTH}
+        assert config.resolve_mail_backend(saved) == config.MAIL_BACKEND_IMAP
     finally:
         config.set_root(Path(__file__).parent.parent)
 
 
-def test_clearing_the_unlock_cannot_hide_oauth_from_a_user_of_it(
-    tmp_path, monkeypatch
-):
-    """The re-hide half of the seven-click toggle.
-
-    Clearing the flag is the only thing the gesture does. Someone whose saved
-    backend is still gmail_oauth, or who still has a token.json, keeps the
-    option regardless -- which is why gui.py re-reads oauth_visible after
-    clearing and says "still shown" instead of claiming a hide that did not
-    happen. On a fresh user the same click really does hide it."""
-    monkeypatch.delenv(config.OAUTH_UNLOCK_ENV, raising=False)
+def test_resolve_mail_backend_defaults_to_imap_and_honours_anything_else(tmp_path):
     config.set_root(tmp_path)
     try:
-        saved = {
-            "mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH,
-            config.SETTING_OAUTH_UNLOCKED: False,
-        }
-        assert config.oauth_visible(saved) is True
-
-        config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-        config.TOKEN_FILE.write_text("{}", encoding="utf-8")
-        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: False}) is True
-
-        config.TOKEN_FILE.unlink()
-        assert config.oauth_visible({config.SETTING_OAUTH_UNLOCKED: False}) is False
+        assert config.resolve_mail_backend({}) == config.MAIL_BACKEND_IMAP
+        assert (
+            config.resolve_mail_backend({"mail_backend": config.MAIL_BACKEND_IMAP})
+            == config.MAIL_BACKEND_IMAP
+        )
     finally:
         config.set_root(Path(__file__).parent.parent)
-
-
-def test_the_env_var_unlocks_but_only_for_truthy_spellings(tmp_path, monkeypatch):
-    """`=0` and `=false` read to a human as "off". Honouring them as "on"
-    merely because they are non-empty is a surprise worth an afternoon."""
-    config.set_root(tmp_path)
-    try:
-        for value in ("1", "true", "YES", "On"):
-            monkeypatch.setenv(config.OAUTH_UNLOCK_ENV, value)
-            assert config.oauth_visible({}) is True, value
-        for value in ("", "0", "false", "no"):
-            monkeypatch.setenv(config.OAUTH_UNLOCK_ENV, value)
-            assert config.oauth_visible({}) is False, value
-    finally:
-        config.set_root(Path(__file__).parent.parent)
-
-
-def test_oauth_is_visible_is_pure_and_needs_no_files_or_settings():
-    """Guards the property that makes the Kotlin twin testable at all.
-
-    AppPrefs.oauthIsVisible has to be callable without a Context, because this
-    repo has no Kotlin test source set and adding an Android test runtime to
-    assert one boolean is out of proportion. Keeping the Python side the same
-    three-argument shape is what lets both platforms check the same rows."""
-    assert config.oauth_is_visible(None, False, False) is False
-    assert config.oauth_is_visible(config.MAIL_BACKEND_GMAIL_OAUTH, False, False) is True
-    assert config.oauth_is_visible(None, True, False) is True
-    assert config.oauth_is_visible(None, False, True) is True
-    assert config.oauth_is_visible(config.MAIL_BACKEND_IMAP, False, False) is False
 
 
 def test_default_root_falls_back_to_project_dir_when_no_override():
@@ -222,13 +159,9 @@ def test_env_root_uses_chatmailsync_root_and_ignores_the_legacy_name(
 # ---------------------------------------------------------------------------
 
 
-def test_is_gmail_mailbox_true_for_oauth_regardless_of_host():
-    assert config.is_gmail_mailbox({"mail_backend": config.MAIL_BACKEND_GMAIL_OAUTH})
-
-
 def test_is_gmail_mailbox_true_for_imap_pointed_at_gmail():
-    """The case the OAuth-only check missed: IMAP is the default backend now
-    and most users here point it at imap.gmail.com with an app password."""
+    """Host-only since v2.0.0: IMAP is the only backend, and many users here
+    point it at imap.gmail.com with an app password."""
     for host in ("imap.gmail.com", "IMAP.GMAIL.COM", "imap.googlemail.com"):
         assert config.is_gmail_mailbox(
             {"mail_backend": config.MAIL_BACKEND_IMAP, "imap_host": host}
