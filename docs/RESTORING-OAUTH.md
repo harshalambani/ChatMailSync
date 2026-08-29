@@ -34,7 +34,7 @@ declaring a capability nobody could use.
 |---|---|
 | Last commit with OAuth present | **`110b4cd`** — "Back up because you will need it, not because you are moving (v1.17.0) (#42)" |
 | Tag | `v1.17.0` |
-| The strip commit | the commit whose subject begins *"Remove Google sign-in"* on `main`; `git log --oneline --grep="Remove Google sign-in"` |
+| The strip commit | **`b8216ae`** - "Remove Google sign-in; keep one export per chat in processed/", released as v2.0.0 |
 
 Two ways back:
 
@@ -42,7 +42,7 @@ Two ways back:
 cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
 
 # A. Undo the whole strip as one change, keeping everything since.
-git revert <strip-commit-sha>
+git revert b8216ae
 
 # B. Take one file back as it was, and re-apply later changes by hand.
 git checkout 110b4cd -- src/mail_client.py
