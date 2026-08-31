@@ -197,3 +197,97 @@ def test_parse_file_zip_bomb_guard_raises(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="safety limit"):
         list(parse_file(zip_path, chat_id="test_chat"))
+
+
+# ---------------------------------------------------------------------------
+# Unclassifiable-line guard
+#
+# A line that is not a timestamp line is appended to the message above it. That
+# is correct for a real multi-line message and wrong for anything else, and the
+# parser cannot tell them apart -- so the guard's job is to make the absorption
+# visible, not to prevent it. These tests pin the warnings, because a silent
+# version of this behaviour is exactly what they exist to catch.
+# ---------------------------------------------------------------------------
+
+def test_foreign_format_line_warns_and_names_the_format(tmp_path, caplog):
+    """A message line in another timestamp format must not vanish quietly.
+
+    Note which format wins the lock. _detect_format walks TIMESTAMP_PATTERNS in
+    priority order and scans the whole sample for each one, so the bracketed
+    line below claims the format even though the plain line comes first. That
+    asymmetry is the reason this guard is worth having: the losing line is a
+    real message from a real person, and without the warning it disappears
+    without trace.
+    """
+    export = tmp_path / "chat.txt"
+    export.write_text(
+        "3/14/25, 9:41 AM - Alice: Hey there!\n"
+        "[14/03/25, 09:41:23] - Bob: I am in the locked format\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING"):
+        messages = list(parse_file(export, chat_id="test_chat"))
+
+    # Only the bracketed line parses as a message; Alice's is dropped outright,
+    # because there is no earlier message for it to be absorbed into.
+    assert len(messages) == 1
+    assert messages[0].sender == "Bob"
+
+    assert "locked 'bracketed_24h_seconds'" in caplog.text
+    assert "plain_ampm=1" in caplog.text
+    assert "1 non-empty line(s) preceded the first message line" in caplog.text
+
+    # The guard must never log chat content.
+    assert "Hey there" not in caplog.text
+    assert "Alice" not in caplog.text
+
+
+def test_orphan_lines_before_first_message_warn(tmp_path, caplog):
+    """Lines with no message to attach to are dropped; say so."""
+    export = tmp_path / "chat.txt"
+    export.write_text(
+        "some preamble the parser cannot place\n"
+        "and a second one\n"
+        "3/14/25, 9:41 AM - Alice: Hey there!\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING"):
+        messages = list(parse_file(export, chat_id="test_chat"))
+
+    assert len(messages) == 1
+    assert "2 non-empty line(s) preceded the first message line" in caplog.text
+    assert "preamble" not in caplog.text
+
+
+def test_ordinary_multiline_message_warns_about_nothing(tmp_path, caplog):
+    """The common case must stay silent, or the warning is worthless."""
+    export = tmp_path / "chat.txt"
+    export.write_text(
+        "3/14/25, 9:41 AM - Alice: Hey there!\n"
+        "this is a normal second line\n"
+        "\n"
+        "and a third after a blank\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING"):
+        messages = list(parse_file(export, chat_id="test_chat"))
+
+    assert len(messages) == 1
+    assert caplog.text == ""
+
+
+def test_blank_lines_are_not_counted_as_orphans(tmp_path, caplog):
+    """Leading blank lines are structure, not lost content."""
+    export = tmp_path / "chat.txt"
+    export.write_text(
+        "\n\n3/14/25, 9:41 AM - Alice: Hey there!\n",
+        encoding="utf-8",
+    )
+
+    with caplog.at_level("WARNING"):
+        list(parse_file(export, chat_id="test_chat"))
+
+    assert caplog.text == ""
