@@ -1,0 +1,34 @@
+Chat Mail Sync files your exported WhatsApp conversations into your own mailbox as ordinary email, so they live where the rest of your records already live: searchable, backed up by your mail provider, and readable in fifty years by anything that can open an email.
+
+It sends. It never reads, never replies, never deletes. The connection is one way by design.
+
+HOW IT WORKS
+
+1. In WhatsApp, open a chat, then More > Export chat. Share it to Chat Mail Sync, or save it to a folder the app watches.
+2. Chat Mail Sync turns the export into one email per chat, threaded, in date order, with the attachments still attached.
+3. It remembers exactly what it has already sent. Export the same chat again next month and only the new messages go - no duplicates, no second copy of the history.
+
+WHAT YOU NEED
+
+An email account that supports IMAP, and an app password for it. Gmail, Outlook, Yahoo, iCloud, Fastmail and any standard IMAP server all work.
+
+Be warned: setting up an app password is the least pleasant part of this app. It means a few minutes in your mail provider's security settings, and on Gmail it also means having two-step verification switched on first. The app walks you through it and links to the right page, but there is no way around it - an app password is what lets a program put mail into your mailbox without ever holding your real password.
+
+WHAT IT DOES NOT DO
+
+There is no Chat Mail Sync account, because there is no Chat Mail Sync server. Nothing is uploaded to us; there is no "us" in the data path at all. Your chats go from your phone to your mail provider and nowhere else. No analytics, no advertising, no tracking, no third-party SDKs.
+
+It does not read your WhatsApp messages, and it cannot: it only sees the export file you hand it yourself. It never sends anything back into WhatsApp.
+
+WORTH KNOWING BEFORE YOU INSTALL
+
+- The export step is manual and always will be. WhatsApp does not let an app read your chats directly, which is exactly as it should be.
+- Your app password is stored encrypted in the Android Keystore, on this device only.
+- Attachments make exports large. A long chat with photos can be tens of megabytes, and your mail provider has its own per-message size limit.
+- This build runs on 64-bit ARM devices, which is essentially every phone and tablet sold in the last several years.
+
+Chat Mail Sync is free software under the GNU General Public License v3.0. The full source is at https://github.com/harshalambani/ChatMailSync
+
+Chat Mail Sync is not affiliated with, endorsed by, or connected to WhatsApp LLC or Meta Platforms, Inc. WhatsApp is a trademark of WhatsApp LLC.
+
+Privacy policy: https://chatmailsync.ambani.tech/privacy.html

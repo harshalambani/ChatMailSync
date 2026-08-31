@@ -1,0 +1,7 @@
+Google sign-in has been removed. Chat Mail Sync now delivers over IMAP only,
+using an app password you create with your mail provider. Any IMAP mailbox
+works - Gmail, Outlook, Yahoo, iCloud, Fastmail and others.
+
+Existing users are unaffected: IMAP was already the default, and nothing about
+how your chats are archived has changed. What is gone is a Google consent grant
+the app no longer needed, and the account permissions that came with it.

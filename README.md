@@ -418,3 +418,46 @@ Build internals:
 - `Data\` is never wiped on rebuild, so saved credentials and synced state
   survive updates.
 ```
+
+---
+
+## Installing on Android
+
+There is no store listing yet. The release APK is published on the
+[Releases page](https://github.com/harshalambani/ChatMailSync/releases) and can be
+installed directly, but a bare APK never tells you when it is out of date.
+
+**Obtainium** solves that. It is a free, open-source app installer that tracks a
+project's releases and offers you the update as soon as one is published — the part
+of a store you actually want, without the store.
+
+1. Install [Obtainium](https://github.com/ImranR98/Obtainium) (itself available from
+   F-Droid or its own releases page).
+2. In Obtainium, tap **Add App** and paste
+   `https://github.com/harshalambani/ChatMailSync`.
+3. Install. Obtainium will notify you of every future release.
+
+The APK is signed with the project's own release key. That key never changes, so
+updates install cleanly over each other — but it also means an APK from anywhere
+else will refuse to install over this one, which is the intended behaviour.
+
+Requires 64-bit ARM (`arm64-v8a`). The build carries a Python runtime and ships no
+other ABI, so it will not install on an emulator.
+
+---
+
+## Licence
+
+Chat Mail Sync is free software under the **GNU General Public License, version 3**.
+See [LICENSE](LICENSE) for the full text.
+
+In short: you may use, study, modify and redistribute it. If you distribute a
+modified version, that version must also be GPL-3.0 and its source must be
+available.
+
+That is a deliberate choice for an app of this kind rather than a default. Chat Mail
+Sync asks for a mail password and reads an entire chat history, and the only real
+reason to trust it is that you can read exactly what it does with both. A permissive
+licence would allow someone to ship a closed, unverifiable fork under a similar name
+and inherit that trust without earning it. Copyleft means every descendant of this
+code stays as readable as this one.
