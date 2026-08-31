@@ -76,33 +76,43 @@
   <p class="eyebrow">Privacy Policy</p>
   <h1>Chat Mail Sync</h1>
   <p class="updated">
-    Last updated: August 29, 2026 &mdash; revised for version 2.0.0, which
-    removed the optional Google sign-in. The app no longer requests, receives
-    or stores any Google user data, so the sections describing it are gone
-    rather than reworded. Previously published as &ldquo;WhatsApp Chat Sync to
-    Gmail&rdquo;; the app is the same, renamed because it is no longer
-    Gmail-only.
+    Last updated: August 31, 2026 &mdash; revised for version 2.0.0.
+    Previously published as &ldquo;WhatsApp Chat Sync to Gmail&rdquo;; the app
+    is the same, renamed because it is no longer Gmail-only.
   </p>
 
   <h2>Summary</h2>
   <p>
     This app copies WhatsApp chat exports that <strong>you</strong> provide
     into <strong>your own</strong> mailbox. It runs entirely on your
-    device. There is no backend server, no account system, no analytics, and
-    no advertising — the developer never receives, stores, or has access to
-    your messages, your mail, or your accounts.
+    device. There is no backend server and no account system &mdash; the
+    developer never receives, stores, or has access to your messages, your
+    mail, or your accounts. This version carries no analytics, no advertising
+    and no third-party SDK of any kind.
+  </p>
+  <p>
+    One promise does not depend on which version you are reading: your chats,
+    your attachments and your credentials go only to the mailbox you name.
+    They are never sold, never used to target anything at you, and never sent
+    to the developer or to anyone else. If a future version ever collects
+    anything at all, this page and the store listing's data-safety declaration
+    change with the release that does it &mdash; before you install it, not after.
   </p>
   <p>
     There is one way to connect: an <strong>email app password over IMAP</strong>,
     which works with any IMAP provider, including Gmail, Outlook, Yahoo, iCloud
-    and Fastmail. No Google account, Google sign-in or Google user data is
-    involved &mdash; not even when the IMAP server you point it at is Gmail's,
-    because that connection is IMAP over TLS like any other.
+    and Fastmail.
+  </p>
+  <p>
+    None of this has to be taken on trust. The app is open source, and every
+    claim on this page can be checked against the code that is supposed to keep
+    it: <a href="https://github.com/harshalambani/ChatMailSync">github.com/harshalambani/ChatMailSync</a>.
   </p>
 
   <h2>How connecting to your mailbox works</h2>
   <p>
-    No account is created, and nothing is registered with the developer:
+    No account is created, and nothing is registered with the developer or
+    with any server:
   </p>
   <ul>
     <li>
@@ -122,12 +132,15 @@
     <li>
       The app uses the IMAP <code>APPEND</code> command, which adds a message to a
       folder. It creates the folders it needs and lists folder names to check
-      whether they already exist. It does not fetch, search, modify or delete any
-      message already in your mailbox, and it never sends mail. To be exact about
+      whether they already exist. <strong>It does not fetch, search, modify or
+      delete any message already in your mailbox, and it never sends
+      mail.</strong> To be exact about
       what enforces this: an app password is not something your provider can
       restrict to a subset of operations, so the limit is the
       app's own code, whose entire mail command surface is the four commands just
-      described. The source is public and the check takes about a minute.
+      described. The
+      <a href="https://github.com/harshalambani/ChatMailSync">source is
+      public</a> and the check takes about a minute.
     </li>
   </ul>
   <p>
@@ -140,11 +153,17 @@
   <p>
     The developer retains nothing, because the developer never receives
     anything. On your own device, the saved app password is kept until you clear
-    it in the app or uninstall, and the local dedup database (message hashes
-    only, no message content) is stored until you uninstall or clear the app's
-    data.
+    it in the app or uninstall, and the local dedup database is stored until you
+    uninstall or clear the app's data. That database holds the names of the chats
+    you have synced, the export filenames, and a one-way hash of each message it
+    has sent &mdash; no message text and no attachments.
+  </p>
+  <p>
     Emails the app has added to your mailbox are yours &mdash; delete them like any
-    other message at any time.
+    other message at any time. <strong>The app cannot do it for you</strong>, and
+    that is by design rather than an omission: it holds no permission to delete
+    anything in your mailbox, so nothing it could be told to do, and no defect in
+    it, can remove mail you already have.
   </p>
 
   <h2>Where your data goes</h2>
@@ -157,9 +176,35 @@
     credentials ever pass through.
   </p>
   <p>
-    The app keeps a small local database on your device (message hashes and
-    sync status) purely to avoid re-sending the same message twice. This
-    database never leaves your device. Deleting the app removes it.
+    The app keeps a small local database on your device &mdash; chat names, sync
+    status, and a hash of each message sent &mdash; purely to avoid sending the
+    same message twice. It stays on your device unless you export a backup of it
+    yourself. Deleting the app removes it.
+  </p>
+
+  <h2>Backups, and moving to a new device</h2>
+  <p>
+    A new phone with no copy of that database would re-send your entire history,
+    so the app can write a backup file for you to carry across. It is written
+    only when you ask for one, never automatically and never anywhere but where
+    you choose to put it.
+  </p>
+  <p>
+    What the file contains is fixed and deliberately narrow: the dedup database
+    described above, and a short list of preferences &mdash; theme, batch size,
+    IMAP host, port and email address. It contains <strong>no password and no
+    credential of any kind</strong>. The app builds it from a list of keys that
+    are permitted to travel rather than by removing ones known to be secret, and
+    it refuses to write the file at all if a key that looks like a credential
+    ever appears on that list. Your new device asks you for the app password
+    once, as a fresh install would.
+  </p>
+  <p>
+    The backup is an ordinary zip file and it is not encrypted. Once written it
+    is a file like any other: the app does not know where you put it and cannot
+    reach it again. Because it names the chats you have synced and your email
+    address, treat it as you would any personal document, and prefer moving it
+    directly between your own devices over leaving it somewhere shared.
   </p>
 
   <h2>How your data is protected</h2>
@@ -182,9 +227,10 @@
       transmitted anywhere except to the IMAP server you named, and never
       written to a log line or an error message.</li>
     <li><strong>Minimal local footprint.</strong> The only thing the app keeps is
-      a small on-device database of message hashes and sync status, used purely
-      to avoid re-sending the same message. It contains no message content and
-      never leaves your device.</li>
+      a small on-device database of chat names, sync status and message hashes,
+      used purely to avoid re-sending the same message. It contains no message
+      text and no attachments, and it leaves your device only in a backup you
+      export yourself.</li>
     <li><strong>You control access and can revoke it instantly.</strong> An app
       password is issued by your provider for one application and can be revoked
       there at any time, without changing your real password (see the next
@@ -201,14 +247,6 @@
     Clear the saved password in the app (Settings &rarr; Forget saved password),
     and revoke the app password with your mail provider so it cannot be used
     again.
-  </p>
-  <p>
-    If you used the Google sign-in offered by earlier versions, that grant may
-    still be listed on your Google Account's
-    <a href="https://myaccount.google.com/permissions">third-party access
-    page</a>, under the name registered on the consent screen, &ldquo;WhatsApp Chat
-    Sync to Gmail&rdquo;. Version 2.0.0 no longer uses it and never will again;
-    removing it there is tidy-up, and safe to do.
   </p>
   <p>
     Revoking access does not delete anything already synced
@@ -233,7 +271,9 @@
   <p>
     Questions about this policy or the app can be raised as an issue on the
     <a href="https://github.com/harshalambani/ChatMailSync/issues">GitHub
-    repository</a>.
+    repository</a>. The
+    <a href="https://github.com/harshalambani/ChatMailSync">full source</a> is
+    there too, for anyone who would rather read the code than the promise.
   </p>
 
   <footer>
