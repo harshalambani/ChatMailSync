@@ -70,6 +70,28 @@ ENVELOPE_BODY = (84, 296, 428, 428)
 ENVELOPE_RADIUS = 40
 ENVELOPE_NOTCH = [(84, 296), (428, 296), (256, 400)]
 
+# The small cut, for 32px and below.
+#
+# The mark above has four elements. At 32px the chevron's stroke lands on two
+# pixels and the 58px gap between the bubble and the envelope lands on three;
+# at 16px both are gone and what reaches the taskbar is a navy square with a
+# pale smudge in it. No amount of resampling fixes that, because the problem is
+# that the drawing has more detail than the raster has pixels.
+#
+# So the small sizes are drawn, not downscaled: the chevron is dropped
+# entirely, and the two remaining masses are pushed apart and grown into the
+# space the chevron and the tail's overlap were using. The tail stays because
+# it is the one asymmetry that stops the mark reading as a generic envelope,
+# but it is shortened so it no longer touches the envelope's lid.
+SMALL_MAX = 32
+
+BUBBLE_SMALL = (140, 44, 372, 226)
+BUBBLE_SMALL_RADIUS = 52
+TAIL_SMALL = [(214, 222), (270, 222), (208, 282)]
+ENVELOPE_BODY_SMALL = (68, 304, 444, 452)
+ENVELOPE_RADIUS_SMALL = 44
+ENVELOPE_NOTCH_SMALL = [(68, 304), (444, 304), (256, 406)]
+
 # The masthead ring. ONLY the in-app masthead gets this - everywhere else the
 # mark stands alone, unbordered. The masthead is the one surface that paints
 # the mark onto a mid-blue band, where a navy tile has almost no edge against
@@ -142,7 +164,8 @@ class Canvas:
         return self.img.resize((self.size, self.size), Image.LANCZOS)
 
 
-def draw_logo(size: int, ground: str = "rounded", scale: float = 1.0) -> Image.Image:
+def draw_logo(size: int, ground: str = "rounded", scale: float = 1.0,
+              detail: str = "full") -> Image.Image:
     """Render the mark.
 
     ground="rounded"  full icon on a rounded-square navy ground
@@ -151,6 +174,10 @@ def draw_logo(size: int, ground: str = "rounded", scale: float = 1.0) -> Image.I
                       chevron and the envelope's notch become holes rather
                       than navy shapes, so an adaptive icon's separate
                       background layer shows through them correctly.
+
+    detail="full"     every element, for anything above SMALL_MAX
+    detail="small"    the reduced cut described beside BUBBLE_SMALL: no
+                      chevron, larger masses, a wider gap between them
     """
     c = Canvas(size, scale)
 
@@ -163,6 +190,13 @@ def draw_logo(size: int, ground: str = "rounded", scale: float = 1.0) -> Image.I
     # punched to transparent when there is not. ImageDraw writes pixels rather
     # than blending them, so drawing CLEAR genuinely erases.
     cut = CLEAR if ground == "none" else NAVY
+
+    if detail == "small":
+        c.rounded_rect(BUBBLE_SMALL, BUBBLE_SMALL_RADIUS, WHITE)
+        c.polygon(TAIL_SMALL, WHITE)
+        c.rounded_rect(ENVELOPE_BODY_SMALL, ENVELOPE_RADIUS_SMALL, WHITE)
+        c.polygon(ENVELOPE_NOTCH_SMALL, cut)
+        return c.finish()
 
     c.rounded_rect(BUBBLE, BUBBLE_RADIUS, WHITE)
     c.polyline(CHEVRON, CHEVRON_WIDTH, cut)
@@ -307,14 +341,22 @@ def main() -> int:
 
     # Windows / PortableApps
     for px in (1024, 128, 75, 32, 16):
-        save(draw_logo(px), appinfo / f"appicon_{px}.png")
+        save(draw_logo(px, detail="small" if px <= SMALL_MAX else "full"),
+             appinfo / f"appicon_{px}.png")
 
-    # A multi-size .ico, not a single 256px image: Windows picks the nearest
-    # embedded size per surface, and letting it downscale one large bitmap to
-    # 16px is exactly how an icon turns to mush in the taskbar.
-    base = draw_logo(256)
-    save(base, appinfo / "appicon.ico",
-         format="ICO", sizes=[(s, s) for s in ICO_SIZES])
+    # A multi-size .ico, and every size drawn at its own size.
+    #
+    # Passing sizes= alone does NOT do that: Pillow resamples the one image it
+    # was given down to each entry, so a 16px frame was a 256px render squeezed
+    # twice. Every frame here is rendered from the geometry instead -- and the
+    # frames at or below SMALL_MAX use the reduced cut, because below that the
+    # full mark has more detail than the raster has pixels to hold it.
+    frames = [draw_logo(s, detail="small" if s <= SMALL_MAX else "full")
+              for s in ICO_SIZES]
+    largest = frames[ICO_SIZES.index(max(ICO_SIZES))]
+    save(largest, appinfo / "appicon.ico",
+         format="ICO", sizes=[(s, s) for s in ICO_SIZES],
+         append_images=[f for f in frames if f is not largest])
 
     save(draw_splash(), appinfo / "Launcher" / "splash.jpg", quality=95, subsampling=0)
 
