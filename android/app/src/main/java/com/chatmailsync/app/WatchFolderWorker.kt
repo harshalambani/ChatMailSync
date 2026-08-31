@@ -209,6 +209,12 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         // next run without any extra filtering needed.
         for (doc in folder.listFiles()) {
             if (!doc.isFile) continue
+            // The picker hides anything that is not a .txt or .zip and says so
+            // on screen. This loop used to import those same files regardless,
+            // so the attachments sitting beside an export -- the JPEGs and PDFs
+            // WhatsApp writes next to it -- were queued as if they were chats.
+            // Same rule, same source, both paths.
+            if (!ExportFiles.looksLikeExport(doc.name ?: continue)) continue
             val docId = doc.uri.toString()
             if (docId in alreadyImported) continue
 

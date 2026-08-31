@@ -467,6 +467,27 @@ def _plain_color(color):
     return color
 
 
+def _hand_cursor(widget) -> None:
+    """Give a CTk widget the pointing-hand cursor, inner label included.
+
+    configure(cursor=...) reaches the CTk frame, and the frame is the one part
+    of a CTkLabel the pointer is never over: the inner tk label covers it. So
+    the frame alone changes nothing visible. The inner widget is private API,
+    hence the guard -- a missing cursor is cosmetic, and not worth an
+    exception on a customtkinter that renames it.
+    """
+    try:
+        widget.configure(cursor="hand2")
+    except Exception:
+        pass
+    inner = getattr(widget, "_label", None) or getattr(widget, "_canvas", None)
+    if inner is not None:
+        try:
+            inner.configure(cursor="hand2")
+        except Exception:
+            pass
+
+
 class _Tooltip:
     """A hover label for a button whose whole text is one glyph.
 
@@ -794,6 +815,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=gui_theme.ON_PRIMARY,
         )
         self._auth_label.pack(side="left", padx=(0, 10))
+
+        # The dot and its words open the mail account screen, the same as
+        # Android's connection pill. Windows already has a Connect button an
+        # inch to the right, so this is symmetry rather than rescue -- but a
+        # status that names the account is the obvious thing to click when you
+        # want to change the account, and it cost two bindings to make that
+        # true. Cursor and tooltip say so before the click, since a plain
+        # label gives no other sign it is live.
+        for _w in (self._auth_dot, self._auth_label):
+            _hand_cursor(_w)
+            _w.bind("<Button-1>", lambda _e: self._open_mail_account())
+        _Tooltip(self._auth_label, "Open mail account")
 
         # Everything from here down sits on the band, so all of it takes the
         # band variants: a stock CTkButton is primary-filled and would be a
@@ -2471,6 +2504,19 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self._panels[-1].focus_set()
             return
         self._push_panel(_SettingsPanel)
+
+    def _open_mail_account(self) -> None:
+        """Show the mail account screen -- what the masthead status opens.
+
+        Reachable from Settings too, and from the Connect button beside it;
+        this is the third door onto the same screen because the status line is
+        where somebody looks when they want to know, or change, which account
+        this is.
+        """
+        if self._panels:
+            self._panels[-1].focus_set()
+            return
+        self._push_panel(_MailAccountPanel)
 
     def _open_import_picker(self) -> None:
         """Show the watched folder's exports in this window, not as a pop-up."""

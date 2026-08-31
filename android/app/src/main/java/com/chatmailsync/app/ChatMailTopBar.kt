@@ -4,6 +4,7 @@ package com.chatmailsync.app
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +99,17 @@ private fun BackAffordance(label: String, onBack: () -> Unit) {
 }
 
 /**
+ * Where the connection pill goes when it is tapped, or null to leave it inert.
+ *
+ * A CompositionLocal rather than a ChatMailTopBar parameter because the pill is
+ * on thirteen call sites and the destination is the same on all of them: making
+ * each screen pass the same lambda is thirteen chances for one of them to be
+ * the screen where the pill quietly stops working. MainActivity provides it
+ * once around the NavHost.
+ */
+val LocalConnectionPillAction = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
  * The connection pill: a coloured dot and two words, at the right-hand end of
  * the masthead.
  *
@@ -113,6 +126,7 @@ private fun BackAffordance(label: String, onBack: () -> Unit) {
  */
 @Composable
 private fun ConnectionPill(status: ConnectionStatus) {
+    val open = LocalConnectionPillAction.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -121,6 +135,16 @@ private fun ConnectionPill(status: ConnectionStatus) {
             // A faint wash of the band's own text colour, so the pill reads as
             // one object rather than a dot that happens to be near a word.
             .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f))
+            // It is a filled pill on a coloured band, which is the shape of a
+            // button whatever it was drawn to be -- and it was not one, so the
+            // taps it invited did nothing. Worse, once an account is set up
+            // Home drops its "Not connected / Set up" row, leaving this as the
+            // only thing on screen that mentions the connection at all. Now it
+            // goes where it looks like it goes.
+            .then(
+                if (open != null) Modifier.clickable(onClickLabel = "Open mail account", onClick = open)
+                else Modifier
+            )
             .padding(horizontal = 8.dp, vertical = 4.dp)
             // One node to the screen reader, saying the whole thing in a
             // sentence -- "green, Connected" is not a sentence.

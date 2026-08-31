@@ -51,12 +51,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-// WhatsApp writes exports as .txt, or .zip when media is included. Anything
-// else in the folder belongs to somebody else, and a Downloads folder full of
-// PDFs would bury the four files this screen exists to show. The filter is
-// escapable rather than absolute -- "Show everything in this folder" -- because
-// a filter that silently hides the file you came for is worse than the noise.
-private val EXPORT_EXTENSIONS = setOf("txt", "zip")
+// Anything that is not an export belongs to somebody else, and a Downloads
+// folder full of PDFs would bury the few files this screen exists to show.
+// Here the filter is escapable rather than absolute -- "Show everything in
+// this folder" -- because a filter that silently hides the file you came for
+// is worse than the noise. What counts as an export lives in ExportFiles, so
+// this screen and WatchFolderWorker cannot drift apart on it again.
 
 private val FILE_DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy")
 
@@ -142,7 +142,7 @@ private suspend fun listExports(
     for (doc in children) {
         if (!doc.isFile) continue
         val name = doc.name ?: continue
-        val looksLikeExport = name.substringAfterLast('.', "").lowercase() in EXPORT_EXTENSIONS
+        val looksLikeExport = ExportFiles.looksLikeExport(name)
         if (!looksLikeExport && !showAllFiles) {
             hidden++
             continue

@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -999,6 +1000,16 @@ fun ChatMailApp(
             }
         },
     ) { padding ->
+        // The connection pill sits in the masthead of every screen and is the
+        // only place the connection is named once an account exists. It reads
+        // as a button, so it is one: tapping it opens the mail account screen,
+        // whichever screen it was tapped from. launchSingleTop so tapping it
+        // while already there does not stack a second copy.
+        CompositionLocalProvider(
+            LocalConnectionPillAction provides {
+                navController.navigate("mailAccount") { launchSingleTop = true }
+            },
+        ) {
         NavHost(
             navController = navController,
             startDestination = "home",
@@ -1298,6 +1309,7 @@ fun ChatMailApp(
                     onMinimize = { navController.popBackStack("home", inclusive = false) },
                 )
             }
+        }
         }
     }
 }
