@@ -91,6 +91,18 @@ def parse_file(
     # current accumulates fields until the next timestamp line triggers a yield.
     current: Optional[dict] = None
 
+    # Anything that is not a timestamp line is treated as a continuation of the
+    # message above it. That is right for a genuine multi-line message and
+    # wrong for anything else, and the two are indistinguishable at this point
+    # -- so an export line this parser does not understand does not fail, it
+    # quietly appends itself to somebody's message and travels into the
+    # mailbox. Count what gets absorbed instead of assuming it was prose.
+    continuation_count = 0
+    orphan_count = 0
+    foreign_hits: dict[str, int] = {}
+    other_res = [(k, _build_line_re(ts)) for k, ts in TIMESTAMP_PATTERNS
+                 if k != format_key]
+
     for raw_line in lines:
         line = _clean_text(raw_line)
         m = line_re.match(line)
@@ -130,14 +142,72 @@ def parse_file(
         else:
             # Continuation line — append to the previous message body,
             # preserving original whitespace/blank lines.
+            if line:
+                continuation_count += 1
+                # A line that is a valid message line in a *different*
+                # timestamp format is the strongest available evidence that
+                # this is not prose: the export's shape has moved and the
+                # locked pattern no longer describes it.
+                for other_key, other_re in other_res:
+                    if other_re.match(line):
+                        foreign_hits[other_key] = foreign_hits.get(other_key, 0) + 1
+                        break
+
             if current is not None:
                 current["body_lines"].append(raw_line)
+            elif line:
+                # Nothing to attach to, so the line is discarded outright.
+                # Silent until now; it is the same class of loss.
+                orphan_count += 1
 
     # Emit the final accumulated message.
     if current is not None:
         msg = _build_message(current, chat_id, format_key, effective_order)
         if msg is not None:
             yield msg
+
+    _log_parse_anomalies(
+        filepath.name, format_key, continuation_count, orphan_count, foreign_hits
+    )
+
+
+def _log_parse_anomalies(
+    filename: str,
+    format_key: str,
+    continuation_count: int,
+    orphan_count: int,
+    foreign_hits: dict[str, int],
+) -> None:
+    """Report lines the parser could not classify.
+
+    Counts and format names only. A continuation line is chat content, and
+    chat content belongs in the mailbox, not in a log file -- so nothing here
+    logs the line itself, deliberately, however useful it would be to see it.
+    """
+    if foreign_hits:
+        log.warning(
+            "%s: %d line(s) parse as message lines in a timestamp format other "
+            "than the locked '%s' (%s), and were absorbed into the preceding "
+            "message body. The export format may have changed.",
+            filename,
+            sum(foreign_hits.values()),
+            format_key,
+            ", ".join("%s=%d" % kv for kv in sorted(foreign_hits.items())),
+        )
+
+    if orphan_count:
+        log.warning(
+            "%s: %d non-empty line(s) preceded the first message line and were "
+            "discarded.",
+            filename,
+            orphan_count,
+        )
+
+    log.debug(
+        "%s: %d continuation line(s) absorbed into message bodies.",
+        filename,
+        continuation_count,
+    )
 
 
 def extract_chat_info(filename: str) -> tuple[str, str]:
