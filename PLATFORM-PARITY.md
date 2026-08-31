@@ -124,6 +124,15 @@ Consequences that follow, and are not optional:
   unavailable, a store submission in flight - **the release waits**. It does not
   go out Windows-only with a note. Should that ever genuinely be unavoidable, it
   is written down here, with the reason and the date it was made good.
+- The APK is published as `ChatMailSync-<version>.apk`, not as Gradle's
+  `app-release.apk` default (renamed on v2.0.0, 2026-08-31). The Windows assets
+  have carried the product name and version since the first release; the APK
+  sitting beside them called `app-release.apk` told a downloader nothing about
+  what it was or which version they were getting, and two of them saved to the
+  same Downloads folder would have been indistinguishable. Rename the file
+  before uploading, or rename the asset afterwards - and make the release notes
+  name the same file, since the SHA-256 table is what a careful downloader
+  checks against.
 
 ## Deliberate, accepted divergences
 
