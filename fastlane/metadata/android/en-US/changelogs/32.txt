@@ -1,0 +1,10 @@
+Two fixes to what the home screen shows you.
+
+The watched folder no longer imports the photos and PDFs sitting beside an
+export. Only .txt and .zip files are chats, and now every part of the app
+agrees on that - the picker already did, the background import did not, so
+attachments were being queued as if they were conversations.
+
+The connection status at the top of every screen is now a real button. It
+looks like one, so it should behave like one: tapping it opens your mail
+account.
