@@ -275,3 +275,37 @@ def test_read_manifest_describes_what_will_be_restored(tmp_path):
     assert manifest["schema_version"] == migration.BUNDLE_SCHEMA_VERSION
     assert manifest["bundle_id"]
     assert manifest["created_at"]
+
+
+def test_a_restore_carries_the_date_of_the_bundle_it_came_from(tmp_path):
+    """The fact both front-ends need to stop saying "No backup yet".
+
+    A phone rebuilt from a backup is protected by that backup. Reporting it as
+    unprotected put a red "a reset makes the app mail every chat again" line
+    directly above the messages the restore had just stopped it re-mailing.
+    """
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    _device(old)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={}, app_version="2.0.2")
+
+    made = migration.read_manifest(bundle)["created_at"]
+
+    first = migration.import_bundle(new, bundle)
+    assert first["created_at"] == made
+    assert migration.created_at_epoch(first["created_at"]) > 0
+
+    # Restoring the same bundle a second time changes nothing else, but it
+    # must still report the cover: that attempt is exactly when someone is
+    # checking whether they are protected.
+    again = migration.import_bundle(new, bundle)
+    assert again["already_imported"] is True
+    assert again["created_at"] == made
+
+
+def test_an_unreadable_creation_stamp_is_no_cover_rather_than_a_crash():
+    assert migration.created_at_epoch("") == 0
+    assert migration.created_at_epoch("not a date") == 0
+    assert migration.created_at_epoch(None) == 0
+    assert migration.created_at_epoch("2026-09-01T11:07:33") > 0

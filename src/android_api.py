@@ -510,4 +510,11 @@ def import_backup(source_path: str) -> dict:
     result = migration.import_bundle(config.PROJECT_ROOT, Path(source_path))
     if result.get("ok"):
         result["settings_json"] = json.dumps(result.get("settings") or {})
+        # Flattened out of the manifest and put in Kotlin's units: the
+        # front-end reads scalars off this map, and AppPrefs keeps the same
+        # fact in millis. Zero when the bundle's stamp cannot be read, which
+        # the caller treats as "no cover date", not as an error.
+        result["created_at_epoch_ms"] = (
+            migration.created_at_epoch(str(result.get("created_at") or "")) * 1000
+        )
     return result
