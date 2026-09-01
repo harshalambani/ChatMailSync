@@ -1,0 +1,7 @@
+Housekeeping only: two unused libraries removed.
+
+The app no longer bundles the "requests" HTTP library. Nothing used it -- it
+was left behind when Google sign-in was removed -- so the download is smaller
+and there is one less piece of code in the app that never ran.
+
+Nothing you can see has changed.
