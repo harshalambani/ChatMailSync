@@ -40,8 +40,8 @@ android {
         // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
         // only, so the phone build was stamped as released without ever being
         // published. v1.4.1 is the first release to carry both.
-        versionCode = 32
-        versionName = "2.0.1"
+        versionCode = 33
+        versionName = "2.0.2"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
