@@ -40,8 +40,8 @@ android {
         // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
         // only, so the phone build was stamped as released without ever being
         // published. v1.4.1 is the first release to carry both.
-        versionCode = 34
-        versionName = "2.0.3"
+        versionCode = 35
+        versionName = "2.0.4"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
@@ -149,7 +149,6 @@ chaquopy {
             // pick up a different (possibly vulnerable or breaking) version
             // with no code change to review. Bump deliberately.
             install("python-dateutil==2.9.0.post0")
-            install("requests==2.33.1")
         }
     }
 }
