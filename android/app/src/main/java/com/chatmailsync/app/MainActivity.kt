@@ -983,12 +983,25 @@ fun ChatMailApp(
                             NavigationBarItem(
                                 selected = selectedTab == dest.route,
                                 onClick = {
+                                    // Home is both a tab *and* the graph's start
+                                    // destination, which is where the usual
+                                    // save/restore idiom breaks. Popping to the
+                                    // start with saveState files the popped stack
+                                    // (settings -> mailAccount) against the start
+                                    // destination; navigating to Home with
+                                    // restoreState then hands that very stack back,
+                                    // so tapping Home from a settings sub-screen
+                                    // put you straight back on it and read as a
+                                    // dead button. Home therefore resets instead of
+                                    // restoring; the other tabs keep their state.
+                                    val start = navController.graph.findStartDestination()
+                                    val goingHome = dest.route == start.route
                                     navController.navigate(dest.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
+                                        popUpTo(start.id) {
+                                            saveState = !goingHome
                                         }
                                         launchSingleTop = true
-                                        restoreState = true
+                                        restoreState = !goingHome
                                     }
                                 },
                                 icon = { Icon(dest.icon, contentDescription = dest.label) },

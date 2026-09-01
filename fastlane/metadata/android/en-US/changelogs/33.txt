@@ -1,0 +1,7 @@
+One fix: the Home tab works from inside Settings.
+
+Opening Settings and then Mail account left the Home button dead - tapping it
+did nothing at all. Home is both a tab and the app's starting screen, and the
+navigation was saving the Settings screens you had just left and handing them
+straight back to you, so nothing appeared to move. Home now returns you to
+Home; Chats and Settings still remember where you were.
