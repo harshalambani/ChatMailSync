@@ -86,6 +86,23 @@
     letter-spacing: 0.06em;
     color: var(--accent);
   }
+  .card h3 {
+    font-size: 0.95rem;
+    margin: 1.6rem 0 0.4rem;
+    font-family: Verdana, sans-serif;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+  .card h3:first-of-type { margin-top: 1.2rem; }
+  .card ol { margin: 0.6rem 0; padding-left: 1.2rem; }
+  code {
+    font-family: 'Consolas', 'DejaVu Sans Mono', monospace;
+    font-size: 0.85em;
+    background: color-mix(in srgb, var(--paper) 88%, var(--ink) 12%);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    overflow-wrap: anywhere;
+  }
   footer {
     margin-top: 3rem;
     padding-top: 1.5rem;
@@ -139,6 +156,47 @@
     Available for Android (Kotlin/Compose, embedding the same Python sync
     engine used by the Windows desktop version) and Windows.
   </p>
+
+  <div class="card">
+    <h2>Getting it</h2>
+    <p>
+      There is no app store listing. Both builds are published on the
+      project's <a href="https://github.com/harshalambani/ChatMailSync/releases/latest">releases page</a>,
+      signed by the developer.
+    </p>
+    <h3>Android</h3>
+    <p>
+      The recommended route is
+      <a href="https://github.com/ImranR98/Obtainium">Obtainium</a>, a free
+      open-source installer that watches this repository and tells you when a
+      new version is out. A bare APK never does that.
+    </p>
+    <ol>
+      <li>Install Obtainium (from its own releases page, or from F-Droid).</li>
+      <li>Tap <strong>Add App</strong> and paste
+        <code>https://github.com/harshalambani/ChatMailSync</code>.</li>
+      <li>Install. Every future release arrives as a notification.</li>
+    </ol>
+    <p>
+      If you would rather not use Obtainium, download
+      <code>ChatMailSync-&lt;version&gt;.apk</code> from the releases page and
+      open it. Android will ask you to allow installs from your browser or
+      file manager. You will then need to check for updates yourself.
+    </p>
+    <p>
+      The app is 64-bit ARM only, and is signed with the developer's own key:
+      updates install cleanly over each other, but an APK from anywhere else
+      will refuse to install over this one. That is deliberate.
+    </p>
+    <h3>Windows</h3>
+    <p>
+      Download either <code>ChatMailSyncPortable_&lt;version&gt;_English.paf.exe</code>
+      (an installer that writes to a folder of your choosing) or
+      <code>ChatMailSyncPortable_&lt;version&gt;.zip</code> (unzip and run).
+      Nothing is written to the registry and nothing needs administrator
+      rights.
+    </p>
+  </div>
 
   <footer>
     <nav>
