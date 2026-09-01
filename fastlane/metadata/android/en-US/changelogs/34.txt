@@ -1,0 +1,7 @@
+One fix: restoring a backup no longer leaves the app saying you have none.
+
+After you restored from a backup file, Home and Settings still showed the red
+"No backup yet - a reset or a reinstall makes the app mail every chat again"
+line, sitting directly above the history the restore had just protected. The
+app now dates your cover from the backup you restored, so it only asks you to
+make a new one when that file is genuinely getting old.

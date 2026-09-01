@@ -129,6 +129,12 @@ object Migration {
             if (!result.callAttr("get", "ok").toBoolean()) {
                 return result.callAttr("get", "error").toString()
             }
+            // Recorded before the early return as well as after it: a bundle
+            // that was already restored here still covers this device's
+            // history, and the second attempt is exactly when someone is
+            // checking whether they are protected.
+            recordCoverFrom(context, result)
+
             if (result.callAttr("get", "already_imported").toBoolean()) {
                 return "That backup has already been restored on this phone. Nothing changed."
             }
@@ -152,6 +158,26 @@ object Migration {
             return "That backup could not be restored: ${e.message}"
         } finally {
             staged.delete()
+        }
+    }
+
+    /**
+     * Date this install's cover from the bundle just restored.
+     *
+     * A restore leaves the phone protected by the file it was restored from,
+     * so the last-backup stamp moves to that file's own creation date. Without
+     * this, a phone that had just been rebuilt from a backup was told "No
+     * backup yet -- a reset makes the app mail every chat again" directly
+     * above the fifty messages the restore had stopped it from re-mailing.
+     *
+     * Never moved backwards: restoring an old bundle onto a device that has a
+     * newer one must not make it look less protected than it is.
+     */
+    private fun recordCoverFrom(context: Context, result: com.chaquo.python.PyObject) {
+        val made = result.callAttr("get", "created_at_epoch_ms")
+            ?.toString()?.toLongOrNull() ?: 0L
+        if (made > 0L && made > AppPrefs.getLastBackupAt(context)) {
+            AppPrefs.setLastBackupAt(context, made)
         }
     }
 

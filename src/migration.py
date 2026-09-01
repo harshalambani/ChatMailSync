@@ -224,6 +224,25 @@ def read_manifest(source: Path) -> dict:
         raise BundleError("That file is not a Chat Mail Sync backup.") from exc
 
 
+def created_at_epoch(created_at: str) -> int:
+    """Seconds since the epoch for a bundle's `created_at`, or 0 if unreadable.
+
+    Used by both front-ends to date the cover a *restore* provides. A backup
+    file dated T captures the sent-history up to T, and it goes on doing that
+    whether the person on this device wrote it or was handed it: after a
+    restore the honest thing to say is "there is a backup, dated T", not "no
+    backup yet" over the top of the fifty messages we just declined to re-send.
+
+    Shared rather than parsed twice: the stamp is written by this module in
+    local time, and two front-ends guessing at that format is two chances to
+    read it an hour out.
+    """
+    try:
+        return int(datetime.fromisoformat(created_at).timestamp())
+    except (TypeError, ValueError):
+        return 0
+
+
 def import_bundle(root: Path, source: Path) -> dict:
     """Merge the bundle at [source] into the install at [root].
 
@@ -274,6 +293,7 @@ def import_bundle(root: Path, source: Path) -> dict:
             "hashes_added": 0,
             "settings": {},
             "manifest": manifest,
+            "created_at": str(manifest.get("created_at") or ""),
         }
 
     try:
@@ -313,6 +333,7 @@ def import_bundle(root: Path, source: Path) -> dict:
         "already_imported": False,
         "settings": settings,
         "manifest": manifest,
+        "created_at": str(manifest.get("created_at") or ""),
         **added,
     }
 

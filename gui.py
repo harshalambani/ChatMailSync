@@ -3269,6 +3269,19 @@ class _SettingsPanel(_Panel):
         # save is the app telling the user their work did not count.
         self._app._refresh_backup_staleness()
 
+    def _record_backup_cover(self, at: int) -> None:
+        """Same stamp as [_record_backup_saved], dated from a restored bundle.
+
+        Never moved backwards: restoring an old bundle onto a machine that has
+        a newer one must not make it look less protected than it is.
+        """
+        if at <= int(self._app._settings.get("last_backup_at") or 0):
+            return
+        self._app._settings["last_backup_at"] = at
+        _save_settings(self._app._settings)
+        self._refresh_backup_age()
+        self._app._refresh_backup_staleness()
+
     def _refresh_backup_age(self) -> None:
         if not hasattr(self, "_backup_age") or not self._backup_age.winfo_exists():
             return
@@ -3358,6 +3371,16 @@ class _SettingsPanel(_Panel):
             result = migration.import_bundle(PROJECT_ROOT, Path(chosen))
             if not result.get("ok"):
                 return str(result.get("error") or "That backup could not be restored.")
+            # A restore leaves this machine protected by the file it was
+            # restored from, so the last-backup stamp moves to that file's own
+            # creation date -- otherwise a freshly rebuilt install reads "No
+            # backup yet" over the top of the history it just declined to
+            # re-send. Recorded for an already-imported bundle too: it still
+            # covers this machine, and a second attempt is exactly when someone
+            # is checking whether they are protected.
+            made = migration.created_at_epoch(str(result.get("created_at") or ""))
+            if made > 0:
+                self.after(0, lambda: self._record_backup_cover(made))
             if result.get("already_imported"):
                 return "That backup has already been restored here. Nothing changed."
             self.after(0, lambda: self._apply_restored_settings(result.get("settings") or {}))
