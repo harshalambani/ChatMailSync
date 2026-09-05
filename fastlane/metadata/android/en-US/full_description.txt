@@ -5,7 +5,7 @@ It sends. It never reads, never replies, never deletes. The connection is one wa
 HOW IT WORKS
 
 1. In WhatsApp, open a chat, then More > Export chat. Share it to Chat Mail Sync, or save it to a folder the app watches.
-2. Chat Mail Sync turns the export into one email per chat, threaded, in date order, with the attachments still attached.
+2. Chat Mail Sync turns the export into email: one message per day of conversation, in date order, with the attachments still attached. They are threaded together, so a long chat arrives as many emails inside a single thread rather than one unopenable giant.
 3. It remembers exactly what it has already sent. Export the same chat again next month and only the new messages go - no duplicates, no second copy of the history.
 
 WHAT YOU NEED
