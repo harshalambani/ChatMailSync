@@ -141,13 +141,20 @@ private val bottomDests = listOf(
  * Mail account (where you land after entering credentials) there was no Home
  * button at all and the labelled back arrow was the only way out. Sub-screens
  * still light up the tab they were opened from, so the bar says where you are
- * rather than going blank. */
-private fun tabForRoute(route: String?): String? = when {
+ * rather than going blank.
+ *
+ * The exception is the sync log, which has three doors and so belongs to no
+ * one tab -- see below. */
+internal fun tabForRoute(route: String?): String? = when {
     route == null -> null
     route == "home" || route == "syncProgress" || route == "importPicker" -> "home"
     route == "chats" || route.startsWith("chat/") -> "chats"
     route == "settings" || route == "mailAccount" || route == "help" -> "settings"
-    route.startsWith("syncLog") -> "settings"
+    // The sync log is reachable from Settings, from the status card on Home,
+    // and from the always-visible sync bar on every screen there is. Lighting
+    // Settings told two thirds of its visitors they were somewhere they had
+    // never been. No tab lit is honest; the wrong tab lit is not.
+    route.startsWith("syncLog") -> null
     else -> null
 }
 
@@ -931,7 +938,12 @@ fun ChatMailApp(
     val onSyncStatusClick: () -> Unit = {
         when {
             manualSyncRunning -> navController.navigate("syncProgress")
-            autoSyncRunning -> navController.navigate("settings")
+            // A watched-folder sync has no progress screen of its own:
+            // SyncProgressScreen observes the manual unique work only, so it
+            // would render empty here. Settings was the old stand-in, and it
+            // is neither where the tap was nor about the sync. The log is the
+            // one screen with something to say about this run.
+            autoSyncRunning -> navController.navigate("syncLog")
             else -> navController.navigate("syncLog")
         }
     }
@@ -1284,10 +1296,11 @@ fun ChatMailApp(
                 HelpScreen(onBack = { navController.popBackStack() })
             }
             composable("syncLog") {
-                // Two ways in - Settings, and the status line on Home - so the
-                // back label is read off the stack rather than fixed. Anything
-                // unmapped falls back to a plain "Back", which is no worse than
-                // the bare arrow this replaced.
+                // Three ways in - Settings, the status card on Home, and the
+                // sync bar, which rides every screen - so the back label is
+                // read off the stack rather than fixed. Anything unmapped
+                // falls back to a plain "Back", which is no worse than the
+                // bare arrow this replaced.
                 val from = navController.previousBackStackEntry?.destination?.route
                 SyncLogScreen(
                     onBack = { navController.popBackStack() },
