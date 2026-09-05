@@ -303,15 +303,29 @@ land in your own mailbox and nobody else receives anything.
 
 ---
 
+### Q. What can the app reach in my email account?
+
+**A.** Nothing outside the mailbox. What you hand it is an *app password*, and
+that is a mail credential rather than an account one — it works with the mail
+protocols and nothing else. It cannot sign in to your provider's website or app,
+cannot reach your files, photos, contacts or calendar, cannot see or change your
+account settings, and cannot change your real password. You create it separately
+from your normal password, and you can revoke it on its own, from your provider,
+whenever you like — that ends this app's access without disturbing anything
+else you use. What it can do *inside* the mailbox is the next question.
+
+---
+
 ### Q. What stops it reading or deleting my mail?
 
-**A.** The app's own code, and it is worth being plain about that. No provider
-can issue a password limited to one operation: any password that can add mail
-can technically do anything. What the app does with it is use four mail commands
-and no others: list folders, create a folder, subscribe to it, and add a
-message. None of them can open or remove a message, and because the app never
-opens a folder for reading it never reaches the state where that would be
-possible. The source is public if you or anyone else wants to verify it.
+**A.** Inside the mailbox, the app's own code — and it is worth being plain
+about that. No provider can issue a password limited to one mail operation: any
+credential that can add mail can technically read and remove it too. What the app
+does with it is use four commands and no others: list folders, create a folder,
+subscribe to it, and add a message. None of them can open or remove a message,
+and because the app never opens a folder for reading it never reaches the state
+where that would be possible. The source is public if you or anyone else wants to
+verify it: [github.com/harshalambani/ChatMailSync](https://github.com/harshalambani/ChatMailSync).
 
 ---
 
@@ -336,16 +350,26 @@ turn off two-factor authentication, and some expire it on their own.
 
 ---
 
-### Q. I used to sign in with Google. Why is it asking for an app password?
+### Q. Why doesn't it just sign in with Google or Microsoft?
 
-**A.** Google sign-in was removed in version 2.0.0. It could never be offered to
-more than 100 people: the app has not been through Google's app-verification
-process, so Google treated it as "Testing", which caps the account list and
-expires the sign-in roughly every 7 days — the weekly reconnect. That is
-Google's rule for unverified apps and cannot be extended from inside the app. An
-app password reaches Gmail perfectly well, does not expire, and works the same
-on every other provider. Nothing already synced is lost or re-sent; see section
-2 for the setup.
+**A.** Because that route is only open to apps the provider has formally
+reviewed, and the review is not free. Google caps an unreviewed app at 100 users
+and expires its sign-in roughly every 7 days; getting past that means going
+through Google's verification, which for anything touching Gmail requires a
+security assessment by an approved third party — paid for, and repeated every
+year. Microsoft, Yahoo and Apple each have their own registration and review to
+satisfy separately: it is one process per provider, not one piece of work. Chat
+Mail Sync is free and takes no money from anyone, so there is nothing to fund
+that with.
+
+An app password works on every provider in the list, does not expire, and can be
+revoked on its own. The honest trade-off is that you type a secret into the app
+instead of clicking a consent screen, which is why two of the questions above set
+out exactly what that secret can and cannot touch.
+
+One consequence worth knowing: Microsoft has switched basic authentication off
+for work and school (Microsoft 365) mailboxes, so an app password is refused
+there; personal Outlook.com accounts are fine.
 
 ---
 
@@ -377,6 +401,23 @@ folder.
 **A.** You probably exported **Without media**. Re-export the chat choosing
 **Include media** / **Attach Media** (this produces a `.zip`), then sync that
 file.
+
+---
+
+### Q. Emoji reactions on messages didn't come through.
+
+**A.** WhatsApp keeps them, but it does not put them in the file it exports.
+**Export chat** writes one line per message — a time, a sender and the text —
+and WhatsApp has chosen not to give reactions a line of their own, so they never
+leave the app. Your own WhatsApp backup does carry reactions; the export is a
+deliberately simpler format. That exported file is the only thing Chat Mail Sync
+is ever given, so there is nothing in it to import — and no setting on either
+side changes that.
+
+An emoji somebody *sent* as a message of its own comes through normally; it is
+only the tap-and-hold reaction on someone else's message that the export leaves
+behind. The same goes for anything else **Export chat** omits: the app can never
+show more than WhatsApp put in the file.
 
 ---
 
