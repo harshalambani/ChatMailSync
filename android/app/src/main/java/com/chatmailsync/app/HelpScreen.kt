@@ -39,12 +39,23 @@ private val FAQ = listOf(
         "It uses IMAP APPEND, the mail command that adds a message straight into a mailbox — the " +
         "same one your mail app uses to save a draft. Nothing is sent, no sending quota is used, " +
         "and nobody else receives these emails: they only appear in your own mailbox.",
+    "What can the app reach in my email account?" to
+        "Nothing outside the mailbox. What you hand it is an app password, and that's a mail " +
+        "credential rather than an account one — it works with the mail protocols and nothing " +
+        "else. It can't sign in to your provider's website or app, can't reach your files, " +
+        "photos, contacts or calendar, can't see or change your account settings, and can't " +
+        "change your real password. You create it separately from your normal password, and you " +
+        "can revoke it on its own, from your provider, whenever you like — that ends this " +
+        "app's access without disturbing anything else you use. What it can do inside the " +
+        "mailbox is the next question.",
     "What stops it reading or deleting my mail?" to
-        "The app's own code, and it is worth being plain about that. No provider can give out a " +
-        "limited password: any password that can add mail can technically do anything. What the " +
-        "app does with it is use four mail commands and no others — list folders, create a " +
-        "folder, subscribe to it, and add a message. None of them can open or remove a message, " +
-        "and the source is public for anyone who wants to check.",
+        "Inside the mailbox, the app's own code — and it is worth being plain about that. No " +
+        "provider can give out a limited password: any credential that can add mail can " +
+        "technically read and remove it too. What the app does with it is use four commands and " +
+        "no others — list folders, create a folder, subscribe to it, and add a message. None " +
+        "of them can open or remove a message, the app never puts a folder into the state where " +
+        "that would even be possible, and the source is public for anyone who wants to check " +
+        "at github.com/harshalambani/ChatMailSync.",
     "Where is my email app password kept?" to
         "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
         "phone's secure hardware. It's never written into the app's settings, never shown in the " +
@@ -55,14 +66,21 @@ private val FAQ = listOf(
         "Open Settings -> Mail account and check the host, port and email address, then enter " +
         "your app password again and save. The app password is the usual culprit — providers " +
         "revoke it if you turn off two-factor authentication, and some expire it on their own.",
-    "I used to sign in with Google. Why is it asking for an app password?" to
-        "Google sign-in was removed in version 2.0.0. It could never be offered to more than 100 " +
-        "people: the app hasn't gone through Google's app-verification process, so Google treated " +
-        "it as \"Testing\", which caps the account list and expires the sign-in roughly every 7 " +
-        "days — the weekly reconnect. That's Google's rule for unverified apps and can't be " +
-        "extended from within the app. An email app password reaches Gmail perfectly well, doesn't " +
-        "expire, and works the same on every other provider. Nothing already synced is lost or " +
-        "re-sent.",
+    "Why doesn't it just sign in with Google or Microsoft?" to
+        "Because that route is only open to apps the provider has formally reviewed, and the " +
+        "review isn't free. Google caps an unreviewed app at 100 users and expires its sign-in " +
+        "roughly every 7 days; getting past that means going through Google's verification, " +
+        "which for anything touching Gmail needs a security assessment by an approved third " +
+        "party — paid for, and repeated every year. Microsoft, Yahoo and Apple each have their " +
+        "own registration and review to satisfy separately: it's one process per provider, not " +
+        "one piece of work. Chat Mail Sync is free and takes no money from anyone, so there's " +
+        "nothing to fund that with. An app password works on every provider in the list, doesn't " +
+        "expire, and can be revoked on its own. The honest trade-off is that you type a secret " +
+        "into the app instead of tapping a consent screen, which is why two of the questions " +
+        "above set out exactly what that secret can and can't touch. One consequence worth " +
+        "knowing: Microsoft has switched basic authentication off for work and school " +
+        "(Microsoft 365) mailboxes, so an app password is refused there; personal Outlook.com " +
+        "accounts are fine.",
     "I moved the app to another PC, or set it up on a new phone, and it wants the password again." to
         "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
         "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +
@@ -77,6 +95,16 @@ private val FAQ = listOf(
     "My photos and files didn't come through." to
         "You probably exported \"Without media\". Re-export the chat choosing \"Include media\" " +
         "(this produces a .zip), then import and sync that file.",
+    "Emoji reactions on messages didn't come through." to
+        "WhatsApp keeps them, but it doesn't put them in the file it exports. Export chat writes " +
+        "one line per message — a time, a sender and the text — and WhatsApp has chosen not " +
+        "to give reactions a line of their own, so they never leave the app. Your own WhatsApp " +
+        "backup does carry reactions; the export is a deliberately simpler format. That exported " +
+        "file is the only thing Chat Mail Sync is ever given, so there's nothing in it to import " +
+        "— and no setting on either side changes that. An emoji somebody sent as a message of " +
+        "its own comes through normally; it's only the tap-and-hold reaction on someone else's " +
+        "message that the export leaves behind. The same goes for anything else Export chat " +
+        "omits: the app can never show more than WhatsApp put in the file.",
     "What is the watched folder for?" to
         "It saves you importing by hand. Point it at a folder, and anything WhatsApp drops there " +
         "(.txt or .zip) is picked up and queued for the next sync. Switch on \"Auto-import from " +
