@@ -177,7 +177,7 @@ fun SettingsScreen(
                     Text(
                         "Checks and syncs in the background on the interval below. Uses a small " +
                             "amount of battery — leave off if you'd rather import manually or with " +
-                            "\"Sync now\".",
+                            "\"Check and sync\".",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -208,7 +208,13 @@ fun SettingsScreen(
                     onClick = onCheckNow,
                     enabled = watchedFolderUri != null && !syncInProgress,
                 ) {
-                    Text(if (syncInProgress) "Current sync is on" else "Sync now")
+                    // Not "Sync now": that is Home's button, and this one is a
+                    // different, smaller promise -- look in the watched folder
+                    // first, and only then send whatever turned up. It does both,
+                    // so it names both. Short because it shares its row with the
+                    // interval menu; the section heading above supplies "watched
+                    // folder", which Windows has to carry in the label itself.
+                    Text(if (syncInProgress) "Current sync is on" else "Check and sync")
                 }
             }
             Text("After import, synced files:", style = MaterialTheme.typography.bodyMedium)
