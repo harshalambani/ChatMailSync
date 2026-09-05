@@ -232,7 +232,7 @@
     <h3>Setting it up on Windows</h3>
     <ol>
       <li><strong>Settings &rarr; Watched folder &rarr; Choose&hellip;</strong> and pick the folder.</li>
-      <li>That alone is enough for on-demand use: <strong>Check watched folder</strong> appears on the main window and looks whenever you click it, whether or not the automatic check is switched on.</li>
+      <li>That alone is enough for on-demand use: <strong>Check watched folder and sync</strong> appears on the main window and looks whenever you click it, whether or not the automatic check is switched on.</li>
       <li>To have it look by itself, tick <strong>Check it automatically</strong> and choose an interval.</li>
       <li><strong>After syncing</strong> decides the fate of the <em>original</em> file in the watched folder.</li>
     </ol>
@@ -244,7 +244,7 @@
     <h3>Setting it up on Android</h3>
     <ol>
       <li><strong>Settings &rarr; Watched folder &rarr; Choose folder</strong> and pick the folder.</li>
-      <li><strong>Sync now</strong> in the same section checks immediately, whether or not auto-import is on.</li>
+      <li><strong>Check and sync</strong> in the same section looks immediately, and sends whatever it finds, whether or not auto-import is on.</li>
       <li>Turn on <strong>Auto-import from this folder</strong> and choose an interval.</li>
       <li><strong>After import, synced files:</strong> the same three choices.</li>
     </ol>
@@ -267,7 +267,7 @@
       <li><strong>Samsung (One UI)</strong>, which is stricter and will otherwise stop the schedule within a day or two of non-use: Settings &rarr; <strong>Battery</strong> &rarr; <strong>Background usage limits</strong> &mdash; make sure the app is <strong>not</strong> in <em>Sleeping apps</em> or <em>Deep sleeping apps</em>, and add it to <strong>Never sleeping apps</strong>. Also turn off <em>Put unused apps to sleep</em> if you use the app infrequently.</li>
       <li><strong>Xiaomi / Oppo / Vivo / OnePlus:</strong> these keep a separate "Autostart" or "Startup manager" permission as well. Enable it for the app, or background work stops after a reboot.</li>
     </ul>
-    <p>None of this affects manual syncs or <strong>Sync now</strong> &mdash; those run in the foreground while you are looking at the app, so the system leaves them alone. It only affects unattended checks.</p>
+    <p>None of this affects manual syncs or <strong>Check and sync</strong> &mdash; those run in the foreground while you are looking at the app, so the system leaves them alone. It only affects unattended checks.</p>
     <div class="note"><strong>Battery cost.</strong> The check itself is cheap &mdash; a directory listing &mdash; but it is not free, and the sync that follows uses the network. Once a day suits most people; every 15 minutes is for a folder that genuinely receives exports through the day.</div>
 
     <h3>What is <em>not</em> scheduled</h3>
@@ -336,7 +336,7 @@
       <dd>WhatsApp keeps them, but it does not put them in the file it exports. <strong>Export chat</strong> writes one line per message &mdash; a time, a sender and the text &mdash; and WhatsApp has chosen not to give reactions a line of their own, so they never leave the app. Your own WhatsApp backup does carry reactions; the export is a deliberately simpler format. That exported file is the only thing Chat Mail Sync is ever given, so there is nothing in it to import &mdash; and no setting on either side changes that. An emoji somebody <em>sent</em> as a message of its own comes through normally; it is only the tap-and-hold reaction on someone else's message that the export leaves behind. The same goes for anything else <strong>Export chat</strong> omits: the app can never show more than WhatsApp put in the file.</dd>
 
       <dt>What is the watched folder for?</dt>
-      <dd>It saves you copying files in by hand. Point it at a folder in <strong>Settings</strong> &mdash; wherever you save WhatsApp exports &mdash; and any <code>.txt</code> or <code>.zip</code> that appears there is copied into the inbox and queued for the next sync. Tick <strong>Check it automatically</strong> and it looks on its own on the interval you choose; leave it unticked and it only looks when you click <strong>Check watched folder</strong>.
+      <dd>It saves you copying files in by hand. Point it at a folder in <strong>Settings</strong> &mdash; wherever you save WhatsApp exports &mdash; and any <code>.txt</code> or <code>.zip</code> that appears there is copied into the inbox and queued for the next sync. Tick <strong>Check it automatically</strong> and it looks on its own on the interval you choose; leave it unticked and it only looks when you click <strong>Check watched folder and sync</strong>.
       <p>Only that one folder is looked at &mdash; subfolders are left alone &mdash; and each file is picked up only once, so leaving it switched on costs you nothing. Your original is never touched at import time: the <strong>After syncing</strong> setting takes effect only once a file has actually reached your mailbox, so a sync that fails, or one you stop, leaves everything exactly where it was. The delete option sends the original to the Recycle Bin, never a permanent delete; where it cannot do that (a network drive, say) it leaves the file alone and says so in the log.</p></dd>
 
       <dt>How do I make it sync on a schedule?</dt>

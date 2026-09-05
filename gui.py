@@ -1166,13 +1166,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             command=lambda: os.startfile(str(INBOX_DIR)),
         ).pack(side="left", padx=6)
 
-        # "Check now" for the watched folder -- Android puts the same button in
-        # Settings; here it belongs beside the other two ways of getting files
-        # in. Hidden entirely until a folder is chosen, so nobody meets a
+        # The watched folder's "do it now" button -- Android puts the same one
+        # in Settings; here it belongs beside the other two ways of getting
+        # files in. Hidden entirely until a folder is chosen, so nobody meets a
         # permanently dead button. Like Android's, it runs whether or not the
         # periodic watch is switched on: choosing a folder is enough.
+        #
+        # The label used to stop at "Check watched folder", which was only half
+        # true: a check that finds something goes straight on to sync it, via
+        # _maybe_auto_sync. A button that sends mail should say it sends mail.
+        # Android's says "Check and sync" -- it has a "Watched folder" heading
+        # over it to supply the noun, and this one, sitting in a row of
+        # unrelated buttons, does not.
         self._watch_now_btn = ctk.CTkButton(
-            btn_row, text="Check watched folder", width=168, height=30,
+            btn_row, text="Check watched folder and sync", width=214, height=30,
             fg_color="transparent", border_width=1,
             text_color=gui_theme.ON_SURFACE,
             command=self._on_check_watch_now,
@@ -1818,7 +1825,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         return Path(raw) if raw else None
 
     def _update_watch_ui(self) -> None:
-        """Show "Check watched folder" only once a folder has been chosen."""
+        """Show "Check watched folder and sync" only once a folder is chosen."""
         if self._watched_folder() is not None:
             self._watch_now_btn.pack(side="left", padx=6)
         else:
@@ -1886,7 +1893,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
 
         self._watch_scanning = False
-        self._watch_now_btn.configure(state="normal", text="Check watched folder")
+        self._watch_now_btn.configure(state="normal", text="Check watched folder and sync")
 
         if "error" in event:
             self._append_log(f"Watched folder: {event['error']}")
@@ -4724,7 +4731,7 @@ class _ImportPickerPanel(_Panel):
     file from another. Windows has no such defect -- askopenfilenames is a full
     Explorer window with names, sizes and dates -- so this is parity of
     capability, not a port of the fix. What Windows genuinely lacked was any
-    way to take *some* files out of the watched folder: [Check watched folder]
+    way to take *some* files out of the watched folder: the check-and-sync button
     is all-or-nothing, and the Explorer dialog opens wherever Explorer last was
     rather than where the exports live.
 

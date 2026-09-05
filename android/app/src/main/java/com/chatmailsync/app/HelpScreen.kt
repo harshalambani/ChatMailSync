@@ -109,7 +109,7 @@ private val FAQ = listOf(
         "It saves you importing by hand. Point it at a folder, and anything WhatsApp drops there " +
         "(.txt or .zip) is picked up and queued for the next sync. Switch on \"Auto-import from " +
         "this folder\" and it checks on its own on the interval you choose; leave it off and it " +
-        "only looks when you tap \"Sync now\". Only that one folder is looked at — subfolders are " +
+        "only looks when you tap \"Check and sync\". Only that one folder is looked at — subfolders are " +
         "left alone — and a file is only ever picked up once, so re-checking costs you nothing. " +
         "Your original is never touched at import time; the \"After import\" setting only takes " +
         "effect once the file has actually reached your mailbox, so a sync that fails or that you " +
@@ -125,7 +125,7 @@ private val FAQ = listOf(
         "floor and no app can go under it. Treat the interval as \"no more often than\" rather than " +
         "\"exactly\" — the system delays and batches background work to save power, so hourly means " +
         "roughly hourly. The scan needs no network; the sync it triggers does, so an offline tick " +
-        "imports the files and leaves them in the inbox for the next run. \"Sync now\" always runs " +
+        "imports the files and leaves them in the inbox for the next run. \"Check and sync\" always runs " +
         "immediately regardless of the schedule. Unlike the Windows edition, this one keeps checking " +
         "with the app closed — that is what the system scheduler is for.",
     "The schedule stopped running on its own. Why?" to
@@ -137,7 +137,7 @@ private val FAQ = listOf(
         "\"Never sleeping apps\", and turn off \"Put unused apps to sleep\" if you open the app " +
         "rarely. Xiaomi, Oppo, Vivo and OnePlus also keep a separate \"Autostart\" permission — " +
         "without it background work stops after a reboot. None of this affects manual syncs or " +
-        "\"Sync now\", which run in the foreground while you are watching; it only affects " +
+        "\"Check and sync\", which run in the foreground while you are watching; it only affects " +
         "unattended checks. (On Windows the equivalent limit is simpler: the check only runs while " +
         "the app is open.)",
     "Will I get duplicate messages if I sync the same chat again?" to

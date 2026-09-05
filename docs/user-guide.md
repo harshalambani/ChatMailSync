@@ -150,9 +150,9 @@ understanding before you rely on it.
 ### Setting it up on Windows
 
 1. **Settings → Watched folder → Choose…** and pick the folder.
-2. That alone is enough for on-demand use: **Check watched folder** appears on
-   the main window and looks whenever you click it, whether or not the automatic
-   check is switched on.
+2. That alone is enough for on-demand use: **Check watched folder and sync**
+   appears on the main window and runs whenever you click it, whether or not the
+   automatic check is switched on.
 3. To have it look by itself, tick **Check it automatically** and choose an
    interval.
 4. **After syncing** decides the fate of the *original* file in the watched
@@ -177,8 +177,8 @@ not wait for the current wait to run out, and it never leaves two timers running
 
 1. **Settings → Watched folder → Choose folder** and pick the folder (Android's
    own file picker, so it can be a cloud folder your provider exposes there).
-2. **Sync now** in the same section checks immediately, whether or not
-   auto-import is on.
+2. **Check and sync** in the same section looks immediately, and sends whatever
+   it finds, whether or not auto-import is on.
 3. Turn on **Auto-import from this folder** and choose an interval.
 4. **After import, synced files:** the same three choices.
 
@@ -223,7 +223,7 @@ app once:
   separate "Autostart" or "Startup manager" permission. Enable it for the app, or
   background work stops after a reboot.
 
-None of this affects manual syncs or **Sync now** — those run in the foreground
+None of this affects manual syncs or **Check and sync** — those run in the foreground
 while you are looking at the app, so the system leaves them alone. It only
 affects unattended checks.
 
