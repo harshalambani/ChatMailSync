@@ -218,6 +218,7 @@
       <li>Watch the progress bar and the log at the bottom. Click <strong>⏹ Stop</strong> to stop after the current file finishes.</li>
     </ol>
     <p>When it's done, each chat appears in the list on the left with a green dot and a message count. Synced files move out of the inbox automatically.</p>
+    <p>If a <strong>cutoff date</strong> is set (<strong>Settings &rarr; Cutoff date</strong>), a strip above the sync button says so, and nothing older than that day is sent. The strip stays for as long as the cutoff does &mdash; it is not a notice to dismiss. Section 8 covers what the cutoff does and does not do.</p>
   </section>
 
   <section id="schedule">
@@ -340,6 +341,11 @@
 
       <dt>The schedule stopped running on its own. Why?</dt>
       <dd>On this edition, the check only runs <strong>while the app is open</strong> &mdash; there is no background service and no scheduled task, so a closed app has nothing running to do the looking. Leave the window open (minimised is fine) if you want it to keep collecting. The Android edition uses the phone's own job scheduler and does keep checking with the app closed; if <em>that</em> one has gone quiet, the cause is almost always battery optimisation &mdash; see section 6.</dd>
+
+      <dt>Can I stop it sending messages from before a certain date?</dt>
+      <dd>Yes. <strong>Settings &rarr; Cutoff date</strong> takes a day, and nothing older than it is ever sent. It is a floor and not a window: there is no matching "to" date, because the whole job of this app is to keep moving forwards. Leave it blank and everything is sent.
+      <p>While a cutoff is set, the main window says so in a strip above the sync button &mdash; permanently, not as a dismissible notice. That is on purpose: a floor you have forgotten about looks exactly like an app that is losing your messages.</p>
+      <p>It cannot cause a duplicate. Where a chat has already been archived past the cutoff, the app carries on from where it stopped and ignores the cutoff entirely &mdash; whichever of the two is later always wins, so lowering the cutoff never sends anything a second time. What it held back is reported as its own line at the end of a sync, separate from the skipped count, so "held back by your cutoff" is never confused with "already sent".</p></dd>
 
       <dt>Will I get duplicate messages if I sync the same chat again?</dt>
       <dd>Not on this instance of the app. It remembers what it has already saved and only adds new messages, so you can safely re-export a chat later to pick up newer messages &mdash; the overlap is skipped automatically. That memory belongs to this copy of the app, though, not to your mailbox; see the next answer.</dd>
