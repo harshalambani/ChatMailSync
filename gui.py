@@ -3421,6 +3421,16 @@ class _SettingsPanel(_Panel):
             self.after(0, lambda: self._apply_restored_settings(result.get("settings") or {}))
             chats = int(result.get("chats_added") or 0)
             hashes = int(result.get("hashes_added") or 0)
+            # Named only when there are any. A per-chat floor is a decision the
+            # user made by hand and would not think to make again, so it has to
+            # be visible that it survived -- but an install that never set one
+            # should not be told about a feature it does not use.
+            cutoffs = int(result.get("cutoffs_added") or 0)
+            carried = (
+                "" if cutoffs == 0
+                else f" {cutoffs} per-chat cutoff date"
+                     f"{'' if cutoffs == 1 else 's'} came with it."
+            )
             # The password sentence is a next step, not a fact, and it is only a
             # next step when there is no connection yet -- restoring onto a
             # machine that is already connected was asking for something the app
@@ -3432,7 +3442,7 @@ class _SettingsPanel(_Panel):
             return (
                 f"Restored {chats} chat{'' if chats == 1 else 's'} and "
                 f"{hashes} message{'' if hashes == 1 else 's'} of history \u2014 "
-                f"those will not be sent again.{finish}"
+                f"those will not be sent again.{carried}{finish}"
             )
 
         self._run_backup_job(work)

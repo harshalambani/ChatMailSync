@@ -1,4 +1,5 @@
 import json
+import zipfile
 import shutil
 from pathlib import Path
 
@@ -382,6 +383,46 @@ def test_export_backup_survives_junk_settings_json(tmp_root, db_path):
     dest = tmp_root / "backup.cmsbackup"
     assert android_api.export_backup(str(dest), "not json at all")["ok"]
     assert android_api.export_backup(str(dest), "[1, 2, 3]")["ok"]
+
+
+def test_describe_backup_counts_the_cutoffs_a_bundle_carries(tmp_root, db_path):
+    """Shown before the restore, because a per-chat floor is the one thing in
+    a bundle the user set by hand and would not think to set again."""
+    upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    android_api.set_cutoff("chat1", "2025-01-31")
+    dest = tmp_root / "backup.cmsbackup"
+    android_api.export_backup(str(dest), "{}", "2.0.5")
+
+    assert android_api.describe_backup(str(dest))["cutoffs"] == 1
+
+
+def test_a_bundle_written_before_cutoffs_existed_reports_none(tmp_root, db_path):
+    """Its manifest has no such key at all. Honestly reporting "no overrides"
+    is the whole backward-compatibility story on this side; raising a
+    KeyError over a field that did not exist last release is not."""
+    upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    dest = tmp_root / "backup.cmsbackup"
+    android_api.export_backup(str(dest), "{}", "2.0.4")
+    _strip_manifest_key(dest, tmp_root / "old.cmsbackup", "cutoffs")
+
+    described = android_api.describe_backup(str(tmp_root / "old.cmsbackup"))
+
+    assert described["ok"] is True
+    assert described["cutoffs"] == 0
+    assert described["chats"] == 1
+
+
+def _strip_manifest_key(src, dest, key):
+    """Rewrite a bundle with one count removed, as an older build wrote it."""
+    with zipfile.ZipFile(src) as z:
+        items = [(n, z.read(n)) for n in z.namelist()]
+    with zipfile.ZipFile(dest, "w") as z:
+        for name, blob in items:
+            if name == "manifest.json":
+                manifest = json.loads(blob)
+                manifest["counts"].pop(key, None)
+                blob = json.dumps(manifest, indent=2).encode("utf-8")
+            z.writestr(name, blob)
 
 
 def test_describe_backup_on_a_file_that_is_not_one(tmp_root):

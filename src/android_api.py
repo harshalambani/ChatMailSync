@@ -599,6 +599,10 @@ def describe_backup(source_path: str) -> dict:
         "chats": int(counts.get("chats") or 0),
         "runs": int(counts.get("runs") or 0),
         "hashes": int(counts.get("hashes") or 0),
+        # `or 0` is the whole backward-compatibility story: a bundle
+        # written before per-chat cutoffs existed has no such key, and
+        # honestly describes itself as carrying none.
+        "cutoffs": int(counts.get("cutoffs") or 0),
     }
 
 
