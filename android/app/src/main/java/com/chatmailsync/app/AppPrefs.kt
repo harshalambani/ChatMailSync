@@ -49,6 +49,7 @@ object AppPrefs {
     private const val KEY_LAST_CONNECTION_OK = "last_connection_ok"
     private const val KEY_LAST_CONNECTION_AT = "last_connection_at"
     private const val KEY_LAST_BACKUP_AT = "last_backup_at"
+    private const val KEY_CUTOFF_DATE = "cutoff_date"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -153,6 +154,19 @@ object AppPrefs {
 
     fun setChunkSize(context: Context, chunkSize: String) {
         prefs(context).edit().putString(KEY_CHUNK_SIZE, chunkSize).apply()
+    }
+
+    /** The app-wide cutoff as a bare "YYYY-MM-DD", or "" for no cutoff.
+     *
+     * "" rather than null so it matches what src/state.py's normalise_cutoff
+     * already treats as "no floor", and so the value can be handed straight to
+     * Python without a null check inventing a second spelling of nothing.
+     * Windows mirrors this via data/.settings.json's cutoff_date. */
+    fun getCutoffDate(context: Context): String =
+        prefs(context).getString(KEY_CUTOFF_DATE, "") ?: ""
+
+    fun setCutoffDate(context: Context, value: String) {
+        prefs(context).edit().putString(KEY_CUTOFF_DATE, value.trim()).apply()
     }
 
     fun isDryRunDefault(context: Context): Boolean =

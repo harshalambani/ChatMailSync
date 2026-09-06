@@ -762,6 +762,7 @@ fun ChatMailApp(
     // couldn't see the user's choice at all since it runs in a separate
     // process-less Worker with no access to this Compose state.
     var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
+    var cutoffDate by remember { mutableStateOf(AppPrefs.getCutoffDate(context)) }
     var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
@@ -1130,6 +1131,8 @@ fun ChatMailApp(
                     onOpenQueue = { navController.navigate("queue") },
                     onOpenBackup = { navController.navigate("settings") },
                     lastBackupAt = lastBackupAt,
+                    cutoffDate = cutoffDate,
+                    onOpenSettings = { navController.navigate("settings") },
                 )
             }
             composable("queue") {
@@ -1212,6 +1215,11 @@ fun ChatMailApp(
                     },
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
+                    cutoffDate = cutoffDate,
+                    onCutoffDateChange = {
+                        cutoffDate = it
+                        AppPrefs.setCutoffDate(context, it)
+                    },
                 )
             }
             composable("importPicker") {

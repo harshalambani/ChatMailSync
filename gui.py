@@ -83,6 +83,7 @@ from src.state import (
     get_sync_summary,
     init_db,
     is_uneventful_run,
+    normalise_cutoff,
     reset_chat,
     summarize_recent_runs,
 )
@@ -358,6 +359,27 @@ def _legacy_oauth_evidence() -> bool:
     if not isinstance(saved, dict):
         saved = {}
     return is_legacy_oauth_user(saved)
+
+
+def _format_cutoff_day(value) -> str:
+    """The cutoff as a person would say it out loud: "1 January 2026".
+
+    Takes either the stored "YYYY-MM-DD" or the full ISO instant the filter
+    compares against, and returns "" for anything it cannot read. A settings
+    file someone has hand-edited should cost them a banner, not a crash on
+    launch -- and "" is already the value that means "no cutoff" everywhere
+    else here. Android's twin is formatCutoffDay.
+    """
+    text = str(value or "").strip()[:10]
+    if not text:
+        return ""
+    try:
+        day = datetime.strptime(text, "%Y-%m-%d")
+    except ValueError:
+        return ""
+    # strftime has no non-padded day on Windows ("%-d" is glibc), so the day
+    # number is formatted by hand rather than arriving as "01 January".
+    return "%d %s %d" % (day.day, day.strftime("%B"), day.year)
 
 
 def _should_show_oauth_removed_notice(settings: dict, was_oauth_user: bool) -> bool:
@@ -942,11 +964,39 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             corner_radius=6, height=22, anchor="w",
         )
 
+        # Cutoff banner. Nothing about a cutoff is wrong, so it is a quiet
+        # surface-variant strip and not the error red -- but it is permanently
+        # visible while one is set, because the failure it prevents is silent:
+        # someone imports a two-year-old export, sees a fraction of it arrive,
+        # and has no way to know the app is obeying a floor they set months
+        # ago. Absent entirely when there is no cutoff. Android's twin is the
+        # card above the inbox card on Home.
+        self._cutoff_banner = ctk.CTkFrame(
+            footer, fg_color=gui_theme.SURFACE_VARIANT, corner_radius=6,
+            height=24,
+        )
+        self._cutoff_banner_label = ctk.CTkLabel(
+            self._cutoff_banner, text="", font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
+        )
+        self._cutoff_banner_label.pack(side="left", padx=(8, 0), pady=2)
+        # A way out of the banner, not just a statement of fact: the person
+        # reading it because messages are missing wants the setting, and
+        # hunting for it is the whole complaint.
+        ctk.CTkButton(
+            self._cutoff_banner, text="Change", width=62, height=20,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+            command=self._open_settings,
+        ).pack(side="left", padx=8, pady=2)
+
         # ── Sync button + progress bar row ────────────────────────────
         ctrl = ctk.CTkFrame(footer, fg_color="transparent")
         ctrl.pack(fill="x", pady=(8, 4), padx=6)
         # Kept so the banner can be packed *above* it after the fact.
         self._sync_ctrl_row = ctrl
+        self._update_cutoff_banner()
 
         self._sync_btn = ctk.CTkButton(
             ctrl, text="▶  Sync Now", width=126, height=36,
@@ -2036,6 +2086,24 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         else:
             self._dry_run_banner.pack_forget()
 
+    def _update_cutoff_banner(self) -> None:
+        """Show the cutoff strip, or take it away when there is no cutoff.
+
+        Called on first paint and from _apply_settings, so clearing the date
+        in settings makes the strip go rather than leaving a stale sentence
+        above the sync button.
+        """
+        day = _format_cutoff_day(self._settings.get("cutoff_date", ""))
+        if not day:
+            self._cutoff_banner.pack_forget()
+            return
+        self._cutoff_banner_label.configure(
+            text=f"Only syncing messages from {day} onwards"
+        )
+        self._cutoff_banner.pack(
+            fill="x", padx=6, pady=(6, 0), before=self._sync_ctrl_row,
+        )
+
     def _begin_sync(
         self, dry_run: bool, chunk_size: str, chat_filter: str | None = None
     ) -> None:
@@ -2614,6 +2682,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             new_settings.get("auto_refresh_label", "30 s"), 30_000
         )
         _save_settings(new_settings)
+        self._update_cutoff_banner()
 
         # Restart the auto-refresh timer if the interval changed.
         if self._auto_refresh_ms != old_refresh_ms and self._auto_refresh_ms > 0:
@@ -2996,6 +3065,49 @@ class _SettingsPanel(_Panel):
             row1, values=["day", "hour", "week"],
             variable=self._chunk_var, width=120, height=30,
         ).pack(side="left")
+
+        # ── Cutoff date ───────────────
+        # A floor, never a window: "do not send me anything from before this".
+        # There is no matching "to" field on purpose -- the app's whole job is
+        # to keep going forwards, and a ceiling would mean it stops.
+        cutrow = ctk.CTkFrame(body, fg_color="transparent")
+        cutrow.pack(fill="x", **pad)
+        ctk.CTkLabel(cutrow, text="Cutoff date:", width=130, anchor="w").pack(side="left")
+        self._cutoff_entry = ctk.CTkEntry(
+            cutrow, width=120, height=30, placeholder_text="YYYY-MM-DD",
+        )
+        self._cutoff_entry.pack(side="left")
+        saved_cutoff = str(settings.get("cutoff_date", "") or "")[:10]
+        if saved_cutoff:
+            self._cutoff_entry.insert(0, saved_cutoff)
+        ctk.CTkButton(
+            cutrow, text="Clear", width=54, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_clear_cutoff,
+        ).pack(side="left", padx=(4, 0))
+
+        self._cutoff_hint = ctk.CTkLabel(
+            body,
+            text=(
+                "Messages older than this are never sent. Leave it blank to "
+                "send everything. A chat that has already been synced past "
+                "this date is unaffected — the app never goes back over "
+                "ground it has covered."
+            ),
+            wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._cutoff_hint.pack(fill="x", padx=20, pady=(0, 4))
+        # Packed only when Save is refused, and unpacked again the moment the
+        # date reads. Kept out of the layout while empty so the section does
+        # not carry a permanent blank line waiting for a mistake.
+        self._cutoff_error = ctk.CTkLabel(
+            body,
+            text="Enter the date as YYYY-MM-DD, or leave it blank for no cutoff.",
+            wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ERROR, font=("", 11),
+        )
 
         # ── Auto-refresh interval ────────────────────────────────────
         row2 = ctk.CTkFrame(body, fg_color="transparent")
@@ -3478,7 +3590,19 @@ class _SettingsPanel(_Panel):
             label = _SYNCED_FILE_POLICY_LABELS.get(str(restored["synced_file_policy"]))
             if label:
                 self._synced_policy_var.set(label)
+        if "cutoff_date" in restored:
+            self._cutoff_entry.delete(0, "end")
+            day = str(restored["cutoff_date"] or "")[:10]
+            if day:
+                self._cutoff_entry.insert(0, day)
+            self._app._update_cutoff_banner()
         self._render_account_summary()
+
+    def _on_clear_cutoff(self) -> None:
+        """Blank means no cutoff -- the same "no floor at all" a field that was
+        never filled in means, rather than a separate "cleared" state."""
+        self._cutoff_entry.delete(0, "end")
+        self._cutoff_error.pack_forget()
 
     def _on_save(self) -> None:
         # Start from a full copy of the existing settings so keys this dialog
@@ -3498,6 +3622,19 @@ class _SettingsPanel(_Panel):
         new_settings["synced_file_policy"] = _SYNCED_FILE_POLICY_LABELS_REV.get(
             self._synced_policy_var.get(), "leave"
         )
+        # Validated here rather than stored and discovered later: a date the
+        # app cannot compare would sort wrong against every message timestamp,
+        # and the failure would surface as a sync that silently sent nothing.
+        # Refusing to close is the point -- the unsaved date stays on screen
+        # next to the reason it was refused.
+        try:
+            normalised = normalise_cutoff(self._cutoff_entry.get())
+        except ValueError:
+            self._cutoff_error.pack(fill="x", padx=20, pady=(0, 4), after=self._cutoff_hint)
+            return
+        self._cutoff_error.pack_forget()
+        new_settings["cutoff_date"] = normalised[:10] if normalised else ""
+
         if self._reset_watch_ledgers:
             new_settings["imported_source_paths"] = []
 

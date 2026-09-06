@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -84,8 +85,14 @@ fun SettingsScreen(
     onRestoreBackup: () -> Unit,
     migrationBusy: Boolean,
     migrationStatus: String?,
+    cutoffDate: String = "",
+    onCutoffDateChange: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    // What is on screen, which is not the same as what is saved: a
+    // half-typed "2026-0" is neither a cutoff nor a mistake yet, so it lives
+    // here and only reaches the preference once it reads as a date.
+    var cutoffText by remember { mutableStateOf(cutoffDate) }
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
     var policyMenuOpen by remember { mutableStateOf(false) }
@@ -244,6 +251,51 @@ fun SettingsScreen(
             // most prominent place, with the worst failure mode (leave it on,
             // and nothing ever reaches the mailbox). Home still says loudly
             // that it is on, and still offers it once before the first run.
+            // A floor, never a window: "do not send me anything from before
+            // this". There is no matching "to" field on purpose -- the app's
+            // whole job is to keep going forwards, and a ceiling would mean it
+            // stops. Windows mirrors this row in its Settings dialog.
+            Text("Cutoff date", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = cutoffText,
+                    onValueChange = {
+                        cutoffText = it
+                        // Committed the moment it reads, and withheld while it
+                        // does not. There is no Save button on this screen, so
+                        // a date the app cannot compare must be refused here,
+                        // under the field, rather than stored and discovered
+                        // later as a sync that quietly sent nothing.
+                        if (CutoffDate.isReadable(it)) onCutoffDateChange(it.trim())
+                    },
+                    label = { Text("YYYY-MM-DD") },
+                    singleLine = true,
+                    isError = !CutoffDate.isReadable(cutoffText),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = { cutoffText = ""; onCutoffDateChange("") },
+                    enabled = cutoffText.isNotEmpty(),
+                ) { Text("Clear") }
+            }
+            if (!CutoffDate.isReadable(cutoffText)) {
+                Text(
+                    "Enter the date as YYYY-MM-DD, or leave it blank for no cutoff.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Text(
+                "Messages older than this are never sent. Leave it blank to send " +
+                    "everything. A chat that has already been synced past this date " +
+                    "is unaffected \u2014 the app never goes back over ground it has " +
+                    "covered.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
             Text("Test run", style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {

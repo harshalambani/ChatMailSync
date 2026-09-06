@@ -44,6 +44,7 @@ from src.mail_client import (
 )
 from src.sync_manager import ProgressSyncManager as _ProgressSyncManager
 from src.sync_manager import SyncStats, _scrub_paths
+from src.state import normalise_cutoff
 from src import secret_store
 
 log = logging.getLogger(__name__)
@@ -123,6 +124,13 @@ class SyncWorker:
                 processed_dir=self._processed_dir,
                 progress_queue=self.q,
                 stop_event=self._stop_event,
+                # Read here rather than handed in by the caller. Every sync
+                # the desktop app starts -- the main button, a single chat
+                # from its detail panel, a retry -- has to obey the same
+                # floor, and a constructor argument is one more place for a
+                # future call site to forget it. The CLI resolves its own
+                # because it has a --cutoff flag to reconcile first.
+                cutoff_date=normalise_cutoff(load_saved_cutoff_date()),
             )
             stats = mgr.run(chat_filter=self._chat_filter)
             stopped = self._stop_event.is_set()
