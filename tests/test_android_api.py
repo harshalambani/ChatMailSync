@@ -90,6 +90,10 @@ def test_sync_dry_run_returns_stats_dict(tmp_root):
         "messages_parsed": 0,
         "messages_synced": 0,
         "messages_skipped": 0,
+        # Withheld by the user's cutoff date -- its own number, never folded
+        # into messages_skipped. Android reads this dict straight through, so
+        # the counter reaching the Sync log is this key being here.
+        "messages_cutoff": 0,
         "chats_recovered": 0,
         "errors": [],
         # Files the provider's message-size limit made unsendable. Part of the

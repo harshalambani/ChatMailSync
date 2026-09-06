@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     messages_parsed  INTEGER NOT NULL DEFAULT 0,
     messages_synced  INTEGER NOT NULL DEFAULT 0,
     messages_skipped INTEGER NOT NULL DEFAULT 0,
+    -- Kept apart from messages_skipped on purpose. That number belongs to the
+    -- deduplicator: it counts messages the app decided it had already sent.
+    -- This one counts messages the *user* asked not to have. Folding them
+    -- together would make a cutoff set by mistake look exactly like a run
+    -- that found nothing new.
+    messages_cutoff  INTEGER NOT NULL DEFAULT 0,
     error_message    TEXT,
     started_at       TEXT    NOT NULL,
     completed_at     TEXT
@@ -59,6 +65,21 @@ CREATE TABLE IF NOT EXISTS message_hashes (
     chat_id    TEXT    NOT NULL REFERENCES chats(chat_id),
     message_ts TEXT    NOT NULL,
     run_id     INTEGER NOT NULL REFERENCES sync_runs(run_id)
+);
+
+-- Deliberately NOT a foreign key to chats. The chats table only holds chats
+-- that have synced at least once, and get_sync_summary() reads straight from
+-- it to build the CLI status output and both front-ends' chat lists. Hanging a
+-- cutoff off a chats row would mean writing a premature row for a chat that
+-- has only ever been seen inside an export file -- putting a phantom chat,
+-- with no runs and no mail folder, into every one of those lists.
+--
+-- So a cutoff row is inert until its chat_id turns up in a run, and setting a
+-- date on a chat before its first ever sync is a supported thing to do.
+CREATE TABLE IF NOT EXISTS chat_cutoffs (
+    chat_id   TEXT PRIMARY KEY,
+    cutoff_ts TEXT NOT NULL,          -- ISO 8601, local midnight
+    set_at    TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_message_hashes_chat  ON message_hashes(chat_id);
@@ -72,6 +93,10 @@ CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
 # by the same trigger, with the same three counts and the same outcome is one
 # run, not two that happen to agree in every particular. Restoring a bundle
 # leans on this to tell a run it already has from one it does not.
+# messages_cutoff is deliberately absent. This tuple is also the column list
+# migration.py SELECTs out of an incoming bundle, and a bundle written before
+# the column existed has no such column to select -- adding it here would turn
+# every older backup into a restore that fails on the first query.
 RUN_NATURAL_KEY = (
     "chat_id", "status", "trigger", "last_synced_ts", "last_synced_hash",
     "messages_parsed", "messages_synced", "messages_skipped", "error_message",
@@ -81,7 +106,7 @@ RUN_NATURAL_KEY = (
 # Bumped when a one-time repair has to run against databases that already
 # exist. Distinct from the bundle version in migration.py, which describes a
 # file rather than a database.
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +142,15 @@ def init_db(db_path: Optional[Path] = None) -> None:
         # CREATE TABLE IF NOT EXISTS above only helps fresh installs.
         try:
             conn.execute("ALTER TABLE sync_runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        # Same story for the cutoff counter. chat_cutoffs needs no equivalent:
+        # a whole new table is covered by CREATE TABLE IF NOT EXISTS above,
+        # which is why only the column is repaired here.
+        try:
+            conn.execute(
+                "ALTER TABLE sync_runs ADD COLUMN messages_cutoff INTEGER NOT NULL DEFAULT 0"
+            )
         except sqlite3.OperationalError:
             pass  # column already exists
 
@@ -285,6 +319,7 @@ def complete_sync_run(
     messages_parsed: int,
     messages_synced: int,
     messages_skipped: int,
+    messages_cutoff: int = 0,
     db_path: Optional[Path] = None,
 ) -> None:
     with _connect(db_path) as conn:
@@ -297,11 +332,12 @@ def complete_sync_run(
                 messages_parsed  = ?,
                 messages_synced  = ?,
                 messages_skipped = ?,
+                messages_cutoff  = ?,
                 completed_at     = ?
             WHERE run_id = ?
             """,
             (last_synced_ts, last_synced_hash,
-             messages_parsed, messages_synced, messages_skipped,
+             messages_parsed, messages_synced, messages_skipped, messages_cutoff,
              _now(), run_id),
         )
 
@@ -587,6 +623,75 @@ def reset_chat(
 # Delete helper
 # ---------------------------------------------------------------------------
 
+def normalise_cutoff(value: Optional[str]) -> Optional[str]:
+    """Turn a user-supplied date into the ISO instant the filter compares against.
+
+    Accepts "YYYY-MM-DD" or a full ISO timestamp; returns local midnight on
+    that day, "YYYY-MM-DDT00:00:00". Empty, blank and None all mean "no
+    cutoff" and come back as None, so a cleared field and an unset one are the
+    same thing everywhere downstream rather than one of them being the string
+    "" that sorts below every real timestamp.
+
+    Midnight matters: the filter uses `<` against this, so a message stamped
+    exactly 00:00:00 on the chosen day is kept. See _filter_messages.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    day = text[:10]
+    # Fail loudly on a date the app cannot compare rather than storing
+    # something that silently sorts wrong against every message timestamp.
+    datetime.strptime(day, "%Y-%m-%d")
+    return day + "T00:00:00"
+
+
+def get_chat_cutoff(chat_id: str, db_path: Optional[Path] = None) -> Optional[str]:
+    """This chat's own cutoff, or None if it has no opinion of its own."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT cutoff_ts FROM chat_cutoffs WHERE chat_id = ?", (chat_id,)
+        ).fetchone()
+    return row["cutoff_ts"] if row else None
+
+
+def set_chat_cutoff(chat_id: str, cutoff: Optional[str], db_path: Optional[Path] = None) -> None:
+    """Set (or, with a blank cutoff, clear) this chat's own floor.
+
+    Clearing through the same door as setting is deliberate: the UI's date
+    field has one control, and "" out of it must mean "inherit the app-wide
+    cutoff again", not "a cutoff of nothing" that then loses every message.
+    """
+    normalised = normalise_cutoff(cutoff)
+    if normalised is None:
+        clear_chat_cutoff(chat_id, db_path)
+        return
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO chat_cutoffs (chat_id, cutoff_ts, set_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(chat_id) DO UPDATE SET cutoff_ts = excluded.cutoff_ts, "
+            "set_at = excluded.set_at",
+            (chat_id, normalised, _now()),
+        )
+
+
+def clear_chat_cutoff(chat_id: str, db_path: Optional[Path] = None) -> None:
+    """Drop this chat's override so it inherits the app-wide cutoff again."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM chat_cutoffs WHERE chat_id = ?", (chat_id,))
+
+
+def list_chat_cutoffs(db_path: Optional[Path] = None) -> dict:
+    """Every per-chat override, as {chat_id: cutoff_ts}.
+
+    One query for the chat list, which would otherwise ask per row.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT chat_id, cutoff_ts FROM chat_cutoffs").fetchall()
+    return {row["chat_id"]: row["cutoff_ts"] for row in rows}
+
+
 def delete_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
     """Fully remove a chat and all its sync history from the database.
 
@@ -596,6 +701,7 @@ def delete_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
     with _connect(db_path) as conn:
         conn.execute("DELETE FROM message_hashes WHERE chat_id = ?", (chat_id,))
         conn.execute("DELETE FROM sync_runs WHERE chat_id = ?", (chat_id,))
+        conn.execute("DELETE FROM chat_cutoffs WHERE chat_id = ?", (chat_id,))
         conn.execute("DELETE FROM chats WHERE chat_id = ?", (chat_id,))
 
 

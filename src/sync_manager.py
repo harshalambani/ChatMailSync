@@ -36,12 +36,14 @@ from src.state import (
     compute_message_hash,
     fail_sync_run,
     get_chat,
+    get_chat_cutoff,
     get_hashes_for_run,
     get_last_successful_run,
     get_pending_runs,
     hash_exists,
     init_db,
     insert_message_hashes,
+    normalise_cutoff,
     start_sync_run,
     update_chat_gmail_ids,
     upsert_chat,
@@ -115,6 +117,12 @@ class SyncStats:
     messages_parsed: int = 0
     messages_synced: int = 0
     messages_skipped: int = 0  # deduped or filtered
+    # Messages the *user* asked not to have, because they predate the cutoff
+    # date. Deliberately its own number rather than part of messages_skipped:
+    # that one means "the app had already sent this", and a run that withheld
+    # 4,000 messages on a date the user mistyped must not look identical to a
+    # run that simply found nothing new.
+    messages_cutoff: int = 0
     chats_recovered: int = 0
     errors: list[str] = field(default_factory=list)
     # Media that no email could ever carry -- a single file larger than the
@@ -132,6 +140,11 @@ class SyncStats:
             f"Messages: parsed={self.messages_parsed}  synced={self.messages_synced}"
             f"  skipped={self.messages_skipped}",
         ]
+        if self.messages_cutoff:
+            lines.append(
+                f"Held back {self.messages_cutoff} message(s) from before your "
+                f"cutoff date"
+            )
         if self.chats_recovered:
             lines.append(f"Recovered {self.chats_recovered} interrupted run(s)")
         if self.media_omitted:
@@ -163,6 +176,7 @@ class SyncManager:
         processed_dir: Optional[Path] = None,
         transport: Optional[MailTransport] = None,
         trigger: str = "manual",
+        cutoff_date: Optional[str] = None,
     ) -> None:
         """`transport` is an already-built MailTransport (see
         mail_client.build_imap_transport). None means dry-run: the manager
@@ -170,11 +184,17 @@ class SyncManager:
 
         `trigger` is recorded on each opened sync_runs row (e.g. "manual",
         "watched_folder") — purely descriptive, for the Android Sync log.
+
+        `cutoff_date` is the app-wide floor: nothing older than it is ever
+        sent. A per-chat override in chat_cutoffs beats it for that chat. It
+        is normalised here, once, rather than at every comparison — see
+        state.normalise_cutoff for why midnight and why blank means None.
         """
         self.transport = transport
         self.chunk_size = chunk_size
         self.dry_run = dry_run
         self.trigger = trigger
+        self.cutoff_date = normalise_cutoff(cutoff_date)
         self.db_path = db_path or config.STATE_DB_PATH
         self.inbox_dir = inbox_dir or config.INBOX_DIR
         self.processed_dir = processed_dir or config.PROCESSED_DIR
@@ -255,7 +275,7 @@ class SyncManager:
 
         # Parse + dedup the file.
         try:
-            all_messages, new_messages, n_skipped = self._parse_and_filter(
+            all_messages, new_messages, n_skipped, n_cutoff = self._parse_and_filter(
                 filepath, chat_id, last_ts
             )
         except Exception as exc:
@@ -269,10 +289,11 @@ class SyncManager:
 
         stats.messages_parsed += len(all_messages)
         stats.messages_skipped += n_skipped
+        stats.messages_cutoff += n_cutoff
 
         log.info(
-            "%s: parsed=%d  new=%d  skipped=%d",
-            display_name, len(all_messages), len(new_messages), n_skipped,
+            "%s: parsed=%d  new=%d  skipped=%d  before_cutoff=%d",
+            display_name, len(all_messages), len(new_messages), n_skipped, n_cutoff,
         )
 
         # Nothing new to push.
@@ -283,7 +304,8 @@ class SyncManager:
                 complete_sync_run(
                     run_id, last_ts, None,
                     len(all_messages), 0, n_skipped,
-                    self.db_path,
+                    messages_cutoff=n_cutoff,
+                    db_path=self.db_path,
                 )
             if not self.dry_run:
                 self._move_to_processed(filepath, run_id)
@@ -375,7 +397,8 @@ class SyncManager:
         complete_sync_run(
             run_id, last_msg.timestamp_iso, last_synced_hash,
             len(all_messages), len(new_messages), n_skipped,
-            self.db_path,
+            messages_cutoff=n_cutoff,
+            db_path=self.db_path,
         )
 
         # Move file to processed/ (only after everything succeeded).
@@ -394,34 +417,66 @@ class SyncManager:
 
     def _parse_and_filter(
         self, filepath: Path, chat_id: str, last_synced_ts: Optional[str]
-    ) -> tuple[list[ParsedMessage], list[ParsedMessage], int]:
+    ) -> tuple[list[ParsedMessage], list[ParsedMessage], int, int]:
         """Parse a file and apply dedup. Raises on parse failure (caller
         handles). Hook point so ProgressSyncManager's pre-scan (which needs
         to parse + dedup every file upfront to size its progress denominator)
         can cache its results here instead of every file being parsed twice.
         """
         all_messages = list(parse_file(filepath, chat_id))
-        new_messages, n_skipped = self._filter_messages(all_messages, chat_id, last_synced_ts)
-        return all_messages, new_messages, n_skipped
+        new_messages, n_skipped, n_cutoff = self._filter_messages(
+            all_messages, chat_id, last_synced_ts
+        )
+        return all_messages, new_messages, n_skipped, n_cutoff
 
     # ------------------------------------------------------------------
     # Deduplication
     # ------------------------------------------------------------------
+
+    def _effective_cutoff(self, chat_id: str) -> Optional[str]:
+        """The floor that applies to this chat: its own override if it has
+        one, otherwise the app-wide cutoff, otherwise None.
+
+        A per-chat row wins outright rather than being combined with the
+        global one. That is the whole point of an override -- a user who sets
+        a chat back to 2019 while the app-wide floor sits at 2026 is asking
+        for that chat's older history, and a max() here would silently refuse
+        to give it to them.
+        """
+        own = get_chat_cutoff(chat_id, self.db_path)
+        return own if own is not None else self.cutoff_date
 
     def _filter_messages(
         self,
         messages: list[ParsedMessage],
         chat_id: str,
         last_synced_ts: Optional[str],
-    ) -> tuple[list[ParsedMessage], int]:
-        """Return (new_messages, n_skipped) after applying dedup rules.
+    ) -> tuple[list[ParsedMessage], int, int]:
+        """Return (new_messages, n_skipped, n_cutoff) after applying the rules.
 
         Rules (applied in order):
           1. Hash already in message_hashes → skip (exact duplicate).
           2. message_ts <= last_synced_ts   → skip (re-export overlap).
+          3. message_ts <  cutoff           → withhold (before the user's date).
+
+        The order is load-bearing, and it is what makes this feature incapable
+        of causing a duplicate. A chat already synced to March, with an
+        app-wide cutoff of January, must not have its floor dragged back to
+        January and everything in between re-sent -- so rule 2 runs first and
+        the *later* of the two always wins. A message that fails both is
+        counted as deduped, not as withheld, which is the honest attribution:
+        the app was never going to send it again anyway.
+
+        Rule 2 is `<=` and rule 3 is `<` on purpose. last_synced_ts names a
+        message that was already sent; the cutoff names an instant, and a
+        message stamped exactly at midnight on the chosen day is on the day
+        the user asked for. Swap them and the first message of the cutoff day
+        vanishes with nothing to show for it.
         """
+        cutoff = self._effective_cutoff(chat_id)
         new: list[ParsedMessage] = []
         skipped = 0
+        n_cutoff = 0
         for msg in messages:
             h = compute_message_hash(
                 msg.chat_id, msg.timestamp_iso, msg.sender, msg.body
@@ -432,8 +487,11 @@ class SyncManager:
             if last_synced_ts and msg.timestamp_iso <= last_synced_ts:
                 skipped += 1
                 continue
+            if cutoff and msg.timestamp_iso < cutoff:
+                n_cutoff += 1
+                continue
             new.append(msg)
-        return new, skipped
+        return new, skipped, n_cutoff
 
     # ------------------------------------------------------------------
     # Partial-sync recovery
@@ -493,20 +551,31 @@ class SyncManager:
             stats.files_failed += 1
             return False
 
-        # Remaining = not yet pushed in this run AND not in any earlier run.
+        # Remaining = not yet pushed in this run AND not in any earlier run
+        # AND not below the cutoff. The cutoff has to be honoured here too:
+        # otherwise a run interrupted before the date was set would, on being
+        # resumed after it, push exactly the pre-cutoff messages the user had
+        # just asked not to have.
+        cutoff = self._effective_cutoff(chat_id)
         remaining: list[ParsedMessage] = []
+        n_cutoff = 0
         for msg in all_messages:
             h = compute_message_hash(
                 msg.chat_id, msg.timestamp_iso, msg.sender, msg.body
             )
             if h in already_pushed or hash_exists(h, self.db_path):
                 continue
+            if cutoff and msg.timestamp_iso < cutoff:
+                n_cutoff += 1
+                continue
             remaining.append(msg)
 
         prior_synced = run.get("messages_synced", 0)
+        stats.messages_cutoff += n_cutoff
         log.info(
-            "Recovery '%s': total=%d  already_pushed=%d  remaining=%d",
-            chat["display_name"], len(all_messages), len(already_pushed), len(remaining),
+            "Recovery '%s': total=%d  already_pushed=%d  remaining=%d  before_cutoff=%d",
+            chat["display_name"], len(all_messages), len(already_pushed),
+            len(remaining), n_cutoff,
         )
 
         # If nothing left, just close the run and move the file.
@@ -517,8 +586,13 @@ class SyncManager:
                 run.get("last_synced_hash"),
                 len(all_messages),
                 prior_synced,
-                len(all_messages) - prior_synced,
-                self.db_path,
+                # Withheld messages come out of the skipped count, not on top
+                # of it: parsed = synced + skipped + cutoff, and double-
+                # counting them here would make the run detail contradict
+                # itself.
+                len(all_messages) - prior_synced - n_cutoff,
+                messages_cutoff=n_cutoff,
+                db_path=self.db_path,
             )
             self._move_to_processed(source_file, run_id)
             log.info("Recovery complete (nothing left to push) for run_id=%d", run_id)
@@ -589,8 +663,9 @@ class SyncManager:
             last_hash,
             len(all_messages),
             total_synced,
-            len(all_messages) - total_synced,
-            self.db_path,
+            len(all_messages) - total_synced - n_cutoff,
+            messages_cutoff=n_cutoff,
+            db_path=self.db_path,
         )
 
         self._move_to_processed(source_file, run_id)
@@ -694,7 +769,7 @@ class ProgressSyncManager(SyncManager):
         self._files_done = 0
         self._total_new_messages = 0
         self._prior_msgs_done = 0
-        self._prescan_cache: dict[str, tuple[list, list, int]] = {}
+        self._prescan_cache: dict[str, tuple[list, list, int, int]] = {}
 
     def run(self, chat_filter: Optional[str] = None) -> SyncStats:
         try:
@@ -736,12 +811,14 @@ class ProgressSyncManager(SyncManager):
             last_run = get_last_successful_run(chat_id, self.db_path)
             last_ts = last_run["last_synced_ts"] if last_run else None
             try:
-                all_messages, new_messages, n_skipped = super()._parse_and_filter(
-                    filepath, chat_id, last_ts
+                all_messages, new_messages, n_skipped, n_cutoff = (
+                    super()._parse_and_filter(filepath, chat_id, last_ts)
                 )
             except Exception:
                 continue
-            self._prescan_cache[str(filepath)] = (all_messages, new_messages, n_skipped)
+            self._prescan_cache[str(filepath)] = (
+                all_messages, new_messages, n_skipped, n_cutoff
+            )
             total += len(new_messages)
         return total
 

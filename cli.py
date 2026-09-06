@@ -5,6 +5,8 @@ Usage examples:
   python cli.py sync
   python cli.py sync --dry-run --verbose
   python cli.py sync --chunk-size hour --chat "John Doe"
+  python cli.py sync --cutoff 2026-01-01
+  python cli.py sync --no-cutoff
   python cli.py status
   python cli.py log --days 30
   python cli.py reset john_doe
@@ -73,6 +75,50 @@ def _parse_chunk_size(value: str):
         )
 
 
+def _parse_cutoff(value: str):
+    """Accept 'YYYY-MM-DD' (or a full ISO timestamp) and fail at parse time.
+
+    Validating here rather than inside the sync means a mistyped date is
+    argparse's error message before anything has been read or sent, instead
+    of a traceback several seconds in.
+    """
+    from src.state import normalise_cutoff
+    try:
+        return normalise_cutoff(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid cutoff date {value!r}. Use YYYY-MM-DD, e.g. 2026-01-01."
+        )
+
+
+def _resolve_cutoff(args: argparse.Namespace):
+    """The floor this run should apply: the flag if given, otherwise whatever
+    the desktop app has saved, otherwise none.
+
+    --no-cutoff is how you ignore the saved one for a single run without
+    having to clear it in the app and put it back afterwards. The two flags
+    are mutually exclusive, so there is no precedence question to get wrong.
+    """
+    if getattr(args, "no_cutoff", False):
+        return None
+    if args.cutoff:
+        return args.cutoff
+    from gui_worker import load_saved_cutoff_date
+    from src.state import normalise_cutoff
+    try:
+        return normalise_cutoff(load_saved_cutoff_date())
+    except ValueError:
+        # A hand-edited settings file with an uncomparable date. Say so and
+        # sync everything rather than silently applying a floor nobody can
+        # predict -- this feature must never lose a message by accident.
+        print(
+            "WARNING: the saved cutoff date could not be read; syncing "
+            "without one.",
+            file=sys.stderr,
+        )
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Command: sync
 # ---------------------------------------------------------------------------
@@ -98,6 +144,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
+    cutoff = _resolve_cutoff(args)
+    if cutoff:
+        # Stated up front, every run, because a floor nobody remembers setting
+        # looks exactly like an app that has stopped working.
+        print(f"Cutoff date: only messages from {cutoff[:10]} onwards "
+              f"will be sent.\n")
+
     from src.sync_manager import SyncManager
     mgr = SyncManager(
         transport=transport,
@@ -106,6 +159,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         db_path=STATE_DB_PATH,
         inbox_dir=INBOX_DIR,
         processed_dir=PROCESSED_DIR,
+        cutoff_date=cutoff,
     )
 
     stats = mgr.run(chat_filter=args.chat)
@@ -323,6 +377,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         default=None,
         help="Sync only this chat (display name or chat_id).",
+    )
+    p_cutoff = p_sync.add_mutually_exclusive_group()
+    p_cutoff.add_argument(
+        "--cutoff",
+        metavar="YYYY-MM-DD",
+        type=_parse_cutoff,
+        default=None,
+        help="Do not send messages from before this date. Defaults to the "
+             "cutoff saved in the desktop app's Settings.",
+    )
+    p_cutoff.add_argument(
+        "--no-cutoff",
+        action="store_true",
+        help="Ignore the saved cutoff date for this run.",
     )
     p_sync.set_defaults(func=cmd_sync)
 

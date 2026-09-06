@@ -167,6 +167,28 @@ def _load_mail_backend_settings() -> dict:
     return defaults
 
 
+def load_saved_cutoff_date() -> Optional[str]:
+    """The app-wide cutoff the desktop Settings panel has saved, or None.
+
+    Read here rather than imported from gui.py so the CLI can honour the same
+    setting without pulling in customtkinter -- the same reason
+    _load_mail_backend_settings exists. "" and a missing key both mean "no
+    cutoff" and both come back as None, matching state.normalise_cutoff.
+
+    Never raises: a sync must not fail over an unreadable preferences file.
+    """
+    try:
+        if not _SETTINGS_FILE.exists():
+            return None
+        saved = json.loads(_SETTINGS_FILE.read_text())
+        value = saved.get("cutoff_date")
+    except Exception:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
 def _save_imap_credentials(host: str, port: int, email: str, password: str) -> None:
     """Persist IMAP connection details to the ACL-hardened auth/ file.
 

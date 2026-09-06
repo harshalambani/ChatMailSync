@@ -173,6 +173,66 @@ def test_legacy_oauth_evidence_reads_the_leftover_token(settings_file, token_fil
 
 
 # ---------------------------------------------------------------------------
+# The app-wide cutoff date
+#
+# One preference read from two modules: gui._load_settings for the Settings
+# panel, gui_worker.load_saved_cutoff_date for the CLI (which cannot import
+# gui.py without pulling in customtkinter). They must agree, and neither may
+# fail a sync over a preferences file.
+# ---------------------------------------------------------------------------
+
+def test_a_fresh_install_has_no_cutoff(settings_file):
+    assert gui._load_settings()["cutoff_date"] == ""
+
+
+def test_a_saved_cutoff_date_round_trips(settings_file):
+    """Only keys named in _DEFAULT_SETTINGS survive a reload, so a key that
+    was never declared there would be written and then silently dropped --
+    the user\'s floor quietly gone at the next launch."""
+    settings = gui._load_settings()
+    settings["cutoff_date"] = "2026-01-01"
+    gui._save_settings(settings)
+    assert gui._load_settings()["cutoff_date"] == "2026-01-01"
+
+
+def test_the_worker_reads_the_same_cutoff_the_gui_wrote(settings_file, monkeypatch):
+    """The CLI honours the floor set in the desktop app. These are two
+    constants pointing at one file, and this is the test that stops them
+    drifting apart."""
+    monkeypatch.setattr(gui_worker, "_SETTINGS_FILE", settings_file)
+    settings = gui._load_settings()
+    settings["cutoff_date"] = "2026-01-01"
+    gui._save_settings(settings)
+    assert gui_worker.load_saved_cutoff_date() == "2026-01-01"
+
+
+def test_no_settings_file_at_all_reads_as_no_cutoff(worker_paths):
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_settings_file_without_the_key_reads_as_no_cutoff(worker_paths):
+    _write_settings(worker_paths["settings"], chunk_size="hour")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_cleared_cutoff_field_reads_as_no_cutoff(worker_paths):
+    _write_settings(worker_paths["settings"], cutoff_date="   ")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_non_string_cutoff_reads_as_no_cutoff(worker_paths):
+    """A hand-edited file. Returning the number would push it straight into a
+    string comparison against every message timestamp."""
+    _write_settings(worker_paths["settings"], cutoff_date=2026)
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_an_unreadable_settings_file_never_raises_into_a_sync(worker_paths):
+    worker_paths["settings"].write_text("{not json at all")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+# ---------------------------------------------------------------------------
 # gui_worker.py: check_auth_status() per backend
 # ---------------------------------------------------------------------------
 

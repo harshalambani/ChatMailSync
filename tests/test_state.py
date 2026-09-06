@@ -313,3 +313,209 @@ def test_the_sweep_runs_once_not_on_every_start(db_path):
     state.init_db(db_path)
 
     assert len(state.get_recent_runs(db_path=db_path)) == 2
+
+
+# ---------------------------------------------------------------------------
+# The cutoff date
+# ---------------------------------------------------------------------------
+
+_V1_DDL = """
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE chats (
+    chat_id          TEXT PRIMARY KEY,
+    display_name     TEXT NOT NULL,
+    source_filename  TEXT,
+    gmail_thread_id  TEXT,
+    gmail_label_id   TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);
+
+CREATE TABLE sync_runs (
+    run_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id          TEXT NOT NULL REFERENCES chats(chat_id),
+    status           TEXT NOT NULL CHECK(status IN ('pending','complete','failed')),
+    trigger          TEXT NOT NULL DEFAULT 'manual',
+    last_synced_ts   TEXT,
+    last_synced_hash TEXT,
+    messages_parsed  INTEGER NOT NULL DEFAULT 0,
+    messages_synced  INTEGER NOT NULL DEFAULT 0,
+    messages_skipped INTEGER NOT NULL DEFAULT 0,
+    error_message    TEXT,
+    started_at       TEXT NOT NULL,
+    completed_at     TEXT
+);
+
+CREATE TABLE message_hashes (
+    hash        TEXT PRIMARY KEY,
+    chat_id     TEXT NOT NULL,
+    message_ts  TEXT NOT NULL,
+    run_id      INTEGER NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+
+def _build_a_v1_database(path):
+    """A database shaped the way version 1 shipped it: no chat_cutoffs table,
+    no messages_cutoff column, and one completed run already in the log.
+
+    Written out here rather than taken from state._DDL on purpose. The point of
+    the test is that today's code can open yesterday's file, and reading the
+    schema out of today's module would make that assertion vacuous the moment
+    the DDL changed again.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(path)
+    conn.executescript(_V1_DDL)
+    conn.execute(
+        "INSERT INTO chats (chat_id, display_name, source_filename, created_at, updated_at) "
+        "VALUES ('chat1', 'Chat One', 'chat1.txt', '2025-03-01T00:00:00', '2025-03-01T00:00:00')"
+    )
+    cur = conn.execute(
+        "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, "
+        "messages_parsed, messages_synced, messages_skipped, started_at, completed_at) "
+        "VALUES ('chat1', 'complete', 'manual', '2025-03-14T09:41:00', 'deadbeef', "
+        "3, 3, 0, '2025-03-14T09:40:00', '2025-03-14T09:42:00')"
+    )
+    run_id = int(cur.lastrowid)
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+    conn.close()
+    return run_id
+
+
+def test_a_version_1_database_gains_the_cutoff_table_and_column(tmp_path):
+    """Plan test 9. Opening an existing install must add both, and must not
+    disturb the run log while doing it -- that log is the only record the user
+    has of what the app has already sent, and a migration that dropped or
+    rewrote it would be indistinguishable from data loss.
+    """
+    import sqlite3
+
+    db_path = tmp_path / "v1.db"
+    run_id = _build_a_v1_database(db_path)
+
+    state.init_db(db_path)
+
+    # get_run, not get_recent_runs: the latter is a 90-day display window and
+    # this fixture's run is deliberately older than that.
+    run = state.get_run(run_id, db_path)
+    assert run["last_synced_ts"] == "2025-03-14T09:41:00"
+    assert run["messages_parsed"] == 3
+    # The column exists and the pre-existing row reads back as zero rather
+    # than NULL: nothing was ever filtered by a cutoff before it existed.
+    assert run["messages_cutoff"] == 0
+
+    # And the new table is there and usable.
+    state.set_chat_cutoff("chat1", "2026-01-01", db_path=db_path)
+    assert state.get_chat_cutoff("chat1", db_path) == "2026-01-01T00:00:00"
+
+    conn = sqlite3.connect(db_path)
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    conn.close()
+    assert version == state._SCHEMA_VERSION
+
+
+def test_a_cutoff_normalises_to_midnight_on_the_day_asked_for(db_path):
+    """A message stamped 00:00:00 on the cutoff day is on the day the user
+    asked for, so the stored instant is the start of that day and the filter
+    compares with `<`. Store noon instead and the first message of the day
+    disappears with nothing to show for it.
+    """
+    assert state.normalise_cutoff("2026-01-01") == "2026-01-01T00:00:00"
+    # A full timestamp is truncated to its day, not kept as given.
+    assert state.normalise_cutoff("2026-01-01T17:30:00") == "2026-01-01T00:00:00"
+    assert state.normalise_cutoff("  2026-01-01  ") == "2026-01-01T00:00:00"
+
+
+def test_blank_and_missing_mean_the_same_thing(db_path):
+    """A cleared date field hands back "", and an unset one hands back None.
+    They must arrive downstream as the same thing: "" is a string that sorts
+    below every real timestamp, so a cutoff of "" that survived would be a
+    cutoff that silently matches nothing while looking set.
+    """
+    assert state.normalise_cutoff(None) is None
+    assert state.normalise_cutoff("") is None
+    assert state.normalise_cutoff("   ") is None
+
+    state.set_chat_cutoff("chat1", "2026-01-01", db_path=db_path)
+    state.set_chat_cutoff("chat1", "", db_path=db_path)
+    # Clearing through the setter leaves no row, so the chat inherits the
+    # app-wide cutoff again rather than carrying an empty one of its own.
+    assert state.get_chat_cutoff("chat1", db_path) is None
+
+
+def test_a_date_the_app_cannot_compare_is_refused(db_path):
+    """Stored unchecked, "01/01/2026" would sort below every ISO timestamp in
+    the database and quietly filter out the entire history."""
+    with pytest.raises(ValueError):
+        state.normalise_cutoff("01/01/2026")
+    with pytest.raises(ValueError):
+        state.set_chat_cutoff("chat1", "next tuesday", db_path=db_path)
+
+
+def test_a_cutoff_can_be_set_on_a_chat_that_has_never_synced(db_path):
+    """No foreign key to chats, deliberately. The chats table is what both
+    front-ends and the CLI status command list, so writing a row there to hang
+    a date off would put a chat with no runs and no mail folder into all three
+    -- when all the user did was set a date in the import preview.
+    """
+    state.set_chat_cutoff("never-synced", "2026-01-01", db_path=db_path)
+
+    assert state.get_chat_cutoff("never-synced", db_path) == "2026-01-01T00:00:00"
+    assert state.list_chats(db_path) == []
+
+
+def test_setting_a_cutoff_twice_replaces_rather_than_duplicates(db_path):
+    state.set_chat_cutoff("chat1", "2026-01-01", db_path=db_path)
+    state.set_chat_cutoff("chat1", "2026-06-01", db_path=db_path)
+
+    assert state.get_chat_cutoff("chat1", db_path) == "2026-06-01T00:00:00"
+    assert state.list_chat_cutoffs(db_path) == {"chat1": "2026-06-01T00:00:00"}
+
+
+def test_deleting_a_chat_takes_its_cutoff_with_it(db_path):
+    """Otherwise the row outlives the chat, and re-adding that chat later
+    would silently inherit a floor the user set and then deleted."""
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    state.set_chat_cutoff("chat1", "2026-01-01", db_path=db_path)
+
+    state.delete_chat("chat1", db_path)
+
+    assert state.get_chat_cutoff("chat1", db_path) is None
+
+
+def test_the_cutoff_count_is_stored_apart_from_the_skipped_count(db_path):
+    """Two different facts. messages_skipped is what the deduplicator decided
+    it had already sent; messages_cutoff is what the user asked not to have.
+    Added together they would make a cutoff set by mistake look exactly like a
+    run that found nothing new.
+    """
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    run_id = state.start_sync_run("chat1", db_path=db_path)
+    state.complete_sync_run(
+        run_id,
+        last_synced_ts="2026-03-14T09:41:00",
+        last_synced_hash="deadbeef",
+        messages_parsed=10,
+        messages_synced=3,
+        messages_skipped=2,
+        messages_cutoff=5,
+        db_path=db_path,
+    )
+
+    run = state.get_run(run_id, db_path)
+    assert run["messages_skipped"] == 2
+    assert run["messages_cutoff"] == 5
+
+
+def test_the_cutoff_count_stays_out_of_the_run_natural_key():
+    """migration.py SELECTs exactly these columns out of an incoming bundle.
+    A backup written before the column existed has no such column, so adding
+    it here would turn every older bundle into a restore that fails on its
+    first query.
+    """
+    assert "messages_cutoff" not in state.RUN_NATURAL_KEY

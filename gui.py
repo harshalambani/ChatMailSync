@@ -206,6 +206,13 @@ _DEFAULT_SETTINGS = {
     # undeclared one would be saved and then quietly thrown away. Android
     # keeps the same fact in AppPrefs as last_backup_at, in millis.
     "last_backup_at":          0,
+    # The app-wide cutoff date: "never send me anything from before this".
+    # "" means no cutoff, and is deliberately the same "no floor at all" that
+    # state.normalise_cutoff turns into None -- a cleared field and a field
+    # never filled in are the same thing everywhere downstream. A per-chat
+    # override lives in the chat_cutoffs table, not here. Android keeps the
+    # twin under AppPrefs.KEY_CUTOFF_DATE.
+    "cutoff_date":             "",
 }
 
 # Android's WATCH_INTERVAL_LABELS, labels and all, plus one shorter option:
