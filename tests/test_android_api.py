@@ -4,10 +4,12 @@ from pathlib import Path
 
 from src import android_api, config
 from src.mail_client import MailTransport
+from src.parser import extract_chat_info
 from src.state import (
     complete_sync_run,
     compute_message_hash,
     get_chat,
+    get_chat_cutoff,
     insert_message_hashes,
     start_sync_run,
     upsert_chat,
@@ -398,3 +400,169 @@ def test_import_backup_returns_settings_in_both_shapes(tmp_root, db_path):
     assert result["ok"]
     # Same bundle, same install: already-imported, and nothing duplicated.
     assert json.loads(result["settings_json"]) == result["settings"]
+
+
+# ---------------------------------------------------------------------------
+# The cutoff date
+#
+# Kotlin reaches every part of this feature through these four entry points
+# and nothing else, so a break here is a break on the phone with nothing in
+# the Python suite to catch it. The app-wide floor is passed in on every
+# sync() call rather than read here, because it lives in AppPrefs and Python
+# has no view of it; the per-chat overrides live in the database and these
+# three accessors are the only door to them.
+# ---------------------------------------------------------------------------
+
+
+def _copy_fixture_chat():
+    """The shipped export, whose messages all fall on 14 March 2025."""
+    config.INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(
+        FIXTURES_DIR / "android_export.txt",
+        config.INBOX_DIR / "WhatsApp Chat with Test Chat.txt",
+    )
+    chat_id, _ = extract_chat_info("WhatsApp Chat with Test Chat.txt")
+    return chat_id
+
+
+def test_the_cutoff_reaches_the_sync_and_the_count_comes_back(tmp_root):
+    """The whole Android contract in one call: a floor goes in as a plain
+    date, and what it withheld comes back as its own number for the Sync
+    log. Everything in the fixture predates this one."""
+    _copy_fixture_chat()
+    transport = _FakeTransport()
+
+    result = android_api.sync(transport=transport, cutoff_date="2025-03-15")
+
+    assert result["messages_synced"] == 0
+    assert result["messages_cutoff"] == result["messages_parsed"] > 0
+    # Withheld, not merely uncounted.
+    assert transport.inserted == []
+
+
+def test_a_cutoff_on_the_export_s_own_day_keeps_everything(tmp_root):
+    """The boundary, through the facade. The comparison is `<`, so a message
+    on the cutoff day itself is on a day the user asked for."""
+    _copy_fixture_chat()
+
+    result = android_api.sync(transport=_FakeTransport(), cutoff_date="2025-03-14")
+
+    assert result["messages_cutoff"] == 0
+    assert result["messages_synced"] > 0
+
+
+def test_an_absent_cutoff_withholds_nothing(tmp_root):
+    """The regression guard: the feature has to be invisible when it is off,
+    and Kotlin passes None for "no floor set"."""
+    _copy_fixture_chat()
+
+    result = android_api.sync(transport=_FakeTransport(), cutoff_date=None)
+
+    assert result["messages_cutoff"] == 0
+    assert result["messages_synced"] > 0
+
+
+def test_a_chat_with_no_override_says_so(tmp_root, db_path):
+    """None means "inherit the app-wide floor", which is what the detail
+    screen shows as "Using the app-wide cutoff"."""
+    chat_id = _copy_fixture_chat()
+
+    assert android_api.get_cutoff(chat_id)["cutoff_date"] is None
+
+
+def test_an_override_round_trips_as_a_plain_day(tmp_root, db_path):
+    """Stored as a midnight instant, handed back as a date, because what
+    asks for it is a date picker and what compares it is a timestamp."""
+    chat_id = _copy_fixture_chat()
+
+    assert android_api.set_cutoff(chat_id, "2025-03-15")["ok"] is True
+    assert android_api.get_cutoff(chat_id)["cutoff_date"] == "2025-03-15"
+
+
+def test_clearing_the_field_removes_the_override(tmp_root, db_path):
+    """One call sets and clears so the Kotlin side has no branch to get
+    wrong -- an emptied date field means "use the app-wide floor again", not
+    "a floor of nothing"."""
+    chat_id = _copy_fixture_chat()
+    android_api.set_cutoff(chat_id, "2025-03-15")
+
+    result = android_api.set_cutoff(chat_id, "")
+
+    assert result["ok"] is True
+    assert result["cutoff_date"] is None
+    assert android_api.get_cutoff(chat_id)["cutoff_date"] is None
+
+
+def test_a_date_that_cannot_be_compared_is_refused_and_nothing_is_stored(
+    tmp_root, db_path
+):
+    """A floor nothing can evaluate would withhold unpredictably, so it is
+    refused with a message rather than stored. The previous value has to
+    survive the refusal: a rejected edit that silently wiped the old floor
+    would deliver everything below it on the next sync."""
+    chat_id = _copy_fixture_chat()
+    android_api.set_cutoff(chat_id, "2025-03-15")
+
+    result = android_api.set_cutoff(chat_id, "15/03/2025")
+
+    assert result["ok"] is False
+    assert result["error"]
+    assert android_api.get_cutoff(chat_id)["cutoff_date"] == "2025-03-15"
+
+
+def test_an_override_can_be_set_before_the_chat_has_ever_synced(tmp_root, db_path):
+    """Set from the import preview, which is where the user first sees how
+    far back an export goes and the one moment the override is most useful.
+    There is no row in `chats` yet, and refusing here would break exactly
+    that case -- which is why chat_cutoffs has no foreign key to it.
+
+    Checked against the database rather than by reading back through
+    get_cutoff: both doors resolve the id the same way, so a resolver that
+    dropped the id entirely would still round-trip through them and this test
+    would pass while every override piled up under one blank key.
+    """
+    result = android_api.set_cutoff("chat-never-seen", "2025-03-15")
+
+    assert result["ok"] is True
+    assert result["chat_id"] == "chat-never-seen"
+    assert get_chat_cutoff("chat-never-seen", config.STATE_DB_PATH) == (
+        "2025-03-15T00:00:00"
+    )
+
+
+def test_an_override_can_be_set_by_display_name(tmp_root, db_path):
+    """Every other chat-addressed call in this facade takes an id or a name;
+    this one has to as well, or the caller has to know which door it is at."""
+    chat_id = _copy_fixture_chat()
+    android_api.sync(transport=_FakeTransport())
+
+    result = android_api.set_cutoff("Test Chat", "2025-03-15")
+
+    assert result["chat_id"] == chat_id
+    assert android_api.get_cutoff(chat_id)["cutoff_date"] == "2025-03-15"
+
+
+def test_list_cutoffs_reports_every_override_in_one_call(tmp_root, db_path):
+    """For a chat list that marks which chats depart from the app-wide
+    floor. One query, not one per row."""
+    android_api.set_cutoff("chat-b", "2025-03-15")
+    android_api.set_cutoff("chat-a", "2024-01-31")
+
+    assert android_api.list_cutoffs() == [
+        {"chat_id": "chat-a", "cutoff_date": "2024-01-31"},
+        {"chat_id": "chat-b", "cutoff_date": "2025-03-15"},
+    ]
+
+
+def test_an_override_beats_the_app_wide_cutoff_end_to_end(tmp_root, db_path):
+    """The two halves of the feature meeting, over the same wire Kotlin
+    uses. The override is *earlier* than the app-wide floor, which is the
+    case a max() of the two would silently refuse -- and the only reason to
+    offer an override at all."""
+    chat_id = _copy_fixture_chat()
+    android_api.set_cutoff(chat_id, "2025-01-01")
+
+    result = android_api.sync(transport=_FakeTransport(), cutoff_date="2025-06-01")
+
+    assert result["messages_cutoff"] == 0
+    assert result["messages_synced"] > 0
