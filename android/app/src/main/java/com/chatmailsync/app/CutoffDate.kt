@@ -79,4 +79,28 @@ object CutoffDate {
         val text = day(value) ?: return true
         return parse(text) != null
     }
+
+    /**
+     * What the line under a chat's own cutoff field says.
+     *
+     * Three states, and the middle one is the one that matters. A chat with
+     * no override of its own is not "no cutoff" -- it is still standing
+     * behind the app-wide floor, and a field sitting empty while a floor
+     * quietly applies is exactly how someone concludes the app is losing
+     * their messages. So the empty field names whose date is in force.
+     *
+     * Both arguments are already-formatted days ("1 January 2026") or "":
+     * nothing is parsed here, [format] does that. The Windows twin is
+     * gui._chat_cutoff_hint, and tests/test_chat_detail.py holds the two to
+     * the same words.
+     */
+    fun chatHint(ownDay: String, appDay: String): String = when {
+        ownDay.isNotEmpty() ->
+            "This chat stops at $ownDay. The app-wide cutoff does not apply to it."
+        appDay.isNotEmpty() ->
+            "Using the app-wide cutoff, $appDay. A date here applies to this chat only."
+        else ->
+            "No cutoff, so every message in this chat is sent. A date here " +
+                "applies to this chat only."
+    }
 }

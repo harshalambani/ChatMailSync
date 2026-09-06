@@ -15,8 +15,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,6 +49,11 @@ fun ChatDetailScreen(
     var archivedCount by remember { mutableStateOf(0) }
     var mailboxFolder by remember { mutableStateOf("") }
     val context = LocalContext.current
+    // This chat's own floor, as typed. Held apart from what is stored, the
+    // same way Settings holds its own: a half-typed "2026-0" is neither a
+    // cutoff nor a mistake yet, so it lives here and reaches the database
+    // only once it reads as a date.
+    var cutoffText by remember { mutableStateOf("") }
     // Whether the *mailbox* is Gmail. IMAP is the only backend, and many
     // users here point it at imap.gmail.com with an app password. It matters
     // for the reset instructions, because Gmail has no real folders - an IMAP
@@ -62,6 +69,13 @@ fun ChatDetailScreen(
 
     LaunchedEffect(chatId) {
         chat = loadChatSummaries().find { it.chatId == chatId }
+        // Null here means "no override", which is the same empty field as
+        // never having set one -- the whole point of get_cutoff returning a
+        // plain day rather than the stored midnight instant.
+        cutoffText = Python.getInstance().getModule("src.android_api")
+            .callAttr("get_cutoff", chatId)
+            .callAttr("get", "cutoff_date")
+            ?.toString()?.takeIf { it != "None" } ?: ""
     }
 
     Scaffold(
@@ -130,6 +144,60 @@ fun ChatDetailScreen(
                 // archive there.
                 DetailField("Mail thread exists", if (c.hasThread) "Yes" else "No")
                 c.sourceFilename?.let { DetailField("Export file", it) }
+
+                // A floor for this chat alone, overriding the app-wide one.
+                // Same field and same Clear button as the Settings row,
+                // because it is the same question asked at a smaller scale --
+                // and two spellings of one control is how a person ends up
+                // believing they set something they did not.
+                DetailSection("Cutoff date")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = cutoffText,
+                        onValueChange = {
+                            cutoffText = it
+                            // Committed the moment it reads, withheld while
+                            // it does not: there is no Save button on this
+                            // screen, so an uncomparable date has to be
+                            // refused under the field rather than stored and
+                            // met later as a sync that quietly sent nothing.
+                            if (CutoffDate.isReadable(it)) {
+                                Python.getInstance().getModule("src.android_api")
+                                    .callAttr("set_cutoff", chatId, it.trim())
+                            }
+                        },
+                        label = { Text("YYYY-MM-DD") },
+                        singleLine = true,
+                        isError = !CutoffDate.isReadable(cutoffText),
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            // Empty means "inherit the app-wide floor again",
+                            // the same state as never having set one -- not a
+                            // separate cutoff of nothing.
+                            cutoffText = ""
+                            Python.getInstance().getModule("src.android_api")
+                                .callAttr("set_cutoff", chatId, "")
+                        },
+                        enabled = cutoffText.isNotEmpty(),
+                    ) { Text("Clear") }
+                }
+                if (!CutoffDate.isReadable(cutoffText)) {
+                    Text(
+                        "Enter the date as YYYY-MM-DD, or leave it blank to use the app-wide cutoff.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Text(
+                    CutoffDate.chatHint(
+                        CutoffDate.format(cutoffText),
+                        CutoffDate.format(AppPrefs.getCutoffDate(context)),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 DetailSection("Actions")
 

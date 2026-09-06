@@ -67,6 +67,7 @@ data class SyncRunLogEntry(
     val messagesParsed: Long,
     val messagesSynced: Long,
     val messagesSkipped: Long,
+    val messagesCutoff: Long,
     val errorMessage: String?,
     val startedAt: String?,
     val completedAt: String?,
@@ -91,6 +92,7 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
             messagesParsed = getStr(row, "messages_parsed")?.toLongOrNull() ?: 0L,
             messagesSynced = getStr(row, "messages_synced")?.toLongOrNull() ?: 0L,
             messagesSkipped = getStr(row, "messages_skipped")?.toLongOrNull() ?: 0L,
+            messagesCutoff = getStr(row, "messages_cutoff")?.toLongOrNull() ?: 0L,
             errorMessage = getStr(row, "error_message"),
             startedAt = getStr(row, "started_at"),
             completedAt = getStr(row, "completed_at"),
@@ -594,6 +596,15 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
             // already in the mailbox from an earlier run, and read cold a
             // skipped count looks like something went missing.
             DetailField("Already there, so skipped", current.messagesSkipped.toString())
+            // Its own line, never folded into the skipped count: skipped
+            // means the mailbox already has it, held back means it was never
+            // offered, and reading one as the other is how a cutoff someone
+            // forgot they set becomes "the app is dropping my messages".
+            // Shown only when it happened -- a permanent "held back: 0" would
+            // be noise on every run for the many who set no floor at all.
+            if (current.messagesCutoff > 0) {
+                DetailField("Held back by your cutoff date", current.messagesCutoff.toString())
+            }
 
             DetailSection("Timing")
             DetailField("Started", formatRunTimeLong(current.startedAt))

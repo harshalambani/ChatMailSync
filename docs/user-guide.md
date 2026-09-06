@@ -456,6 +456,12 @@ ever sent. It is a floor, not a window: there is no matching "to" date, because
 the whole job of this app is to keep moving forwards. Leave it blank and
 everything is sent.
 
+An individual chat can also carry its own cutoff, set from that chat's page
+under **Cutoff date**, and that one overrides the app-wide date for that chat
+alone -- it is not added to it. The line under the field always names the date
+actually in force, so a chat with no cutoff of its own still tells you which
+floor it is standing behind.
+
 While a cutoff is set, both editions say so permanently — a strip above the
 sync button on Windows, a card above the inbox on Android — rather than as a
 notice you can dismiss. A floor you have forgotten about looks exactly like an

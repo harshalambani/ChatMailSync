@@ -344,6 +344,7 @@
 
       <dt>Can I stop it sending messages from before a certain date?</dt>
       <dd>Yes. <strong>Settings &rarr; Cutoff date</strong> takes a day, and nothing older than it is ever sent. It is a floor and not a window: there is no matching "to" date, because the whole job of this app is to keep moving forwards. Leave it blank and everything is sent.
+      <p>A single chat can also carry its own cutoff, set from that chat's page under <strong>Cutoff date</strong>, and that one overrides the app-wide date for that chat alone &mdash; it is not added to it. The line under the field always names the date actually in force, so a chat with no cutoff of its own still tells you which floor it is standing behind.</p>
       <p>While a cutoff is set, the main window says so in a strip above the sync button &mdash; permanently, not as a dismissible notice. That is on purpose: a floor you have forgotten about looks exactly like an app that is losing your messages.</p>
       <p>It cannot cause a duplicate. Where a chat has already been archived past the cutoff, the app carries on from where it stopped and ignores the cutoff entirely &mdash; whichever of the two is later always wins, so lowering the cutoff never sends anything a second time. What it held back is reported as its own line at the end of a sync, separate from the skipped count, so "held back by your cutoff" is never confused with "already sent".</p></dd>
 

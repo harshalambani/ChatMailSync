@@ -150,7 +150,10 @@ internal val FAQ = listOf(
     "Can I stop it sending messages from before a certain date?" to
         "Yes. Settings -> Cutoff date takes a day, and nothing older than it is ever sent. It is a " +
         "floor and not a window: there is no matching \"to\" date, because the whole job of this app " +
-        "is to keep moving forwards. Leave it blank and everything is sent. While a cutoff is set, " +
+        "is to keep moving forwards. Leave it blank and everything is sent. A single chat can also " +
+        "carry its own cutoff, set from that chat's page under \"Cutoff date\", and that one " +
+        "overrides the app-wide date for that chat alone rather than adding to it; the line under " +
+        "the field always names the date actually in force. While a cutoff is set, " +
         "the home screen says so in a card above the inbox — permanently, not as a notice you can " +
         "dismiss, because a floor you have forgotten about looks exactly like an app that is losing " +
         "your messages. It cannot cause a duplicate: for a chat already archived past the cutoff " +

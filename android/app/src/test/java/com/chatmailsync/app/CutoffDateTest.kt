@@ -106,6 +106,79 @@ class CutoffDateTest {
     // where those messages went.
     // -----------------------------------------------------------------
 
+    @Test
+    fun `an empty field names the floor that is still in force`() {
+        // The state that matters. A chat with no override of its own still
+        // stands behind the app-wide cutoff, and a blank field beside a floor
+        // that is quietly applying is how someone decides the app is losing
+        // their messages.
+        assertEquals(
+            "Using the app-wide cutoff, 1 January 2026. A date here applies to this chat only.",
+            CutoffDate.chatHint("", "1 January 2026"),
+        )
+    }
+
+    @Test
+    fun `an override says the app-wide date no longer applies`() {
+        assertEquals(
+            "This chat stops at 1 March 2026. The app-wide cutoff does not apply to it.",
+            CutoffDate.chatHint("1 March 2026", "1 January 2026"),
+        )
+    }
+
+    @Test
+    fun `with no floor anywhere it says so rather than staying silent`() {
+        assertEquals(
+            "No cutoff, so every message in this chat is sent. A date here " +
+                "applies to this chat only.",
+            CutoffDate.chatHint("", ""),
+        )
+    }
+
+    @Test
+    fun `the chat screen both reads and writes the per-chat floor`() {
+        // Two halves of one control, and either missing is silent: without
+        // the read the field shows blank over a floor that is applying,
+        // without the write the date the user typed is never stored.
+        val source = source("src/main/java/com/chatmailsync/app/ChatDetailScreen.kt")
+        assertTrue(
+            "the screen must load this chat's own cutoff",
+            source.contains("\"get_cutoff\", chatId"),
+        )
+        assertTrue(
+            "and store what was typed",
+            source.contains("\"set_cutoff\", chatId, it.trim()"),
+        )
+        assertTrue(
+            "and store the clearing of it, which is a write of its own and not"
+                + " the absence of one",
+            source.contains("\"set_cutoff\", chatId, \"\""),
+        )
+    }
+
+    @Test
+    fun `the run detail keeps the held-back count off the skipped line`() {
+        val source = source("src/main/java/com/chatmailsync/app/SyncLogScreen.kt")
+        assertTrue(
+            "messages_cutoff must be read off the run row",
+            source.contains("messagesCutoff = getStr(row, \"messages_cutoff\")"),
+        )
+        assertTrue(
+            "and shown as its own field, not added to the skipped count",
+            source.contains("DetailField(\"Held back by your cutoff date\""),
+        )
+    }
+
+    private fun source(relative: String): String {
+        var dir: File? = File("").absoluteFile
+        while (dir != null) {
+            val candidate = File(dir, relative)
+            if (candidate.isFile) return candidate.readText()
+            dir = dir.parentFile
+        }
+        throw AssertionError("could not locate " + relative)
+    }
+
     private fun syncWorkerSource(): String {
         // Gradle runs unit tests with the module directory as the working
         // directory, but that is a default rather than a promise, so walk up
