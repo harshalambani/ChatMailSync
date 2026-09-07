@@ -2,7 +2,7 @@
 
 Run from the repo root:
 
-    cd "C:\\Users\\inabm\\Documents\\Cowork Playground\\ChatMailSync"
+    cd "C:\\Users\\user\\Documents\\Cowork Playground\\ChatMailSync"
     python tools\\render_icons.py
 
 Why a script and not a folder of hand-made PNGs

@@ -31,7 +31,7 @@ fixable without paying annual CASA. So the path must simply not be *offered* to 
 users — while staying reachable for the maintainer, for whom it works fine.
 
 ## Repo
-`C:\Users\inabm\Documents\Cowork Playground\WAMailSync`
+`C:\Users\user\Documents\Cowork Playground\WAMailSync`
 Windows / PowerShell 5.1. Python core shared across a Windows desktop (pywebview GUI + CLI)
 and an Android app (Chaquopy Python + Kotlin/Compose UI). **`gh` is PowerShell-PATH only.**
 

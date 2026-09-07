@@ -117,7 +117,7 @@ exists as precedent on `2026-07-04-playstore-publishing-sop.md`.
 Run from the repo root:
 
 ```
-cd "C:\Users\inabm\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
+cd "C:\Users\user\Documents\Cowork Playground\WAGmailApp\WA Chat Sync to Gmail App"
 git grep -Ioni "gmail"
 git grep -Ioni "wagmail"
 ```

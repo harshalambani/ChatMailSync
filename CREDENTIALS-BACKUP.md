@@ -70,7 +70,7 @@ Then confirm the backup actually works, because an untested backup is a belief
 rather than a fact:
 
 ```
-cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
+cd "C:\Users\user\Documents\Cowork Playground\ChatMailSync"
 keytool -list -v -keystore android\app\release.jks
 ```
 

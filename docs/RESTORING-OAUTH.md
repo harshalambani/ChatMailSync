@@ -39,7 +39,7 @@ declaring a capability nobody could use.
 Two ways back:
 
 ```bash
-cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
+cd "C:\Users\user\Documents\Cowork Playground\ChatMailSync"
 
 # A. Undo the whole strip as one change, keeping everything since.
 git revert 86630aa

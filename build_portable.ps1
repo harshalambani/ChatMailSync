@@ -15,7 +15,7 @@
     hand to anyone.
 
 .EXAMPLE
-    cd "C:\Users\inabm\Documents\Cowork Playground\ChatMailSync"
+    cd "C:\Users\user\Documents\Cowork Playground\ChatMailSync"
     .\build_portable.ps1
 
     To skip PyInstaller (re-assemble layout only):
