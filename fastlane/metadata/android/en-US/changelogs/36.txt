@@ -1,0 +1,16 @@
+A cutoff date: never send me anything from before this.
+
+Set a date and the app leaves everything older than it alone. Set it once in
+Settings and it covers every chat, or set one on a single chat's own page and
+that one wins for that chat.
+
+It cannot cause a duplicate. For each chat the app uses whichever is later:
+your cutoff, or the point that chat has already synced to -- so a chat already
+archived up to March keeps March even under a cutoff of January. A message
+stamped exactly on your cutoff day is still sent; the floor is that day's
+midnight.
+
+Held-back messages are counted as their own number in a run's detail, never
+folded into "already there, so skipped", and the import preview now tells you
+before you sync whether your cutoff would hold back all of a file, part of it,
+or none of it.
