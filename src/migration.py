@@ -22,6 +22,14 @@ them and be untestable on both.
 complete set of keys that may leave the device. A deny-list would ship any key
 a future release adds and forgets to exclude -- and the key most likely to be
 added near this code is a credential.
+
+**The mail server is never taken from the bundle.** A bundle is meant to be
+handed about -- mailed to yourself, copied off a dead phone -- so it is a file
+an attacker can write. The password is not in it, but the address the password
+gets typed into would be, and TLS does not help: a server presenting a valid
+certificate for its own name passes every check this app makes. So the host is
+derived here from the provider preset instead, and a bundle that names one is
+ignored. See `_with_derived_host`.
 """
 
 from __future__ import annotations
@@ -37,6 +45,11 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from src import state
+# The one thing read from config, and deliberately not a path: IMAP_PROVIDERS
+# is a constant table of provider presets. The "root is a parameter" rule above
+# is about config's *path* constants, which are rebound at runtime per platform;
+# a lookup table is neither rebound nor a test seam.
+from src.config import IMAP_PROVIDERS
 
 # Bumped only when the *bundle* layout changes -- the names of the members, or
 # the shape of the manifest. The database inside carries its own schema and is
@@ -75,7 +88,14 @@ _PORTABLE_SETTINGS = frozenset({
     "dry_run_default",
     "mail_backend",
     "imap_provider",
-    "imap_host",
+    # No `imap_host`. It used to travel, and on the way back in it was written
+    # straight into the settings store, so a crafted bundle could point the app
+    # at a server of its choosing -- and the very next sentence the app shows
+    # after a restore invites the user to type their mail password. Nothing
+    # else in the flow names the server, so there was no moment at which that
+    # was visible. The host now comes from the provider preset instead
+    # (`_with_derived_host`), which loses nothing for the five presets and
+    # costs a "custom" user one field they alone know the value of.
     "imap_port",
     "imap_email",
 })
@@ -87,8 +107,51 @@ _PORTABLE_SETTINGS = frozenset({
 _FORBIDDEN_SUBSTRINGS = ("password", "secret", "token", "credential")
 
 
+# The manifest and the settings are both a few hundred bytes of JSON. Read
+# whole into memory, so they get the ceiling the chat parser and the media
+# extractor already put on their own zip members -- a kilobyte that inflates to
+# a gigabyte is a cheap file to write and an expensive one to open. The
+# database member is not covered by this and does not need to be: it is
+# streamed to disk with copyfileobj, never read whole.
+MAX_BUNDLE_MEMBER_BYTES = 4 * 1_048_576  # 4 MiB
+
+
 class BundleError(RuntimeError):
     """A bundle that cannot be read, or cannot be trusted to be read."""
+
+
+def _read_small_member(bundle: zipfile.ZipFile, name: str) -> bytes:
+    """The bytes of [name], refused if it claims to inflate past the ceiling."""
+    size = bundle.getinfo(name).file_size
+    if size > MAX_BUNDLE_MEMBER_BYTES:
+        raise BundleError(
+            "That backup's %s would expand to %d bytes, past the "
+            "%d-byte safety limit." % (name, size, MAX_BUNDLE_MEMBER_BYTES)
+        )
+    return bundle.read(name)
+
+
+def _with_derived_host(settings: dict) -> dict:
+    """Put the provider's own host and port back on [settings], in place.
+
+    The bundle's word is not taken for either. For the five presets the answer
+    is a constant this build already holds, so nothing is lost by looking it up
+    rather than trusting the file. For "custom" the host is left absent
+    entirely: only that user knows it, the front-ends leave a key they were not
+    given alone, and the mail account screen already refuses to save a custom
+    provider with an empty host -- so the failure mode is one field to fill in,
+    not a silent redirection.
+    """
+    # Dropped first, unconditionally. The allow-list has already discarded it
+    # on the way in, so this is the second lock on the same door -- and it is
+    # the one that still holds if some future release puts `imap_host` back on
+    # the allow-list without remembering why it came off.
+    settings.pop("imap_host", None)
+    preset = IMAP_PROVIDERS.get(str(settings.get("imap_provider") or ""))
+    if preset and preset.get("host"):
+        settings["imap_host"] = preset["host"]
+        settings["imap_port"] = preset["port"]
+    return settings
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +287,7 @@ def read_manifest(source: Path) -> dict:
     """The manifest of [source], for showing the user what they are about to restore."""
     try:
         with zipfile.ZipFile(source) as bundle:
-            return json.loads(bundle.read(_MANIFEST_NAME))
+            return json.loads(_read_small_member(bundle, _MANIFEST_NAME))
     except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
         raise BundleError("That file is not a Chat Mail Sync backup.") from exc
 
@@ -312,13 +375,16 @@ def import_bundle(root: Path, source: Path) -> dict:
             settings = {}
             if _SETTINGS_NAME in names:
                 try:
-                    raw = json.loads(bundle.read(_SETTINGS_NAME))
+                    raw = json.loads(_read_small_member(bundle, _SETTINGS_NAME))
                 except ValueError:
                     raw = {}
                 # Filtered on the way in as well as on the way out. A bundle is
                 # a file on disk that anyone can edit, and the allow-list is
                 # cheaper to apply twice than to reason about once.
                 settings = {k: v for k, v in raw.items() if k in _PORTABLE_SETTINGS}
+                # And the host is not among them -- it is looked up from the
+                # provider, never read from the file.
+                settings = _with_derived_host(settings)
 
             added = {"chats_added": 0, "runs_added": 0,
                      "hashes_added": 0, "cutoffs_added": 0}
@@ -331,6 +397,8 @@ def import_bundle(root: Path, source: Path) -> dict:
                     # can be short a column this build selects by name.
                     state.init_db(incoming)
                     added = _merge_db(db, incoming)
+    except BundleError as exc:
+        return {"ok": False, "error": str(exc)}
     except (OSError, zipfile.BadZipFile) as exc:
         return {"ok": False, "error": f"That backup could not be read: {exc}"}
     except sqlite3.DatabaseError as exc:

@@ -13,6 +13,7 @@ import zipfile
 import pytest
 
 from src import migration, state
+from src.config import IMAP_PROVIDERS
 
 
 def _device(root, chats=(("chat1", "Chat One"),), messages=2):
@@ -401,6 +402,135 @@ def test_a_bundle_from_before_cutoffs_existed_still_restores(tmp_path):
     assert result["cutoffs_added"] == 0
     assert result["hashes_added"] == 2
     assert result["settings"] == {"chunk_size": 100}
+
+
+def _tamper(bundle, member, payload):
+    """Rewrite one member of [bundle] with [payload], as an attacker would.
+
+    A .cmsbackup is a zip a person is invited to mail to themselves, so the
+    threat model is not a corrupt file -- it is a deliberate one, handed over
+    by someone who wants it opened.
+    """
+    with zipfile.ZipFile(bundle) as z:
+        members = [(n, z.read(n)) for n in z.namelist()]
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in members:
+            z.writestr(name, payload if name == member else data)
+
+
+def _bundle_with_settings(tmp_path, settings):
+    """A real exported bundle whose settings.json has been replaced wholesale."""
+    old = tmp_path / "old"
+    _device(old)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={"chunk_size": 100},
+                            app_version="2.1.0")
+    _tamper(bundle, "settings.json", json.dumps(settings))
+    return bundle
+
+
+def test_the_host_never_leaves_the_device(tmp_path):
+    """Export side: a host in the settings store is not written to the file."""
+    old = tmp_path / "old"
+    _device(old)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+
+    migration.export_bundle(
+        old,
+        bundle,
+        settings={
+            "imap_provider": "gmail",
+            "imap_host": "imap.gmail.com",
+            "imap_email": "someone@example.com",
+        },
+        app_version="2.1.0",
+    )
+
+    with zipfile.ZipFile(bundle) as z:
+        written = json.loads(z.read("settings.json"))
+    assert "imap_host" not in written
+    assert written["imap_provider"] == "gmail"
+
+
+def test_a_bundle_cannot_redirect_the_mail_server(tmp_path):
+    """The finding itself. A crafted bundle names a host; the host it gets is
+    the provider's own, because the next thing the app says after a restore is
+    "enter your mail password once to finish"."""
+    bundle = _bundle_with_settings(tmp_path, {
+        "imap_provider": "gmail",
+        "imap_host": "mail.attacker.example",
+        "imap_port": 1993,
+        "imap_email": "victim@gmail.com",
+    })
+    new = tmp_path / "new"
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["ok"] is True
+    assert result["settings"]["imap_host"] == "imap.gmail.com"
+    assert result["settings"]["imap_port"] == 993
+
+
+def test_every_preset_provider_resolves_to_its_own_host(tmp_path):
+    """Not just Gmail -- the lookup is the mechanism, so it is tested as one."""
+    for key, preset in IMAP_PROVIDERS.items():
+        if not preset["host"]:
+            continue
+        settings = {"imap_provider": key, "imap_host": "mail.attacker.example"}
+        assert migration._with_derived_host(settings)["imap_host"] == preset["host"]
+
+
+def test_a_custom_provider_carries_no_host_at_all(tmp_path):
+    """The one case with no preset to fall back on. The host is dropped rather
+    than trusted: a custom user knows their own server, and the account screen
+    will not save a custom provider without one, so the worst case is a field
+    to fill in."""
+    bundle = _bundle_with_settings(tmp_path, {
+        "imap_provider": "custom",
+        "imap_host": "mail.attacker.example",
+        "imap_email": "victim@example.com",
+    })
+    new = tmp_path / "new"
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["ok"] is True
+    assert "imap_host" not in result["settings"]
+    assert result["settings"]["imap_email"] == "victim@example.com"
+
+
+def test_an_unknown_provider_name_carries_no_host_either(tmp_path):
+    """A provider key this build has never heard of is not a licence to keep
+    whatever host came with it."""
+    settings = {"imap_provider": "definitely-not-a-provider",
+                "imap_host": "mail.attacker.example"}
+    assert "imap_host" not in migration._with_derived_host(dict(settings))
+
+
+def test_an_oversized_manifest_is_refused(tmp_path):
+    """L1. A member that compresses to nothing and inflates to everything is
+    refused on its declared size, before a byte of it is read."""
+    bundle = _bundle_with_settings(tmp_path, {"chunk_size": 100})
+    fat = json.dumps({"schema_version": 1, "pad": " " * (5 * 1_048_576)})
+    _tamper(bundle, "manifest.json", fat)
+
+    with pytest.raises(migration.BundleError):
+        migration.read_manifest(bundle)
+
+    result = migration.import_bundle(tmp_path / "new", bundle)
+    assert result["ok"] is False
+    assert "safety limit" in result["error"]
+
+
+def test_an_oversized_settings_member_is_refused(tmp_path):
+    bundle = _bundle_with_settings(tmp_path, {"chunk_size": 100})
+    _tamper(bundle, "settings.json",
+            json.dumps({"chunk_size": 100, "pad": " " * (5 * 1_048_576)}))
+
+    result = migration.import_bundle(tmp_path / "new", bundle)
+
+    assert result["ok"] is False
+    assert "safety limit" in result["error"]
 
 
 def _has_table(db, name):
