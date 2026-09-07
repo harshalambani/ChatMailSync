@@ -35,3 +35,7 @@ android/.kotlin/
 # Local convenience launcher. Hardcodes one machine's absolute path, so it is
 # deliberately per-developer rather than shared.
 RunApp.bat
+
+# Store-console scratch: vendor-supplied APKs and the signed artifacts we
+# hand back to them. Not source, and regenerable from the release keystore.
+/Xiaomi/
