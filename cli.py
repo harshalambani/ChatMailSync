@@ -49,9 +49,11 @@ def _configure_logging(verbose: bool) -> None:
         level=level,
         stream=sys.stderr,
     )
-    # Silence noisy third-party loggers unless verbose.
-    if not verbose:
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
+    # No third-party loggers to quiet any more. The one line that used to be
+    # here turned urllib3 down, and urllib3 came in with the Google sign-in
+    # stack that 2.0.0 removed -- it has been configuring a logger nothing
+    # writes to ever since. Everything this app talks to now is imaplib, which
+    # logs nothing of its own.
 
 
 # ---------------------------------------------------------------------------
