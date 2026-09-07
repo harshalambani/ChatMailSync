@@ -1,0 +1,16 @@
+A backup file no longer gets to say where your password goes.
+
+A backup is meant to be handed about -- mailed to yourself, copied off a phone
+that died. That also makes it a file someone else could write. It used to carry
+the mail server's address, and restoring it wrote that address straight into
+your settings, with nothing on screen naming the server before the app asked
+you for your mail password.
+
+The password was never in the backup. The address it gets sent to was.
+
+So the server is no longer carried at all. It is looked up from your provider,
+which changes nothing if you use Gmail, Outlook, Yahoo, iCloud or Fastmail. If
+you set up a custom server, you fill that one field in again after restoring.
+
+Also: a backup whose insides claim an implausible size is now refused before it
+is opened, and a leftover logging line from the removed Google sign-in has gone.
