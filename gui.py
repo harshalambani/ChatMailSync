@@ -1836,7 +1836,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
     def _show_preview(self, filename: str) -> None:
         """Parse one queued export and say what is in it, in place."""
         try:
-            text = format_preview(preview_export(str(INBOX_DIR / filename)))
+            text = format_preview(preview_export(
+                str(INBOX_DIR / filename),
+                self._settings.get("cutoff_date", ""),
+            ))
         except Exception as exc:
             # A preview is a convenience; it must never take the screen with it.
             text = f"This file could not be read: {exc}"
@@ -5393,7 +5396,10 @@ class _QueuePanel(_Panel):
 
     def _on_preview(self, filename: str) -> None:
         try:
-            text = format_preview(preview_export(str(INBOX_DIR / filename)))
+            text = format_preview(preview_export(
+                str(INBOX_DIR / filename),
+                self._app._settings.get("cutoff_date", ""),
+            ))
         except Exception as exc:
             text = f"This file could not be read: {exc}"
         self._preview_label.configure(text=text)

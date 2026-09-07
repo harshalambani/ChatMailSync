@@ -11,7 +11,9 @@ from src.state import (
     compute_message_hash,
     get_chat,
     get_chat_cutoff,
+    init_db,
     insert_message_hashes,
+    set_chat_cutoff,
     start_sync_run,
     upsert_chat,
 )
@@ -348,6 +350,137 @@ def test_format_preview_parsed_but_empty_keeps_the_name_and_the_reason():
         "error": "No messages found.",
     })
     assert text == "Empty\nNo messages found."
+
+
+# --- the cutoff line on the preview -----------------------------------------
+# The moment a cutoff is most likely to be mistaken for a broken app: two years
+# of a chat imported, synced, and almost nothing arrives. These hold the two
+# sentences and, more importantly, the boundary between them.
+
+_RANGED = {
+    "ok": True,
+    "display_name": "Neha",
+    "message_count": 2,
+    "participant_count": 2,
+    "media_count": 0,
+    "first_message_ts": "2024-01-02T10:11:12",
+    "last_message_ts": "2025-03-04T05:06:07",
+    "error": None,
+}
+
+
+def test_format_preview_says_nothing_when_there_is_no_cutoff():
+    text = android_api.format_preview(dict(_RANGED, cutoff_date=None))
+    assert text.endswith("2024-01-02 to 2025-03-04")
+
+
+def test_format_preview_says_nothing_when_the_cutoff_predates_the_file():
+    # Every message is on or after the floor, so the floor changes nothing and
+    # mentioning it would only invent a worry.
+    text = android_api.format_preview(dict(_RANGED, cutoff_date="2023-12-31"))
+    assert text.endswith("2024-01-02 to 2025-03-04")
+
+
+def test_format_preview_warns_when_only_part_of_the_file_survives():
+    text = android_api.format_preview(dict(_RANGED, cutoff_date="2024-06-01"))
+    assert text.endswith(
+        "Your cutoff date, 2024-06-01, holds back the part of this that is "
+        "older than it."
+    )
+
+
+def test_format_preview_warns_when_none_of_the_file_survives():
+    text = android_api.format_preview(dict(_RANGED, cutoff_date="2026-01-01"))
+    assert text.endswith(
+        "All of this is older than your cutoff date, 2026-01-01, so none of "
+        "it would be sent."
+    )
+
+
+def test_format_preview_keeps_a_file_ending_on_the_cutoff_day_itself():
+    """The floor is midnight and the filter is "before", so a message stamped
+    on the cutoff day is sent. A file whose last message falls on that day is
+    therefore partly kept, never wholly held back -- getting this edge wrong
+    would tell someone nothing will arrive on the one day something will."""
+    text = android_api.format_preview(dict(_RANGED, cutoff_date="2025-03-04"))
+    assert "holds back the part" in text
+    assert "none of it would be sent" not in text
+
+
+def test_preview_cutoff_prefers_the_chats_own_floor(tmp_root, db_path):
+    """Outright, never the later of the two -- that is the rule
+    SyncManager._effective_cutoff applies at sync time, and a preview using a
+    different one would be describing a sync that is not going to happen."""
+    init_db(config.STATE_DB_PATH)
+    set_chat_cutoff("neha", "2024-05-05", config.STATE_DB_PATH)
+
+    assert android_api._preview_cutoff("neha", "2025-09-09") == "2024-05-05"
+    assert android_api._preview_cutoff("neha", "") == "2024-05-05"
+
+
+def test_preview_cutoff_falls_back_to_the_app_wide_floor(tmp_root, db_path):
+    init_db(config.STATE_DB_PATH)
+    assert android_api._preview_cutoff("neha", "2025-09-09") == "2025-09-09"
+    assert android_api._preview_cutoff("neha", "") is None
+
+
+def test_preview_cutoff_swallows_an_unreadable_date(tmp_root, db_path):
+    # A preview is a convenience. A floor that cannot be parsed is worth a
+    # missing line, never a panel that refuses to open.
+    init_db(config.STATE_DB_PATH)
+    assert android_api._preview_cutoff("neha", "not a date") is None
+
+
+_REPO = Path(__file__).resolve().parent.parent
+
+
+def test_both_windows_preview_call_sites_hand_over_the_app_wide_date():
+    """A preview that ignored the floor would describe a sync that is not the
+    one about to run -- the opposite of what the line is for. Neither call site
+    can run here (both need a Tk window), so this reads the source, as
+    FrozenIdentifiersTest does on the Kotlin side."""
+    body = (_REPO / "gui.py").read_text(encoding="utf-8")
+
+    assert body.count("preview_export(") == 2, "a third call site appeared"
+    # Not a substring check on the settings key -- gui.py reads cutoff_date in
+    # five places, so any one of them would satisfy a loose guard while a
+    # preview quietly dropped it. This asserts the calls themselves.
+    assert "preview_export(str(INBOX_DIR / filename))" not in body, (
+        "a preview call site is back to ignoring the cutoff"
+    )
+    assert body.count(
+        "preview_export(\n"
+        "                str(INBOX_DIR / filename),\n"
+        '                self._settings.get("cutoff_date", ""),\n'
+    ) == 1
+    assert body.count(
+        "preview_export(\n"
+        "                str(INBOX_DIR / filename),\n"
+        '                self._app._settings.get("cutoff_date", ""),\n'
+    ) == 1
+
+
+def test_every_android_preview_call_site_hands_over_the_app_wide_date():
+    body = (_REPO / "android/app/src/main/java/com/chatmailsync/app"
+            / "MainActivity.kt").read_text(encoding="utf-8")
+
+    calls = body.count('"preview_text"')
+    assert calls == 3, "a preview call site was added or removed"
+    assert body.count(
+        '"preview_text", outcome.file.absolutePath, '
+        "AppPrefs.getCutoffDate(context))"
+    ) == 1
+    assert body.count(
+        '"preview_text", path, AppPrefs.getCutoffDate(context))'
+    ) == 2
+
+
+def test_preview_carries_the_cutoff_through_to_the_dict(tmp_root):
+    fixture = FIXTURES_DIR / "android_export.txt"
+
+    assert android_api.preview(str(fixture))["cutoff_date"] is None
+    assert android_api.preview(
+        str(fixture), "2025-01-01")["cutoff_date"] == "2025-01-01"
 
 
 # ---------------------------------------------------------------------------

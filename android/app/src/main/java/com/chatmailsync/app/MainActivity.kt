@@ -549,7 +549,7 @@ fun ChatMailApp(
         // format_preview() applied, and is what every other call site already uses.
         val preview = Python.getInstance()
             .getModule("src.android_api")
-            .callAttr("preview_text", outcome.file.absolutePath)
+            .callAttr("preview_text", outcome.file.absolutePath, AppPrefs.getCutoffDate(context))
         lastResult = "Imported ${outcome.file.name}\n\n$preview"
     }
 
@@ -1110,7 +1110,8 @@ fun ChatMailApp(
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path).toString()
+                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                            .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
                     chunkSize = chunkSize,
@@ -1144,7 +1145,8 @@ fun ChatMailApp(
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path).toString()
+                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                            .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },
                     onImportPick = { navController.navigate("importPicker") },

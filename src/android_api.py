@@ -30,6 +30,7 @@ from src.state import (
     init_db,
     is_uneventful_run,
     list_chat_cutoffs,
+    normalise_cutoff,
     reset_chat,
     resolve_chat,
     set_chat_cutoff,
@@ -141,14 +142,43 @@ def imap_providers() -> list[dict]:
     ]
 
 
-def preview(file_path: str) -> dict:
+def _preview_cutoff(chat_id: str, app_cutoff: str) -> Optional[str]:
+    """The floor this file would actually meet, as a plain day.
+
+    The chat's own override wins outright over the app-wide date -- never the
+    later of the two -- because that is the rule SyncManager._effective_cutoff
+    applies at sync time, and a preview that used a different one would be
+    describing a sync that is not going to happen.
+
+    Best-effort by design: a preview is a convenience, and a floor that cannot
+    be read is not worth failing the whole panel over.
+    """
+    try:
+        init_db(config.STATE_DB_PATH)
+        own = get_chat_cutoff(chat_id, config.STATE_DB_PATH)
+    except Exception:
+        own = None
+    if own:
+        return own[:10]
+    try:
+        return (normalise_cutoff(app_cutoff) or "")[:10] or None
+    except ValueError:
+        return None
+
+
+def preview(file_path: str, cutoff: str = "") -> dict:
     """Parse one export file without touching the mailbox or the state DB — the
     quick local preview for the Android "Import review" screen (§4 of the
     screen-guides doc): chat name, participant count, message count, date
     range, media count.
 
     Returns {"ok", "display_name", "message_count", "participant_count",
-    "media_count", "first_message_ts", "last_message_ts", "error"}.
+    "media_count", "first_message_ts", "last_message_ts", "cutoff_date",
+    "error"}.
+
+    [cutoff] is the app-wide cutoff date, which each front-end holds in its own
+    settings store and this module cannot read for itself. It is only used to
+    work out what would actually be sent; nothing here writes it anywhere.
     """
     path = Path(file_path)
     empty = {
@@ -159,6 +189,7 @@ def preview(file_path: str) -> dict:
         "media_count": 0,
         "first_message_ts": None,
         "last_message_ts": None,
+        "cutoff_date": None,
         "error": None,
     }
 
@@ -184,6 +215,7 @@ def preview(file_path: str) -> dict:
         "media_count": sum(1 for m in messages if m.attachment_filename),
         "first_message_ts": min(m.timestamp_iso for m in messages),
         "last_message_ts": max(m.timestamp_iso for m in messages),
+        "cutoff_date": _preview_cutoff(chat_id, cutoff),
         "error": None,
     }
 
@@ -221,12 +253,32 @@ def format_preview(info: dict) -> str:
         # Dates only: the timestamps are ISO, and the clock time of the first
         # message in a three-year chat is not information anyone wants here.
         lines.append("%s to %s" % (first[:10], last[:10]))
+
+    # Said here because this is the moment a cutoff is most likely to be
+    # mistaken for a broken app: someone imports two years of a chat, syncs,
+    # and sees almost nothing arrive. The date is printed as the plain day it
+    # was typed as, matching the range line just above it.
+    #
+    # A message stamped exactly on the cutoff day is kept -- the floor is
+    # midnight and the comparison is "before" -- so the whole file is held
+    # back only when its last message falls on an earlier day than the cutoff.
+    day = info.get("cutoff_date")
+    if day and last and last[:10] < day:
+        lines.append(
+            "All of this is older than your cutoff date, %s, so none of it "
+            "would be sent." % day
+        )
+    elif day and first and first[:10] < day:
+        lines.append(
+            "Your cutoff date, %s, holds back the part of this that is older "
+            "than it." % day
+        )
     return "\n".join(lines)
 
 
-def preview_text(file_path: str) -> str:
+def preview_text(file_path: str, cutoff: str = "") -> str:
     """preview() + format_preview(), as one call across the Chaquopy bridge."""
-    return format_preview(preview(file_path))
+    return format_preview(preview(file_path, cutoff))
 
 
 
