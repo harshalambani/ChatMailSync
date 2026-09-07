@@ -7,6 +7,7 @@ install.
 """
 
 import json
+import sqlite3
 import zipfile
 
 import pytest
@@ -255,7 +256,9 @@ def test_exporting_a_device_that_has_never_synced(tmp_path):
     bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
 
     summary = migration.export_bundle(old, bundle, settings={"chunk_size": 50})
-    assert summary["counts"] == {"chats": 0, "runs": 0, "hashes": 0}
+    assert summary["counts"] == {
+        "chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0,
+    }
 
     result = migration.import_bundle(new, bundle)
     assert result["ok"]
@@ -271,7 +274,9 @@ def test_read_manifest_describes_what_will_be_restored(tmp_path):
 
     manifest = migration.read_manifest(bundle)
     assert manifest["app_version"] == "1.16.0"
-    assert manifest["counts"] == {"chats": 2, "runs": 2, "hashes": 4}
+    assert manifest["counts"] == {
+        "chats": 2, "runs": 2, "hashes": 4, "cutoffs": 0,
+    }
     assert manifest["schema_version"] == migration.BUNDLE_SCHEMA_VERSION
     assert manifest["bundle_id"]
     assert manifest["created_at"]
@@ -309,3 +314,102 @@ def test_an_unreadable_creation_stamp_is_no_cover_rather_than_a_crash():
     assert migration.created_at_epoch("not a date") == 0
     assert migration.created_at_epoch(None) == 0
     assert migration.created_at_epoch("2026-09-01T11:07:33") > 0
+
+
+# ---------------------------------------------------------------------------
+# Per-chat cutoff dates
+#
+# A cutoff is the one thing in this database the user typed by hand. History
+# they can always re-derive by re-importing an export; a floor they set on a
+# particular chat months ago they would never think to set again, and losing
+# it silently means that chat quietly starts mailing everything below it.
+# ---------------------------------------------------------------------------
+
+
+def test_a_per_chat_cutoff_moves_with_the_bundle(tmp_path):
+    """The whole point of carrying them: the new device withholds exactly what
+    the old one withheld, without the user re-entering anything."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    db = _device(old)
+    state.set_chat_cutoff("chat1", "2025-01-31", db)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+
+    summary = migration.export_bundle(old, bundle, settings={})
+    assert summary["counts"]["cutoffs"] == 1
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["cutoffs_added"] == 1
+    assert state.get_chat_cutoff(
+        "chat1", new / "data" / "sync_state.db"
+    ) == "2025-01-31T00:00:00"
+
+
+def test_a_floor_set_on_this_device_beats_the_one_in_the_bundle(tmp_path):
+    """Same rule the rest of the merge follows, and the safe way round. A
+    floor set here is a live instruction; a bundle is a photograph of an older
+    device. Overwriting the live one could only ever lower the floor and mail
+    the difference."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old_db = _device(old)
+    state.set_chat_cutoff("chat1", "2024-01-01", old_db)
+    new_db = _device(new)
+    state.set_chat_cutoff("chat1", "2025-06-01", new_db)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={})
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["cutoffs_added"] == 0
+    assert state.get_chat_cutoff("chat1", new_db) == "2025-06-01T00:00:00"
+
+
+def test_a_bundle_from_before_cutoffs_existed_still_restores(tmp_path):
+    """Backward compatibility, which is not theoretical: every backup taken
+    before this release has no chat_cutoffs table at all, and the merge reads
+    that table by name. It works because import_bundle brings the incoming
+    database forward with init_db before reading it -- so an old bundle
+    restores as a backup carrying no overrides, rather than an error."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    _device(old)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={"chunk_size": 100})
+
+    # Re-write the bundle with the table removed, which is byte for byte what
+    # an older build would have produced.
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    with zipfile.ZipFile(bundle) as z:
+        names = z.namelist()
+        z.extractall(staged)
+    conn = sqlite3.connect(staged / "sync_state.db")
+    conn.execute("DROP TABLE chat_cutoffs")
+    conn.commit()
+    conn.close()
+    assert not _has_table(staged / "sync_state.db", "chat_cutoffs")
+    old_bundle = tmp_path / ("old" + migration.BUNDLE_SUFFIX)
+    with zipfile.ZipFile(old_bundle, "w") as z:
+        for name in names:
+            z.write(staged / name, name)
+
+    result = migration.import_bundle(new, old_bundle)
+
+    assert result["ok"] is True
+    assert result["cutoffs_added"] == 0
+    assert result["hashes_added"] == 2
+    assert result["settings"] == {"chunk_size": 100}
+
+
+def _has_table(db, name):
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (name,),
+        ).fetchone() is not None
+    finally:
+        conn.close()
+

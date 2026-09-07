@@ -549,7 +549,7 @@ fun ChatMailApp(
         // format_preview() applied, and is what every other call site already uses.
         val preview = Python.getInstance()
             .getModule("src.android_api")
-            .callAttr("preview_text", outcome.file.absolutePath)
+            .callAttr("preview_text", outcome.file.absolutePath, AppPrefs.getCutoffDate(context))
         lastResult = "Imported ${outcome.file.name}\n\n$preview"
     }
 
@@ -762,6 +762,7 @@ fun ChatMailApp(
     // couldn't see the user's choice at all since it runs in a separate
     // process-less Worker with no access to this Compose state.
     var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
+    var cutoffDate by remember { mutableStateOf(AppPrefs.getCutoffDate(context)) }
     var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
@@ -1109,7 +1110,8 @@ fun ChatMailApp(
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path).toString()
+                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                            .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
                     chunkSize = chunkSize,
@@ -1130,6 +1132,8 @@ fun ChatMailApp(
                     onOpenQueue = { navController.navigate("queue") },
                     onOpenBackup = { navController.navigate("settings") },
                     lastBackupAt = lastBackupAt,
+                    cutoffDate = cutoffDate,
+                    onOpenSettings = { navController.navigate("settings") },
                 )
             }
             composable("queue") {
@@ -1141,7 +1145,8 @@ fun ChatMailApp(
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path).toString()
+                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                            .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },
                     onImportPick = { navController.navigate("importPicker") },
@@ -1212,6 +1217,11 @@ fun ChatMailApp(
                     },
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
+                    cutoffDate = cutoffDate,
+                    onCutoffDateChange = {
+                        cutoffDate = it
+                        AppPrefs.setCutoffDate(context, it)
+                    },
                 )
             }
             composable("importPicker") {

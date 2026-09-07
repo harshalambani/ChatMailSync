@@ -143,6 +143,14 @@ object Migration {
 
             val chats = result.callAttr("get", "chats_added").toString().toIntOrNull() ?: 0
             val hashes = result.callAttr("get", "hashes_added").toString().toIntOrNull() ?: 0
+            // Named only when there are any. A per-chat floor is a decision the
+            // user made by hand and would not think to make again, so it has to
+            // be visible that it survived -- but a phone that never set one
+            // should not be told about a feature it does not use.
+            val cutoffs = result.callAttr("get", "cutoffs_added").toString().toIntOrNull() ?: 0
+            val carried =
+                if (cutoffs == 0) ""
+                else " ${plural(cutoffs, "per-chat cutoff date")} came with it."
             // "Enter your mail password once to finish" is a next step, not a
             // fact -- and it is only a next step when there is no password yet.
             // Restoring onto a phone that is already connected was telling the
@@ -153,7 +161,7 @@ object Migration {
                 else AppPrefs.getConnectedAccountEmail(context) != null
             val finish = if (connected) "" else " Enter your mail password once to finish."
             return "Restored ${plural(chats, "chat")} and ${plural(hashes, "message")} of " +
-                "history — those will not be sent again.$finish"
+                "history — those will not be sent again.$carried$finish"
         } catch (e: Exception) {
             return "That backup could not be restored: ${e.message}"
         } finally {

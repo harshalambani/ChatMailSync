@@ -164,3 +164,71 @@ def test_android_status_helpers_stay_reachable_from_the_detail_screen():
         "internal fun StatusDot(",
     ):
         assert decl in source, f"expected `{decl}` in {CHATS_LIST_KT.name}"
+
+
+# ---------------------------------------------------------------------------
+# The per-chat cutoff line
+#
+# gui._chat_cutoff_hint and CutoffDate.chatHint are one sentence written
+# twice, in two languages, in two files. Nothing but this test connects them,
+# and the failure is not a crash -- it is the two editions telling the same
+# user two different stories about which floor is in force.
+# ---------------------------------------------------------------------------
+
+CUTOFF_DATE_KT = (
+    REPO_ROOT / "android" / "app" / "src" / "main" / "java" / "com"
+    / "chatmailsync" / "app" / "CutoffDate.kt"
+)
+
+
+def test_an_empty_field_names_the_floor_that_is_still_in_force():
+    """The state that matters: no override of this chat's own, but an
+    app-wide floor quietly applying to it anyway."""
+    assert gui._chat_cutoff_hint("", "1 January 2026") == (
+        "Using the app-wide cutoff, 1 January 2026. A date here applies to "
+        "this chat only."
+    )
+
+
+def test_an_override_says_the_app_wide_date_no_longer_applies():
+    assert gui._chat_cutoff_hint("1 March 2026", "1 January 2026") == (
+        "This chat stops at 1 March 2026. The app-wide cutoff does not apply "
+        "to it."
+    )
+
+
+def test_with_no_floor_anywhere_it_says_so_rather_than_staying_silent():
+    assert gui._chat_cutoff_hint("", "") == (
+        "No cutoff, so every message in this chat is sent. A date here "
+        "applies to this chat only."
+    )
+
+
+def test_both_editions_say_the_same_three_sentences():
+    # Kotlin interpolates the day where Python formats it, and wraps its long
+    # strings with `" + "`. Undo the wrapping, then feed the Kotlin
+    # placeholder names through the Python function: what comes out is the
+    # exact literal CutoffDate.kt has to contain.
+    kotlin = re.sub(r'"\s*\+\s*"', "", CUTOFF_DATE_KT.read_text(encoding="utf-8"))
+    assert gui._chat_cutoff_hint("$ownDay", "") in kotlin
+    assert gui._chat_cutoff_hint("", "$appDay") in kotlin
+    assert gui._chat_cutoff_hint("", "") in kotlin
+
+
+def test_the_windows_panel_reads_and_writes_the_per_chat_floor():
+    """Two halves of one control, and either missing is silent: without the
+    read the field sits blank over a floor that is applying, without the
+    write the date the user typed is never stored."""
+    source = (REPO_ROOT / "gui.py").read_text(encoding="utf-8")
+    assert "get_chat_cutoff(self._chat_id, STATE_DB_PATH)" in source
+    assert "set_chat_cutoff(self._chat_id, text or None, STATE_DB_PATH)" in source
+    assert "set_chat_cutoff(self._chat_id, None, STATE_DB_PATH)" in source
+
+
+def test_the_run_detail_keeps_the_held_back_count_off_the_skipped_line():
+    """Skipped means the mailbox already has it; held back means it was never
+    offered. Folding one into the other is how a forgotten cutoff reads as an
+    app that is dropping messages."""
+    source = (REPO_ROOT / "gui.py").read_text(encoding="utf-8")
+    assert 'if run.get("messages_cutoff"):' in source
+    assert '"Held back by your cutoff date"' in source

@@ -207,7 +207,20 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             else -> null
         }
         try {
-            val result = androidApi.callAttr("sync", transport, chunkSize, dryRun, chatFilter, null, trigger)
+            // Read here rather than passed in, for the same reason the
+            // Windows SyncWorker reads it: every run this app starts has to
+            // obey the same floor, and a parameter is one more place for a
+            // future call site to forget it.
+            //
+            // Handed over raw. SyncManager normalises it and raises on a date
+            // it cannot compare, and that is the behaviour we want: a corrupt
+            // preference should fail the run, not silently drop the floor and
+            // mail out messages the user asked never to receive. A failed sync
+            // can be retried; a sent email cannot be unsent.
+            val cutoff = AppPrefs.getCutoffDate(applicationContext)
+            val result = androidApi.callAttr(
+                "sync", transport, chunkSize, dryRun, chatFilter, null, trigger, cutoff,
+            )
             SyncStatsResult.from(result)
         } finally {
             if (backend == AppPrefs.MAIL_BACKEND_IMAP && transport != null) {
@@ -277,6 +290,11 @@ private data class SyncStatsResult(
     val messagesParsed: Int,
     val messagesSynced: Int,
     val messagesSkipped: Int,
+    // Its own number, never folded into messagesSkipped: "skipped" means the
+    // app had already sent it, and being told 4,000 messages were skipped when
+    // the real answer is "your cutoff held them back" is the one explanation
+    // this feature exists to give. Mirrors SyncStats.messages_cutoff.
+    val messagesCutoff: Int,
     val chatsRecovered: Int,
     val errors: List<String>,
     // Files a single email could never carry. Deliberately separate from
@@ -292,6 +310,9 @@ private data class SyncStatsResult(
             "Files   : found=$filesFound  synced=$filesSynced  skipped=$filesSkipped  failed=$filesFailed",
             "Messages: parsed=$messagesParsed  synced=$messagesSynced  skipped=$messagesSkipped",
         )
+        if (messagesCutoff > 0) {
+            lines.add("Held back $messagesCutoff message(s) from before your cutoff date")
+        }
         if (chatsRecovered > 0) lines.add("Recovered $chatsRecovered interrupted run(s)")
         if (mediaOmitted.isNotEmpty()) {
             lines.add("Media too large to email (archived without the file - it stays in your WhatsApp export):")
@@ -332,6 +353,7 @@ private data class SyncStatsResult(
                 messagesParsed = intOf("messages_parsed"),
                 messagesSynced = intOf("messages_synced"),
                 messagesSkipped = intOf("messages_skipped"),
+                messagesCutoff = intOf("messages_cutoff"),
                 stopped = try { result.callAttr("get", "stopped")?.toString() == "True" } catch (_: Exception) { false },
                 chatsRecovered = intOf("chats_recovered"),
                 errors = errors,

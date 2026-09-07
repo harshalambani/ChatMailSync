@@ -147,6 +147,20 @@ internal val FAQ = listOf(
         "\"Check and sync\", which run in the foreground while you are watching; it only affects " +
         "unattended checks. (On Windows the equivalent limit is simpler: the check only runs while " +
         "the app is open.)",
+    "Can I stop it sending messages from before a certain date?" to
+        "Yes. Settings -> Cutoff date takes a day, and nothing older than it is ever sent. It is a " +
+        "floor and not a window: there is no matching \"to\" date, because the whole job of this app " +
+        "is to keep moving forwards. Leave it blank and everything is sent. A single chat can also " +
+        "carry its own cutoff, set from that chat's page under \"Cutoff date\", and that one " +
+        "overrides the app-wide date for that chat alone rather than adding to it; the line under " +
+        "the field always names the date actually in force. While a cutoff is set, " +
+        "the home screen says so in a card above the inbox — permanently, not as a notice you can " +
+        "dismiss, because a floor you have forgotten about looks exactly like an app that is losing " +
+        "your messages. It cannot cause a duplicate: for a chat already archived past the cutoff " +
+        "the app carries on from where it stopped and ignores " +
+        "the cutoff, because whichever of the two dates is later always wins. What it held back is " +
+        "reported as its own number at the end of a sync, kept apart from the skipped count — see " +
+        "the next answer.",
     "Will I get duplicate messages if I sync the same chat again?" to
         "Every message is fingerprinted (hashed). Re-syncing the same file, or a fresh export that " +
         "overlaps an earlier one, skips anything already pushed — nothing is duplicated in your " +

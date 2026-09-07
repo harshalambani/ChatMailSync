@@ -182,6 +182,8 @@ fun HomeScreen(
     onOpenQueue: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     lastBackupAt: Long = 0L,
+    cutoffDate: String = "",
+    onOpenSettings: () -> Unit = {},
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
@@ -274,6 +276,38 @@ fun HomeScreen(
             // only class of thing allowed above the button.
             backgroundIssues.forEach { issue ->
                 BackgroundHealthCard(issue = issue, onAction = { onBackgroundIssueAction(issue) })
+            }
+
+            // Nothing about a cutoff is wrong, so this is a quiet
+            // surface-variant card and not an error -- but it is permanently
+            // visible while one is set, because the failure it prevents is
+            // silent: someone imports a two-year-old export, sees a fraction
+            // of it arrive, and has no way to know the app is obeying a floor
+            // they set months ago. Absent entirely when there is no cutoff.
+            // Windows mirrors this as the strip above its sync button.
+            val cutoffLabel = CutoffDate.format(cutoffDate)
+            if (cutoffLabel.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "Only syncing messages from $cutoffLabel onwards",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        // A way out of the card, not just a statement of fact:
+                        // the person reading it because messages are missing
+                        // wants the setting, and hunting for it is the whole
+                        // complaint.
+                        OutlinedButton(onClick = onOpenSettings) { Text("Change") }
+                    }
+                }
             }
 
             // Inbox + sync — one card: these two are really one workflow

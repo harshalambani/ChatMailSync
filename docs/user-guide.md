@@ -119,6 +119,12 @@ one. That is section 6.
 When it's done, each chat appears in the list on the left with a green dot and a
 message count. Synced files move out of the inbox automatically.
 
+If a **cutoff date** is set (Settings on either edition), a strip above the sync
+button — a card above the inbox on Android — says so, and nothing older than
+that day is sent. The strip stays there for as long as the cutoff does; it is
+not a notice to dismiss. The FAQ in section 8 covers what the cutoff does and
+does not do.
+
 ---
 
 ## 6. Scheduling: having it sync on its own
@@ -440,6 +446,33 @@ optimisation: the system has put the app to sleep, and a sleeping app gets no
 background ticks. Exempt it once — stock Android, Samsung's sleep lists and the
 Autostart permission on Xiaomi/Oppo/Vivo/OnePlus are all covered in section 6.
 Neither case affects a manual sync, which runs in the foreground while you watch.
+
+---
+
+### Q. Can I stop it sending messages from before a certain date?
+
+**A.** Yes. Set a **cutoff date** in Settings and nothing older than that day is
+ever sent. It is a floor, not a window: there is no matching "to" date, because
+the whole job of this app is to keep moving forwards. Leave it blank and
+everything is sent.
+
+An individual chat can also carry its own cutoff, set from that chat's page
+under **Cutoff date**, and that one overrides the app-wide date for that chat
+alone -- it is not added to it. The line under the field always names the date
+actually in force, so a chat with no cutoff of its own still tells you which
+floor it is standing behind.
+
+While a cutoff is set, both editions say so permanently — a strip above the
+sync button on Windows, a card above the inbox on Android — rather than as a
+notice you can dismiss. A floor you have forgotten about looks exactly like an
+app that is losing your messages.
+
+It cannot cause a duplicate. For a chat already archived past the cutoff, the
+app carries on from where it stopped and ignores the cutoff — whichever of the
+two dates is later always wins — so lowering the cutoff never re-sends
+anything. What the cutoff held back is reported as its own number at the end of
+a sync, kept apart from the skipped count, so "your cutoff held these back" is
+never mistaken for "already sent".
 
 ---
 

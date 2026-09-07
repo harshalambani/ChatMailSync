@@ -44,6 +44,7 @@ from src.mail_client import (
 )
 from src.sync_manager import ProgressSyncManager as _ProgressSyncManager
 from src.sync_manager import SyncStats, _scrub_paths
+from src.state import normalise_cutoff
 from src import secret_store
 
 log = logging.getLogger(__name__)
@@ -123,6 +124,13 @@ class SyncWorker:
                 processed_dir=self._processed_dir,
                 progress_queue=self.q,
                 stop_event=self._stop_event,
+                # Read here rather than handed in by the caller. Every sync
+                # the desktop app starts -- the main button, a single chat
+                # from its detail panel, a retry -- has to obey the same
+                # floor, and a constructor argument is one more place for a
+                # future call site to forget it. The CLI resolves its own
+                # because it has a --cutoff flag to reconcile first.
+                cutoff_date=normalise_cutoff(load_saved_cutoff_date()),
             )
             stats = mgr.run(chat_filter=self._chat_filter)
             stopped = self._stop_event.is_set()
@@ -165,6 +173,28 @@ def _load_mail_backend_settings() -> dict:
         pass
     defaults["mail_backend"] = resolve_mail_backend(saved)
     return defaults
+
+
+def load_saved_cutoff_date() -> Optional[str]:
+    """The app-wide cutoff the desktop Settings panel has saved, or None.
+
+    Read here rather than imported from gui.py so the CLI can honour the same
+    setting without pulling in customtkinter -- the same reason
+    _load_mail_backend_settings exists. "" and a missing key both mean "no
+    cutoff" and both come back as None, matching state.normalise_cutoff.
+
+    Never raises: a sync must not fail over an unreadable preferences file.
+    """
+    try:
+        if not _SETTINGS_FILE.exists():
+            return None
+        saved = json.loads(_SETTINGS_FILE.read_text())
+        value = saved.get("cutoff_date")
+    except Exception:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
 
 
 def _save_imap_credentials(host: str, port: int, email: str, password: str) -> None:

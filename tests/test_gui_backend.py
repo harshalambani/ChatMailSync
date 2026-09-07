@@ -23,6 +23,7 @@ using the tmp_root fixture from conftest.py.
 import json
 import types
 import queue
+from pathlib import Path
 
 import pytest
 
@@ -36,6 +37,7 @@ from src.config import (
     MAIL_BACKEND_IMAP,
 )
 from src.progress import ProgressTracker
+from src.sync_manager import SyncStats
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +172,208 @@ def test_legacy_oauth_evidence_reads_the_leftover_token(settings_file, token_fil
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token_file.write_text("{}", encoding="utf-8")
     assert gui._legacy_oauth_evidence() is True
+
+
+# ---------------------------------------------------------------------------
+# The app-wide cutoff date
+#
+# One preference read from two modules: gui._load_settings for the Settings
+# panel, gui_worker.load_saved_cutoff_date for the CLI (which cannot import
+# gui.py without pulling in customtkinter). They must agree, and neither may
+# fail a sync over a preferences file.
+# ---------------------------------------------------------------------------
+
+def test_a_fresh_install_has_no_cutoff(settings_file):
+    assert gui._load_settings()["cutoff_date"] == ""
+
+
+def test_a_saved_cutoff_date_round_trips(settings_file):
+    """Only keys named in _DEFAULT_SETTINGS survive a reload, so a key that
+    was never declared there would be written and then silently dropped --
+    the user\'s floor quietly gone at the next launch."""
+    settings = gui._load_settings()
+    settings["cutoff_date"] = "2026-01-01"
+    gui._save_settings(settings)
+    assert gui._load_settings()["cutoff_date"] == "2026-01-01"
+
+
+def test_the_worker_reads_the_same_cutoff_the_gui_wrote(settings_file, monkeypatch):
+    """The CLI honours the floor set in the desktop app. These are two
+    constants pointing at one file, and this is the test that stops them
+    drifting apart."""
+    monkeypatch.setattr(gui_worker, "_SETTINGS_FILE", settings_file)
+    settings = gui._load_settings()
+    settings["cutoff_date"] = "2026-01-01"
+    gui._save_settings(settings)
+    assert gui_worker.load_saved_cutoff_date() == "2026-01-01"
+
+
+def test_no_settings_file_at_all_reads_as_no_cutoff(worker_paths):
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_settings_file_without_the_key_reads_as_no_cutoff(worker_paths):
+    _write_settings(worker_paths["settings"], chunk_size="hour")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_cleared_cutoff_field_reads_as_no_cutoff(worker_paths):
+    _write_settings(worker_paths["settings"], cutoff_date="   ")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_a_non_string_cutoff_reads_as_no_cutoff(worker_paths):
+    """A hand-edited file. Returning the number would push it straight into a
+    string comparison against every message timestamp."""
+    _write_settings(worker_paths["settings"], cutoff_date=2026)
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+def test_an_unreadable_settings_file_never_raises_into_a_sync(worker_paths):
+    worker_paths["settings"].write_text("{not json at all")
+    assert gui_worker.load_saved_cutoff_date() is None
+
+
+# ---------------------------------------------------------------------------
+# The main-window cutoff banner
+#
+# _format_cutoff_day is the whole of the banner's vocabulary: everything else
+# about the strip is packing. Android's twin is formatCutoffDay.
+# ---------------------------------------------------------------------------
+
+def test_the_banner_names_the_day_the_way_a_person_would():
+    """Not "2026-01-01". The strip exists to be read at a glance by someone
+    wondering why a chat is short, and an ISO date is the app talking to
+    itself."""
+    assert gui._format_cutoff_day("2026-01-01") == "1 January 2026"
+
+
+def test_the_banner_reads_the_stored_instant_as_well_as_the_day():
+    """The filter compares against "...T00:00:00" and the settings file holds
+    the bare day. The banner must not care which one reaches it."""
+    assert gui._format_cutoff_day("2026-01-01T00:00:00") == "1 January 2026"
+
+
+def test_no_cutoff_means_no_banner_at_all():
+    """"" and None are the same "no floor" everywhere else here, and an empty
+    string is what _update_cutoff_banner treats as "take the strip away"."""
+    assert gui._format_cutoff_day("") == ""
+    assert gui._format_cutoff_day(None) == ""
+
+
+def test_a_date_the_app_cannot_read_costs_a_banner_not_a_launch():
+    """A hand-edited settings file. The strip is cosmetic; refusing to start
+    the app over it would not be."""
+    assert gui._format_cutoff_day("first of January") == ""
+    assert gui._format_cutoff_day("2026-13-40") == ""
+
+
+class _FakeStrip:
+    """Enough of a CTkFrame for _update_cutoff_banner to talk to."""
+
+    def __init__(self):
+        self.packed = False
+        self.text = None
+
+    def pack(self, **kwargs):
+        self.packed = True
+
+    def pack_forget(self):
+        self.packed = False
+
+    def configure(self, text=None, **kwargs):
+        self.text = text
+
+
+def _banner_after(cutoff):
+    """Run the real method against stub widgets and report what it did."""
+    app = types.SimpleNamespace(
+        _settings={"cutoff_date": cutoff},
+        _cutoff_banner=_FakeStrip(),
+        _cutoff_banner_label=_FakeStrip(),
+        _sync_ctrl_row=object(),
+    )
+    gui.App._update_cutoff_banner(app)
+    return app
+
+
+def test_the_strip_appears_and_says_what_the_floor_is():
+    app = _banner_after("2026-01-01")
+    assert app._cutoff_banner.packed is True
+    assert app._cutoff_banner_label.text == (
+        "Only syncing messages from 1 January 2026 onwards"
+    )
+
+
+def test_clearing_the_cutoff_takes_the_strip_away_again():
+    """Not merely blanked. A strip that survives its own reason for existing
+    is worse than no strip: it says a floor is in force when none is."""
+    app = _banner_after("2026-01-01")
+    assert app._cutoff_banner.packed is True
+
+    app._settings["cutoff_date"] = ""
+    gui.App._update_cutoff_banner(app)
+
+    assert app._cutoff_banner.packed is False
+
+
+# ---------------------------------------------------------------------------
+# The desktop sync obeys the saved cutoff
+#
+# SyncWorker reads the preference itself rather than taking it as an argument,
+# so that no call site -- the main button, one chat from its detail panel, the
+# watched folder -- can be the one that forgets it. These are the tests that
+# hold that true.
+# ---------------------------------------------------------------------------
+
+class _RecordingManager:
+    """Stands in for _ProgressSyncManager and keeps what it was handed."""
+
+    last_kwargs: dict = {}
+
+    def __init__(self, **kwargs):
+        _RecordingManager.last_kwargs = kwargs
+
+    def run(self, chat_filter=None):
+        self.chat_filter = chat_filter
+        return SyncStats()
+
+
+def _run_worker(monkeypatch, chat_filter=None):
+    monkeypatch.setattr(gui_worker, "_ProgressSyncManager", _RecordingManager)
+    worker = gui_worker.SyncWorker(
+        transport=None, chunk_size="day", dry_run=True,
+        db_path=Path("db"), inbox_dir=Path("in"), processed_dir=Path("out"),
+        chat_filter=chat_filter,
+    )
+    # Run the body on this thread: start() would put it on a daemon thread and
+    # the assertion would race it.
+    worker._run()
+    return worker
+
+
+def test_the_desktop_sync_applies_the_saved_cutoff(worker_paths, monkeypatch):
+    _write_settings(worker_paths["settings"], cutoff_date="2026-01-01")
+    _run_worker(monkeypatch)
+    assert _RecordingManager.last_kwargs["cutoff_date"] == "2026-01-01T00:00:00"
+
+
+def test_the_desktop_sync_with_no_cutoff_set_holds_nothing_back(worker_paths, monkeypatch):
+    """None, not "". An empty string sorts below every real timestamp and
+    would be a floor that happens to let everything through by accident."""
+    _write_settings(worker_paths["settings"], chunk_size="day")
+    _run_worker(monkeypatch)
+    assert _RecordingManager.last_kwargs["cutoff_date"] is None
+
+
+def test_syncing_one_chat_obeys_the_cutoff_too(worker_paths, monkeypatch):
+    """The chat detail panel's [Sync just this chat] goes through the same
+    worker, and a floor that applied to the big button but not to this one
+    would be a floor nobody could explain."""
+    _write_settings(worker_paths["settings"], cutoff_date="2026-01-01")
+    worker = _run_worker(monkeypatch, chat_filter="chat1")
+    assert _RecordingManager.last_kwargs["cutoff_date"] == "2026-01-01T00:00:00"
+    assert worker._chat_filter == "chat1"
 
 
 # ---------------------------------------------------------------------------

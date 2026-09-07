@@ -23,12 +23,17 @@ from src.parser import extract_chat_info, parse_file
 from src.state import MailboxNotClearedError, count_archived_messages
 from src.state import delete_chat as state_delete_chat
 from src.state import (
+    clear_chat_cutoff,
+    get_chat_cutoff,
     get_recent_runs,
     get_sync_summary,
     init_db,
     is_uneventful_run,
+    list_chat_cutoffs,
+    normalise_cutoff,
     reset_chat,
     resolve_chat,
+    set_chat_cutoff,
     summarize_recent_runs,
 )
 from src.progress import ProgressTracker
@@ -137,14 +142,43 @@ def imap_providers() -> list[dict]:
     ]
 
 
-def preview(file_path: str) -> dict:
+def _preview_cutoff(chat_id: str, app_cutoff: str) -> Optional[str]:
+    """The floor this file would actually meet, as a plain day.
+
+    The chat's own override wins outright over the app-wide date -- never the
+    later of the two -- because that is the rule SyncManager._effective_cutoff
+    applies at sync time, and a preview that used a different one would be
+    describing a sync that is not going to happen.
+
+    Best-effort by design: a preview is a convenience, and a floor that cannot
+    be read is not worth failing the whole panel over.
+    """
+    try:
+        init_db(config.STATE_DB_PATH)
+        own = get_chat_cutoff(chat_id, config.STATE_DB_PATH)
+    except Exception:
+        own = None
+    if own:
+        return own[:10]
+    try:
+        return (normalise_cutoff(app_cutoff) or "")[:10] or None
+    except ValueError:
+        return None
+
+
+def preview(file_path: str, cutoff: str = "") -> dict:
     """Parse one export file without touching the mailbox or the state DB — the
     quick local preview for the Android "Import review" screen (§4 of the
     screen-guides doc): chat name, participant count, message count, date
     range, media count.
 
     Returns {"ok", "display_name", "message_count", "participant_count",
-    "media_count", "first_message_ts", "last_message_ts", "error"}.
+    "media_count", "first_message_ts", "last_message_ts", "cutoff_date",
+    "error"}.
+
+    [cutoff] is the app-wide cutoff date, which each front-end holds in its own
+    settings store and this module cannot read for itself. It is only used to
+    work out what would actually be sent; nothing here writes it anywhere.
     """
     path = Path(file_path)
     empty = {
@@ -155,6 +189,7 @@ def preview(file_path: str) -> dict:
         "media_count": 0,
         "first_message_ts": None,
         "last_message_ts": None,
+        "cutoff_date": None,
         "error": None,
     }
 
@@ -180,6 +215,7 @@ def preview(file_path: str) -> dict:
         "media_count": sum(1 for m in messages if m.attachment_filename),
         "first_message_ts": min(m.timestamp_iso for m in messages),
         "last_message_ts": max(m.timestamp_iso for m in messages),
+        "cutoff_date": _preview_cutoff(chat_id, cutoff),
         "error": None,
     }
 
@@ -217,12 +253,32 @@ def format_preview(info: dict) -> str:
         # Dates only: the timestamps are ISO, and the clock time of the first
         # message in a three-year chat is not information anyone wants here.
         lines.append("%s to %s" % (first[:10], last[:10]))
+
+    # Said here because this is the moment a cutoff is most likely to be
+    # mistaken for a broken app: someone imports two years of a chat, syncs,
+    # and sees almost nothing arrive. The date is printed as the plain day it
+    # was typed as, matching the range line just above it.
+    #
+    # A message stamped exactly on the cutoff day is kept -- the floor is
+    # midnight and the comparison is "before" -- so the whole file is held
+    # back only when its last message falls on an earlier day than the cutoff.
+    day = info.get("cutoff_date")
+    if day and last and last[:10] < day:
+        lines.append(
+            "All of this is older than your cutoff date, %s, so none of it "
+            "would be sent." % day
+        )
+    elif day and first and first[:10] < day:
+        lines.append(
+            "Your cutoff date, %s, holds back the part of this that is older "
+            "than it." % day
+        )
     return "\n".join(lines)
 
 
-def preview_text(file_path: str) -> str:
+def preview_text(file_path: str, cutoff: str = "") -> str:
     """preview() + format_preview(), as one call across the Chaquopy bridge."""
-    return format_preview(preview(file_path))
+    return format_preview(preview(file_path, cutoff))
 
 
 
@@ -247,6 +303,7 @@ def sync(
     chat_filter: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
     trigger: str = "manual",
+    cutoff_date: Optional[str] = None,
 ) -> dict:
     """Run one full sync pass over data/inbox/ (or the caller's configured root).
 
@@ -257,6 +314,14 @@ def sync(
     `trigger` is recorded on each sync_runs row for the Android Sync log
     screen (e.g. "manual" for Home's Sync now, "watched_folder" for an
     auto-synced watched-folder import).
+
+    `cutoff_date` is the app-wide floor -- "YYYY-MM-DD", or None/"" for none.
+    It is passed in on every call rather than read here because the setting
+    lives in AppPrefs on the Kotlin side; Python has no view of it. A chat
+    with its own row in chat_cutoffs overrides this, and that lookup does
+    happen down in SyncManager. The count of what was withheld comes back in
+    the returned dict as messages_cutoff -- its own number, never folded into
+    messages_skipped.
     """
     def _relay(event: dict) -> None:
         _publish_progress(event)
@@ -273,6 +338,7 @@ def sync(
         trigger=trigger,
         progress_queue=_CallbackSink(_relay),
         stop_event=_stop_event,
+        cutoff_date=cutoff_date,
     )
     stats = mgr.run(chat_filter=chat_filter)
     stopped = _stop_event.is_set()
@@ -449,6 +515,95 @@ def delete_chat(chat_id_or_name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Per-chat cutoff override.
+#
+# The app-wide floor lives in AppPrefs and travels in on sync(); these three
+# are the per-chat exception to it, stored in the chat_cutoffs table.
+# ---------------------------------------------------------------------------
+
+
+def _cutoff_chat_id(chat_id_or_name: str) -> str:
+    """Resolve to a chat_id, falling back to the argument as given.
+
+    Deliberately not an error when the chat is unknown. A cutoff can be set
+    from the import preview, before the chat has ever synced and before it
+    has a row in `chats` -- refusing there would break the one case the
+    override is most useful for. chat_cutoffs is not a foreign key into
+    `chats` precisely so this works; see state.py. Kotlin passes the chat_id
+    parser.extract_chat_info gave it, so the fallback is exact, not a guess.
+    """
+    chat = resolve_chat(chat_id_or_name, config.STATE_DB_PATH)
+    return chat["chat_id"] if chat is not None else chat_id_or_name
+
+
+def get_cutoff(chat_id_or_name: str) -> dict:
+    """This chat\'s own cutoff, or None if it inherits the app-wide one.
+
+    Returns {"chat_id": str, "cutoff_date": "YYYY-MM-DD" | None}. The date
+    comes back as a plain day, not the stored midnight instant, because what
+    asks for it is a date picker.
+    """
+    init_db(config.STATE_DB_PATH)
+    chat_id = _cutoff_chat_id(chat_id_or_name)
+    stored = get_chat_cutoff(chat_id, config.STATE_DB_PATH)
+    return {
+        "chat_id": chat_id,
+        "cutoff_date": stored[:10] if stored else None,
+    }
+
+
+def set_cutoff(chat_id_or_name: str, cutoff_date: Optional[str] = None) -> dict:
+    """Set this chat\'s own cutoff, or clear it when [cutoff_date] is empty.
+
+    One call for both so the Kotlin side has no branch to get wrong: clearing
+    the field in the UI and never setting one are the same state, and both
+    mean "use the app-wide floor".
+
+    Returns {"ok": bool, "chat_id": str, "cutoff_date": str | None,
+    "error": str | None}; a date that cannot be compared is refused rather
+    than stored, since a floor nothing can evaluate would withhold
+    unpredictably.
+    """
+    init_db(config.STATE_DB_PATH)
+    chat_id = _cutoff_chat_id(chat_id_or_name)
+    text = (cutoff_date or "").strip()
+    if not text:
+        clear_chat_cutoff(chat_id, config.STATE_DB_PATH)
+        return {"ok": True, "chat_id": chat_id, "cutoff_date": None,
+                "error": None}
+    try:
+        set_chat_cutoff(chat_id, text, config.STATE_DB_PATH)
+    except ValueError:
+        return {
+            "ok": False,
+            "chat_id": chat_id,
+            "cutoff_date": None,
+            "error": f"{cutoff_date!r} is not a date. Use YYYY-MM-DD.",
+        }
+    return {"ok": True, "chat_id": chat_id, "cutoff_date": text[:10],
+            "error": None}
+
+
+def list_cutoffs() -> list[dict]:
+    """Every per-chat override, as [{"chat_id", "cutoff_date"}].
+
+    For a chat list that wants to mark which chats depart from the app-wide
+    floor -- without which an override set once and forgotten is invisible
+    until someone wonders where their messages went.
+
+    One call, not one per row: the chat list would otherwise ask per chat.
+    Dates come back as plain days, matching get_cutoff.
+    """
+    init_db(config.STATE_DB_PATH)
+    return [
+        {"chat_id": chat_id, "cutoff_date": cutoff_ts[:10]}
+        for chat_id, cutoff_ts in sorted(
+            list_chat_cutoffs(config.STATE_DB_PATH).items()
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Device migration (P3).
 #
 # Kotlin owns the file, Python owns the contents. SAF hands Kotlin a content://
@@ -496,6 +651,10 @@ def describe_backup(source_path: str) -> dict:
         "chats": int(counts.get("chats") or 0),
         "runs": int(counts.get("runs") or 0),
         "hashes": int(counts.get("hashes") or 0),
+        # `or 0` is the whole backward-compatibility story: a bundle
+        # written before per-chat cutoffs existed has no such key, and
+        # honestly describes itself as carrying none.
+        "cutoffs": int(counts.get("cutoffs") or 0),
     }
 
 

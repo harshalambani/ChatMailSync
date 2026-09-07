@@ -194,7 +194,7 @@ def _snapshot_db(source: Path, dest: Path) -> None:
 
 def _counts(db: Path) -> dict:
     if not db.exists():
-        return {"chats": 0, "runs": 0, "hashes": 0}
+        return {"chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0}
     conn = sqlite3.connect(db)
     try:
         def one(table: str) -> int:
@@ -206,6 +206,11 @@ def _counts(db: Path) -> dict:
             "chats": one("chats"),
             "runs": one("sync_runs"),
             "hashes": one("message_hashes"),
+            # Shown to the user before they restore. A per-chat cutoff is a
+            # decision they made by hand and would not think to make again,
+            # so a bundle that silently carried none of them should be
+            # visible as such rather than discovered months later.
+            "cutoffs": one("chat_cutoffs"),
         }
     finally:
         conn.close()
@@ -253,6 +258,10 @@ def import_bundle(root: Path, source: Path) -> dict:
     fresh ids, and a local row always wins over an incoming one of the same
     name.
 
+    That last rule is why an incoming per-chat cutoff never overwrites one
+    already set here: a floor the user set on *this* device is a live
+    instruction, and a bundle is a photograph of an older one.
+
     Returns a result dict. Never raises for anything a user can do to the file;
     a bad bundle comes back as ok=False with a sentence to show them.
     """
@@ -291,6 +300,7 @@ def import_bundle(root: Path, source: Path) -> dict:
             "chats_added": 0,
             "runs_added": 0,
             "hashes_added": 0,
+            "cutoffs_added": 0,
             "settings": {},
             "manifest": manifest,
             "created_at": str(manifest.get("created_at") or ""),
@@ -310,7 +320,8 @@ def import_bundle(root: Path, source: Path) -> dict:
                 # cheaper to apply twice than to reason about once.
                 settings = {k: v for k, v in raw.items() if k in _PORTABLE_SETTINGS}
 
-            added = {"chats_added": 0, "runs_added": 0, "hashes_added": 0}
+            added = {"chats_added": 0, "runs_added": 0,
+                     "hashes_added": 0, "cutoffs_added": 0}
             if _DB_NAME in names:
                 with tempfile.TemporaryDirectory() as tmp:
                     incoming = Path(tmp) / _DB_NAME
@@ -452,6 +463,25 @@ def _merge_db(target: Path, incoming: Path) -> dict:
                 runs_added += 1
             run_id_map[int(row["run_id"])] = local
 
+        # Per-chat cutoffs. INSERT OR IGNORE, so a chat that already has a
+        # floor on this device keeps it; only chats with no opinion here
+        # inherit the old device's. Reading this table at all depends on
+        # state.init_db() having been run over the incoming file first, which
+        # import_bundle does -- a bundle written before this table existed
+        # arrives without it and is given an empty one on the way in, so an
+        # older backup restores as a backup with no overrides rather than an
+        # error.
+        cutoffs_added = 0
+        for row in src.execute(
+            "SELECT chat_id, cutoff_ts, set_at FROM chat_cutoffs"
+        ).fetchall():
+            cur = dst.execute(
+                "INSERT OR IGNORE INTO chat_cutoffs (chat_id, cutoff_ts, set_at) "
+                "VALUES (?, ?, ?)",
+                (row["chat_id"], row["cutoff_ts"], row["set_at"]),
+            )
+            cutoffs_added += max(cur.rowcount, 0)
+
         hashes_added = 0
         rows = src.execute(
             "SELECT hash, chat_id, message_ts, run_id FROM message_hashes"
@@ -477,6 +507,7 @@ def _merge_db(target: Path, incoming: Path) -> dict:
             "chats_added": chats_added,
             "runs_added": runs_added,
             "hashes_added": hashes_added,
+            "cutoffs_added": cutoffs_added,
         }
     except Exception:
         dst.rollback()
