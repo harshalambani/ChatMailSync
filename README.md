@@ -423,7 +423,11 @@ Build internals:
 
 ## Installing on Android
 
-There is no store listing yet. The release APK is published on the
+**Xiaomi GetApps** carries the app, so on a Xiaomi, Redmi or POCO phone — or on
+any other phone with GetApps installed — you can install and update it like any
+other store app: [global.app.mi.com/details?id=com.chatmailsync.app](https://global.app.mi.com/details?id=com.chatmailsync.app).
+
+Everywhere else, the release APK is published on the
 [Releases page](https://github.com/harshalambani/ChatMailSync/releases) and can be
 installed directly, but a bare APK never tells you when it is out of date.
 
