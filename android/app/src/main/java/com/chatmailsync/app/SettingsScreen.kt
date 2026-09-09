@@ -2,6 +2,7 @@
 
 package com.chatmailsync.app
 
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
+
+// Kept as a constant because the Windows front end shows the same link from
+// the same section, and the two are meant to point at the same page.
+internal const val PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
 
 private val THEME_LABELS = mapOf(
     "system" to "Match system",
@@ -392,6 +397,18 @@ fun SettingsScreen(
             )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
             TextButton(onClick = onOpenSyncLog) { Text("Sync log") }
+            // The policy is hosted, not bundled, so this opens a browser. It
+            // is here because a store asked for it -- Indus put the app on
+            // hold over a policy that was perfectly reachable on the web but
+            // unreachable from inside the app, which is a fair distinction:
+            // someone holding the phone should not have to go and find it.
+            TextButton(
+                onClick = {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)),
+                    )
+                },
+            ) { Text("Privacy policy") }
         }
     }
 }

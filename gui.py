@@ -2860,6 +2860,10 @@ _PROVIDER_LABELS_REV = {v: k for k, v in _PROVIDER_LABELS.items()}
 # unverified link, these go stale often as providers redesign support sites.
 # "custom" has no entry: there's no provider to link to, so the UI falls back
 # to generic guidance instead.
+# The hosted privacy policy, the same page Android links from its own
+# About / Help section and the same URL the store listings carry.
+PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
+
 APP_PASSWORD_HELP_URLS = {
     "gmail": "https://support.google.com/accounts/answer/185833",
     "outlook": "https://support.microsoft.com/en-us/account-billing/using-app-passwords-with-apps-that-don-t-support-two-step-verification-5896ed9b-4263-e681-128a-a6f2979a7944",
@@ -3332,6 +3336,18 @@ class _SettingsPanel(_Panel):
             text_color=gui_theme.ON_SURFACE_VARIANT, anchor="w",
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
+
+        # Same link, same section, as Android. It is here because a store
+        # asked for it -- Indus held the app over a privacy policy that was
+        # perfectly reachable on the web but unreachable from inside the app,
+        # which is a fair distinction: someone holding the app should not have
+        # to go and find it. The page is hosted, so this opens a browser.
+        ctk.CTkButton(
+            body, text="Privacy policy", width=180, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=lambda: webbrowser.open(PRIVACY_POLICY_URL),
+        ).pack(anchor="w", padx=20, pady=(0, 8))
 
     # ------------------------------------------------------------------
     # Mail account (its own window -- Android's MailAccountScreen)
