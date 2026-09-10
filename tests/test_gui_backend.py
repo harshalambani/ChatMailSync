@@ -935,14 +935,20 @@ def tk_root():
 
 
 def _as_host(root, settings):
-    """Lend the bare Tk root the three things a panel needs from App, using
-    App's own implementations rather than stand-ins -- the panel stack is what
-    replaced the pop-up windows, so the tests should be running the real one."""
+    """Lend the bare Tk root the things a panel needs from App, using App's
+    own implementations rather than stand-ins -- the panel stack is what
+    replaced the pop-up windows, so the tests should be running the real one.
+
+    Openers that a panel wires straight into a button belong here too. The
+    lookup happens when the button is built, not when it is clicked, so a
+    panel that reaches for an opener this list has forgotten fails at
+    construction -- which is how the privacy screen's arrival was caught."""
     root._settings = settings
     root._panels = []
     root._HEADER_HEIGHT = gui.App._HEADER_HEIGHT
     root._push_panel = types.MethodType(gui.App._push_panel, root)
     root._pop_panel = types.MethodType(gui.App._pop_panel, root)
+    root._open_privacy = types.MethodType(gui.App._open_privacy, root)
     return root
 
 
@@ -1339,3 +1345,107 @@ def test_launch_scan_gate_matches_the_periodic_timer():
     assert gui._should_scan_at_launch(False, folder) is False
     assert gui._should_scan_at_launch(True, None) is False
     assert gui._should_scan_at_launch(False, None) is False
+
+# ---------------------------------------------------------------------------
+# The privacy policy panel
+#
+# The policy is carried in the app rather than linked to, because Indus
+# Appstore held the Android build twice over a policy it could not reach from
+# inside the app. Windows answers that the same way, and these tests hold it
+# to the same standard: the text is present, and it is readable.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def privacy_window(tk_root):
+    root = _as_host(tk_root, {})
+    root._open_privacy()
+    root.update_idletasks()
+    yield root._panels[-1]
+    while root._panels:
+        root._pop_panel()
+
+
+def _labels(parent):
+    """Every CTkLabel in a widget tree, in the order they were built."""
+    found = []
+    for child in parent.winfo_children():
+        if isinstance(child, gui.ctk.CTkLabel):
+            found.append(child)
+        found.extend(_labels(child))
+    return found
+
+
+def _texts(parent):
+    out = []
+    for child in parent.winfo_children():
+        try:
+            out.append(str(child.cget("text")))
+        except Exception:
+            pass
+        out.extend(_texts(child))
+    return out
+
+
+def test_the_policy_is_carried_not_fetched(privacy_window):
+    """Every section of the shipped policy is on the panel, drawn from the
+    text in gui.py -- no browser, no network. That is the whole point of the
+    screen, so it is asserted rather than assumed."""
+    shown = _texts(privacy_window)
+    assert gui.PRIVACY_LAST_UPDATED in shown
+    for heading, paragraphs in gui.PRIVACY_POLICY:
+        assert heading in shown, f"missing section {heading!r}"
+        for para in paragraphs:
+            assert para in shown, f"missing paragraph in {heading!r}"
+
+
+def test_paragraphs_start_wrapped_to_the_window(privacy_window):
+    """Before the panel is laid out, nothing may ask for its natural width.
+
+    A label with no wraplength requests the full width of its text; the
+    scrolling body requests the width of its widest label; the panel requests
+    the width of the body. So an unwrapped panel arrives already stretched to
+    the longest sentence in the policy -- wider than the window -- and
+    measuring it at that point only confirms the damage.
+    """
+    for label in _labels(privacy_window):
+        if label.cget("text") in (gui.PRIVACY_LAST_UPDATED,):
+            continue
+        wrap = label.cget("wraplength")
+        if wrap:
+            assert wrap <= gui._PrivacyPanel._INITIAL_WRAP
+
+
+def test_no_paragraph_runs_off_the_right_edge(privacy_window):
+    """The bug this guards against shipped in the first draft of the panel
+    and was found by looking at it, not by reasoning about it.
+
+    Widths from winfo/event geometry are real screen pixels; wraplength is
+    scaled again by CustomTkinter on the way in. Hand one straight to the
+    other on a 125% display and every paragraph wraps a quarter wider than
+    the panel, so the right-hand edge of the policy is simply cut off -- the
+    desktop form of the complaint this whole screen exists to answer.
+
+    The panel is driven with a Configure event rather than a real window
+    because the test root is withdrawn: a withdrawn window is never mapped
+    and never lays out, so its measured width would be 1.
+    """
+    panel = privacy_window
+    logical = 760
+    event = types.SimpleNamespace(width=panel._apply_widget_scaling(logical))
+    panel._rewrap(event)
+
+    assert panel._paragraphs, "no paragraph was collected to be re-wrapped"
+    for label in panel._paragraphs:
+        wrap = label.cget("wraplength")
+        assert wrap <= logical, (
+            f"paragraph wraps at {wrap} inside a {logical}-wide panel: "
+            f"{label.cget('text')[:50]!r}"
+        )
+        assert wrap > 240, f"paragraph wrapped down to {wrap}"
+
+
+def test_the_hosted_copy_is_offered_but_nothing_depends_on_it(privacy_window):
+    """The link stays -- it is just no longer the only way to read the policy."""
+    shown = _texts(privacy_window)
+    assert any(gui.PRIVACY_POLICY_URL in text for text in shown)
+    assert "Open in browser" in shown

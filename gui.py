@@ -2670,6 +2670,18 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         self._push_panel(_SyncLogPanel)
 
+    def _open_privacy(self) -> None:
+        """Show the privacy policy in this window, from the text we carry.
+
+        Not webbrowser.open. The hosted page is still offered from inside the
+        panel, but it is the secondary: nothing about reading the policy is
+        allowed to depend on there being a browser and a connection.
+        """
+        if self._panels:
+            self._panels[-1].focus_set()
+            return
+        self._push_panel(_PrivacyPanel)
+
     def _push_panel(self, factory) -> None:
         """Put an in-window screen over the sync view.
 
@@ -2863,6 +2875,257 @@ _PROVIDER_LABELS_REV = {v: k for k, v in _PROVIDER_LABELS.items()}
 # The hosted privacy policy, the same page Android links from its own
 # About / Help section and the same URL the store listings carry.
 PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
+
+# The policy carried in the app, rather than linked to.
+#
+# It used to be a link out to the hosted page and nothing else. That reads as
+# reasonable until a store reviewer opens the app on a machine with no network
+# and reports the policy as unreachable -- which Indus Appstore did to the
+# Android build, twice. A policy that needs a second application and a live
+# connection before it can be read is not really "in the app", so this text is
+# the policy and the hosted page is the copy.
+#
+# PARITY: this list is generated from Android's PrivacyScreen.kt rather than
+# typed, and tests/test_privacy_parity.py fails the build if the two, or
+# either of them and docs/privacy.html, drift apart. Unlike the FAQ -- where
+# the two platforms may phrase a question differently -- a privacy policy is a
+# statement about behaviour, and the two front-ends must not say different
+# things about it.
+
+PRIVACY_LAST_UPDATED = (
+    "Last updated: August 31, 2026 - revised for version 2.0.0."
+)
+
+PRIVACY_POLICY = [
+    (
+        "Summary",
+        [
+            (
+                "This app copies WhatsApp chat exports that you provide into your own "
+                "mailbox. It runs entirely on your device. There is no backend server and "
+                "no account system - the developer never receives, stores, or has access "
+                "to your messages, your mail, or your accounts. This version carries no "
+                "analytics, no advertising and no third-party SDK of any kind."
+            ),
+            (
+                "One promise does not depend on which version you are reading: your chats, "
+                "your attachments and your credentials go only to the mailbox you name. "
+                "They are never sold, never used to target anything at you, and never sent "
+                "to the developer or to anyone else. If a future version ever collects "
+                "anything at all, this page and the store listing's data-safety "
+                "declaration change with the release that does it - before you install it, "
+                "not after."
+            ),
+            (
+                "There is one way to connect: an email app password over IMAP, which works "
+                "with any IMAP provider, including Gmail, Outlook, Yahoo, iCloud and "
+                "Fastmail."
+            ),
+            (
+                "None of this has to be taken on trust. The app is open source, and every "
+                "claim on this page can be checked against the code that is supposed to "
+                "keep it: github.com/harshalambani/ChatMailSync"
+            ),
+        ],
+    ),
+    (
+        "How connecting to your mailbox works",
+        [
+            (
+                "No account is created, and nothing is registered with the developer or "
+                "with any server:"
+            ),
+            (
+                "• You supply your email address, your provider's IMAP host and port, and "
+                "an app password - a separate credential your provider issues for one "
+                "application, which you can revoke at any time without changing your real "
+                "password."
+            ),
+            (
+                "• That app password is stored only on your own device and is sent only to "
+                "the IMAP server you named. It is encrypted at rest on both platforms: "
+                "with the Android Keystore on Android, and with Windows DPAPI on Windows, "
+                "inside the app's own data folder readable only by your Windows user "
+                "account. Because both keys are tied to the device, a saved password does "
+                "not travel to another phone or PC."
+            ),
+            (
+                "• The app uses the IMAP APPEND command, which adds a message to a folder. "
+                "It creates the folders it needs and lists folder names to check whether "
+                "they already exist. It does not fetch, search, modify or delete any "
+                "message already in your mailbox, and it never sends mail. To be exact "
+                "about what enforces this: an app password is not something your provider "
+                "can restrict to a subset of operations, so the limit is the app's own "
+                "code, whose entire mail command surface is the four commands just "
+                "described. The source is public and the check takes about a minute."
+            ),
+            (
+                "Your mail provider necessarily sees the messages you archive, because "
+                "they are stored in the mailbox they host for you. That relationship is "
+                "governed by your provider's own privacy policy, not this one."
+            ),
+        ],
+    ),
+    (
+        "Data retention and deletion",
+        [
+            (
+                "The developer retains nothing, because the developer never receives "
+                "anything. On your own device, the saved app password is kept until you "
+                "clear it in the app or uninstall, and the local dedup database is stored "
+                "until you uninstall or clear the app's data. That database holds the "
+                "names of the chats you have synced, the export filenames, and a one-way "
+                "hash of each message it has sent - no message text and no attachments."
+            ),
+            (
+                "Emails the app has added to your mailbox are yours - delete them like any "
+                "other message at any time. The app cannot do it for you, and that is by "
+                "design rather than an omission: it holds no permission to delete anything "
+                "in your mailbox, so nothing it could be told to do, and no defect in it, "
+                "can remove mail you already have."
+            ),
+        ],
+    ),
+    (
+        "Where your data goes",
+        [
+            (
+                "Nowhere but your own device and your own mailbox. The WhatsApp export "
+                "file you share or import is copied into the app's private storage on your "
+                "device, parsed there, and sent directly from your device to your mail "
+                "provider's IMAP server over TLS. There is no intermediate server operated "
+                "by the developer that your messages, attachments, or credentials ever "
+                "pass through."
+            ),
+            (
+                "The app keeps a small local database on your device - chat names, sync "
+                "status, and a hash of each message sent - purely to avoid sending the "
+                "same message twice. It stays on your device unless you export a backup of "
+                "it yourself. Deleting the app removes it."
+            ),
+        ],
+    ),
+    (
+        "Backups, and moving to a new device",
+        [
+            (
+                "A new phone with no copy of that database would re-send your entire "
+                "history, so the app can write a backup file for you to carry across. It "
+                "is written only when you ask for one, never automatically and never "
+                "anywhere but where you choose to put it."
+            ),
+            (
+                "What the file contains is fixed and deliberately narrow: the dedup "
+                "database described above, and a short list of preferences - theme, batch "
+                "size, IMAP host, port and email address. It contains no password and no "
+                "credential of any kind. The app builds it from a list of keys that are "
+                "permitted to travel rather than by removing ones known to be secret, and "
+                "it refuses to write the file at all if a key that looks like a credential "
+                "ever appears on that list. Your new device asks you for the app password "
+                "once, as a fresh install would."
+            ),
+            (
+                "The backup is an ordinary zip file and it is not encrypted. Once written "
+                "it is a file like any other: the app does not know where you put it and "
+                "cannot reach it again. Because it names the chats you have synced and "
+                "your email address, treat it as you would any personal document, and "
+                "prefer moving it directly between your own devices over leaving it "
+                "somewhere shared."
+            ),
+        ],
+    ),
+    (
+        "How your data is protected",
+        [
+            (
+                "Because the messages you sync are sensitive personal data, the app is "
+                "built so that this data is exposed to as few systems as possible:"
+            ),
+            (
+                "• Encrypted in transit. Every network request the app makes goes directly "
+                "to your mail provider's IMAP server over TLS. Your messages, attachments "
+                "and app password are never sent over an unencrypted connection."
+            ),
+            (
+                "• No developer server, ever. There is no backend operated by the "
+                "developer. Your data travels only between your own device and your own "
+                "mail provider's servers, so there is no third-party system that could "
+                "store, log, or leak it."
+            ),
+            (
+                "• Credentials stay on your device. The app password is stored only in "
+                "local app storage, encrypted with a key tied to that device (Windows "
+                "DPAPI on Windows; the Android Keystore on Android). It is never "
+                "transmitted anywhere except to the IMAP server you named, and never "
+                "written to a log line or an error message."
+            ),
+            (
+                "• Minimal local footprint. The only thing the app keeps is a small "
+                "on-device database of chat names, sync status and message hashes, used "
+                "purely to avoid re-sending the same message. It contains no message text "
+                "and no attachments, and it leaves your device only in a backup you export "
+                "yourself."
+            ),
+            (
+                "• You control access and can revoke it instantly. An app password is "
+                "issued by your provider for one application and can be revoked there at "
+                "any time, without changing your real password (see the next section)."
+            ),
+            (
+                "Because your data lives only on your own device and in your own mailbox, "
+                "we recommend protecting both with the usual safeguards - a device "
+                "lock/OS-level encryption, and two-step verification on your mail account."
+            ),
+        ],
+    ),
+    (
+        "Account connection and revoking access",
+        [
+            (
+                "Clear the saved password in the app (Settings, then Mail account, then "
+                "Forget saved password), and revoke the app password with your mail "
+                "provider so it cannot be used again."
+            ),
+            (
+                "Revoking access does not delete anything already synced - those are "
+                "ordinary emails in your mailbox and are yours to keep or delete like any "
+                "other message."
+            ),
+        ],
+    ),
+    (
+        "Third parties",
+        [
+            (
+                "None. The app does not share, sell, or transmit any data to any third "
+                "party. The only network calls it makes are to the IMAP server you name, "
+                "directly from your device."
+            ),
+        ],
+    ),
+    (
+        "Changes to this policy",
+        [
+            (
+                "If this policy changes, the updated version is published at the same "
+                "address with a new \"Last updated\" date, and is carried in the app from "
+                "the next release."
+            ),
+        ],
+    ),
+    (
+        "Contact",
+        [
+            (
+                "Questions about this policy or the app can be raised as an issue on the "
+                "GitHub repository. The full source is there too, for anyone who would "
+                "rather read the code than the promise: "
+                "github.com/harshalambani/ChatMailSync"
+            ),
+        ],
+    ),
+]
+
 
 APP_PASSWORD_HELP_URLS = {
     "gmail": "https://support.google.com/accounts/answer/185833",
@@ -3337,16 +3600,16 @@ class _SettingsPanel(_Panel):
         )
         self._version_label.pack(fill="x", padx=20, pady=(4, 8))
 
-        # Same link, same section, as Android. It is here because a store
-        # asked for it -- Indus held the app over a privacy policy that was
-        # perfectly reachable on the web but unreachable from inside the app,
+        # Same door, same section, as Android -- but it no longer leaves the
+        # app. Indus held the build twice over a privacy policy that was
+        # perfectly reachable on the web and unreachable from inside the app,
         # which is a fair distinction: someone holding the app should not have
-        # to go and find it. The page is hosted, so this opens a browser.
+        # to go and find it, and should not need a browser to read it.
         ctk.CTkButton(
             body, text="Privacy policy", width=180, height=30,
             fg_color="transparent", border_width=1,
             text_color=gui_theme.ON_SURFACE,
-            command=lambda: webbrowser.open(PRIVACY_POLICY_URL),
+            command=self._app._open_privacy,
         ).pack(anchor="w", padx=20, pady=(0, 8))
 
     # ------------------------------------------------------------------
@@ -6167,6 +6430,103 @@ class _ChatDetailPanel(_Panel):
                     return
         except Exception:
             pass
+
+
+class _PrivacyPanel(_Panel):
+    """The privacy policy, rendered from the text the app ships with.
+
+    Android's PrivacyScreen, in the shape Windows uses: the same ten sections
+    in the same order, and the same words, because PRIVACY_POLICY above is
+    generated from the Kotlin rather than transcribed from it.
+
+    Reached from Settings > About / Help. help.html carries a link to the same
+    policy, which is the second way in -- one buried entrance was enough for a
+    store reviewer to miss it entirely.
+    """
+
+    # Panel width, less this, is how wide a paragraph may run: the scrolling
+    # body's own padding on both sides plus room for the scrollbar.
+    _GUTTER = 76
+    # What a paragraph is wrapped to before the panel has been laid out, taken
+    # from the window's own default width. This is not just a nicety: a label
+    # with no wraplength asks for the full width of its text, the scrolling
+    # body asks for the width of the widest label, and the panel asks for the
+    # width of the body -- so the panel arrives already stretched to fit the
+    # longest sentence in the policy, and measuring it then just confirms the
+    # damage. Wrapping from the start keeps every request modest.
+    _INITIAL_WRAP = 800 - _GUTTER
+
+    def __init__(self, app: "App", master) -> None:
+        super().__init__(app, master, "Privacy policy", "Back to settings")
+
+        self._paragraphs: list[ctk.CTkLabel] = []
+
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=18, pady=(12, 12))
+        self.bind("<Configure>", self._rewrap, add="+")
+
+        ctk.CTkLabel(
+            body, text=PRIVACY_LAST_UPDATED, anchor="w",
+            font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(0, 10))
+
+        for index, (heading, paragraphs) in enumerate(PRIVACY_POLICY):
+            if index:
+                ctk.CTkFrame(
+                    body, height=1, fg_color=gui_theme.OUTLINE_VARIANT,
+                ).pack(fill="x", pady=(14, 10))
+            ctk.CTkLabel(
+                body, text=heading, anchor="w",
+                font=ctk.CTkFont(size=13, weight="bold"),
+            ).pack(fill="x", pady=(0, 6))
+            for para in paragraphs:
+                # wraplength rather than a fixed width: the window is
+                # resizable, and a policy that runs off the right edge is the
+                # desktop version of the same complaint.
+                label = ctk.CTkLabel(
+                    body, text=para, anchor="w", justify="left",
+                    font=ctk.CTkFont(size=12),
+                    text_color=gui_theme.ON_SURFACE,
+                    wraplength=self._INITIAL_WRAP,
+                )
+                label.pack(fill="x", pady=(0, 6))
+                self._paragraphs.append(label)
+
+        ctk.CTkFrame(body, height=1, fg_color=gui_theme.OUTLINE_VARIANT).pack(
+            fill="x", pady=(14, 10)
+        )
+        # Secondary, not the way in. The text above is the policy; this is for
+        # anyone who wants the canonical hosted copy.
+        ctk.CTkLabel(
+            body, text=f"The same policy is published at {PRIVACY_POLICY_URL}",
+            anchor="w", font=ctk.CTkFont(size=11),
+            text_color=gui_theme.ON_SURFACE_VARIANT,
+        ).pack(fill="x", pady=(0, 6))
+        ctk.CTkButton(
+            body, text="Open in browser", width=180, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=lambda: webbrowser.open(PRIVACY_POLICY_URL),
+        ).pack(anchor="w", pady=(0, 8))
+
+    def _rewrap(self, event) -> None:
+        """Keep every paragraph wrapped to the panel, whatever the window does.
+
+        Measured off the panel, deliberately, and not off the scrolling body.
+        A CTkScrollableFrame is as wide as whatever it holds, and what it holds
+        here is labels whose width is decided by their wraplength -- so asking
+        it how wide it is and wrapping to the answer settles at "as wide as the
+        text already was" and lets the policy run off the right edge. The panel
+        is sized by the window instead, which is the thing the text has to fit.
+        """
+        # winfo/event geometry is in real screen pixels; wraplength is not --
+        # CustomTkinter scales it on the way in, so on a 125% display a width
+        # measured here and handed straight over comes back a quarter too wide
+        # and the text runs off the edge. Undo the scaling before subtracting.
+        width = self._reverse_widget_scaling(event.width)
+        for label in self._paragraphs:
+            label.configure(wraplength=max(240, width - self._GUTTER))
 
 
 # ---------------------------------------------------------------------------

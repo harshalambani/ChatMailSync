@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
@@ -313,7 +314,7 @@ private fun QaLine(tag: String, text: String, style: TextStyle) {
 }
 
 @Composable
-fun HelpScreen(onBack: () -> Unit) {
+fun HelpScreen(onBack: () -> Unit, onOpenPrivacy: () -> Unit) {
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
         // this NavHost for the status bar and the bottom bars, and insets
@@ -351,6 +352,12 @@ fun HelpScreen(onBack: () -> Unit) {
                     QaLine("A", answer, MaterialTheme.typography.bodyMedium)
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // Second way in. The policy also sits in Settings, but someone
+            // looking for what the app does with their data looks under Help
+            // at least as readily -- and one buried entrance was enough for a
+            // store reviewer to miss it entirely.
+            TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
         }
     }
 }
