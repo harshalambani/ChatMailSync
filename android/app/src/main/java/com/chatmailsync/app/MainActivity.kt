@@ -1185,6 +1185,7 @@ fun ChatMailApp(
                     onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
                     onOpenSyncLog = { navController.navigate("syncLog") },
+                    onOpenPrivacy = { navController.navigate("privacy") },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     watchedFolderUri = watchedFolderUri,
@@ -1327,7 +1328,19 @@ fun ChatMailApp(
                 )
             }
             composable("help") {
-                HelpScreen(onBack = { navController.popBackStack() })
+                HelpScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPrivacy = { navController.navigate("privacy") },
+                )
+            }
+            composable("privacy") {
+                // Two ways in - Settings and Help - so the back label is read
+                // off the stack, the same way the sync log does it.
+                val from = navController.previousBackStackEntry?.destination?.route
+                PrivacyScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = if (from == "help") "Help" else "Settings",
+                )
             }
             composable("syncLog") {
                 // Three ways in - Settings, the status card on Home, and the

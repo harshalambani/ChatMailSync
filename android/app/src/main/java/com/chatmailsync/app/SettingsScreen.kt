@@ -2,7 +2,6 @@
 
 package com.chatmailsync.app
 
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +70,7 @@ fun SettingsScreen(
     onOpenMailAccount: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenSyncLog: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
     watchedFolderUri: String?,
@@ -397,18 +397,13 @@ fun SettingsScreen(
             )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
             TextButton(onClick = onOpenSyncLog) { Text("Sync log") }
-            // The policy is hosted, not bundled, so this opens a browser. It
-            // is here because a store asked for it -- Indus put the app on
-            // hold over a policy that was perfectly reachable on the web but
-            // unreachable from inside the app, which is a fair distinction:
-            // someone holding the phone should not have to go and find it.
-            TextButton(
-                onClick = {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)),
-                    )
-                },
-            ) { Text("Privacy policy") }
+            // The policy is carried in the app now, not linked out to. It was
+            // a browser link, which is where Indus Appstore put the app on
+            // hold: a policy that needs a second app and a live connection
+            // before it can be read is not really inside the app at all. This
+            // goes to a screen that renders offline, with the hosted copy
+            // offered from there as a secondary.
+            TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
         }
     }
 }

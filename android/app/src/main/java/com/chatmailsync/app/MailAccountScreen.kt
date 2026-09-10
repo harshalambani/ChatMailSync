@@ -5,8 +5,6 @@ package com.chatmailsync.app
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -240,9 +238,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
                 onClick = {
                     val prompt = buildAppPasswordPrompt(providerKey, providerLabel, host)
                     val encoded = URLEncoder.encode(prompt, "UTF-8")
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$encoded")),
-                    )
+                    openUrl(context, "https://www.google.com/search?q=$encoded")
                 },
             ) { Text("Search for steps") }
         }
@@ -257,7 +253,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
         // it — the two buttons above don't have that expiry problem.
         if (helpUrl != null) {
             TextButton(
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(helpUrl))) },
+                onClick = { openUrl(context, helpUrl) },
             ) { Text("Open $providerLabel's help page") }
         }
     }
