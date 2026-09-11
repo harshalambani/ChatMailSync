@@ -256,12 +256,48 @@ def test_googlemail_address_still_gets_the_gmail_hint(monkeypatch, all_probes_pa
     assert "16-character app password" in result["message"]
 
 
-def test_outlook_rejection_mentions_the_administrator(monkeypatch, all_probes_pass):
+@pytest.mark.parametrize(
+    "host, email",
+    [
+        ("outlook.office365.com", "someone@acme.co"),
+        ("imap-mail.outlook.com", "someone@acme.co"),
+        ("imap.acme.co", "someone@outlook.com"),
+        ("imap.acme.co", "someone@hotmail.co.uk"),
+        ("imap.acme.co", "someone@live.com"),
+        ("imap.acme.co", "someone@msn.com"),
+    ],
+)
+def test_a_microsoft_mailbox_is_told_it_cannot_be_used(
+    monkeypatch, all_probes_pass, host, email
+):
+    # Microsoft switched app-password sign-in off for personal Outlook.com /
+    # Hotmail / Live / MSN mailboxes in September 2024, and for work and
+    # school Microsoft 365 before that. This app does no OAuth, so there is
+    # no password and no administrator setting that can make it work -- the
+    # old "ask your administrator" hint sent people on an errand that could
+    # not end. Say plainly that the destination has to be a different mailbox.
     _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
-    result = check_connection(
-        "outlook.office365.com", PORT, "someone@acme.co", PASSWORD
-    )
-    assert "administrator" in result["message"]
+    result = check_connection(host, PORT, email, PASSWORD)
+    assert "cannot be used with this app" in result["message"]
+    assert "administrator" not in result["message"]
+
+
+@pytest.mark.parametrize(
+    "host, email",
+    [
+        ("outlook.office365.com.phish.example", "someone@acme.co"),
+        ("imap.acme.co", "someone@hotmail.com.phish.example"),
+        ("notoutlook.com", "someone@acme.co"),
+    ],
+)
+def test_lookalike_domains_do_not_get_the_microsoft_hint(
+    monkeypatch, all_probes_pass, host, email
+):
+    # Matched on whole domain labels, exactly as the Gmail hint is: telling
+    # someone their working mailbox is unusable would be the worse error.
+    _patch_transport(monkeypatch, login_exc=MailTransportError("bad", status=401))
+    result = check_connection(host, PORT, email, PASSWORD)
+    assert "cannot be used with this app" not in result["message"]
 
 
 def test_unknown_provider_gets_the_generic_hint(monkeypatch, all_probes_pass):

@@ -193,3 +193,56 @@ def test_mailbox_clear_steps_gmail_never_says_delete_the_folder():
 def test_mailbox_clear_steps_non_gmail_names_the_folder():
     steps = config.mailbox_clear_steps("WhatsApp/Alice", gmail=False)
     assert any("delete the folder 'WhatsApp/Alice'" in s for s in steps)
+
+
+def test_retired_provider_keys_are_not_also_offered():
+    """A key cannot be both live and retired -- the resolver would never
+    reach the retirement table, and the two would silently disagree."""
+    for key in config.RETIRED_IMAP_PROVIDERS:
+        assert key not in config.IMAP_PROVIDERS, key
+
+
+def test_every_retirement_lands_on_a_provider_that_exists():
+    for key, landing in config.RETIRED_IMAP_PROVIDERS.items():
+        assert landing in config.IMAP_PROVIDERS, (key, landing)
+
+
+def test_outlook_is_retired_onto_custom():
+    """Dropped in 2.1.4: Microsoft accepts OAuth2 only and this app does
+    none. "custom" is the honest landing -- the host the old release derived
+    is still in the settings file and the field unlocks, so the user can see
+    and change it instead of having Gmail's host appear in its place."""
+    assert config.RETIRED_IMAP_PROVIDERS["outlook"] == "custom"
+    assert config.resolve_provider_key("outlook") == "custom"
+
+
+def test_a_live_provider_key_resolves_to_itself():
+    for key in config.IMAP_PROVIDERS:
+        assert config.resolve_provider_key(key) == key, key
+
+
+def test_an_unknown_provider_key_falls_back_to_gmail():
+    for key in ("", None, "nonesuch", 0, []):
+        assert config.resolve_provider_key(key) == "gmail", key
+
+
+def test_no_provider_is_offered_without_a_message_size_cap():
+    """PROVIDER_MAX_MESSAGE_BYTES is keyed to the provider table; a preset
+    added without a cap would silently get the generic default."""
+    for key, preset in config.IMAP_PROVIDERS.items():
+        if preset["host"]:
+            assert key in config.PROVIDER_MAX_MESSAGE_BYTES, key
+
+
+def test_retired_provider_landing_is_empty_for_keys_that_were_never_ours():
+    """The narrower question, and the one that licenses rewriting the settings
+    file. resolve_provider_key has to name *some* provider for any input;
+    this one must not, or a hand-edited or truncated key would be quietly
+    replaced with Gmail's host on disk."""
+    for key in ("", None, "nonesuch", "gmail", "custom"):
+        assert config.retired_provider_landing(key) == "", key
+
+
+def test_retired_provider_landing_names_the_replacement():
+    for key, landing in config.RETIRED_IMAP_PROVIDERS.items():
+        assert config.retired_provider_landing(key) == landing, key

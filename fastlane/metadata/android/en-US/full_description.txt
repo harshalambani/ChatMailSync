@@ -10,7 +10,7 @@ HOW IT WORKS
 
 WHAT YOU NEED
 
-An email account that supports IMAP, and an app password for it. Gmail, Outlook, Yahoo, iCloud, Fastmail and any standard IMAP server all work.
+An email account that supports IMAP, and an app password for it. Gmail, Yahoo, iCloud, Fastmail and any standard IMAP server all work.
 
 Be warned: setting up an app password is the least pleasant part of this app. It means a few minutes in your mail provider's security settings, and on Gmail it also means having two-step verification switched on first. The app walks you through it and links to the right page, but there is no way around it - an app password is what lets a program put mail into your mailbox without ever holding your real password.
 

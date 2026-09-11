@@ -41,7 +41,7 @@ Alternates, if the portal rejects the first for naming another app:
 >
 > WHAT YOU NEED
 >
-> An email account that supports IMAP, and an app password for it. Gmail, Outlook, Yahoo,
+> An email account that supports IMAP, and an app password for it. Gmail, Yahoo,
 > iCloud, Fastmail and any standard IMAP server all work.
 >
 > Be warned: setting up an app password is the least pleasant part of this app. It means a

@@ -556,7 +556,7 @@ def imap_tls_context() -> "ssl.SSLContext":
     current CPython the default already refuses TLS 1.0/1.1, but that is a
     property of the interpreter the app is built against, and this app ships
     inside two of them (the portable Windows bundle and Chaquopy) whose
-    versions move independently. Gmail, Outlook, iCloud and Fastmail have
+    versions move independently. Gmail, Yahoo, iCloud and Fastmail have
     all required 1.2+ for years, so the floor costs no real connection.
     """
     ctx = ssl.create_default_context()
@@ -656,12 +656,14 @@ class ImapTransport:
             # of the raw imaplib string being retried 5x by
             # _insert_with_backoff before finally surfacing.
             raise MailTransportError(
-                "IMAP login failed for %s @ %s:%s — this can mean a wrong "
-                "password, but for many providers (especially Workspace/"
-                "Microsoft 365 accounts) it means the provider or an admin "
-                "has disabled app-password / basic-auth IMAP access "
-                "entirely. Server said: %s"
-                % (self._email, self._host, self._port, _strip_secret(str(exc), self._password)),
+                "IMAP login failed for %s @ %s:%s — %s Server said: %s"
+                % (
+                    self._email,
+                    self._host,
+                    self._port,
+                    login_failure_hint(self._host, self._email),
+                    _strip_secret(str(exc), self._password),
+                ),
                 status=401,
             ) from exc
         except OSError as exc:
@@ -990,6 +992,28 @@ def _gmail_like(host: str, email: str) -> bool:
     return any(mail_domain == d or mail_domain.endswith("." + d) for d in domains)
 
 
+def _microsoft_like(host: str, email: str) -> bool:
+    """True when the mailbox being signed in to is a Microsoft one.
+
+    Matched on whole domain labels, exactly as _gmail_like does and for the
+    same reason: "outlook.office365.com.phish.example" contains "outlook" and
+    is not Microsoft, and the wrong hint here would tell someone their working
+    provider is unusable. Both halves are checked because a personal address
+    (hotmail.com) and the shared IMAP front end (outlook.office365.com) each
+    identify Microsoft on their own.
+    """
+    host_domains = ("office365.com", "outlook.com", "office.com", "hotmail.com")
+    mail_domains = (
+        "outlook.com", "hotmail.com", "hotmail.co.uk", "live.com",
+        "msn.com", "passport.com", "windowslive.com",
+    )
+    hostname = (host or "").strip().lower().rstrip(".")
+    if any(hostname == d or hostname.endswith("." + d) for d in host_domains):
+        return True
+    _, _, mail_domain = (email or "").strip().lower().rpartition("@")
+    return any(mail_domain == d or mail_domain.endswith("." + d) for d in mail_domains)
+
+
 def login_failure_hint(host: str, email: str) -> str:
     """The one sentence that turns a rejected login into a next action.
 
@@ -1005,11 +1029,15 @@ def login_failure_hint(host: str, email: str) -> str:
             "password, not your normal Google password — your account "
             "password will always be rejected here."
         )
-    if "outlook" in (host or "").lower() or "office365" in (host or "").lower():
+    if _microsoft_like(host, email):
         return (
-            "The server rejected this password. Microsoft 365 accounts often "
-            "have app passwords switched off by an administrator, in which "
-            "case no password will work here until they turn IMAP back on."
+            "Microsoft mailboxes cannot be used with this app. Microsoft "
+            "switched off app-password sign-in for Outlook.com, Hotmail, "
+            "Live and MSN accounts in September 2024, and for work or school "
+            "Microsoft 365 accounts before that — they all need OAuth now, "
+            "which this app does not do. Use a mailbox that still issues an "
+            "app password (Gmail, Yahoo, iCloud or Fastmail), or any other "
+            "IMAP server, as the destination."
         )
     return (
         "The server rejected this sign-in. That usually means a wrong app "

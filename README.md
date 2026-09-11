@@ -4,7 +4,7 @@ Sync exported WhatsApp `.txt` (or `.zip`) chats into your own mailbox. Each chat
 becomes an email thread under a `WhatsApp/<Chat Name>` label/folder, with messages
 rendered as a readable, WhatsApp-style HTML conversation (inline images, attached
 media). Mail is delivered over IMAP with an app password, which works with any
-provider — Gmail, Outlook, Yahoo, iCloud, Fastmail, and more. A Gmail-only
+provider — Gmail, Yahoo, iCloud, Fastmail, and more. A Gmail-only
 Google sign-in path existed until v2.0.0; see
 [Why Google sign-in was removed](#why-google-sign-in-was-removed).
 
@@ -40,7 +40,7 @@ data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (IMAP APPEND)  →
   never remove it, so the cleanup is manual. Replacing an instance is fine — carry
   `sync_state.db` across.
 - Files move from `inbox/` to `processed/` only after a fully successful sync.
-- Every provider caps the size of a single message (25 MB at Gmail/Outlook/Yahoo,
+- Every provider caps the size of a single message (25 MB at Gmail/Yahoo,
   20 MB at iCloud; RFC 7889 `APPENDLIMIT` is honoured when advertised, and a
   refusal in flight lowers the ceiling for the rest of the run). A chunk that
   would exceed it is split; MIME encoding inflates raw bytes by roughly ×1.37, so

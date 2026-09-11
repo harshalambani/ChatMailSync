@@ -323,6 +323,21 @@ fun ChatMailApp(
                 port = entry.callAttr("get", "port").toString().toIntOrNull() ?: 993,
             )
         }
+        // A settings file written by a release that offered a provider this
+        // one has retired still names it, and the picker would otherwise show
+        // the raw key with the host field locked. Ask the Python side what
+        // replaced it (config.RETIRED_IMAP_PROVIDERS), and save the answer so
+        // the two sides stop disagreeing from here on. A key that was never
+        // ours comes back empty and is left alone -- guessing at it would put
+        // some other provider's host in front of the user without saying so.
+        // The saved host is never touched either: only the user knows what it
+        // should be.
+        val landing = Python.getInstance().getModule("src.config")
+            .callAttr("retired_provider_landing", imapProvider).toString()
+        if (landing.isNotEmpty() && landing != imapProvider) {
+            imapProvider = landing
+            AppPrefs.setImapProvider(context, landing)
+        }
         stagePlan = Python.getInstance().getModule("src.mail_client")
             .callAttr("connection_stage_plan").asList().map { entry ->
                 WizardStage(

@@ -69,7 +69,6 @@ val BACKEND_LABELS = mapOf(
 // UI falls back to generic guidance instead.
 internal val APP_PASSWORD_HELP_URLS = mapOf(
     "gmail" to "https://support.google.com/accounts/answer/185833",
-    "outlook" to "https://support.microsoft.com/en-us/account-billing/using-app-passwords-with-apps-that-don-t-support-two-step-verification-5896ed9b-4263-e681-128a-a6f2979a7944",
     "yahoo" to "https://help.yahoo.com/kb/SLN15241.html",
     "icloud" to "https://support.apple.com/en-us/102654",
     "fastmail" to "https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords",
@@ -77,19 +76,13 @@ internal val APP_PASSWORD_HELP_URLS = mapOf(
 
 internal val APP_PASSWORD_HELP_TEXT = mapOf(
     "gmail" to "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
-    // Personal Microsoft accounts only. Work and school (Microsoft 365)
-    // mailboxes have basic authentication switched off, so an app password is
-    // refused there whatever host is entered -- see src/config.py's
-    // IMAP_PROVIDERS note.
-    "outlook" to "Outlook.com app passwords are generated from your personal Microsoft account's security settings (requires two-step verification to be on). Work or school Microsoft 365 accounts can't use an app password at all.",
     "yahoo" to "Yahoo app passwords are generated from your Yahoo Account security page.",
     "icloud" to "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
     "fastmail" to "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
 )
 
 // Bump this string (to the month/year you actually re-checked the steps
-// below) any time APP_PASSWORD_STEPS_GMAIL or APP_PASSWORD_STEPS_OUTLOOK is
-// edited. It's rendered next to the steps so a user whose provider has since
+// below) any time APP_PASSWORD_STEPS_GMAIL is edited. It's rendered next to the steps so a user whose provider has since
 // changed its menus knows to trust the "Ask Google" / help-page buttons over
 // this in-app text rather than assume the app is simply wrong.
 internal const val APP_PASSWORD_STEPS_REVIEWED = "August 2026"
@@ -105,20 +98,6 @@ internal val APP_PASSWORD_STEPS_GMAIL = listOf(
     "Go to myaccount.google.com/apppasswords (in a browser) and sign in.",
     "Create a new app password there — Google gives you a 16-character code.",
     "Paste that 16-character code into the \"App password\" field below (not your normal Google password).",
-)
-
-// Derived from support.microsoft.com's "Using app passwords with apps that
-// don't support two-step verification" page (fetched and read directly —
-// see task report), which describes: two-step verification must be on;
-// go to Advanced security options; scroll to the App passwords section;
-// select the option to create one; use it wherever the app would normally
-// ask for your Microsoft account password.
-internal val APP_PASSWORD_STEPS_OUTLOOK = listOf(
-    "Turn on two-step verification for your Microsoft account first — app passwords are only offered once it's on.",
-    "Go to your Microsoft account's Advanced security options (account.microsoft.com) and sign in.",
-    "Scroll to the \"App passwords\" section and choose to create one.",
-    "Paste the generated app password into the \"App password\" field below (not your normal Microsoft password).",
-    "If this is a work or school (Microsoft 365) account, see the note below — IMAP may be disabled by the admin regardless.",
 )
 
 /** Builds the provider-specific question a user can copy into an AI
@@ -179,13 +158,12 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
             Text(helpText, style = MaterialTheme.typography.bodySmall)
         }
 
-        // Inline numbered steps — only for the two providers whose official
-        // pages were actually read and translated into steps here (Gmail,
-        // Outlook). Every other provider relies on the help-page link and the
-        // prompt buttons below instead of guessed steps.
+        // Inline numbered steps — only for Gmail, the one provider whose
+        // official page was actually read and translated into steps here.
+        // Every other provider relies on the help-page link and the prompt
+        // buttons below instead of guessed steps.
         val inlineSteps = when (providerKey) {
             "gmail" -> APP_PASSWORD_STEPS_GMAIL
-            "outlook" -> APP_PASSWORD_STEPS_OUTLOOK
             else -> null
         }
         if (inlineSteps != null) {
@@ -204,14 +182,6 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
 
         // Provider-specific gotchas that aren't obvious from the generic help
         // text above, surfaced only when they're relevant.
-        if (providerKey == "outlook") {
-            Text(
-                "Work or school Microsoft 365 accounts often have IMAP access disabled by " +
-                    "the organisation's administrator — if so, even a correct app password " +
-                    "will be rejected.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
         if (providerKey == "icloud") {
             Text(
                 "This must be an app-specific password generated at appleid.apple.com, not " +
