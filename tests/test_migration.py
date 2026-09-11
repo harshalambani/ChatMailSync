@@ -543,3 +543,15 @@ def _has_table(db, name):
     finally:
         conn.close()
 
+
+
+def test_a_retired_provider_key_is_rewritten_on_restore():
+    """A bundle written by a release that still offered Outlook.com restores
+    as the key this build reads it as, and is written back so the settings
+    file and the rest of the app agree from here on. The host is not
+    replaced with some other provider's -- "custom" has no preset, so
+    whatever the user had stays theirs to see and change."""
+    settings = {"imap_provider": "outlook", "imap_host": "outlook.office365.com"}
+    result = migration._with_derived_host(settings)
+    assert result["imap_provider"] == "custom"
+    assert "imap_host" not in result

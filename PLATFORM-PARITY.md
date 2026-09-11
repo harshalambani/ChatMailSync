@@ -233,7 +233,7 @@ reasoning behind each is still the reasoning the code follows.
    on first read (`gui_worker.resolve_imap_password`).
 2. **P2 - We are no longer a Gmail-only tool. DONE and merged (2026-08-06).**
    The final sweep is described at the end of this section. With IMAP
-   as the default backend the app archives into Outlook, Yahoo, iCloud,
+   as the default backend the app archives into Gmail, Yahoo, iCloud,
    Fastmail or any IMAP server. The product is renamed **WA Mail Sync**
    (Android package `com.wamailsync.app`), the shared core module is
    `src/mail_client.py` (`MailTransport`/`MailTransportError`), the Chaquopy

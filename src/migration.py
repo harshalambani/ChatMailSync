@@ -49,7 +49,7 @@ from src import state
 # is a constant table of provider presets. The "root is a parameter" rule above
 # is about config's *path* constants, which are rebound at runtime per platform;
 # a lookup table is neither rebound nor a test seam.
-from src.config import IMAP_PROVIDERS
+from src.config import IMAP_PROVIDERS, retired_provider_landing
 
 # Bumped only when the *bundle* layout changes -- the names of the members, or
 # the shape of the manifest. The database inside carries its own schema and is
@@ -147,6 +147,15 @@ def _with_derived_host(settings: dict) -> dict:
     # the one that still holds if some future release puts `imap_host` back on
     # the allow-list without remembering why it came off.
     settings.pop("imap_host", None)
+    # A bundle written by a release that still offered a provider this one has
+    # retired restores as the key that replaced it, and is written back so the
+    # rest of the app and the settings file agree from here on. Only a key we
+    # actually retired is rewritten: an unrecognised one keeps falling through
+    # to the no-preset path below, which drops the host rather than trusting
+    # whatever came with it.
+    landing = retired_provider_landing(settings.get("imap_provider"))
+    if landing:
+        settings["imap_provider"] = landing
     preset = IMAP_PROVIDERS.get(str(settings.get("imap_provider") or ""))
     if preset and preset.get("host"):
         settings["imap_host"] = preset["host"]

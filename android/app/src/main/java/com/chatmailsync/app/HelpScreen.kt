@@ -86,9 +86,10 @@ internal val FAQ = listOf(
         "expire, and can be revoked on its own. The honest trade-off is that you type a secret " +
         "into the app instead of tapping a consent screen, which is why two of the questions " +
         "above set out exactly what that secret can and can't touch. One consequence worth " +
-        "knowing: Microsoft has switched basic authentication off for work and school " +
-        "(Microsoft 365) mailboxes, so an app password is refused there; personal Outlook.com " +
-        "accounts are fine.",
+        "knowing: Microsoft no longer allows app passwords on any of its mailboxes — work and " +
+        "school (Microsoft 365) accounts lost basic authentication first, and personal " +
+        "Outlook.com, Hotmail, Live and MSN accounts followed in September 2024 — so a Microsoft " +
+        "mailbox cannot be used as the destination at all.",
     "I moved the app to another PC, or set it up on a new phone, and it wants the password again." to
         "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
         "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +
@@ -202,7 +203,7 @@ internal val FAQ = listOf(
         "one. Your mail password is in neither: it never leaves this phone's Keystore, so you enter " +
         "it once after any restore.",
     "The sync said some media was \"too large to email\"." to
-        "Every provider caps how big one email can be — 25 MB at Gmail, Outlook and Yahoo, 20 MB at " +
+        "Every provider caps how big one email can be — 25 MB at Gmail and Yahoo, 20 MB at " +
         "iCloud. A busy day is split across several emails to stay under that, so you'll almost never " +
         "notice. What can't be split is a single file, usually a long video, that's bigger than the " +
         "whole cap on its own — no email anywhere can carry it. The message itself is still archived " +

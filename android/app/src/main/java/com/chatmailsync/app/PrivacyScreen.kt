@@ -52,7 +52,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "store listing's data-safety declaration change with the release that does it - " +
             "before you install it, not after.",
         "There is one way to connect: an email app password over IMAP, which works with any " +
-            "IMAP provider, including Gmail, Outlook, Yahoo, iCloud and Fastmail.",
+            "IMAP provider, including Gmail, Yahoo, iCloud and Fastmail.",
         "None of this has to be taken on trust. The app is open source, and every claim on " +
             "this page can be checked against the code that is supposed to keep it: " +
             "github.com/harshalambani/ChatMailSync",

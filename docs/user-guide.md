@@ -27,7 +27,7 @@ anything, and never posts anything back to WhatsApp.
 
 Before the first sync, the app needs permission to add messages to your mailbox.
 It does that with an **email app password (IMAP)**, which works with Gmail,
-Outlook, Yahoo, iCloud, Fastmail and any other IMAP mailbox.
+Yahoo, iCloud, Fastmail and any other IMAP mailbox.
 
 ### Email app password (IMAP)
 
@@ -43,7 +43,7 @@ your real password.
    (top-left), or the Escape key, returns you to the sync view.
 3. Under **Mail account**, click **Change…**. That opens the Mail account screen
    the same way, with **Back to settings** to come out of it.
-4. Choose your provider (Gmail, Outlook, Yahoo, iCloud, Fastmail, or a custom
+4. Choose your provider (Gmail, Yahoo, iCloud, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
 5. Enter your email address and the app password, then **Save**.
 6. The indicator turns **green** and says **Connected**.
@@ -359,9 +359,11 @@ revoked on its own. The honest trade-off is that you type a secret into the app
 instead of clicking a consent screen, which is why two of the questions above set
 out exactly what that secret can and cannot touch.
 
-One consequence worth knowing: Microsoft has switched basic authentication off
-for work and school (Microsoft 365) mailboxes, so an app password is refused
-there; personal Outlook.com accounts are fine.
+One consequence worth knowing: Microsoft no longer allows app passwords on any
+of its mailboxes — work and school (Microsoft 365) accounts lost basic
+authentication first, and personal Outlook.com, Hotmail, Live and MSN accounts
+followed in September 2024 — so a Microsoft mailbox cannot be used as the
+destination at all.
 
 ---
 
@@ -547,8 +549,8 @@ it once after a restore.
 
 ### Q. The sync said some media was "too large to email".
 
-**A.** Every email provider caps how big a single email can be — 25 MB at Gmail,
-Outlook and Yahoo, 20 MB at iCloud, more at some others. The app works within
+**A.** Every email provider caps how big a single email can be — 25 MB at Gmail
+and Yahoo, 20 MB at iCloud, more at some others. The app works within
 that cap by splitting a busy day across several emails, so in almost every case
 you will never notice it. One case cannot be split: a *single* file, usually a
 long video, larger than the whole cap on its own. No email anywhere can carry

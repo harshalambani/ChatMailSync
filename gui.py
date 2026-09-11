@@ -50,6 +50,7 @@ from src.config import (
     is_legacy_oauth_user,
     mailbox_clear_steps,
     resolve_mail_backend,
+    resolve_provider_key,
 )
 from src.app_version import app_version, version_label
 # The same bundle format Android reads and writes, so a backup taken on
@@ -2594,8 +2595,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "This removes the saved app password from this computer only.\n\n"
             "It does NOT revoke or delete the app password at your email "
             "provider — for Gmail, remove it under Google Account > Security > "
-            "App passwords; for Outlook/Microsoft, under Security > Advanced "
-            "security options. You'll need to generate a new one (or re-enter "
+            "App passwords. You'll need to generate a new one (or re-enter "
             "this one) to connect again.",
             icon="warning",
         )
@@ -2792,8 +2792,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             "The sign-in never completed Google's app verification, so it "
             "stayed in Google's \"Testing\" mode: it expired about every 7 "
             "days and only pre-listed accounts could use it at all. An app "
-            "password has neither limit and works with Gmail, Outlook, Yahoo, "
-            "iCloud, Fastmail or any IMAP server.\n\n"
+            "password has neither limit and works with Gmail, Yahoo, iCloud, "
+            "Fastmail or any IMAP server.\n\n"
             "Nothing already archived is affected, and none of your sync "
             "history was touched. To carry on, open Settings (gear icon, "
             "top-right) -> Mail account and set up an app password -- the "
@@ -2918,7 +2918,7 @@ PRIVACY_POLICY = [
             ),
             (
                 "There is one way to connect: an email app password over IMAP, which works "
-                "with any IMAP provider, including Gmail, Outlook, Yahoo, iCloud and "
+                "with any IMAP provider, including Gmail, Yahoo, iCloud and "
                 "Fastmail."
             ),
             (
@@ -3129,7 +3129,6 @@ PRIVACY_POLICY = [
 
 APP_PASSWORD_HELP_URLS = {
     "gmail": "https://support.google.com/accounts/answer/185833",
-    "outlook": "https://support.microsoft.com/en-us/account-billing/using-app-passwords-with-apps-that-don-t-support-two-step-verification-5896ed9b-4263-e681-128a-a6f2979a7944",
     "yahoo": "https://help.yahoo.com/kb/SLN15241.html",
     "icloud": "https://support.apple.com/en-us/102654",
     "fastmail": "https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords",
@@ -3137,18 +3136,13 @@ APP_PASSWORD_HELP_URLS = {
 
 APP_PASSWORD_HELP_TEXT = {
     "gmail": "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
-    # Personal Microsoft accounts only. Work and school (Microsoft 365) mailboxes
-    # have basic authentication switched off, so an app password is refused there
-    # whatever host is entered -- see src/config.py's IMAP_PROVIDERS note.
-    "outlook": "Outlook.com app passwords are generated from your personal Microsoft account's security settings (requires two-step verification to be on). Work or school Microsoft 365 accounts can't use an app password at all.",
     "yahoo": "Yahoo app passwords are generated from your Yahoo Account security page.",
     "icloud": "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
     "fastmail": "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
 }
 
 # Bump this string (to the month/year you actually re-checked the steps
-# below) any time APP_PASSWORD_STEPS_GMAIL or APP_PASSWORD_STEPS_OUTLOOK is
-# edited. It's rendered next to the steps so a user whose provider has since
+# below) any time APP_PASSWORD_STEPS_GMAIL is edited. It's rendered next to the steps so a user whose provider has since
 # changed its menus knows to trust the "Search for steps" / help-page button
 # over this in-app text rather than assume the app is simply wrong.
 APP_PASSWORD_STEPS_REVIEWED = "August 2026"
@@ -3164,19 +3158,6 @@ APP_PASSWORD_STEPS_GMAIL = [
     "Go to myaccount.google.com/apppasswords (in a browser) and sign in.",
     "Create a new app password there — Google gives you a 16-character code.",
     "Paste that 16-character code into the \"App password\" field below (not your normal Google password).",
-]
-
-# Derived from support.microsoft.com's "Using app passwords with apps that
-# don't support two-step verification" page, which describes: two-step
-# verification must be on; go to Advanced security options; scroll to the
-# App passwords section; select the option to create one; use it wherever
-# the app would normally ask for your Microsoft account password.
-APP_PASSWORD_STEPS_OUTLOOK = [
-    "Turn on two-step verification for your Microsoft account first — app passwords are only offered once it's on.",
-    "Go to your Microsoft account's Advanced security options (account.microsoft.com) and sign in.",
-    "Scroll to the \"App passwords\" section and choose to create one.",
-    "Paste the generated app password into the \"App password\" field below (not your normal Microsoft password).",
-    "If this is a work or school (Microsoft 365) account, see the note below — IMAP may be disabled by the admin regardless.",
 ]
 
 
@@ -4094,7 +4075,7 @@ class _MailAccountPanel(_Panel):
         prow = ctk.CTkFrame(self._imap_frame, fg_color="transparent")
         prow.pack(fill="x", padx=20, pady=(0, 8))
         ctk.CTkLabel(prow, text="Provider:", width=130, anchor="w").pack(side="left")
-        current_provider = settings.get("imap_provider", "gmail")
+        current_provider = resolve_provider_key(settings.get("imap_provider", "gmail"))
         self._provider_var = ctk.StringVar(
             value=_PROVIDER_LABELS.get(current_provider, _PROVIDER_LABELS["gmail"])
         )
@@ -4200,7 +4181,8 @@ class _MailAccountPanel(_Panel):
         settings = self._app._settings
         self._provider_var.set(
             _PROVIDER_LABELS.get(
-                settings.get("imap_provider", "gmail"), _PROVIDER_LABELS["gmail"]
+                resolve_provider_key(settings.get("imap_provider", "gmail")),
+                _PROVIDER_LABELS["gmail"],
             )
         )
         self._email_entry.delete(0, "end")
@@ -4404,11 +4386,11 @@ class _MailAccountPanel(_Panel):
         elif help_text:
             secondary(help_text)
 
-        # Inline numbered steps -- only for the two providers whose official
-        # pages were actually read and translated into steps here (Gmail,
-        # Outlook). Every other provider relies on the help-page link and
-        # the prompt buttons below instead of guessed steps.
-        inline_steps = {"gmail": APP_PASSWORD_STEPS_GMAIL, "outlook": APP_PASSWORD_STEPS_OUTLOOK}.get(provider_key)
+        # Inline numbered steps -- only for Gmail, the one provider whose
+        # official page was actually read and translated into steps here.
+        # Every other provider relies on the help-page link and the prompt
+        # buttons below instead of guessed steps.
+        inline_steps = {"gmail": APP_PASSWORD_STEPS_GMAIL}.get(provider_key)
         if inline_steps:
             for i, step in enumerate(inline_steps, start=1):
                 secondary(f"{i}. {step}")
@@ -4419,12 +4401,6 @@ class _MailAccountPanel(_Panel):
 
         # Provider-specific gotchas that aren't obvious from the generic
         # help text above, surfaced only when they're relevant.
-        if provider_key == "outlook":
-            secondary(
-                "Work or school Microsoft 365 accounts often have IMAP access disabled by "
-                "the organisation's administrator — if so, even a correct app password "
-                "will be rejected."
-            )
         if provider_key == "icloud":
             secondary(
                 "This must be an app-specific password generated at appleid.apple.com, not "
@@ -4618,7 +4594,7 @@ class _MailWizardPanel(_Panel):
 
         settings = app._settings
         self._step = 0
-        self._provider_key = settings.get("imap_provider", "gmail")
+        self._provider_key = resolve_provider_key(settings.get("imap_provider", "gmail"))
         self._email = settings.get("imap_email", "") or ""
         self._password = ""
         self._custom_host = ""
@@ -4783,10 +4759,7 @@ class _MailWizardPanel(_Panel):
         elif help_text:
             self._secondary(parent, help_text)
 
-        inline_steps = {
-            "gmail": APP_PASSWORD_STEPS_GMAIL,
-            "outlook": APP_PASSWORD_STEPS_OUTLOOK,
-        }.get(provider_key)
+        inline_steps = {"gmail": APP_PASSWORD_STEPS_GMAIL}.get(provider_key)
         if inline_steps:
             for i, step in enumerate(inline_steps, start=1):
                 self._secondary(parent, f"{i}. {step}")
@@ -4794,13 +4767,6 @@ class _MailWizardPanel(_Panel):
                 parent,
                 f"Steps checked {APP_PASSWORD_STEPS_REVIEWED}. If they don't match what you "
                 "see, use the buttons below to get the current version.",
-            )
-        if provider_key == "outlook":
-            self._secondary(
-                parent,
-                "Work or school Microsoft 365 accounts often have IMAP access disabled by "
-                "the organisation's administrator — if so, even a correct app password "
-                "will be rejected.",
             )
         if provider_key == "icloud":
             self._secondary(
@@ -6243,7 +6209,7 @@ class _ChatDetailPanel(_Panel):
         # the RFC 822 Message-ID this app generated (that is what IMAP threads
         # on), not a Gmail thread id, so the mail.google.com/#all/<id> deep
         # link would point at a thread Gmail has never heard of -- and at
-        # Gmail at all for someone archiving to Outlook or Fastmail. There is
+        # Gmail at all for someone archiving to Fastmail or iCloud. There is
         # no cross-provider equivalent, so the action is gone rather than
         # disabled.
         syncing = self._app._worker is not None

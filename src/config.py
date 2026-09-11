@@ -148,21 +148,62 @@ def resolve_mail_backend(saved: dict) -> str:
 
 IMAP_PROVIDERS = {
     "gmail":    {"label": "Gmail",          "host": "imap.gmail.com",        "port": 993},
-    # "Outlook / 365" promised something this app cannot deliver: Microsoft
-    # turned off basic authentication for work and school (Microsoft 365)
-    # mailboxes, so an app password there is refused no matter what host is
-    # typed in -- those accounts need OAuth, which this app does not do at all
-    # (the Google sign-in that used to be here went in 2.0.0).
-    # The label now names the account type that can actually sign in, rather
-    # than inviting a work address into a dead end. The host is unchanged and
-    # deliberate: consumer Outlook.com mailboxes live on the office365.com IMAP
-    # front end too.
-    "outlook":  {"label": "Outlook.com",    "host": "outlook.office365.com", "port": 993},
     "yahoo":    {"label": "Yahoo",          "host": "imap.mail.yahoo.com",   "port": 993},
     "icloud":   {"label": "iCloud",         "host": "imap.mail.me.com",      "port": 993},
     "fastmail": {"label": "Fastmail",       "host": "imap.fastmail.com",     "port": 993},
     "custom":   {"label": "Custom",         "host": None,                    "port": 993},
 }
+
+# Provider keys earlier releases offered and this one does not, each mapped to
+# the key a settings file naming it should now be read as.
+#
+# Listing one here is not tidiness: a saved settings file still names it, and
+# every lookup that turns a saved key into a label or a host has to land
+# somewhere honest rather than silently claiming to be Gmail. "custom" is that
+# landing -- the host the old release derived is still in the settings file,
+# the host field unlocks so it can be read and changed, and nothing is
+# rewritten behind the user's back.
+RETIRED_IMAP_PROVIDERS = {
+    # Dropped in 2.1.4. Microsoft switched basic authentication off for
+    # personal Outlook.com / Hotmail / Live / MSN mailboxes on 16 September
+    # 2024; they accept OAuth2 only for IMAP now. This app does no OAuth at
+    # all -- the Google sign-in that used to be here went in 2.0.0 -- so an
+    # app password is refused there no matter what host is typed in, and the
+    # work/school Microsoft 365 side was never reachable either. Listing the
+    # provider promised a sign-in that cannot happen on any 2.x release.
+    "outlook": "custom",
+}
+
+
+def resolve_provider_key(key) -> str:
+    """The provider key *this* build understands, for one read out of settings.
+
+    Settings files outlive provider lists. A key this build still knows comes
+    back untouched; a key it retired comes back as whatever RETIRED_IMAP_PROVIDERS
+    says it should now be read as; anything else -- a truncated file, a key from
+    a future release -- comes back as the default, which is what every call site
+    fell back to before this function existed.
+    """
+    key = str(key or "")
+    if key in IMAP_PROVIDERS:
+        return key
+    return RETIRED_IMAP_PROVIDERS.get(key, "gmail")
+
+
+def retired_provider_landing(key) -> str:
+    """The key a *retired* provider should now be read as, or "" if this key
+    was never one of ours.
+
+    resolve_provider_key answers "what do I show?" and so has to name some
+    provider for any input at all. This answers the narrower question "was
+    this key something an older release of *this* app offered, and if so what
+    replaced it?", which is the only case where rewriting what is on disk is
+    justified. A key we have never heard of -- a truncated file, a hand-edited
+    one, a key from a future release -- is left exactly as it is, because
+    guessing at it would hand the user some other provider's host without
+    saying so.
+    """
+    return RETIRED_IMAP_PROVIDERS.get(str(key or ""), "")
 
 def is_gmail_mailbox(saved: dict) -> bool:
     """Whether the destination mailbox is Gmail, however we authenticate to it.
@@ -354,7 +395,6 @@ DEFAULT_MAX_MESSAGE_BYTES = 25_000_000
 # little higher, which is headroom in our favour, not against us.
 PROVIDER_MAX_MESSAGE_BYTES = {
     "gmail":    25_000_000,
-    "outlook":  25_000_000,
     "yahoo":    25_000_000,
     "icloud":   20_000_000,
     "fastmail": 70_000_000,
