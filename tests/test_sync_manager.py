@@ -491,3 +491,111 @@ def test_recovering_an_interrupted_run_honours_a_cutoff_set_since(
         run["messages_synced"] + run["messages_skipped"] + run["messages_cutoff"]
         == run["messages_parsed"]
     )
+
+
+# ---------------------------------------------------------------------------
+# Learning the account owner's name across chats
+# ---------------------------------------------------------------------------
+
+class CapturingTransport(FakeTransport):
+    """FakeTransport that keeps the HTML it was asked to deliver, so a test can
+    look at which side of the conversation each bubble was drawn on."""
+
+    def __init__(self):
+        super().__init__()
+        self.bodies: list[str] = []
+
+    def messages_insert(self, body: dict, thread_id: Optional[str] = None) -> dict:
+        import base64
+        import email
+
+        # The HTML part is base64 transfer-encoded (MIMEText with a utf-8
+        # charset always is), so it has to be walked and decoded rather than
+        # searched for in the raw message.
+        msg = email.message_from_bytes(base64.urlsafe_b64decode(body["raw"]))
+        for part in msg.walk():
+            if part.get_content_type() == "text/html":
+                self.bodies.append(
+                    part.get_payload(decode=True).decode("utf-8", "replace")
+                )
+        return super().messages_insert(body, thread_id=thread_id)
+
+
+_OWNER = "Sam Iyer"
+
+
+def _write_export(inbox_dir: Path, name: str, lines: list[str]) -> Path:
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    path = inbox_dir / f"WhatsApp Chat with {name}.txt"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_a_one_to_one_chat_teaches_the_name_a_group_chat_then_uses(tmp_root, db_path):
+    """The whole point of learning the name rather than asking for it.
+
+    A group export cannot identify its owner -- its filename is the group's
+    name and matches nobody -- so on its own every message in it draws as
+    incoming. A one-to-one export can prove the name, and once it has, the
+    group chat renders correctly without the user being asked anything.
+    """
+    inbox_dir = tmp_root / "inbox"
+
+    # One-to-one: the filename names Alice, so whoever else speaks is the owner.
+    _write_export(inbox_dir, "Alice", [
+        f"20/03/25, 09:00 - Alice: morning",
+        f"21/03/25, 09:00 - {_OWNER}: morning back",
+    ])
+    transport = CapturingTransport()
+    _make_manager(tmp_root, db_path, transport).run()
+
+    from src import state as state_module
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED, db_path
+    ) == _OWNER
+
+    # Group: nothing in this file identifies anybody, but the name is known now.
+    _write_export(inbox_dir, "Trek Crew", [
+        f"22/03/25, 09:00 - Bob: who is bringing the tent",
+        f"23/03/25, 09:00 - {_OWNER}: i have it",
+    ])
+    group_transport = CapturingTransport()
+    _make_manager(tmp_root, db_path, group_transport).run()
+
+    owner_chunks = [b for b in group_transport.bodies if "flex-end" in b]
+    assert len(owner_chunks) == 1, "exactly one message in the group is the owner's"
+
+
+def test_a_group_chat_alone_never_guesses_an_owner(tmp_root, db_path):
+    """The conservative half of the same rule. With no one-to-one chat ever
+    synced, a group export must not pick somebody -- a wrong guess would file
+    another person's messages as the user's own."""
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Trek Crew", [
+        "22/03/25, 09:00 - Bob: who is bringing the tent",
+        f"23/03/25, 09:00 - {_OWNER}: i have it",
+    ])
+    transport = CapturingTransport()
+    _make_manager(tmp_root, db_path, transport).run()
+
+    from src import state as state_module
+    assert state_module.get_app_state(state_module.SELF_SENDER_LEARNED, db_path) is None
+    assert not any("flex-end" in b for b in transport.bodies)
+
+
+def test_an_explicit_override_outranks_what_was_learned(tmp_root, db_path):
+    """The escape hatch: an export whose sender names the app cannot reconcile
+    (a renamed profile, a chat exported from somebody else's phone) is fixed by
+    the user typing the name, and nothing the app infers may override that."""
+    from src import state as state_module
+
+    state_module.set_app_state(state_module.SELF_SENDER_OVERRIDE, "Bob", db_path)
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Trek Crew", [
+        "22/03/25, 09:00 - Bob: who is bringing the tent",
+        f"23/03/25, 09:00 - {_OWNER}: i have it",
+    ])
+    transport = CapturingTransport()
+    _make_manager(tmp_root, db_path, transport).run()
+
+    assert sum("flex-end" in b for b in transport.bodies) == 1

@@ -7,12 +7,16 @@ from src import android_api, config
 from src.mail_client import MailTransport
 from src.parser import extract_chat_info
 from src.state import (
+    SELF_SENDER_LEARNED,
+    SELF_SENDER_OVERRIDE,
     complete_sync_run,
     compute_message_hash,
     get_chat,
+    get_app_state,
     get_chat_cutoff,
     init_db,
     insert_message_hashes,
+    set_app_state,
     set_chat_cutoff,
     start_sync_run,
     upsert_chat,
@@ -740,3 +744,54 @@ def test_an_override_beats_the_app_wide_cutoff_end_to_end(tmp_root, db_path):
 
     assert result["messages_cutoff"] == 0
     assert result["messages_synced"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Which name in an export is yours
+# ---------------------------------------------------------------------------
+
+def test_get_self_sender_admits_it_does_not_know_yet(tmp_root, db_path):
+    described = android_api.get_self_sender()
+    assert described["source"] == "unknown"
+    assert described["name"] is None
+    assert described["override"] is None
+    assert described["learned"] is None
+    # The front-ends render these verbatim, so they have to arrive filled in.
+    assert described["summary"] and described["detail"]
+
+
+def test_get_self_sender_reports_a_name_a_one_to_one_taught_it(tmp_root, db_path):
+    set_app_state(SELF_SENDER_LEARNED, "Sam Iyer", config.STATE_DB_PATH)
+    described = android_api.get_self_sender()
+    assert described["source"] == "learned"
+    assert described["name"] == "Sam Iyer"
+    assert described["learned"] == "Sam Iyer"
+    assert described["override"] is None
+
+
+def test_set_self_sender_returns_the_new_state_without_a_second_call(tmp_root, db_path):
+    described = android_api.set_self_sender("Sam I.")
+    assert described["source"] == "override"
+    assert described["name"] == "Sam I."
+    assert get_app_state(SELF_SENDER_OVERRIDE, config.STATE_DB_PATH) == "Sam I."
+
+
+def test_clearing_the_override_falls_back_to_what_was_learned(tmp_root, db_path):
+    # Clearing must not take the learned name with it: that name is the thing
+    # being fallen back to, and re-deriving it needs another one-to-one export
+    # the user may not have to hand.
+    set_app_state(SELF_SENDER_LEARNED, "Sam Iyer", config.STATE_DB_PATH)
+    android_api.set_self_sender("Sam I.")
+
+    described = android_api.set_self_sender("")
+    assert described["source"] == "learned"
+    assert described["name"] == "Sam Iyer"
+    assert described["override"] is None
+
+
+def test_clearing_with_no_argument_is_the_same_as_clearing_with_an_empty_one(
+    tmp_root, db_path
+):
+    # The Kotlin side gets one call for both so it has no branch to get wrong.
+    android_api.set_self_sender("Sam I.")
+    assert android_api.set_self_sender()["source"] == "unknown"

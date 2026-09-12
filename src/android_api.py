@@ -17,13 +17,16 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable, Optional
 
-from src import config, migration
+from src import config, migration, self_sender
 from src.mail_client import ChunkSize, MailTransport, mailbox_folder_for
 from src.parser import extract_chat_info, parse_file
 from src.state import MailboxNotClearedError, count_archived_messages
 from src.state import delete_chat as state_delete_chat
 from src.state import (
+    SELF_SENDER_LEARNED,
+    SELF_SENDER_OVERRIDE,
     clear_chat_cutoff,
+    get_app_state,
     get_chat_cutoff,
     get_recent_runs,
     get_sync_summary,
@@ -33,6 +36,7 @@ from src.state import (
     normalise_cutoff,
     reset_chat,
     resolve_chat,
+    set_app_state,
     set_chat_cutoff,
     summarize_recent_runs,
 )
@@ -601,6 +605,50 @@ def list_cutoffs() -> list[dict]:
             list_chat_cutoffs(config.STATE_DB_PATH).items()
         )
     ]
+
+
+# ---------------------------------------------------------------------------
+# Which name in an export is yours.
+#
+# This decides which side of the conversation every bubble is drawn on, so it
+# is not a per-front-end preference: two front-ends holding different answers
+# would archive the same export two different ways. Both read and write the one
+# shared row.
+# ---------------------------------------------------------------------------
+
+
+def get_self_sender() -> dict:
+    """What the app currently treats as your own name in exports.
+
+    Returns {"name", "source", "summary", "detail", "override", "learned"}.
+    `source` is "override", "learned" or "unknown"; `summary` and `detail` are
+    the display wording, kept in Python so both front-ends say the same thing.
+    `override` and `learned` are the raw stored values, for the text field and
+    for showing what would be fallen back to if the override were cleared.
+    """
+    init_db(config.STATE_DB_PATH)
+    override = get_app_state(SELF_SENDER_OVERRIDE, config.STATE_DB_PATH)
+    learned = get_app_state(SELF_SENDER_LEARNED, config.STATE_DB_PATH)
+    described = self_sender.describe(override, learned)
+    described["override"] = override
+    described["learned"] = learned
+    return described
+
+
+def set_self_sender(name: Optional[str] = None) -> dict:
+    """Set your name by hand, or clear it when [name] is empty.
+
+    One call for both, as with the cutoff: an emptied field and a field never
+    filled in are the same state, and both mean "work it out from a one-to-one
+    chat". Clearing deliberately leaves the learned name alone -- that is the
+    thing being fallen back to.
+
+    Returns the same shape as get_self_sender, so the caller can render the
+    result without a second call.
+    """
+    init_db(config.STATE_DB_PATH)
+    set_app_state(SELF_SENDER_OVERRIDE, name, config.STATE_DB_PATH)
+    return get_self_sender()
 
 
 # ---------------------------------------------------------------------------

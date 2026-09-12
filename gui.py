@@ -64,8 +64,10 @@ from src.parser import extract_chat_info
 # one idea. (The module is named for Android for historical reasons only.)
 from src.android_api import (
     format_preview,
+    get_self_sender,
     preview as preview_export,
     remove_from_inbox,
+    set_self_sender,
 )
 from src.mail_client import build_imap_transport
 from src.mail_client import connection_stage_plan, mailbox_folder_for
@@ -2893,7 +2895,7 @@ PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
 # things about it.
 
 PRIVACY_LAST_UPDATED = (
-    "Last updated: August 31, 2026 - revised for version 2.0.0."
+    "Last updated: September 12, 2026 - revised for version 2.1.5."
 )
 
 PRIVACY_POLICY = [
@@ -3336,6 +3338,44 @@ class _SettingsPanel(_Panel):
             command=self._open_mail_account,
         ).pack(side="left", padx=(12, 0))
         self._render_account_summary()
+
+        # ── Your messages ───────────────
+        # Second, and above every other setting here, because it is the only
+        # one the app answers on its own. An export does not mark your own
+        # messages, so the app works out which name is yours -- and that
+        # decides which side of the conversation every single bubble is drawn
+        # on. Getting it wrong does not fail loudly; it produces a perfectly
+        # readable archive of the wrong shape. So it is stated, with where the
+        # answer came from, rather than left to be inferred from a blank box.
+        self._section(body, "Your messages")
+
+        self._self_summary = ctk.CTkLabel(
+            body, text="", anchor="w", justify="left", wraplength=380,
+            font=("", 13, "bold"),
+        )
+        self._self_summary.pack(fill="x", padx=20, pady=(6, 0))
+
+        self._self_detail = ctk.CTkLabel(
+            body, text="", wraplength=380, justify="left", anchor="w",
+            text_color=gui_theme.ON_SURFACE_VARIANT, font=("", 11),
+        )
+        self._self_detail.pack(fill="x", padx=20, pady=(2, 4))
+
+        selfrow = ctk.CTkFrame(body, fg_color="transparent")
+        selfrow.pack(fill="x", **pad)
+        ctk.CTkLabel(selfrow, text="Your name:", width=130, anchor="w").pack(side="left")
+        self._self_entry = ctk.CTkEntry(
+            selfrow, width=180, height=30,
+            placeholder_text="Your WhatsApp profile name",
+        )
+        self._self_entry.pack(side="left")
+        ctk.CTkButton(
+            selfrow, text="Clear", width=54, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=gui_theme.ON_SURFACE,
+            command=self._on_clear_self_sender,
+        ).pack(side="left", padx=(4, 0))
+        self._render_self_sender()
 
         # ── Syncing ──────────────────────────────────────────────────
         self._section(body, "Syncing")
@@ -3893,6 +3933,26 @@ class _SettingsPanel(_Panel):
             self._app._update_cutoff_banner()
         self._render_account_summary()
 
+    def _render_self_sender(self) -> None:
+        """Show who the app thinks you are, and put the stored override -- not
+        the resolved name -- in the box.
+
+        The distinction matters: pre-filling the box with a name the app worked
+        out would turn it into an override the moment Save was pressed, which
+        is the opposite of what looking at the screen implies.
+        """
+        described = get_self_sender()
+        self._self_summary.configure(text=described["summary"])
+        self._self_detail.configure(text=described["detail"])
+        self._self_entry.delete(0, "end")
+        if described["override"]:
+            self._self_entry.insert(0, described["override"])
+
+    def _on_clear_self_sender(self) -> None:
+        """Empty the box. Saving then hands the decision back to the app,
+        which falls back to whatever a one-to-one chat has already proved."""
+        self._self_entry.delete(0, "end")
+
     def _on_clear_cutoff(self) -> None:
         """Blank means no cutoff -- the same "no floor at all" a field that was
         never filled in means, rather than a separate "cleared" state."""
@@ -3905,6 +3965,11 @@ class _SettingsPanel(_Panel):
         # so on -- are preserved rather than dropped on save.
         new_settings = dict(self._app._settings)
         new_settings["chunk_size"] = self._chunk_var.get()
+
+        # Written to the shared state database rather than into the settings
+        # file: both front-ends have to agree on it, because the same export
+        # archived under two different answers produces two different archives.
+        set_self_sender(self._self_entry.get())
         new_settings["auto_refresh_label"] = self._refresh_var.get()
 
         new_settings["watched_folder_path"] = self._watched_path

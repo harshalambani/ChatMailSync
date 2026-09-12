@@ -559,6 +559,21 @@ def _merge_db(target: Path, incoming: Path) -> dict:
             )
             cutoffs_added += max(cur.rowcount, 0)
 
+        # Key/value app state, same INSERT OR IGNORE reasoning as the cutoffs
+        # above: this device's own answer stands, and only keys it has no
+        # opinion on are inherited. Wrapped because a bundle written before
+        # the table existed has none to read, and an older backup must restore
+        # as a backup with nothing to say here rather than as an error.
+        try:
+            state_rows = src.execute("SELECT key, value FROM app_state").fetchall()
+        except sqlite3.Error:
+            state_rows = []
+        for row in state_rows:
+            dst.execute(
+                "INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)",
+                (row["key"], row["value"]),
+            )
+
         hashes_added = 0
         rows = src.execute(
             "SELECT hash, chat_id, message_ts, run_id FROM message_hashes"

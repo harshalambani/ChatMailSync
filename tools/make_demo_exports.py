@@ -34,32 +34,40 @@ TINY_JPEG = bytes.fromhex(
     "00000000000000000000000000000000ffda0008010100013f10"
 )
 
+# The demo account's own name. A real export does not write "You" -- it writes
+# your WhatsApp profile name in the sender position, exactly as it writes
+# everybody else's, and that is what the app has to recognise. Writing "You"
+# here made the demo set agree with an assumption the renderer was making and
+# real exports were not, so the whole demo path passed while every real export
+# drew the owner's own messages as incoming.
+OWNER = "Sam Iyer"
+
 HEADER = "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them."
 
 CHATS = {
     "Anita Verma": [
         ("12/01/26, 09:14", "Anita Verma", "Morning! Are we still on for Saturday?"),
-        ("12/01/26, 09:31", "You", "Yes, all set. What time works?"),
+        ("12/01/26, 09:31", OWNER, "Yes, all set. What time works?"),
         ("12/01/26, 09:32", "Anita Verma", "Four-ish? The traffic after five is unbearable."),
-        ("12/01/26, 09:35", "You", "Four it is."),
+        ("12/01/26, 09:35", OWNER, "Four it is."),
         ("28/02/26, 18:02", "Anita Verma", "That bookshop we talked about has moved to the second floor"),
-        ("28/02/26, 18:20", "You", "Good, the old place was impossible to find"),
+        ("28/02/26, 18:20", OWNER, "Good, the old place was impossible to find"),
         ("14/04/26, 11:47", "Anita Verma", "IMG-20260414-WA0002.jpg (file attached)"),
         ("14/04/26, 11:47", "Anita Verma", "Found this in the loft. Any idea what year?"),
-        ("14/04/26, 12:15", "You", "No clue, but keep it"),
+        ("14/04/26, 12:15", OWNER, "No clue, but keep it"),
         ("03/06/26, 20:11", "Anita Verma", "Thanks for today. Genuinely."),
-        ("03/06/26, 20:44", "You", "Any time."),
+        ("03/06/26, 20:44", OWNER, "Any time."),
     ],
     "Dad": [
         ("05/02/26, 07:02", "Dad", "Walk was good today. 6000 steps before breakfast."),
-        ("05/02/26, 08:19", "You", "That's more than me and I have no excuse"),
+        ("05/02/26, 08:19", OWNER, "That's more than me and I have no excuse"),
         ("05/02/26, 08:21", "Dad", "Start small. Nobody begins at 6000."),
         ("19/03/26, 21:30", "Dad", "The tap in the guest bathroom is dripping again"),
-        ("19/03/26, 21:58", "You", "I'll call the plumber tomorrow morning"),
+        ("19/03/26, 21:58", OWNER, "I'll call the plumber tomorrow morning"),
         ("20/03/26, 10:04", "Dad", "He came. Washer had gone. Fixed in ten minutes."),
         ("11/05/26, 16:40", "Dad", "<Media omitted>"),
         ("11/05/26, 16:41", "Dad", "Your mother wanted you to see the garden"),
-        ("11/05/26, 17:12", "You", "It looks better than it ever did when I was there"),
+        ("11/05/26, 17:12", OWNER, "It looks better than it ever did when I was there"),
         ("02/07/26, 19:25", "Dad", "Call when you get a minute. Nothing urgent."),
     ],
     "Building Society": [
@@ -69,7 +77,7 @@ CHATS = {
         ("08/01/26, 10:52", "Sunil", "Is the lift maintenance the same day?"),
         ("08/01/26, 11:03", "Ramesh (Secretary)", "No, that is the following Saturday."),
         ("22/03/26, 08:30", "Ramesh (Secretary)", "The parking survey closes tonight. Twelve flats have not responded."),
-        ("22/03/26, 09:11", "You", "Submitted ours last week"),
+        ("22/03/26, 09:11", OWNER, "Submitted ours last week"),
         ("22/03/26, 09:40", "Farah", "Same here"),
         ("17/05/26, 13:05", "Sunil", "NOTICE-society-agm.pdf (file attached)"),
         ("17/05/26, 13:06", "Sunil", "AGM minutes, for anyone who missed it"),
@@ -79,25 +87,25 @@ CHATS = {
     "Trek Crew": [
         ("14/02/26, 22:10", "Kabir", "Right, who is actually coming in April?"),
         ("14/02/26, 22:12", "Meera", "In."),
-        ("14/02/26, 22:12", "You", "In, assuming the knee holds"),
+        ("14/02/26, 22:12", OWNER, "In, assuming the knee holds"),
         ("14/02/26, 22:19", "Kabir", "That is three. We need five for the permit."),
         ("14/02/26, 22:41", "Nikhil", "Count me in. I will ask Divya."),
         ("06/04/26, 06:02", "Meera", "IMG-20260406-WA0007.jpg (file attached)"),
         ("06/04/26, 06:03", "Meera", "First light from the ridge. Worth every step."),
-        ("06/04/26, 06:30", "You", "Unfair. I am at my desk."),
+        ("06/04/26, 06:30", OWNER, "Unfair. I am at my desk."),
         ("06/04/26, 07:15", "Kabir", "Next year then. Blocking the dates now."),
         ("21/06/26, 12:00", "Nikhil", "Boots finally gave up. Any recommendations?"),
         ("21/06/26, 12:34", "Meera", "Whatever you buy, walk them in for a month first."),
     ],
     "Priya Nair": [
         ("30/01/26, 15:20", "Priya Nair", "Did the invoice go through?"),
-        ("30/01/26, 15:44", "You", "Sent this morning. Let me know if it does not show up."),
+        ("30/01/26, 15:44", OWNER, "Sent this morning. Let me know if it does not show up."),
         ("30/01/26, 16:02", "Priya Nair", "Got it, thanks."),
         ("25/04/26, 09:50", "Priya Nair", "Moving the Thursday call to Friday, same time. Does that work?"),
-        ("25/04/26, 10:05", "You", "Friday is fine"),
+        ("25/04/26, 10:05", OWNER, "Friday is fine"),
         ("18/07/26, 17:30", "Priya Nair", "This message was deleted"),
         ("18/07/26, 17:31", "Priya Nair", "Sorry, wrong chat!"),
-        ("18/07/26, 17:33", "You", "Happens to all of us"),
+        ("18/07/26, 17:33", OWNER, "Happens to all of us"),
     ],
 }
 
@@ -121,6 +129,9 @@ def main() -> int:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "demo_exports")
     out.mkdir(parents=True, exist_ok=True)
 
+    # A one-to-one export's filename names the other party, which is how the
+    # app works out which of the two senders is the account owner. That only
+    # holds while the names below stay distinct from OWNER.
     for name, messages in CHATS.items():
         path = out / f"WhatsApp Chat with {name}.txt"
         path.write_text(build_export(messages), encoding="utf-8")

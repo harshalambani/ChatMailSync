@@ -529,6 +529,40 @@ fun ChatMailApp(
         imapEmail = ""
     }
 
+    // ---- Which name in an export is yours -----------------------------
+    // The app works this out from a one-to-one export and then uses it to
+    // decide which side of the conversation every bubble is drawn on. That is
+    // too consequential to leave unsaid, so Settings states it. Held in the
+    // shared state database, not in preferences, because Windows has to reach
+    // the same answer -- two front-ends disagreeing would archive one export
+    // two different ways.
+    var selfSenderSummary by remember { mutableStateOf("") }
+    var selfSenderDetail by remember { mutableStateOf("") }
+    var selfSenderOverride by remember { mutableStateOf("") }
+
+    fun applySelfSender(described: com.chaquo.python.PyObject) {
+        selfSenderSummary = described.callAttr("get", "summary").toString()
+        selfSenderDetail = described.callAttr("get", "detail").toString()
+        // The stored override, deliberately not the resolved name: filling the
+        // box with a name the app worked out would turn it into an override
+        // the moment anything else on the screen was touched.
+        val override = described.callAttr("get", "override")
+        selfSenderOverride = if (override == null) "" else override.toString()
+    }
+
+    fun refreshSelfSender() {
+        applySelfSender(
+            Python.getInstance().getModule("src.android_api").callAttr("get_self_sender")
+        )
+    }
+
+    fun setSelfSender(name: String) {
+        applySelfSender(
+            Python.getInstance().getModule("src.android_api")
+                .callAttr("set_self_sender", name)
+        )
+    }
+
     // ---- Inbox + import (Phase A2) -----------------------------------
     var inboxFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
     var lastResult by remember { mutableStateOf("Nothing run yet.") }
@@ -1189,6 +1223,10 @@ fun ChatMailApp(
                 )
             }
             composable("settings") {
+                // Re-read on entry, not once at startup: a sync that happened
+                // while this screen sat on the back stack may have worked the
+                // name out, and the screen exists to say so.
+                LaunchedEffect(Unit) { refreshSelfSender() }
                 // Backend-neutral one-line status for the "Mail account" nav
                 // row — SettingsScreen no longer receives the backend params
                 // it would need to compute this itself now that the account
@@ -1238,6 +1276,10 @@ fun ChatMailApp(
                         cutoffDate = it
                         AppPrefs.setCutoffDate(context, it)
                     },
+                    selfSenderSummary = selfSenderSummary,
+                    selfSenderDetail = selfSenderDetail,
+                    selfSenderOverride = selfSenderOverride,
+                    onSelfSenderChange = { setSelfSender(it) },
                 )
             }
             composable("importPicker") {

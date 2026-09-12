@@ -1617,6 +1617,7 @@ def _size_split_cached(
     extractor: Optional[MediaExtractor],
     limit_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     depth: int = 0,
+    self_sender: Optional[str] = None,
 ) -> list[tuple[list[ParsedMessage], RenderedChunk]]:
     """Recursively split messages so each piece fits inside `limit_bytes` on the wire.
 
@@ -1643,6 +1644,7 @@ def _size_split_cached(
     rendered = render_chunk(
         messages, display_name, extractor, "",
         max_media_bytes=media_budget(limit_bytes),
+        self_sender=self_sender,
     )
 
     # The index rides on the finished email but does not exist yet, so its size
@@ -1663,8 +1665,10 @@ def _size_split_cached(
     )
     mid = len(messages) // 2
     return (
-        _size_split_cached(messages[:mid], display_name, extractor, limit_bytes, depth + 1)
-        + _size_split_cached(messages[mid:], display_name, extractor, limit_bytes, depth + 1)
+        _size_split_cached(messages[:mid], display_name, extractor, limit_bytes,
+                           depth + 1, self_sender)
+        + _size_split_cached(messages[mid:], display_name, extractor, limit_bytes,
+                             depth + 1, self_sender)
     )
 
 
@@ -1674,6 +1678,7 @@ def _prepare_emails(
     extractor: Optional[MediaExtractor],
     chunk_size: ChunkSize,
     limit_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
+    self_sender: Optional[str] = None,
 ) -> list[tuple[list[ParsedMessage], RenderedChunk]]:
     """Flatten all chunks into a final list of (sub_chunk, RenderedChunk).
 
@@ -1682,7 +1687,9 @@ def _prepare_emails(
     """
     result: list[tuple[list[ParsedMessage], RenderedChunk]] = []
     for chunk in chunks:
-        sub_pairs = _size_split_cached(chunk, display_name, extractor, limit_bytes)
+        sub_pairs = _size_split_cached(
+            chunk, display_name, extractor, limit_bytes, self_sender=self_sender
+        )
         n = len(sub_pairs)
         for k, (msgs, cached_render) in enumerate(sub_pairs):
             if n > 1:
@@ -1692,6 +1699,7 @@ def _prepare_emails(
                 rendered = render_chunk(
                     msgs, display_name, extractor, suffix,
                     max_media_bytes=media_budget(limit_bytes),
+                    self_sender=self_sender,
                 )
             else:
                 # Normal single email for this period — no suffix.
@@ -1840,6 +1848,7 @@ def push_chunks(
     dry_run: bool = False,
     source_path: Optional[Path] = None,
     on_chunk: Optional[Callable[[int, int, int, int, list[ParsedMessage]], None]] = None,
+    self_sender: Optional[str] = None,
 ) -> list[PushResult]:
     """Push a list of message chunks to Gmail as individual HTML emails in one thread.
 
@@ -1875,6 +1884,10 @@ def push_chunks(
                            off this rather than the whole `messages` argument,
                            so an interruption partway through a push leaves
                            the record matching reality instead of all-or-nothing.
+        self_sender:       The account owner's name as it appears in the sender
+                           position of this export. Messages from that name are
+                           drawn as outgoing; None falls back to the literal
+                           "You". See src/self_sender.py for how it is resolved.
 
     Returns:
         List of PushResult, one per email sent.
@@ -1897,7 +1910,8 @@ def push_chunks(
     )
     try:
         email_list = _prepare_emails(
-            chunks, display_name, extractor, chunk_size, limit_bytes
+            chunks, display_name, extractor, chunk_size, limit_bytes,
+            self_sender=self_sender,
         )
 
         total_emails = len(email_list)
@@ -1982,15 +1996,18 @@ def push_chunks(
                 if len(sub_chunk) > 1:
                     mid = len(sub_chunk) // 2
                     replacement = _size_split_cached(
-                        sub_chunk[:mid], display_name, extractor, limit_bytes
+                        sub_chunk[:mid], display_name, extractor, limit_bytes,
+                        self_sender=self_sender,
                     ) + _size_split_cached(
-                        sub_chunk[mid:], display_name, extractor, limit_bytes
+                        sub_chunk[mid:], display_name, extractor, limit_bytes,
+                        self_sender=self_sender,
                     )
                 else:
                     # One message, still too big: its media cannot travel.
                     retry = render_chunk(
                         sub_chunk, display_name, extractor, "",
                         max_media_bytes=media_budget(limit_bytes),
+                        self_sender=self_sender,
                     )
                     if len(retry.omissions) <= len(rendered.omissions):
                         # Dropping media changed nothing, so there is nothing
@@ -2021,7 +2038,8 @@ def push_chunks(
                     else:
                         resplit.extend(
                             _size_split_cached(
-                                pending_msgs, display_name, extractor, limit_bytes
+                                pending_msgs, display_name, extractor, limit_bytes,
+                                self_sender=self_sender,
                             )
                         )
                 worklist[pending_start:] = resplit
@@ -2084,10 +2102,14 @@ def push_chat(
     dry_run: bool = False,
     source_path: Optional[Path] = None,
     on_chunk: Optional[Callable[[int, int, int, int, list[ParsedMessage]], None]] = None,
+    self_sender: Optional[str] = None,
 ) -> tuple[list[PushResult], str, str]:
     """High-level helper: chunk messages, ensure label, and push to Gmail.
 
     Resolves (or creates) the label automatically when label_id is None.
+
+    `self_sender` names the account owner as this export writes them, so their
+    messages land on the right side of the conversation; see push_chunks().
 
     Returns:
         (results, label_id, thread_id) — all three values that the caller
@@ -2124,6 +2146,7 @@ def push_chat(
         dry_run=dry_run,
         source_path=source_path,
         on_chunk=on_chunk,
+        self_sender=self_sender,
     )
 
     final_thread_id = results[-1].thread_id if results else (gmail_thread_id or "")

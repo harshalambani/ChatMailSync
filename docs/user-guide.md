@@ -415,6 +415,88 @@ show more than WhatsApp put in the file.
 
 ---
 
+### Q. All my own messages are on the wrong side of the conversation.
+
+**A.** The app has not worked out which name in your exports is yours yet.
+
+An export does not mark your own messages in any way. WhatsApp writes your
+profile name in the sender position exactly as it writes everybody else's, so
+there is nothing in the file that says which of the names is you. The app has
+to work it out, and it does so from a one-to-one chat: that export names the
+other person in its own filename, so whichever name is left over is
+necessarily yours. Group chats never decide this -- there is no way to tell
+from a group who the owner is -- they use whatever a one-to-one has already
+established.
+
+Until it knows, every message is drawn as if somebody else sent it. Two ways
+to fix it:
+
+- **Sync any one-to-one chat.** The app works it out on its own from that
+  export and remembers it for every chat afterwards, groups included.
+- **Type it in.** Go to **Settings -> Your messages** and enter your WhatsApp
+  profile name, spelled as it appears in your exports. A name you type there
+  always wins and the app will stop working it out; clear the box to hand the
+  decision back.
+
+That screen always states which name it is currently treating as yours and
+where that name came from, so you never have to guess what the app thinks.
+
+> **Emails already sent are not redrawn.** Setting the name changes how
+> future emails are laid out, not ones already in your mailbox, and the app
+> will not re-send a message it has already archived. If you want a chat laid
+> out again correctly, use **Reset** on that chat after setting the name.
+
+---
+
+### Q. I edited a message in WhatsApp. Which version gets archived?
+
+**A.** Both of them, as two separate emails.
+
+A message is recognised by its text, so editing it makes it a different
+message as far as the app is concerned. If the chat was already archived
+before you made the edit, the original email stays exactly where it is and
+the edited version arrives beside it as a new one. Nothing is overwritten,
+because this app can add mail to your mailbox but never change or remove
+what is already there.
+
+Telling them apart is easy: WhatsApp marks the edited line
+`<This message was edited>` in the export, and that marker is archived along
+with it. The email carrying the marker is the later version.
+
+If you only ever export a chat *after* editing it, you get the edited
+version on its own -- the original was never in the file, so the app never
+saw it.
+
+---
+
+### Q. I deleted a message in WhatsApp. Is it still in my mailbox?
+
+**A.** That depends on whether it had already been archived when you
+deleted it.
+
+**Deleted before you exported the chat** -- it is not archived at all.
+*Delete for everyone* leaves the line `This message was deleted` in the
+export, and the app drops that along with WhatsApp's other notices, so it
+never reaches your mailbox.
+
+**Deleted after it was archived** -- the email is still in your mailbox, and
+it stays there. Deleting a message in WhatsApp has no effect on mail that has
+already been sent; the app only ever adds. If you want it gone, delete that
+email yourself in your mail app.
+
+> **Deleting the archived email does not undo the record.** The app
+> remembers that it already sent that message, so it will not send it again
+> on a later sync -- you are left with a permanent gap in the archive. If you
+> want a chat re-sent from scratch, use **Reset** on that chat instead, which
+> clears the record deliberately and tells you how to clear the mailbox
+> first.
+
+Messages *disappearing* from a later export are harmless in the other
+direction: the app never treats an absence as a change, so a re-export with
+deleted messages missing cannot disturb anything it has already archived.
+
+---
+
 ### Q. What is the watched folder for?
 
 **A.** It saves you adding files by hand. Point it at a folder — wherever your
