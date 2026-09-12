@@ -92,12 +92,20 @@ fun SettingsScreen(
     migrationStatus: String?,
     cutoffDate: String = "",
     onCutoffDateChange: (String) -> Unit = {},
+    selfSenderSummary: String = "",
+    selfSenderDetail: String = "",
+    selfSenderOverride: String = "",
+    onSelfSenderChange: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     // What is on screen, which is not the same as what is saved: a
     // half-typed "2026-0" is neither a cutoff nor a mistake yet, so it lives
     // here and only reaches the preference once it reads as a date.
     var cutoffText by remember { mutableStateOf(cutoffDate) }
+    // Keyed on what was loaded, so a name the app works out while this screen
+    // is open replaces what is in the box -- but a half-typed name does not
+    // get thrown away on every recomposition.
+    var selfSenderText by remember(selfSenderOverride) { mutableStateOf(selfSenderOverride) }
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
     var policyMenuOpen by remember { mutableStateOf(false) }
@@ -142,6 +150,48 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+
+            HorizontalDivider()
+
+            // Above every other setting here, because it is the only one the
+            // app answers on its own. An export does not mark your own
+            // messages -- it writes your profile name exactly as it writes
+            // everybody else's -- so the app works out which name is yours,
+            // and that decides which side of the conversation every bubble is
+            // drawn on. Getting it wrong does not fail loudly; it produces a
+            // perfectly readable archive of the wrong shape. So it is stated,
+            // with where the answer came from, rather than left to be inferred
+            // from an empty box. Windows mirrors this section.
+            Text("Your messages", style = MaterialTheme.typography.titleMedium)
+            Text(
+                selfSenderSummary,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                selfSenderDetail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = selfSenderText,
+                    onValueChange = {
+                        selfSenderText = it
+                        // Committed as typed. There is no Save button on this
+                        // screen, and unlike the cutoff there is no shape a
+                        // name has to take, so there is nothing to withhold it
+                        // for.
+                        onSelfSenderChange(it)
+                    },
+                    label = { Text("Your WhatsApp profile name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = { selfSenderText = ""; onSelfSenderChange("") },
+                    enabled = selfSenderText.isNotEmpty(),
+                ) { Text("Clear") }
             }
 
             HorizontalDivider()

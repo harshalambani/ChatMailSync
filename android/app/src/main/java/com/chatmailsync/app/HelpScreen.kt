@@ -114,6 +114,51 @@ internal val FAQ = listOf(
         "its own comes through normally; it's only the tap-and-hold reaction on someone else's " +
         "message that the export leaves behind. The same goes for anything else Export chat " +
         "omits: the app can never show more than WhatsApp put in the file.",
+    "All my own messages are on the wrong side of the conversation." to
+        "The app hasn't worked out which name in your exports is yours yet. An export " +
+        "doesn't mark your own messages in any way — WhatsApp writes your profile name " +
+        "in the sender position exactly as it writes everybody else's — so the app has " +
+        "to work it out, and it does so from a one-to-one chat: that export names the " +
+        "other person in its own filename, so whichever name is left over is necessarily " +
+        "yours. Group chats never decide this; they use whatever a one-to-one has " +
+        "already established. Until it knows, every message is drawn as if somebody else " +
+        "sent it. Either sync any one-to-one chat, after which the app works it out on " +
+        "its own and remembers it for every chat afterwards, groups included — or type " +
+        "it in at Settings > Your messages, spelled as it appears in your exports. A name " +
+        "you type there always wins and the app will stop working it out; clear the box " +
+        "to hand the decision back. That screen always states which name it is currently " +
+        "treating as yours and where that name came from. Emails already sent are not " +
+        "redrawn: setting the name changes how future emails are laid out, not ones " +
+        "already in your mailbox, and the app won't re-send a message it has already " +
+        "archived. If you want a chat laid out again correctly, use Reset on that chat " +
+        "after setting the name.",
+    "I edited a message in WhatsApp. Which version gets archived?" to
+        "Both of them, as two separate emails. A message is recognised by its text, so " +
+        "editing it makes it a different message as far as the app is concerned. If the " +
+        "chat was already archived before you made the edit, the original email stays " +
+        "exactly where it is and the edited version arrives beside it as a new one — " +
+        "nothing is overwritten, because this app can add mail to your mailbox but never " +
+        "change or remove what is already there. Telling them apart is easy: WhatsApp " +
+        "marks the edited line \"<This message was edited>\" in the export, and that " +
+        "marker is archived along with it, so the email carrying it is the later version. " +
+        "If you only ever export a chat after editing it, you get the edited version on " +
+        "its own — the original was never in the file, so the app never saw it.",
+    "I deleted a message in WhatsApp. Is it still in my mailbox?" to
+        "That depends on whether it had already been archived when you deleted it. " +
+        "Deleted before you exported the chat, and it is not archived at all: \"Delete " +
+        "for everyone\" leaves the line \"This message was deleted\" in the export, and " +
+        "the app drops that along with WhatsApp's other notices, so it never reaches " +
+        "your mailbox. Deleted after it was archived, and the email is still in your " +
+        "mailbox, where it stays — deleting a message in WhatsApp has no effect on mail " +
+        "that has already been sent, because the app only ever adds. If you want it gone, " +
+        "delete that email yourself in your mail app. Deleting the archived email does " +
+        "not undo the record: the app remembers that it already sent that message, so it " +
+        "will not send it again on a later sync, leaving a permanent gap in the archive. " +
+        "If you want a chat re-sent from scratch, use Reset on that chat instead, which " +
+        "clears the record deliberately and tells you how to clear the mailbox first. " +
+        "Messages disappearing from a later export are harmless in the other direction: " +
+        "the app never treats an absence as a change, so a re-export with deleted " +
+        "messages missing cannot disturb anything it has already archived.",
     "What is the watched folder for?" to
         "It saves you importing by hand. Point it at a folder, and anything WhatsApp drops there " +
         "(.txt or .zip) is picked up and queued for the next sync. Switch on \"Auto-import from " +

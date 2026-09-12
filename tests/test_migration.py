@@ -555,3 +555,69 @@ def test_a_retired_provider_key_is_rewritten_on_restore():
     result = migration._with_derived_host(settings)
     assert result["imap_provider"] == "custom"
     assert "imap_host" not in result
+
+
+def test_the_account_name_moves_with_the_bundle(tmp_path):
+    """A name established on the old device should not have to be re-derived on
+    the new one. Without it the first sync after a migration could draw the
+    owner's own messages as incoming until a one-to-one chat happened to be
+    exported again."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    db = _device(old)
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Sam Iyer", db)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={})
+
+    migration.import_bundle(new, bundle)
+
+    assert state.get_app_state(
+        state.SELF_SENDER_LEARNED, new / "data" / "sync_state.db"
+    ) == "Sam Iyer"
+
+
+def test_a_name_set_on_this_device_beats_the_one_in_the_bundle(tmp_path):
+    """Same rule as the per-chat floors, for the same reason: what is set here
+    is a live instruction, a bundle is a photograph of an older device."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old_db = _device(old)
+    state.set_app_state(state.SELF_SENDER_OVERRIDE, "Old Name", old_db)
+    new_db = _device(new)
+    state.set_app_state(state.SELF_SENDER_OVERRIDE, "Current Name", new_db)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={})
+
+    migration.import_bundle(new, bundle)
+
+    assert state.get_app_state(state.SELF_SENDER_OVERRIDE, new_db) == "Current Name"
+
+
+def test_a_bundle_from_before_app_state_existed_still_restores(tmp_path):
+    """Every backup taken before this release has no app_state table, and the
+    merge reads it by name."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    _device(old)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={})
+
+    staged = tmp_path / "staged_app_state"
+    staged.mkdir()
+    with zipfile.ZipFile(bundle) as z:
+        names = z.namelist()
+        z.extractall(staged)
+    conn = sqlite3.connect(staged / "sync_state.db")
+    conn.execute("DROP TABLE app_state")
+    conn.commit()
+    conn.close()
+    assert not _has_table(staged / "sync_state.db", "app_state")
+    old_bundle = tmp_path / ("old_app_state" + migration.BUNDLE_SUFFIX)
+    with zipfile.ZipFile(old_bundle, "w") as z:
+        for name in names:
+            z.write(staged / name, name)
+
+    result = migration.import_bundle(new, old_bundle)
+
+    assert result["ok"] is True
+    assert result["hashes_added"] == 2

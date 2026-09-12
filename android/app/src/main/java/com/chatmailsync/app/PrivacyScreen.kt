@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 // behaviour, and the two platforms must not say different things about it.
 
 internal const val PRIVACY_LAST_UPDATED =
-    "Last updated: August 31, 2026 - revised for version 2.0.0."
+    "Last updated: September 12, 2026 - revised for version 2.1.5."
 
 internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "Summary" to listOf(

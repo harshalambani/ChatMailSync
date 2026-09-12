@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS chat_cutoffs (
     set_at    TEXT NOT NULL
 );
 
+-- Small key/value store for settings that are genuinely about the archive
+-- rather than about one front-end. Both front-ends keep their own settings
+-- file for their own concerns (window size, mail account, theme), and that is
+-- the right home for them. The account owner's own name is not one of those:
+-- it decides which side of the conversation every bubble is drawn on, so the
+-- two front-ends reading a different answer would produce two different
+-- archives from one export. Keeping it beside the data it describes also
+-- means a device migration carries it, and that a name learned on one front
+-- end is already known to the other.
+CREATE TABLE IF NOT EXISTS app_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_message_hashes_chat  ON message_hashes(chat_id);
 CREATE INDEX IF NOT EXISTS idx_sync_runs_chat       ON sync_runs(chat_id);
 CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
@@ -165,6 +179,46 @@ def init_db(db_path: Optional[Path] = None) -> None:
             _dedupe_sync_runs(conn)
         if version < _SCHEMA_VERSION:
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+
+
+# ---------------------------------------------------------------------------
+# Key/value app state
+# ---------------------------------------------------------------------------
+
+# The account owner's name, as the user typed it. Wins over anything inferred.
+SELF_SENDER_OVERRIDE = "self_sender_override"
+
+# The account owner's name as last proved by a one-to-one export. Written by
+# the app, not the user, and safe to be wrong only in the sense that a later
+# one-to-one export corrects it.
+SELF_SENDER_LEARNED = "self_sender_learned"
+
+
+def get_app_state(key: str, db_path: Optional[Path] = None) -> Optional[str]:
+    """Return the stored value for [key], or None if it has never been set."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT value FROM app_state WHERE key = ?", (key,)
+        ).fetchone()
+    return row["value"] if row else None
+
+
+def set_app_state(key: str, value: Optional[str], db_path: Optional[Path] = None) -> None:
+    """Store [value] under [key]; a None or blank value clears the key.
+
+    Clearing rather than storing an empty string keeps "never set" and "set to
+    nothing" as the same state, which is what every caller means: an empty
+    override box is an absent override, not an owner whose name is "".
+    """
+    with _connect(db_path) as conn:
+        if value is None or not value.strip():
+            conn.execute("DELETE FROM app_state WHERE key = ?", (key,))
+        else:
+            conn.execute(
+                "INSERT INTO app_state (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value.strip()),
+            )
 
 
 def _dedupe_sync_runs(conn: sqlite3.Connection) -> int:

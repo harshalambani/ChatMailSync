@@ -31,7 +31,10 @@ from src import config
 from src.config import DEFAULT_CHUNK_SIZE
 from src.mail_client import ChunkSize, MailTransport, push_chat
 from src.parser import ParsedMessage, extract_chat_info, parse_file
+from src.self_sender import resolve as resolve_self_sender
 from src.state import (
+    SELF_SENDER_LEARNED,
+    SELF_SENDER_OVERRIDE,
     complete_sync_run,
     compute_message_hash,
     fail_sync_run,
@@ -42,8 +45,10 @@ from src.state import (
     get_pending_runs,
     hash_exists,
     init_db,
+    get_app_state,
     insert_message_hashes,
     normalise_cutoff,
+    set_app_state,
     start_sync_run,
     update_chat_gmail_ids,
     upsert_chat,
@@ -360,6 +365,7 @@ class SyncManager:
                 dry_run=False,
                 source_path=filepath,
                 on_chunk=_record_chunk,
+                self_sender=self._resolve_self_sender(display_name, all_messages),
             )
         except Exception as exc:
             msg = f"{display_name}: Mail push failed — {_scrub_paths(str(exc))}"
@@ -445,6 +451,39 @@ class SyncManager:
         """
         own = get_chat_cutoff(chat_id, self.db_path)
         return own if own is not None else self.cutoff_date
+
+    # ------------------------------------------------------------------
+    # Who is "me"
+    # ------------------------------------------------------------------
+
+    def _resolve_self_sender(
+        self, display_name: str, messages: list[ParsedMessage]
+    ) -> Optional[str]:
+        """The owner's name for this chat, learning it from the file if it can.
+
+        Called with *every* message in the file, not just the new ones: the
+        one-to-one rule needs to see both people speak, and an incremental
+        re-export may well contain only one of them.
+        """
+        override = get_app_state(SELF_SENDER_OVERRIDE, self.db_path)
+        learned = get_app_state(SELF_SENDER_LEARNED, self.db_path)
+
+        name, newly_derived = resolve_self_sender(
+            override=override,
+            learned=learned,
+            display_name=display_name,
+            senders=[m.sender for m in messages],
+        )
+
+        if newly_derived is not None:
+            log.info(
+                "Learned the account name from a one-to-one chat "
+                "(previously %s)",
+                "unknown" if not learned else "a different name",
+            )
+            set_app_state(SELF_SENDER_LEARNED, newly_derived, self.db_path)
+
+        return name
 
     def _filter_messages(
         self,
@@ -628,6 +667,9 @@ class SyncManager:
                 dry_run=False,
                 source_path=source_file,
                 on_chunk=_record_chunk,
+                self_sender=self._resolve_self_sender(
+                    chat["display_name"], all_messages
+                ),
             )
         except Exception as exc:
             log.error(

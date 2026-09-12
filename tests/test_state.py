@@ -519,3 +519,35 @@ def test_the_cutoff_count_stays_out_of_the_run_natural_key():
     first query.
     """
     assert "messages_cutoff" not in state.RUN_NATURAL_KEY
+
+
+# ---------------------------------------------------------------------------
+# app_state: small shared key/value facts that are not per-chat
+# ---------------------------------------------------------------------------
+
+def test_app_state_round_trip(db_path):
+    assert state.get_app_state(state.SELF_SENDER_LEARNED, db_path) is None
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Sam Iyer", db_path)
+    assert state.get_app_state(state.SELF_SENDER_LEARNED, db_path) == "Sam Iyer"
+
+
+def test_app_state_writes_replace_rather_than_duplicate(db_path):
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Sam Iyer", db_path)
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Samir Iyer", db_path)
+    assert state.get_app_state(state.SELF_SENDER_LEARNED, db_path) == "Samir Iyer"
+
+
+@pytest.mark.parametrize("blank", ["", "   ", None])
+def test_a_blank_value_clears_the_key(db_path, blank):
+    """Emptying the override box has to mean "no override", not "an owner whose
+    name is the empty string" -- otherwise every sender would match it."""
+    state.set_app_state(state.SELF_SENDER_OVERRIDE, "Sam Iyer", db_path)
+    state.set_app_state(state.SELF_SENDER_OVERRIDE, blank, db_path)
+    assert state.get_app_state(state.SELF_SENDER_OVERRIDE, db_path) is None
+
+
+def test_app_state_keys_do_not_collide(db_path):
+    state.set_app_state(state.SELF_SENDER_OVERRIDE, "Sam", db_path)
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Sam Iyer", db_path)
+    assert state.get_app_state(state.SELF_SENDER_OVERRIDE, db_path) == "Sam"
+    assert state.get_app_state(state.SELF_SENDER_LEARNED, db_path) == "Sam Iyer"

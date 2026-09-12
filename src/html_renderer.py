@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from src.parser import ParsedMessage
+from src.self_sender import is_outgoing
 
 if TYPE_CHECKING:
     from src.media_extractor import MediaExtractor
@@ -238,6 +239,7 @@ def render_chunk(
     extractor: Optional["MediaExtractor"],
     label: str = "",
     max_media_bytes: Optional[int] = None,
+    self_sender: Optional[str] = None,
 ) -> RenderedChunk:
     """Render messages into a WhatsApp-light HTML email.
 
@@ -254,6 +256,13 @@ def render_chunk(
                        decided here, at render time, per file. None disables
                        the check entirely (the default, for callers that are
                        not building a real email).
+        self_sender:   The account owner's name as it appears in the sender
+                       position of this export, resolved by `self_sender.resolve`.
+                       Messages from that name are drawn as outgoing. None
+                       falls back to the literal "You", which is what exports
+                       of that shape use and what this function assumed
+                       unconditionally before real exports showed that most
+                       of them write a profile name instead.
 
     Returns:
         RenderedChunk — caller is responsible for building the MIME message from it.
@@ -277,7 +286,7 @@ def render_chunk(
     )
 
     for msg in messages:
-        outgoing = msg.sender.strip().lower() == "you"
+        outgoing = is_outgoing(msg.sender, self_sender)
         body_parts.append(
             _render_bubble(
                 msg, outgoing, extractor, inline_parts, attachments,
