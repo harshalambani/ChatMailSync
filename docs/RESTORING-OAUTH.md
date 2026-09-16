@@ -7,6 +7,12 @@ repo to make it work again.
 Nothing here is needed to run the app. IMAP with an app password is the only
 backend, and it reaches Gmail perfectly well.
 
+The file-by-file table below is a historical map: it names files from the
+Windows desktop app (`gui.py`, `gui_worker.py`, `cli.py`), which ended at
+v2.1.5 (tag `windows-final`) and no longer exist in this repo. They are kept
+here unaltered because they are part of the git history a restore would need
+to navigate, not instructions for the current tree.
+
 ---
 
 ## 1. Why it was removed
@@ -123,7 +129,6 @@ Without step 3 no amount of `git revert` produces a working sign-in.
 
 ## 6. If you restore it
 
-Platform parity is mandatory (`PLATFORM-PARITY.md`): the feature comes back on
-**both** front-ends in the same batch, or not at all. And before it ships on
-Android, the Galaxy Store data-safety declaration must be updated to say the
+The repo is Android-only now, so this would be a single-platform change. Before
+it ships, the Galaxy Store data-safety declaration must be updated to say the
 app collects a Google account — that is what removing it avoided.

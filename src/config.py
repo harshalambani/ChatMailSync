@@ -9,9 +9,9 @@ from pathlib import Path
 # Project root and directory layout
 # ---------------------------------------------------------------------------
 
-# When running as a PyInstaller bundle, __file__ points inside the frozen
-# binary and relative paths break.  The PortableApps launcher sets
-# CHATMAILSYNC_ROOT to the App/ChatMailSync/ directory before starting the exe.
+# The retired Windows app (a PyInstaller bundle launched by PortableApps,
+# gone as of 2.1.5) set CHATMAILSYNC_ROOT before starting the exe, since
+# __file__ points inside the frozen binary and relative paths break there.
 #
 # An Android/Chaquopy caller has no env var to set and no __file__-relative
 # layout to fall back to (app-private storage lives under
@@ -68,8 +68,8 @@ def set_root(path: str | Path) -> None:
 
     Must be called before any other src.* module imports config's derived
     path constants (AUTH_DIR, DATA_DIR, INBOX_DIR, ...) — see _apply_root()'s
-    docstring. Windows never calls this; it keeps using the CHATMAILSYNC_ROOT
-    env var / __file__-relative fallback below.
+    docstring. Android calls this on startup; the CHATMAILSYNC_ROOT env var /
+    __file__-relative fallback below exists for other embedding contexts.
     """
     global _explicit_root
     _explicit_root = Path(path)
@@ -121,13 +121,13 @@ def is_legacy_oauth_user(saved: dict) -> bool:
 def resolve_mail_backend(saved: dict) -> str:
     """Pick the backend for a settings dict, which may predate or postdate OAuth.
 
-    Shared by gui.py and gui_worker.py precisely so the two cannot drift into
+    Lives in the shared core so the sync path and the UI cannot drift into
     disagreeing about which backend a given settings file means -- they read
     the same file and must reach the same answer or a sync would run against a
     different transport than the UI is showing.
 
     There is only one answer now. A saved "gmail_oauth" is deliberately NOT
-    honoured: returning it would hand gui_worker a backend name nothing can
+    honoured: returning it would hand the caller a backend name nothing can
     build a transport for, and the user would meet a crash instead of an
     explanation. is_legacy_oauth_user() above is how the UI knows to explain.
     """
@@ -228,10 +228,9 @@ def mailbox_clear_steps(folder: str, gmail: bool) -> list[str]:
     the lot. Moving the messages themselves to the Bin is the only action that
     strips every label and removes them from All Mail.
 
-    Shared by gui.py and cli.py so the two front-ends cannot give contradictory
-    instructions for the same destructive action; the Android copy of this
-    wording lives in ChatDetailScreen.kt and must be kept in step (see
-    PLATFORM-PARITY.md).
+    Lives in the shared core so this module cannot drift from the Android
+    copy of this wording, which lives in ChatDetailScreen.kt and must be
+    kept in step.
     """
     if gmail:
         return [

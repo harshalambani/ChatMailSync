@@ -8,10 +8,9 @@ import java.io.File
 
 /**
  * The cutoff card's whole vocabulary, and the check Settings makes before it
- * saves. The Windows twins are gui._format_cutoff_day and the normalise_cutoff
- * call in _SettingsPanel._on_save; these tests mirror the four in
- * tests/test_gui_backend.py that cover them, plus the strict-date cases the
- * Python side gets for free from strptime.
+ * saves. The Python twin is the normalise_cutoff call in src/state.py; these
+ * tests mirror the cases tests/test_state.py covers there, plus the
+ * strict-date cases the Python side gets for free from strptime.
  */
 class CutoffDateTest {
 

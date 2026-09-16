@@ -42,7 +42,8 @@ import androidx.compose.ui.unit.dp
  * a Java interface implementation arrives as one whose methods can be called
  * by name. src/mail_client.py's _emit_stage does exactly that -- it looks for
  * an `onStage` attribute first and falls back to calling the object directly,
- * which is what lets Windows keep passing a plain Python function.
+ * which is what lets the shared Python core also be called from a plain
+ * script with a plain Python function as the listener.
  *
  * Three primitives rather than a dict, because a dict would have to be
  * converted on the way across for no gain.
@@ -330,11 +331,11 @@ fun MailSetupWizardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            // The same three marks Windows draws, rather
-                            // than the words "OK" and "X": a column of ticks
-                            // reads as a checklist at a glance, and five lines
-                            // that settle on "OK" are not the ticks the rest of
-                            // the app -- and this screen's own copy -- promise.
+                            // Marks, rather than the words "OK" and "X": a
+                            // column of ticks reads as a checklist at a
+                            // glance, and five lines that settle on "OK" are
+                            // not the ticks the rest of the app -- and this
+                            // screen's own copy -- promise.
                             Text(
                                 when (result) {
                                     true -> "\u2713"

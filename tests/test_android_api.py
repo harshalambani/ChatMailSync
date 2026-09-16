@@ -438,32 +438,6 @@ def test_preview_cutoff_swallows_an_unreadable_date(tmp_root, db_path):
 _REPO = Path(__file__).resolve().parent.parent
 
 
-def test_both_windows_preview_call_sites_hand_over_the_app_wide_date():
-    """A preview that ignored the floor would describe a sync that is not the
-    one about to run -- the opposite of what the line is for. Neither call site
-    can run here (both need a Tk window), so this reads the source, as
-    FrozenIdentifiersTest does on the Kotlin side."""
-    body = (_REPO / "gui.py").read_text(encoding="utf-8")
-
-    assert body.count("preview_export(") == 2, "a third call site appeared"
-    # Not a substring check on the settings key -- gui.py reads cutoff_date in
-    # five places, so any one of them would satisfy a loose guard while a
-    # preview quietly dropped it. This asserts the calls themselves.
-    assert "preview_export(str(INBOX_DIR / filename))" not in body, (
-        "a preview call site is back to ignoring the cutoff"
-    )
-    assert body.count(
-        "preview_export(\n"
-        "                str(INBOX_DIR / filename),\n"
-        '                self._settings.get("cutoff_date", ""),\n'
-    ) == 1
-    assert body.count(
-        "preview_export(\n"
-        "                str(INBOX_DIR / filename),\n"
-        '                self._app._settings.get("cutoff_date", ""),\n'
-    ) == 1
-
-
 def test_every_android_preview_call_site_hands_over_the_app_wide_date():
     body = (_REPO / "android/app/src/main/java/com/chatmailsync/app"
             / "MainActivity.kt").read_text(encoding="utf-8")

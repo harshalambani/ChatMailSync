@@ -419,7 +419,7 @@ class SyncManager:
         msgs_done: int, total_msgs: int,
     ) -> None:
         """Hook for subclasses (ProgressSyncManager) to observe within-file
-        push progress. No-op on the plain CLI/GUI-facing SyncManager."""
+        push progress. No-op on the plain base SyncManager."""
 
     def _parse_and_filter(
         self, filepath: Path, chat_id: str, last_synced_ts: Optional[str]
@@ -786,10 +786,10 @@ class SyncManager:
 # ---------------------------------------------------------------------------
 # SyncManager subclass — adds per-file progress events
 #
-# Lives in the shared core (not gui_worker.py, which is Windows-only and not
-# bundled into the Android build) so both the Windows GUI and android_api.py
-# can reuse the same event vocabulary. `progress_queue` only needs a `.put()`
-# method (a real queue.Queue on Windows, a plain callback adapter on
+# Lives in the shared core, not in android_api.py itself, so the event
+# vocabulary stays reusable rather than tied to one caller. Until 2.1.5 a
+# Windows build shared this module too, via its own gui_worker.py.
+# `progress_queue` only needs a `.put()` method (a plain callback adapter on
 # Android) and `stop_event` only needs `.is_set()` — duck-typed, not tied to
 # threading.Event, so a caller with no cancellation support can pass anything
 # that always answers False.

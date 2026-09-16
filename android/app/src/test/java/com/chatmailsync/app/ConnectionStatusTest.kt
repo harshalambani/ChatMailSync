@@ -7,10 +7,11 @@ import org.junit.Test
 /**
  * The Kotlin half of the connection-status contract (Batch G).
  *
- * These rows are the same judgement gui._auth_display makes on Windows, and
- * tests/test_connection_status.py asserts them there. If a row here changes
- * without the matching row there changing, the two products are telling the
- * same user two different things about the same mailbox.
+ * These rows are the same judgement src/mail_client.py's connection-status
+ * logic makes, and tests/test_connection_status.py asserts them there. If a
+ * row here changes without the matching row there changing, the app and its
+ * shared Python core are telling the same user two different things about
+ * the same mailbox.
  *
  * Plain JUnit, no Robolectric, for the same reason OauthVisibilityTest is:
  * connectionStatusOf takes two plain values and touches no Context. The

@@ -284,7 +284,6 @@ fun HomeScreen(
             // silent: someone imports a two-year-old export, sees a fraction
             // of it arrive, and has no way to know the app is obeying a floor
             // they set months ago. Absent entirely when there is no cutoff.
-            // Windows mirrors this as the strip above its sync button.
             val cutoffLabel = CutoffDate.format(cutoffDate)
             if (cutoffLabel.isNotEmpty()) {
                 Card(

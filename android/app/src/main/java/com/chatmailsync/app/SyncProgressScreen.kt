@@ -57,9 +57,9 @@ fun SyncProgressScreen(
         .firstOrNull()
     // Local only — request_stop() is fire-and-forget on the Python side
     // (src/android_api.py sets a threading.Event the in-flight sync polls
-    // between files, same mechanism as the Windows GUI's Stop button). This
-    // just tracks that a request was made so the button doesn't look like
-    // it did nothing while the current file finishes.
+    // between files). This just tracks that a request was made so the
+    // button doesn't look like it did nothing while the current file
+    // finishes.
     var stopRequested by remember { mutableStateOf(false) }
 
     // The sync request's input Data sits in WorkManager's own SQLite DB
@@ -193,10 +193,10 @@ fun SyncProgressScreen(
                     )
 
                     // Rolling milestone log (file started/finished, inbox
-                    // scan result) — Windows' GUI has always shown a log
-                    // box; Android previously showed only the single
-                    // current-line status with nothing to scroll back
-                    // through.
+                    // scan result) — Android previously showed only the
+                    // single current-line status with nothing to scroll
+                    // back through (the Windows desktop app had a log box
+                    // for this until 2.1.5).
                     val logLines = workInfo.progress.getString(SyncWorker.KEY_LOG_LINES)
                     if (!logLines.isNullOrBlank()) {
                         val logScroll = rememberScrollState()

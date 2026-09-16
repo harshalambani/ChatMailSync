@@ -43,10 +43,10 @@ from src.state import (
 from src.progress import ProgressTracker
 from src.sync_manager import ProgressSyncManager
 
-# Mirrors gui_worker.py's existing {"type": ..., ...} event vocabulary
+# Uses the established {"type": ..., ...} event vocabulary
 # (files_total / syncing / file_done / log / done / error) so a future
 # Kotlin WorkManager progress bridge stays consistent with what the
-# Windows GUI already emits.
+# app already emits.
 ProgressCallback = Callable[[dict], None]
 
 
@@ -78,7 +78,7 @@ class _CallbackSink:
 # caller that arrived late (a collapsed sync bar recomposed after the user
 # navigated away and back) had no way to learn what it had missed. Reading a
 # state instead of a stream also means the label and fraction rules live in
-# the shared core for both front-ends rather than being restated in Kotlin.
+# the shared core rather than being restated in Kotlin.
 # ---------------------------------------------------------------------------
 
 _progress_lock = threading.Lock()
@@ -136,10 +136,9 @@ def remove_from_inbox(name: str) -> dict:
 
 def imap_providers() -> list[dict]:
     """Expose config.IMAP_PROVIDERS to Kotlin so the Android provider picker
-    reads from the same preset table as the Windows GUI instead of
-    duplicating hosts/ports in Kotlin. "custom" comes through with
-    host == "" (None isn't JSON-clean for Chaquopy) so the Android field
-    stays editable, matching gui.py's _apply_host_field_state."""
+    reads from the shared preset table instead of duplicating hosts/ports
+    in Kotlin. "custom" comes through with host == "" (None isn't JSON-clean
+    for Chaquopy) so the Android field stays editable."""
     return [
         {"key": key, "label": info["label"], "host": info["host"] or "", "port": info["port"]}
         for key, info in config.IMAP_PROVIDERS.items()
@@ -180,7 +179,7 @@ def preview(file_path: str, cutoff: str = "") -> dict:
     "media_count", "first_message_ts", "last_message_ts", "cutoff_date",
     "error"}.
 
-    [cutoff] is the app-wide cutoff date, which each front-end holds in its own
+    [cutoff] is the app-wide cutoff date, which the app holds in its own
     settings store and this module cannot read for itself. It is only used to
     work out what would actually be sent; nothing here writes it anywhere.
     """
@@ -227,11 +226,10 @@ def preview(file_path: str, cutoff: str = "") -> dict:
 def format_preview(info: dict) -> str:
     """Render preview()'s dict as the few lines a person actually reads.
 
-    Lives beside preview() rather than in either front-end because both of them
-    show it: Android's queue card and Windows' inbox list are the same question
-    asked twice, and a second copy of this wording would drift within a
-    release. (This module is named for Android for historical reasons only --
-    preview() and this function are platform-neutral.)
+    Lives beside preview() rather than in the caller because Android's queue
+    card needs exactly this wording, and a second copy of it would drift
+    within a release. (This module is named for Android for historical
+    reasons only -- preview() and this function are platform-neutral.)
     """
     if not info.get("ok"):
         return info.get("error") or "This file could not be read."
@@ -288,10 +286,9 @@ def preview_text(file_path: str, cutoff: str = "") -> str:
 
 # Module-level so request_stop() (called from a Compose "Cancel sync" button,
 # on a different thread than the sync itself) can reach the in-flight run —
-# mirrors gui_worker.SyncWorker.stop(), which sets a stop_event the Windows
-# GUI's Stop button triggers the same way. Honoured between files, same as
-# Windows: the file in progress finishes (nothing left half-written), no
-# further files are started.
+# it sets a stop_event that is only honoured between files: the file in
+# progress finishes (nothing left half-written), no further files are
+# started.
 _stop_event = threading.Event()
 
 
@@ -420,10 +417,9 @@ def reset_preview(chat_id_or_name: str) -> dict:
 def reset(chat_id_or_name: str, confirmed_mailbox_cleared: bool = False) -> dict:
     """Reset sync state for one chat (accepts chat_id or display_name).
 
-    Mirrors gui.py's _on_resync_chat: also moves the chat's export file back
-    from processed/ to inbox/ (when found) so the very next sync naturally
-    re-imports it, instead of requiring the user to manually re-pick the
-    original file.
+    Also moves the chat's export file back from processed/ to inbox/ (when
+    found) so the very next sync naturally re-imports it, instead of
+    requiring the user to manually re-pick the original file.
 
     confirmed_mailbox_cleared asserts the user has already deleted this chat's
     existing mail by hand - see reset_preview() for the count and folder to put
@@ -493,8 +489,8 @@ def reset(chat_id_or_name: str, confirmed_mailbox_cleared: bool = False) -> dict
 def delete_chat(chat_id_or_name: str) -> dict:
     """Fully remove a chat and its sync history (accepts chat_id or
     display_name) — distinct from reset(): the entry disappears from the
-    list entirely rather than being kept for re-sync. Mirrors gui.py's
-    _on_delete_chat / state.delete_chat().
+    list entirely rather than being kept for re-sync. Thin wrapper around
+    state.delete_chat().
 
     Returns {"ok": bool, "chat_id": str | None, "display_name": str | None,
     "error": str | None}.
@@ -611,9 +607,8 @@ def list_cutoffs() -> list[dict]:
 # Which name in an export is yours.
 #
 # This decides which side of the conversation every bubble is drawn on, so it
-# is not a per-front-end preference: two front-ends holding different answers
-# would archive the same export two different ways. Both read and write the one
-# shared row.
+# is not a per-install preference -- Android reads and writes the one shared
+# row.
 # ---------------------------------------------------------------------------
 
 
@@ -622,7 +617,8 @@ def get_self_sender() -> dict:
 
     Returns {"name", "source", "summary", "detail", "override", "learned"}.
     `source` is "override", "learned" or "unknown"; `summary` and `detail` are
-    the display wording, kept in Python so both front-ends say the same thing.
+    the display wording, kept in Python so the shared core owns it rather
+    than Kotlin.
     `override` and `learned` are the raw stored values, for the text field and
     for showing what would be fallen back to if the override were cleared.
     """
@@ -656,8 +652,7 @@ def set_self_sender(name: Optional[str] = None) -> dict:
 #
 # Kotlin owns the file, Python owns the contents. SAF hands Kotlin a content://
 # URI, not a path, and Python cannot open one -- so Kotlin copies to a cache
-# file, calls in here with that path, and copies the result back out. The same
-# split lets Windows call these functions with a real path and no adapter.
+# file, calls in here with that path, and copies the result back out.
 # ---------------------------------------------------------------------------
 
 
@@ -710,9 +705,9 @@ def import_backup(source_path: str) -> dict:
     """Merge the bundle at [source_path] into this install.
 
     The returned "settings" are the portable ones from the bundle, for the
-    front-end to apply to its own store -- this module does not know where
-    either front-end keeps them. "settings_json" carries the same thing in the
-    form Kotlin can read without marshalling a heterogeneous map.
+    caller to apply to its own store -- this module does not know where the
+    app keeps them. "settings_json" carries the same thing in the form
+    Kotlin can read without marshalling a heterogeneous map.
     """
     result = migration.import_bundle(config.PROJECT_ROOT, Path(source_path))
     if result.get("ok"):

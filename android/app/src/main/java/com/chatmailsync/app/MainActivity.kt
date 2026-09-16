@@ -183,8 +183,8 @@ internal fun shouldScanAtLaunch(autoWatchOn: Boolean, watchedFolderUri: String?)
  * happening, how far along, and reopens the full view on tap.
  *
  * The text and the fraction are rendered by src/progress.py and carried here
- * verbatim, so this bar, the full progress screen, the notification and the
- * Windows window all say the same words. */
+ * verbatim, so this bar, the full progress screen and the notification all
+ * say the same words. */
 @Composable
 private fun SyncStatusBar(
     text: String,
@@ -255,8 +255,7 @@ fun ChatMailApp(
 
     // ---- Legacy Google sign-in notice (v2.0.0) ----------------------
     // Google sign-in was removed in v2.0.0. Someone who had it gets one
-    // explanation, once -- see AppPrefs.isLegacyOauthUser, and gui.py's
-    // _maybe_show_oauth_removed_notice for the desktop twin.
+    // explanation, once -- see AppPrefs.isLegacyOauthUser.
     var showOauthRemovedNotice by remember {
         mutableStateOf(
             AppPrefs.isLegacyOauthUser(context) &&
@@ -289,13 +288,13 @@ fun ChatMailApp(
         )
     }
 
-    // ---- Mail backend: IMAP app password parity with Windows -----------
+    // ---- Mail backend: IMAP app password -------------------------------
     // mailBackend/imapProvider/imapHost/imapPort/imapEmail mirror AppPrefs
     // (persisted there), but only *after* a successful Save & connect — see
-    // saveImapSettings below, which follows gui_worker.connect_imap's
-    // "validate, build transport, force a real login via labels_list(),
-    // persist only on success" contract. imapPasswordSaved never reflects
-    // the password itself, only whether SecretStore currently holds one.
+    // saveImapSettings below, which follows a "validate, build transport,
+    // force a real login via labels_list(), persist only on success"
+    // contract. imapPasswordSaved never reflects the password itself, only
+    // whether SecretStore currently holds one.
     var mailBackend by remember { mutableStateOf(AppPrefs.resolveMailBackend(context)) }
     var imapProvider by remember { mutableStateOf(AppPrefs.getImapProvider(context)) }
     var imapHost by remember { mutableStateOf(AppPrefs.getImapHost(context)) }
@@ -306,13 +305,12 @@ fun ChatMailApp(
     // The five connection stages, in order, so the wizard's last step can draw
     // the whole list greyed out before the check starts rather than growing it
     // a line at a time. Read from the Python core rather than hardcoded here,
-    // which is what keeps the two apps naming the same five things
-    // (PLATFORM-PARITY.md).
+    // so Kotlin never drifts from the source of truth.
     var stagePlan by remember { mutableStateOf(listOf<WizardStage>()) }
 
     // Reads config.IMAP_PROVIDERS via the Python side once per composition —
-    // same preset table (host/port per provider) the Windows GUI uses, so
-    // Android never duplicates that data in Kotlin.
+    // the shared preset table (host/port per provider), so Android never
+    // duplicates that data in Kotlin.
     LaunchedEffect(Unit) {
         val result = Python.getInstance().getModule("src.android_api").callAttr("imap_providers")
         imapProviders = result.asList().map { entry ->
@@ -406,9 +404,8 @@ fun ChatMailApp(
             val errorText = try {
                 transport = Python.getInstance().getModule("src.mail_client")
                     .callAttr("build_imap_transport", effectiveHost, port, email, effectivePassword)
-                // Forces a real login (mirrors gui_worker.connect_imap) so a
-                // wrong host/port/password/app-password is caught here, not
-                // on the next real sync.
+                // Forces a real login so a wrong host/port/password/
+                // app-password is caught here, not on the next real sync.
                 transport?.callAttr("labels_list")
                 null
             } catch (e: Exception) {
@@ -533,9 +530,9 @@ fun ChatMailApp(
     // The app works this out from a one-to-one export and then uses it to
     // decide which side of the conversation every bubble is drawn on. That is
     // too consequential to leave unsaid, so Settings states it. Held in the
-    // shared state database, not in preferences, because Windows has to reach
-    // the same answer -- two front-ends disagreeing would archive one export
-    // two different ways.
+    // shared state database, not in preferences, because every part of the
+    // app that touches an export needs to reach the same answer -- a
+    // disagreement would archive one export two different ways.
     var selfSenderSummary by remember { mutableStateOf("") }
     var selfSenderDetail by remember { mutableStateOf("") }
     var selfSenderOverride by remember { mutableStateOf("") }
@@ -1325,11 +1322,11 @@ fun ChatMailApp(
                                 // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
                                 // failed, instead of the old labels_list() call whose
                                 // only two outcomes were a raw folder dump or "Could
-                                // not connect". It lives in src/mail_client.py so this
-                                // screen and the Windows [Test connection] button say
-                                // the same words -- see PLATFORM-PARITY.md. It reports
-                                // failures as a return value rather than an exception,
-                                // so the catch below is only for a bridge-level fault.
+                                // not connect". It lives in src/mail_client.py so
+                                // every place this screen reports a connection result
+                                // says the same words. It reports failures as a
+                                // return value rather than an exception, so the catch
+                                // below is only for a bridge-level fault.
                                 val text = try {
                                     val mailClient = Python.getInstance().getModule("src.mail_client")
                                     val outcome = mailClient.callAttr(
@@ -1341,8 +1338,7 @@ fun ChatMailApp(
                                     )
                                     connected = outcome.callAttr("get", "ok").toBoolean()
                                     // Same formatter check_connection_text
-                                    // uses, so the words are still shared
-                                    // with the Windows button verbatim.
+                                    // uses, so the wording stays consistent.
                                     mailClient.callAttr("format_connection_result", outcome).toString()
                                 } catch (e: Exception) {
                                     redactSecret("Could not connect: ${e.message}", password)

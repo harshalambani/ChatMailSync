@@ -12,18 +12,16 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * AndroidKeyStore-backed at-rest encryption for the one secret this app ever
- * needs to hold on the Android side: an IMAP app password. This is the Android
- * half of a guarantee both platforms make — the desktop build encrypts the same
- * secret with Windows DPAPI (src/secret_store.py, called from
- * gui_worker._save_imap_credentials) over an NTFS-ACL-hardened auth/ directory.
- * Android has neither of those primitives, and app-private storage alone is not
+ * needs to hold: an IMAP app password. App-private storage alone is not
  * considered sufficient for a live credential (a rooted device or a
  * backup-extraction tool can read another app's private files).
  * AndroidKeyStore gives a hardware/TEE-backed key that never itself leaves
- * secure storage, so encrypting with it is the closest Android equivalent to
- * what DPAPI plus the ACL give on Windows. src/config.py's own comments already anticipate
- * per-OS hardening layered on a shared file format — this is that layer for
- * Android, just backed by SharedPreferences instead of a file.
+ * secure storage, so encrypting with it is the strongest at-rest protection
+ * available on this platform (the Windows desktop app encrypted the same
+ * secret with DPAPI over an NTFS-ACL-hardened auth/ directory until 2.1.5).
+ * src/config.py's own comments already anticipate per-OS hardening layered
+ * on a shared file format — this is that layer for Android, just backed by
+ * SharedPreferences instead of a file.
  *
  * Ciphertext is stored as "<base64 iv>:<base64 ciphertext>" in a plain
  * SharedPreferences file. The IV is regenerated per encryption (GCM requires

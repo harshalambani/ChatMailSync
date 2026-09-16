@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS chats (
     -- hold whichever transport is active (IMAP stores its folder in the label
     -- column and its thread anchor in the thread column). Deliberately not
     -- renamed - it would need a migration on every existing install for a
-    -- cosmetic gain. See PLATFORM-PARITY.md P2.
+    -- cosmetic gain.
     gmail_thread_id   TEXT,
     gmail_label_id    TEXT,
     anchor_message_id TEXT,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS message_hashes (
 
 -- Deliberately NOT a foreign key to chats. The chats table only holds chats
 -- that have synced at least once, and get_sync_summary() reads straight from
--- it to build the CLI status output and both front-ends' chat lists. Hanging a
+-- it to build Android's chat list. Hanging a
 -- cutoff off a chats row would mean writing a premature row for a chat that
 -- has only ever been seen inside an export file -- putting a phantom chat,
 -- with no runs and no mail folder, into every one of those lists.
@@ -83,14 +83,13 @@ CREATE TABLE IF NOT EXISTS chat_cutoffs (
 );
 
 -- Small key/value store for settings that are genuinely about the archive
--- rather than about one front-end. Both front-ends keep their own settings
--- file for their own concerns (window size, mail account, theme), and that is
--- the right home for them. The account owner's own name is not one of those:
--- it decides which side of the conversation every bubble is drawn on, so the
--- two front-ends reading a different answer would produce two different
--- archives from one export. Keeping it beside the data it describes also
--- means a device migration carries it, and that a name learned on one front
--- end is already known to the other.
+-- rather than about the app itself. The Android app keeps its own settings
+-- file for its own concerns (mail account, theme), and that is the right
+-- home for them. The account owner's own name is not one of those: it
+-- decides which side of the conversation every bubble is drawn on, so an
+-- inconsistent answer would produce two different archives from one export.
+-- Keeping it beside the data it describes also means a device migration
+-- carries it along automatically.
 CREATE TABLE IF NOT EXISTS app_state (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -338,8 +337,8 @@ def list_chats(db_path: Optional[Path] = None) -> list[sqlite3.Row]:
 
 def resolve_chat(target: str, db_path: Optional[Path] = None) -> Optional[sqlite3.Row]:
     """Look up a chat by chat_id first, falling back to a case-insensitive
-    display_name match. Shared by cli.py's `reset` command and android_api.py
-    so the two entry points can't drift on lookup behavior."""
+    display_name match. Shared by callers like android_api.py's reset
+    command so lookup behavior can't drift between them."""
     chat = get_chat(target, db_path)
     if chat is not None:
         return chat
@@ -539,19 +538,18 @@ def is_uneventful_run(row: Mapping[str, Any]) -> bool:
     own `sync_runs` row whether or not the export moved. On a 40-chat inbox
     checked daily that is ~1,200 rows a month, of which the handful that
     actually uploaded something are the only ones anyone opens the log to
-    find. The log therefore folds these away by default -- see the Windows
-    _SyncLogPanel and Android's SyncLogScreen, both of which show a count and
-    a way to unfold rather than hiding them outright.
+    find. The log therefore folds these away by default -- see Android's
+    SyncLogScreen, which shows a count and a way to unfold rather than
+    hiding them outright.
 
     Deliberately *not* "messages_synced == 0": a failed run also uploads
     nothing, and burying failures is the one thing this must never do. A
     still-`pending` run is not uneventful either -- it hasn't finished, so
     there is nothing yet to judge.
 
-    The rule lives here, in the shared core, so the two front-ends cannot
-    drift into folding away different runs: Windows calls this directly and
-    Android reads the `uneventful` flag that android_api.sync_log() stamps on
-    each row from it.
+    The rule lives here, in the shared core, so callers cannot drift into
+    folding away different runs: Android reads the `uneventful` flag that
+    android_api.sync_log() stamps on each row from it.
     """
     return row["status"] == "complete" and not (row["messages_synced"] or 0)
 
@@ -559,20 +557,20 @@ def is_uneventful_run(row: Mapping[str, Any]) -> bool:
 def summarize_recent_runs(
     days: int = 90, db_path: Optional[Path] = None
 ) -> dict[str, Any]:
-    """Answer "where do things stand?" in one read, for both home screens.
+    """Answer "where do things stand?" in one read, for the app's home screen.
 
     The sync log already holds this, but reaching it costs a navigation, and
     the two questions someone asks on arriving -- did the last sync work, and
     is anything broken -- deserve an answer before that. The summary lives
-    here rather than in either front-end for the same reason
-    `is_uneventful_run` does: two hand-written summaries over the same table
-    would eventually disagree, and a home screen quietly claiming a different
-    history than the log is worse than no summary at all.
+    here rather than in the app for the same reason `is_uneventful_run` does:
+    a hand-written summary over the same table risks drifting from it, and a
+    home screen quietly claiming a different history than the log is worse
+    than no summary at all.
 
     `last_*` describes the newest run that has *finished*, which is what "the
     last sync" means to a reader. A run still in flight is reported separately
     as `running_runs`, so a sync starting does not blank out the outcome of
-    the one before it -- both front-ends show live progress elsewhere.
+    the one before it -- the app shows live progress elsewhere.
     """
     runs = get_recent_runs(days, db_path)
     finished = [r for r in runs if r["status"] in ("complete", "failed")]

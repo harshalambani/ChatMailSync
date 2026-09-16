@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.sp
  * straight onto this navy band there was nothing beneath it: the chevron and
  * the envelope notch showed band colour through, and the mark had no container,
  * so it read as unfinished. ic_masthead is the ringed badge cut for this one
- * surface. Everywhere else — launcher, taskbar, splash — the mark stands alone
+ * surface. Everywhere else — launcher, splash — the mark stands alone
  * with no ring, so do not reuse ic_masthead outside the banner.
  */
 private val MastheadHeight = 88.dp
@@ -64,9 +64,7 @@ private val MastheadHeight = 88.dp
  * A back arrow on its own says only "leave", and the feedback on this app was
  * exactly that it "is not very intuitive or obvious" -- it does not say what
  * you are leaving *to*, which on a screen reached from two places is the only
- * thing worth knowing. The Windows window has said "Back to sync" / "Back to
- * settings" since its panel stack shipped; this is the Android half of that
- * parity.
+ * thing worth knowing.
  */
 @Composable
 private fun BackAffordance(label: String, onBack: () -> Unit) {

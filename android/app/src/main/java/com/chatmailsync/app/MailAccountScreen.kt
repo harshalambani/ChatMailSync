@@ -47,9 +47,8 @@ import java.util.Calendar
  * instantiates/populates it when loading the provider list from Python. */
 data class ImapProviderInfo(val key: String, val label: String, val host: String, val port: Int)
 
-// Matches gui.py's _BACKEND_LABELS exactly, so the two apps describe the
-// same thing with the same words. Moved here with the rest of the account
-// UI it labels; MainActivity.kt uses it too (mail-account summary line).
+// Moved here with the rest of the account UI it labels; MainActivity.kt uses
+// it too (mail-account summary line).
 //
 // The label names the SCOPE, not just the mechanism. Since v2.0.0 there is
 // one entry, because there is one backend -- Google sign-in was removed (see
@@ -263,9 +262,9 @@ fun MailAccountScreen(
     // state here is plain (unencrypted) memory, and re-displaying a saved
     // password back into a text field is exactly the kind of surfacing the
     // security spec for this feature rules out. An empty field with
-    // imapPasswordSaved shown as a separate status line is the same UX
-    // gui.py's Settings window uses ("Leave blank to keep the currently
-    // saved password. The password is never shown or logged.").
+    // imapPasswordSaved shown as a separate status line says the same thing
+    // without ever redisplaying the secret: "Leave blank to keep the
+    // currently saved password. The password is never shown or logged."
     var imapPasswordInput by remember { mutableStateOf("") }
     var imapSaveBusy by remember { mutableStateOf(false) }
     var imapSaveStatus by remember { mutableStateOf<String?>(null) }
@@ -313,21 +312,18 @@ fun MailAccountScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // One instance per mailbox. Parity with gui.py's mail-account panel,
-            // which carries the same sentence in the same position -- first, above
-            // the backend picker -- because this screen is where a second instance
-            // gets pointed at a mailbox the first one is already archiving into,
-            // which is the exact moment the mistake is made. The record of what
-            // has been sent lives in this instance's own sync_state.db, not in the
+            // One instance per mailbox, stated first, above the backend picker,
+            // because this screen is where a second instance gets pointed at a
+            // mailbox the first one is already archiving into, which is the
+            // exact moment the mistake is made. The record of what has been
+            // sent lives in this instance's own sync_state.db, not in the
             // mailbox, so a second one starts from zero knowledge and re-files
             // every chat it is given. Nothing downstream can catch that: the
-            // de-duplication is per-instance by construction, and the app can add
-            // mail but never remove it.
+            // de-duplication is per-instance by construction, and the app can
+            // add mail but never remove it.
             //
-            // "Instance", not "device" or "platform": two phones, two PCs and two
-            // copies of the portable app in different folders on one PC are all
-            // the same failure. Naming Windows-vs-Android would read as an
-            // exhaustive list and quietly bless the other cases.
+            // "Instance", not "device": two phones, or two installs on the same
+            // phone, are the same failure.
             //
             // Weighting, decided deliberately: ONE quiet line in the same muted
             // caption style as every other note here -- no dialog, no banner, no
@@ -347,8 +343,7 @@ fun MailAccountScreen(
             Text("Mail backend", style = MaterialTheme.typography.titleMedium)
             // A statement of fact, not a choice: there is one backend, and a
             // one-item dropdown is the worse lie -- it implies something else
-            // is behind it. Matches the static label gui.py now shows in the
-            // same spot; see docs/RESTORING-OAUTH.md if a second one ever
+            // is behind it. See docs/RESTORING-OAUTH.md if a second one ever
             // comes back.
             Text(BACKEND_LABELS[AppPrefs.MAIL_BACKEND_IMAP]!!)
 

@@ -51,8 +51,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
         /** The same fraction as a whole number, or -1 when there is no honest
          * one yet. Rounded in src/progress.py rather than here so the
-         * collapsed sync bar and the Windows window can never disagree by a
-         * percentage point. */
+         * collapsed sync bar and the full progress screen can never disagree
+         * by a percentage point. */
         const val KEY_PROGRESS_PERCENT = "progress_percent"
         const val KEY_LOG_LINES = "log_lines"
         const val NOTIFICATION_CHANNEL_ID = "sync_channel"
@@ -120,10 +120,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 // What comes back is the whole state of the run so far, not
                 // the events since the last look, so a slow tick can't drop
                 // anything: the status line, the monotonic fraction and the
-                // milestone log are all derived in src/progress.py, which
-                // the Windows GUI renders from too. Kotlin's job here is to
-                // move those three strings onto the notification and into
-                // WorkManager's Data — not to decide what they say.
+                // milestone log are all derived in src/progress.py. Kotlin's
+                // job here is to move those three strings onto the
+                // notification and into WorkManager's Data — not to decide
+                // what they say.
                 while (isActive) {
                     val state = try {
                         androidApi.callAttr("progress_state")
@@ -207,10 +207,9 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             else -> null
         }
         try {
-            // Read here rather than passed in, for the same reason the
-            // Windows SyncWorker reads it: every run this app starts has to
-            // obey the same floor, and a parameter is one more place for a
-            // future call site to forget it.
+            // Read here rather than passed in: every run this app starts has
+            // to obey the same floor, and a parameter is one more place for
+            // a future call site to forget it.
             //
             // Handed over raw. SyncManager normalises it and raises on a date
             // it cannot compare, and that is the behaviour we want: a corrupt
@@ -279,8 +278,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
 /**
  * Mirrors SyncStats.__str__ (src/sync_manager.py) so the Android result
- * screen shows the same breakdown as the Windows GUI's log box, instead of
- * a raw Python dict repr.
+ * screen shows a readable breakdown instead of a raw Python dict repr.
  */
 private data class SyncStatsResult(
     val filesFound: Int,

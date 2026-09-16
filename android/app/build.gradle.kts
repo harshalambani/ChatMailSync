@@ -33,13 +33,13 @@ android {
         applicationId = "com.chatmailsync.app"
         minSdk = 24
         targetSdk = 36
-        // Moves with DisplayVersion/PackageVersion in
-        // portable/App/AppInfo/appinfo.ini, in the same commit, and every
-        // release publishes an APK alongside the Windows assets. See
-        // PLATFORM-PARITY.md, "Every release ships both platforms" - v1.2.1,
-        // v1.3.0 and v1.4.0 each bumped this file and then shipped Windows
-        // only, so the phone build was stamped as released without ever being
-        // published. v1.4.1 is the first release to carry both.
+        // Historically moved in step with the now-retired Windows app's own
+        // version file, and every release published an APK alongside the
+        // Windows assets - v1.2.1, v1.3.0 and v1.4.0 each bumped this file and
+        // then shipped Windows only, so the phone build was stamped as
+        // released without ever being published; v1.4.1 was the first release
+        // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
+        // and this repo is Android-only from here on.
         versionCode = 41
         versionName = "2.1.5"
 
@@ -102,10 +102,11 @@ android {
 // Chaquopy's sourceSet directly at ../../src. Chaquopy treats a srcDir's
 // *contents* as sitting at the Python path root, so pointing it straight at
 // ../../src would expose config.py/mail_client.py/etc. as top-level modules
-// (import config) instead of the package Windows already uses everywhere
-// (import src.config) — this Copy task instead recreates a literal "src"
-// package folder under src/main/python/ so every existing `from src.x import
-// y` statement in the shared core works unchanged on Android too.
+// (import config) instead of the package the tests and the rest of the shared
+// core already use everywhere (import src.config) — this Copy task instead
+// recreates a literal "src" package folder under src/main/python/ so every
+// existing `from src.x import y` statement in the shared core works unchanged
+// on Android too.
 // The destination is regenerated on every build and is gitignored; the repo's
 // src/ directory (one level up from android/) remains the single source of
 // truth — nothing is hand-edited here.

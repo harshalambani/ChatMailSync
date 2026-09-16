@@ -5,8 +5,8 @@ the archive: a new phone re-synced from scratch would still *work*, and would
 mail every message a second time. What cannot be rebuilt from the mailbox is
 `sync_state.db` -- the record of which message hashes have already been sent.
 Without it the second device duplicates the entire history into a mailbox that
-has no conflict resolution, because we deliberately have none (see
-PLATFORM-PARITY.md: we are write-only, we have duplicates, not conflicts).
+has no conflict resolution, because we deliberately have none: we are
+write-only, we have duplicates, not conflicts.
 
 So this module is not "back up the app". It carries the ledger and the
 settings, and nothing else.
@@ -14,9 +14,8 @@ settings, and nothing else.
 Two rules shape everything below.
 
 **The root is a parameter.** Nothing here reads `src.config`. Android sets its
-root at runtime and Windows sets it from an environment variable, and a
-function that reached for a module-level constant would work on exactly one of
-them and be untestable on both.
+root at runtime, and a function that reached for a module-level constant
+instead would be untestable in isolation.
 
 **Settings move by allow-list, never deny-list.** `_PORTABLE_SETTINGS` is the
 complete set of keys that may leave the device. A deny-list would ship any key
@@ -67,11 +66,10 @@ _SETTINGS_NAME = "settings.json"
 # decisions, not omissions:
 #
 #   - No credential of any kind. The IMAP app password is sealed by the
-#     Keystore on Android and by DPAPI on Windows, both of them to *that*
-#     device; a portable copy is a plaintext password in a file the user will
-#     mail to themselves. The new device asks once.
-#   - No watched folder. An Android SAF grant does not transfer, and a Windows
-#     path is unlikely to exist on the machine being restored onto -- it would
+#     Keystore, tied to *that* device; a portable copy is a plaintext
+#     password in a file the user will mail to themselves. The new device
+#     asks once.
+#   - No watched folder. An Android SAF grant does not transfer -- it would
 #     come back as a permission the new device does not hold, and the app would
 #     look broken rather than unconfigured.
 #   - No `last_connection_ok` / `last_connection_at`. They are only a verdict
@@ -206,9 +204,9 @@ def export_bundle(
 ) -> dict:
     """Write a restore bundle for the install at [root] to [dest].
 
-    [settings] is passed in rather than read, because the two front-ends keep it
-    in different places -- a JSON file on Windows, SharedPreferences on Android
-    -- and neither of those belongs in here.
+    [settings] is passed in rather than read, because the caller keeps it
+    elsewhere -- SharedPreferences on Android -- and that storage does not
+    belong in here.
 
     Returns a summary dict; raises BundleError only for the credential tripwire,
     which is a programming error rather than something a user can cause.

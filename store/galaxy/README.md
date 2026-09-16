@@ -6,7 +6,7 @@ rebuilt rather than remembered. Nothing here is submitted yet.
 | File | What it is |
 | --- | --- |
 | `make_assets.py` | Regenerates the two PNGs below from the shipping app icon. Run it from the repo root: `python store/galaxy/make_assets.py`. Requires Pillow. |
-| `icon_512.png` | 512x512 store icon, one LANCZOS step down from `portable/App/AppInfo/appicon_1024.png`. Alpha kept. |
+| `icon_512.png` | 512x512 store icon, one LANCZOS step down from the shipping Android app icon (`appicon_1024.png`). Alpha kept. Galaxy Store is closed to this app (Android needs Corporate + D-U-N-S), so this script is kept for reference rather than active submission use. |
 | `icon_512_opaque.png` | The same, flattened on the icon's own navy, for a portal that rejects alpha. |
 | `feature_graphic_1024x500.png` | 1024x500 banner: mark, name, one line of what the app does. |
 | `listing-copy.md` | App name, short description, long description, and notes for whoever fills the portal in. |

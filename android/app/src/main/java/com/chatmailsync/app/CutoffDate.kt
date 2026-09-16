@@ -7,9 +7,9 @@ package com.chatmailsync.app
  * and it is stored as a bare "YYYY-MM-DD" day in [AppPrefs]. Python owns what
  * it *means*: src/state.py's normalise_cutoff turns the day into local
  * midnight and SyncManager compares message timestamps against that. Nothing
- * here duplicates that rule; this is the Kotlin side of the same two jobs the
- * Windows client does in gui.py -- deciding whether what the user typed can be
- * read at all, and turning it into a sentence a person would say.
+ * here duplicates that rule; this is the Kotlin side of deciding whether what
+ * the user typed can be read at all, and turning it into a sentence a person
+ * would say.
  *
  * Deliberately not java.time. The parsing is a handful of digits and a
  * calendar rule, the class has a plain JVM unit test with no Android runtime
@@ -59,7 +59,6 @@ object CutoffDate {
      * compares against, and returns "" for anything it cannot read -- a
      * corrupted preference should cost a card, not a crash on the home screen.
      * "" is already the value that means "no cutoff" to every caller here.
-     * The Windows twin is gui._format_cutoff_day.
      */
     fun format(value: String?): String {
         val text = day(value) ?: return ""
@@ -90,9 +89,7 @@ object CutoffDate {
      * their messages. So the empty field names whose date is in force.
      *
      * Both arguments are already-formatted days ("1 January 2026") or "":
-     * nothing is parsed here, [format] does that. The Windows twin is
-     * gui._chat_cutoff_hint, and tests/test_chat_detail.py holds the two to
-     * the same words.
+     * nothing is parsed here, [format] does that.
      */
     fun chatHint(ownDay: String, appDay: String): String = when {
         ownDay.isNotEmpty() ->

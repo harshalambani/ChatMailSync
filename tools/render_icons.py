@@ -14,13 +14,14 @@ emits assets/logo.svg for humans to look at AND rasterises every tracked
 asset, so the two can never disagree. Change a number here, re-run, commit
 what changed.
 
-Deliberately dependency-light: Pillow only, which the project already has.
-An SVG rasteriser (cairosvg, Inkscape, ImageMagick) would let the SVG be the
-literal input, but adding a native dependency that is present on one machine
-and absent on another is exactly how the PA Skills splash shipped the wrong
-version number - see the stamping block in build_portable.ps1. Drawing the
-shapes twice from shared constants keeps the toolchain to one pure-Python
-package.
+Deliberately dependency-light: Pillow only. An SVG rasteriser (cairosvg,
+Inkscape, ImageMagick) would let the SVG be the literal input, but a native
+dependency that is present on one machine and absent on another is exactly
+how an asset ships differently from what was reviewed. Drawing the shapes
+twice from shared constants keeps the toolchain to one pure-Python package.
+
+The Windows icons (.ico, appicon_*.png, the launcher splash) were emitted
+here too until the desktop app was retired after 2.1.5 (tag windows-final).
 
 The mark
 --------
@@ -39,7 +40,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # ---------------------------------------------------------------------------
 # Geometry - all coordinates are in a 512x512 design space
@@ -97,8 +98,8 @@ ENVELOPE_NOTCH_SMALL = [(68, 304), (444, 304), (256, 406)]
 # the mark onto a mid-blue band, where a navy tile has almost no edge against
 # the band and a groundless mark has nothing containing it at all. A thin white
 # ring gives it a boundary without inverting the colours. Do not propagate it
-# to the launcher icon or the .ico: on a wallpaper or a taskbar the mark has
-# its own ground and a ring there is just noise.
+# to the launcher icon: on a home screen wallpaper the mark has its own
+# ground and a ring there is just noise.
 MASTHEAD_RING = 14
 MASTHEAD_INSET = 34
 
@@ -267,63 +268,12 @@ def svg_source() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Splash - 400x160, drawn to the same layout the old one used
-# ---------------------------------------------------------------------------
-
-SPLASH_SIZE = (400, 160)
-SPLASH_BG = (27, 36, 48)          # #1B2430
-SPLASH_TITLE = (240, 242, 245)
-SPLASH_MUTED = (139, 148, 161)    # matches the version stamp in build_portable.ps1
-
-
-def font(name: str, size: int) -> ImageFont.FreeTypeFont:
-    path = Path("C:/Windows/Fonts") / name
-    if not path.exists():
-        raise SystemExit(f"Missing font {path}. The splash cannot be rendered without it.")
-    return ImageFont.truetype(str(path), size)
-
-
-def draw_splash() -> Image.Image:
-    img = Image.new("RGB", SPLASH_SIZE, SPLASH_BG)
-
-    # The mark goes on WITHOUT its navy ground. Oxford navy (#14345C) against
-    # the splash's #1B2430 is navy on near-navy - the rounded-square tile has
-    # almost no edge against the panel and reads as a smudge, so the icon
-    # would look broken on the one screen every user sees on every launch.
-    # Groundless, the white shapes sit at full contrast and the cut-outs let
-    # the panel show through, which is the same figure/ground relationship the
-    # launcher icon has - just inverted.
-    icon = draw_logo(100, ground="none")
-    img.paste(icon, (22, 30), icon)
-
-    d = ImageDraw.Draw(img)
-    d.text((154, 46), "Chat Mail Sync", font=font("segoeui.ttf", 34), fill=SPLASH_TITLE)
-    d.text((156, 96), "Starting...", font=font("segoeui.ttf", 15), fill=SPLASH_MUTED)
-
-    # Nothing may be drawn in the bottom-right corner: build_portable.ps1
-    # stamps the version there at package time and does NOT clear the area
-    # first, so anything already there shows through the text. The stamp is
-    # Segoe UI 9pt placed at (width - textwidth - 10, height - textheight - 7);
-    # this reserves a generous box around that and fails the render rather
-    # than shipping a splash where the version is unreadable.
-    reserved = (300, 128, SPLASH_SIZE[0], SPLASH_SIZE[1])
-    if img.crop(reserved).getcolors(maxcolors=4) is None:
-        raise SystemExit(
-            "Splash bottom-right is not clear - the version stamp would be "
-            "drawn over artwork. Move the content, do not relax this check.")
-    return img
-
-
-# ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
-
-ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
-    appinfo = root / "portable" / "App" / "AppInfo"
     android_res = root / "android" / "app" / "src" / "main" / "res"
     assets = root / "assets"
     assets.mkdir(exist_ok=True)
@@ -338,27 +288,6 @@ def main() -> int:
     # Vector master
     (assets / "logo.svg").write_text(svg_source(), encoding="utf-8")
     written.append(assets / "logo.svg")
-
-    # Windows / PortableApps
-    for px in (1024, 128, 75, 32, 16):
-        save(draw_logo(px, detail="small" if px <= SMALL_MAX else "full"),
-             appinfo / f"appicon_{px}.png")
-
-    # A multi-size .ico, and every size drawn at its own size.
-    #
-    # Passing sizes= alone does NOT do that: Pillow resamples the one image it
-    # was given down to each entry, so a 16px frame was a 256px render squeezed
-    # twice. Every frame here is rendered from the geometry instead -- and the
-    # frames at or below SMALL_MAX use the reduced cut, because below that the
-    # full mark has more detail than the raster has pixels to hold it.
-    frames = [draw_logo(s, detail="small" if s <= SMALL_MAX else "full")
-              for s in ICO_SIZES]
-    largest = frames[ICO_SIZES.index(max(ICO_SIZES))]
-    save(largest, appinfo / "appicon.ico",
-         format="ICO", sizes=[(s, s) for s in ICO_SIZES],
-         append_images=[f for f in frames if f is not largest])
-
-    save(draw_splash(), appinfo / "Launcher" / "splash.jpg", quality=95, subsampling=0)
 
     # Android launcher icons
     save(draw_logo(512), android_res / "mipmap-anydpi" / "ic_launcher.png")

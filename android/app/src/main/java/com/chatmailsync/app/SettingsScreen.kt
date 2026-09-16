@@ -35,8 +35,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 
-// Kept as a constant because the Windows front end shows the same link from
-// the same section, and the two are meant to point at the same page.
+// Kept as a constant so every reference to the privacy page points at the
+// same URL.
 internal const val PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
 
 private val THEME_LABELS = mapOf(
@@ -162,7 +162,7 @@ fun SettingsScreen(
             // drawn on. Getting it wrong does not fail loudly; it produces a
             // perfectly readable archive of the wrong shape. So it is stated,
             // with where the answer came from, rather than left to be inferred
-            // from an empty box. Windows mirrors this section.
+            // from an empty box.
             Text("Your messages", style = MaterialTheme.typography.titleMedium)
             Text(
                 selfSenderSummary,
@@ -274,8 +274,8 @@ fun SettingsScreen(
                     // different, smaller promise -- look in the watched folder
                     // first, and only then send whatever turned up. It does both,
                     // so it names both. Short because it shares its row with the
-                    // interval menu; the section heading above supplies "watched
-                    // folder", which Windows has to carry in the label itself.
+                    // interval menu; the section heading above already supplies
+                    // "watched folder", so the button doesn't have to repeat it.
                     Text(if (syncInProgress) "Current sync is on" else "Check and sync")
                 }
             }
@@ -309,7 +309,7 @@ fun SettingsScreen(
             // A floor, never a window: "do not send me anything from before
             // this". There is no matching "to" field on purpose -- the app's
             // whole job is to keep going forwards, and a ceiling would mean it
-            // stops. Windows mirrors this row in its Settings dialog.
+            // stops.
             Text("Cutoff date", style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
