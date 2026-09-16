@@ -59,6 +59,22 @@ class AppPasswordTest {
     }
 
     @Test
+    fun `a well formed 16 letter aol password gets no hint`() {
+        assertNull(appPasswordHint("aol", "abcdefghijklmnop"))
+    }
+
+    @Test
+    fun `a short aol password gets a hint`() {
+        val hint = appPasswordHint("aol", "abcdefgh")
+        assertTrue(hint != null && hint.isNotBlank())
+    }
+
+    @Test
+    fun `negative - aol input with spaces is returned unchanged by normalizeAppPassword`() {
+        assertEquals("abcd efgh ijkl mnop", normalizeAppPassword("aol", "abcd efgh ijkl mnop"))
+    }
+
+    @Test
     fun `a short gmail password gets a hint`() {
         val hint = appPasswordHint("gmail", "abcdefgh")
         assertTrue(hint != null && hint.isNotBlank())

@@ -27,7 +27,7 @@ anything, and never posts anything back to WhatsApp.
 
 Before the first sync, the app needs permission to add messages to your mailbox.
 It does that with an **email app password (IMAP)**, which works with Gmail,
-Yahoo, iCloud, Fastmail and any other IMAP mailbox.
+Yahoo, iCloud, AOL, Fastmail and any other IMAP mailbox.
 
 ### Email app password (IMAP)
 
@@ -48,7 +48,7 @@ your real password.
    (top-left), or the Escape key, returns you to the sync view.
 3. Under **Mail account**, click **Change…**. That opens the Mail account screen
    the same way, with **Back to settings** to come out of it.
-4. Choose your provider (Gmail, Yahoo, iCloud, Fastmail, or a custom
+4. Choose your provider (Gmail, Yahoo, iCloud, AOL, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
 5. Enter your email address and the app password, then **Save**.
 6. The indicator turns **green** and says **Connected**.
@@ -329,6 +329,20 @@ of its mailboxes — work and school (Microsoft 365) accounts lost basic
 authentication first, and personal Outlook.com, Hotmail, Live and MSN accounts
 followed in September 2024 — so a Microsoft mailbox cannot be used as the
 destination at all.
+
+---
+
+### Q. Which mail services can I use with this app?
+
+**A.** Gmail and Yahoo are tested end to end. iCloud and AOL should work the
+same way but have not been run through that same testing yet — pick **Other
+(IMAP)** if either surprises you, and it will work all the same, just without
+a ready-made host and port. Any other mail service that offers app passwords
+over IMAP should also work through **Other (IMAP)**, including paid ones such
+as Fastmail or Mailbox.org. The one mail service that cannot be used at all is
+Outlook.com or Hotmail (or any other personal Microsoft mailbox): Microsoft no
+longer issues app passwords for those accounts, and this app has no other way
+to sign in.
 
 ---
 

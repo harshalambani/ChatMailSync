@@ -246,3 +246,40 @@ def test_retired_provider_landing_is_empty_for_keys_that_were_never_ours():
 def test_retired_provider_landing_names_the_replacement():
     for key, landing in config.RETIRED_IMAP_PROVIDERS.items():
         assert config.retired_provider_landing(key) == landing, key
+
+
+def test_aol_preset_matches_yahoo_shape():
+    """Batch 3b: AOL is a new preset added on the same backend as Yahoo, so
+    it should carry the same shape of entry -- label/host/port, implicit TLS
+    on 993 like every other preset in the table."""
+    assert config.IMAP_PROVIDERS["aol"] == {
+        "label": "AOL",
+        "host": "imap.aol.com",
+        "port": 993,
+    }
+
+
+def test_existing_provider_keys_still_present():
+    """No key renames -- a settings file saved before Batch 3b must still
+    resolve to a live preset."""
+    for key in ("gmail", "yahoo", "icloud", "fastmail", "custom"):
+        assert key in config.IMAP_PROVIDERS, key
+
+
+def test_provider_order_is_proven_first_then_expected_then_fastmail_then_custom():
+    """Picker order comes straight from this dict's insertion order (see the
+    comment above IMAP_PROVIDERS) -- Gmail/Yahoo (tested), iCloud/AOL
+    (expected to work, untested), Fastmail (paid, not promoted, kept for
+    existing users), Custom last as the escape hatch."""
+    assert list(config.IMAP_PROVIDERS.keys()) == [
+        "gmail", "yahoo", "icloud", "aol", "fastmail", "custom",
+    ]
+
+
+def test_no_undocumented_provider_presets_were_added():
+    """NEGATIVE: this batch adds AOL only. Outlook/Hotmail/Zoho/Proton are
+    not offered as setup presets -- Outlook/Hotmail is retired (see
+    RETIRED_IMAP_PROVIDERS above) precisely because Microsoft no longer
+    allows app passwords there, and Zoho/Proton were never offered."""
+    for key in ("outlook", "hotmail", "zoho", "proton"):
+        assert key not in config.IMAP_PROVIDERS, key

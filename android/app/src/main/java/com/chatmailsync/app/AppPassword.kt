@@ -21,11 +21,13 @@ fun normalizeAppPassword(provider: String, raw: String): String =
 
 /**
  * A gentle, non-blocking hint shown under an app-password field when the
- * normalized password does not look like the shape Gmail and Yahoo actually
- * issue -- 16 letters, no digits or punctuation. Returns null when the
- * password looks right, when it is blank (nothing to judge yet), and for
- * any provider this app does not know a confirmed shape for (iCloud,
+ * normalized password does not look like the shape Gmail, Yahoo and AOL
+ * actually issue -- 16 letters, no digits or punctuation. Returns null when
+ * the password looks right, when it is blank (nothing to judge yet), and
+ * for any provider this app does not know a confirmed shape for (iCloud,
  * Fastmail, custom IMAP) -- a wrong guess there would be worse than no hint.
+ * AOL is included alongside Yahoo because it runs on the same backend and
+ * issues app passwords the same way (Batch 3b).
  *
  * This must never gate Save or Test connection: providers occasionally
  * issue a password in a different shape, and the hint is advisory only.
@@ -35,7 +37,7 @@ fun normalizeAppPassword(provider: String, raw: String): String =
  */
 fun appPasswordHint(provider: String, normalized: String): String? {
     if (normalized.isBlank()) return null
-    if (provider != "gmail" && provider != "yahoo") return null
+    if (provider != "gmail" && provider != "yahoo" && provider != "aol") return null
     val looksRight = normalized.length == 16 && normalized.all { it.isLetter() }
     return if (looksRight) {
         null

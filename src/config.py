@@ -146,10 +146,19 @@ def resolve_mail_backend(saved: dict) -> str:
 # deliberately, so a caller can't accidentally use it without supplying one.
 # ---------------------------------------------------------------------------
 
+# Dict order here is also picker order: android_api.imap_providers() (and the
+# Kotlin ImapProviderInfo list it feeds) walks this dict in insertion order,
+# and both the setup wizard and the mail account screen render providers in
+# whatever order they come back in. Gmail and Yahoo are proven (tested end to
+# end on real mailboxes) and lead; iCloud and AOL come next -- expected to
+# work the same way but not yet run through an end-to-end test on this app;
+# Fastmail (paid, not promoted, kept only so existing saved accounts keep
+# working) sits just above Custom, which is always last as the escape hatch.
 IMAP_PROVIDERS = {
     "gmail":    {"label": "Gmail",          "host": "imap.gmail.com",        "port": 993},
     "yahoo":    {"label": "Yahoo",          "host": "imap.mail.yahoo.com",   "port": 993},
     "icloud":   {"label": "iCloud",         "host": "imap.mail.me.com",      "port": 993},
+    "aol":      {"label": "AOL",            "host": "imap.aol.com",          "port": 993},
     "fastmail": {"label": "Fastmail",       "host": "imap.fastmail.com",     "port": 993},
     "custom":   {"label": "Custom",         "host": None,                    "port": 993},
 }
@@ -395,6 +404,11 @@ DEFAULT_MAX_MESSAGE_BYTES = 25_000_000
 PROVIDER_MAX_MESSAGE_BYTES = {
     "gmail":    25_000_000,
     "yahoo":    25_000_000,
+    # AOL Mail runs on the same backend as Yahoo Mail (both Yahoo-owned) and
+    # issues app passwords the same way; no AOL-specific limit has been
+    # separately verified, so this borrows Yahoo's documented figure rather
+    # than falling through to the generic default.
+    "aol":      25_000_000,
     "icloud":   20_000_000,
     "fastmail": 70_000_000,
 }

@@ -63,6 +63,16 @@ val BACKEND_LABELS = mapOf(
     AppPrefs.MAIL_BACKEND_IMAP to "Any provider (IMAP app password)",
 )
 
+// Batch 3b: iCloud and AOL are promoted as "should work" presets without
+// having been run through an end-to-end test on this app yet (unlike Gmail
+// and Yahoo, which have). This is the short qualifier shown next to their
+// name in the picker, on both the wizard and the mail account screen, so
+// that promotion never reads as a tested claim it cannot back up.
+internal val PROVIDER_TIER2_NOTE = mapOf(
+    "icloud" to "Should work, not tested yet",
+    "aol" to "Should work, not tested yet",
+)
+
 // Official, human-verified "create an app password" pages, one per
 // src/config.py IMAP_PROVIDERS key. Verified by fetching each URL and
 // confirming it is the provider's own current app-password help page
@@ -75,6 +85,10 @@ internal val APP_PASSWORD_HELP_URLS = mapOf(
     "yahoo" to "https://help.yahoo.com/kb/SLN15241.html",
     "icloud" to "https://support.apple.com/en-us/102654",
     "fastmail" to "https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords",
+    // No AOL entry here deliberately: there is no analogous, independently
+    // confirmed AOL app-password help URL the way there is for the other
+    // providers (see task notes) — omitted rather than guessed, same as
+    // "custom" already does below.
 )
 
 internal val APP_PASSWORD_HELP_TEXT = mapOf(
@@ -85,8 +99,13 @@ internal val APP_PASSWORD_HELP_TEXT = mapOf(
     // TODO(2.2.0 Batch 6): confirm exact Yahoo Mail app menu path on the Nord
     "yahoo" to "You can create one inside the Yahoo Mail app, in your account security settings. You " +
         "can also do this from a browser, on Yahoo's account security page.",
-    "icloud" to "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
+    "icloud" to "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security. " +
+        "Note that the free iCloud plan includes only 5 GB of storage, which a chat archive with photos " +
+        "and videos can fill.",
     "fastmail" to "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
+    // Batch 3b: generic wording only -- no AOL-specific menu path has been
+    // confirmed, so this doesn't invent one.
+    "aol" to "Create an app password in your AOL account security settings.",
 )
 
 // Bump this string (to the month/year you actually re-checked the steps
@@ -377,8 +396,16 @@ fun MailAccountScreen(
                 }
                 DropdownMenu(expanded = providerMenuOpen, onDismissRequest = { providerMenuOpen = false }) {
                     imapProviders.forEach { info ->
+                        val tier2Note = PROVIDER_TIER2_NOTE[info.key]
                         DropdownMenuItem(
                             text = { Text(info.label) },
+                            // Batch 3b: same "should work, not tested yet"
+                            // qualifier as the wizard's picker, so switching
+                            // provider here carries the same honesty about
+                            // what's proven versus what's expected to work.
+                            trailingIcon = if (tier2Note != null) {
+                                { Text(tier2Note, style = MaterialTheme.typography.labelSmall) }
+                            } else null,
                             onClick = { onImapProviderChange(info.key); providerMenuOpen = false },
                         )
                     }
