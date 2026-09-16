@@ -184,6 +184,12 @@ fun HomeScreen(
     lastBackupAt: Long = 0L,
     cutoffDate: String = "",
     onOpenSettings: () -> Unit = {},
+    // Masthead Me row -- label/colour already resolved by
+    // selfSenderDisplay() in MainActivity, so this screen just displays
+    // them rather than re-deriving the colour language itself.
+    meLabel: String = "",
+    meColor: Color = Color.Unspecified,
+    onMeClick: () -> Unit = {},
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
@@ -209,7 +215,16 @@ fun HomeScreen(
         // on every screen, which is how two exports ended up below the
         // fold on the import picker.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { ChatMailTopBar(title = "Chat Mail Sync", subtitle = "Private mail archive") },
+        topBar = {
+            ChatMailTopBar(
+                title = "Chat Mail Sync",
+                subtitle = "Private mail archive",
+                showMe = true,
+                meLabel = meLabel,
+                meColor = meColor,
+                onMeClick = onMeClick,
+            )
+        },
     ) { padding ->
         val scrollState = rememberScrollState()
         Column(

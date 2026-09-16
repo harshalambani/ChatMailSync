@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,6 +34,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,8 +58,24 @@ import androidx.compose.ui.unit.sp
  * so it read as unfinished. ic_masthead is the ringed badge cut for this one
  * surface. Everywhere else — launcher, splash — the mark stands alone
  * with no ring, so do not reuse ic_masthead outside the banner.
+ *
+ * The band carries one row on most screens, and two when the Me row is
+ * showing: a mark+wordmark(+pill) row always, and below it a second row for
+ * whoever "Me" currently resolves to, wide enough to be its own >=48dp tap
+ * target rather than a caption squeezed under the title. Screens without the
+ * Me row (every pushed screen, Settings) must not pay for headroom they
+ * never fill, so the band's height switches between [MastheadHeightOneRow]
+ * and [MastheadHeightTwoRows] rather than being fixed at the taller value --
+ * see `meVisible` below, which both the TopAppBar's expandedHeight and the
+ * title box read so they never disagree.
  */
-private val MastheadHeight = 88.dp
+private val MastheadHeightOneRow = 88.dp
+
+/** 112dp is the two-row band -- not a round number, what the mark+wordmark
+ *  row, the Me row, and the padding between them actually need -- so a later
+ *  row wanting headroom should get its own space rather than stretching
+ *  this one again. */
+private val MastheadHeightTwoRows = 112.dp
 
 /**
  * The labelled back affordance: `← Chats`, not a bare arrow.
@@ -163,15 +182,55 @@ private fun ConnectionPill(status: ConnectionStatus) {
     }
 }
 
+/**
+ * The Me row: whoever the app currently thinks you are in an export, one tap
+ * from the masthead of every top-level screen rather than buried in Settings.
+ *
+ * Its own >=48dp tap target, not a caption squeezed under the title -- this
+ * is the same information Settings used to be the only place to find, so it
+ * earns a real touch target rather than a label that merely happens to be
+ * clickable. [label] and [color] come from [selfSenderDisplay], the one
+ * place that derives them, so this row never re-derives the colour language
+ * on its own.
+ */
+@Composable
+private fun MeRow(label: String, color: Color, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClickLabel = "Open Me", onClick = onClick)
+            .semantics { contentDescription = label },
+    ) {
+        Text(
+            label,
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            // null: the row's own semantics block already says the whole
+            // sentence, same reasoning as the back arrow above.
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
 @Composable
 fun ChatMailTopBar(
     title: String,
     subtitle: String? = null,
     // Where back goes, in words. Set these instead of navigationIcon on any
     // screen that is pushed onto another -- the mark steps aside when they
-    // are, because an 88dp band cannot carry a 56dp badge, a labelled back
-    // and a title without one of them being squeezed, and on a pushed screen
-    // the badge is the least useful of the three.
+    // are, because the top row cannot carry a badge, a labelled back and a
+    // title without one of them being squeezed, and on a pushed screen the
+    // badge is the least useful of the three.
     backLabel: String? = null,
     onBack: (() -> Unit)? = null,
     // On by default: the point of putting the connection state on the banner
@@ -179,12 +238,25 @@ fun ChatMailTopBar(
     // user-supplied text -- a chat name -- turn it off, because there the pill
     // would be competing with the one thing the title is for.
     showConnection: Boolean = true,
+    // Off by default and opt-in per screen, deliberately -- unlike
+    // showConnection this is not "on unless it would collide with
+    // something": a screen that forgets to pass it should render exactly as
+    // it did before this row existed, not gain a row nobody asked for. Only
+    // Home and the chats list turn it on; it never shows alongside a labelled
+    // back regardless of what the caller passes, for the same headroom
+    // reason the mark steps aside.
+    showMe: Boolean = false,
+    meLabel: String = "",
+    meColor: Color = Color.Unspecified,
+    onMeClick: (() -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val labelledBack = backLabel != null && onBack != null
+    val meVisible = !labelledBack && showMe && onMeClick != null
+    val mastheadHeight = if (meVisible) MastheadHeightTwoRows else MastheadHeightOneRow
     TopAppBar(
-        expandedHeight = MastheadHeight,
+        expandedHeight = mastheadHeight,
         // Zero for the same reason the screen Scaffolds are zero: the
         // status-bar strip is already paid for by MainActivity's Scaffold,
         // and paying twice made an 88dp band render nearer 120dp.
@@ -194,52 +266,63 @@ fun ChatMailTopBar(
             // it toward the bottom of expandedHeight (matching Large/Medium
             // top-bar collapse behavior) rather than centering it, so with
             // an expandedHeight taller than the default this left a lot of
-            // dead space above the mark+wordmark. A fixed-height box (not
+            // dead space above the content. A fixed-height box (not
             // fillMaxHeight — the slot's height constraint here is
             // unbounded, which blows fillMaxHeight up to fill the screen)
             // matching expandedHeight, centered inside, overrides that.
-            Box(modifier = androidx.compose.ui.Modifier.height(MastheadHeight), contentAlignment = Alignment.CenterStart) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    // The pill is pushed to the far end of the slot rather than
-                    // trailing the wordmark, so it sits in the same place on
-                    // every screen regardless of how long the title is -- a
-                    // status light that moves is one you have to look for.
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+            //
+            // The Me row lives in this same box, stacked under the
+            // mark+wordmark row, rather than as a second TopAppBar slot --
+            // TopAppBar only offers title/navigationIcon/actions, none of
+            // which is "a second line the whole band tall enough to hold".
+            Box(modifier = androidx.compose.ui.Modifier.height(mastheadHeight), contentAlignment = Alignment.CenterStart) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        // The pill is pushed to the far end of the slot rather than
+                        // trailing the wordmark, so it sits in the same place on
+                        // every screen regardless of how long the title is -- a
+                        // status light that moves is one you have to look for.
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        if (!labelledBack) Image(
-                            painter = painterResource(R.drawable.ic_masthead),
-                            contentDescription = null,
-                            // 56dp, not the old 72dp. The adaptive foreground drew
-                            // its mark at 72/108 of its canvas, so a 72dp box put
-                            // ~48dp of ink on screen. ic_masthead is a full-bleed
-                            // badge, so the same box would render half again as
-                            // large and crowd an 88dp band.
-                            modifier = androidx.compose.ui.Modifier.size(56.dp),
-                        )
-                        Column {
-                            Text(
-                                title,
-                                fontFamily = FontFamily.Serif,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 18.sp,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (!labelledBack) Image(
+                                painter = painterResource(R.drawable.ic_masthead),
+                                contentDescription = null,
+                                // 40dp, not the old 56dp. The Me row below now
+                                // shares this band, and the badge gave up the
+                                // headroom that row needs rather than the band
+                                // growing by the row's full height -- the
+                                // adaptive-foreground arithmetic this comment
+                                // used to justify (72dp box, ~48dp of ink) no
+                                // longer applies at this size, it is simply
+                                // "as large as the new two-row band allows".
+                                modifier = androidx.compose.ui.Modifier.size(40.dp),
                             )
-                            subtitle?.let {
+                            Column {
                                 Text(
-                                    it.uppercase(),
-                                    fontSize = 10.sp,
+                                    title,
+                                    fontFamily = FontFamily.Serif,
                                     fontWeight = FontWeight.SemiBold,
-                                    letterSpacing = 1.4.sp,
+                                    fontSize = 18.sp,
                                 )
+                                subtitle?.let {
+                                    Text(
+                                        it.uppercase(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = 1.4.sp,
+                                    )
+                                }
                             }
                         }
+                        if (showConnection) ConnectionPill(ConnectionState.current)
                     }
-                    if (showConnection) ConnectionPill(ConnectionState.current)
+                    if (meVisible) MeRow(meLabel, meColor, onMeClick!!)
                 }
             }
         },

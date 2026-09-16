@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -170,7 +171,16 @@ internal fun StatusDot(lastRunStatus: String?) {
 }
 
 @Composable
-fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
+fun ChatsListScreen(
+    onOpenChat: (String) -> Unit,
+    onImportChat: () -> Unit,
+    // Masthead Me row -- label/colour already resolved by
+    // selfSenderDisplay() in MainActivity, so this screen just displays
+    // them rather than re-deriving the colour language itself.
+    meLabel: String = "",
+    meColor: Color = Color.Unspecified,
+    onMeClick: () -> Unit = {},
+) {
     var chats by remember { mutableStateOf(listOf<ChatSummary>()) }
     var menuOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -239,6 +249,10 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
         topBar = {
             ChatMailTopBar(
                 title = "Chats",
+                showMe = true,
+                meLabel = meLabel,
+                meColor = meColor,
+                onMeClick = onMeClick,
                 actions = {
                     IconButton(onClick = { refresh() }) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
