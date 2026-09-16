@@ -1,6 +1,21 @@
 package com.chatmailsync.app
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 
 /**
  * The three things `src.android_api.get_self_sender()["source"]` can say, as
@@ -101,5 +116,95 @@ fun selfSenderContentDescription(source: String?, name: String?): String {
         SelfSenderSource.LEARNED -> "Your messages: ${name ?: ""}, worked out automatically"
         SelfSenderSource.OVERRIDE -> "Your messages: ${name ?: ""}, set by you"
         SelfSenderSource.UNKNOWN -> "Your messages: not known yet"
+    }
+}
+
+/**
+ * The full strip shown on the chat detail screen: text, the trailing action
+ * word, and the colours to paint it with.
+ */
+data class SelfSenderStripDisplay(
+    val text: String,
+    val actionWord: String,
+    val background: Color,
+    val textColor: Color,
+)
+
+/**
+ * Fixed light-surface values, like [SelfSenderSource.color] above -- the chat
+ * screen's strip sits on a light surface, never the navy masthead band, so
+ * these don't need to double as both like that colour does. Each pairs a
+ * background with a text colour chosen to read on it, taken straight from
+ * the approved mockups rather than derived from a MaterialTheme role, so the
+ * strip matches the mockup exactly regardless of theme.
+ *  - [SelfSenderSource.LEARNED] -- neutral grey: a calm, resolved state.
+ *  - [SelfSenderSource.OVERRIDE] -- amber: the same "stated by hand, not
+ *    derived" note as [SelfSenderSource.color]'s amber.
+ *  - [SelfSenderSource.UNKNOWN] -- red: the same alarm as [SelfSenderSource
+ *    .color]'s red, every bubble drawn on a guess until this is resolved.
+ */
+private val SelfSenderSource.stripBackground: Color
+    get() = when (this) {
+        SelfSenderSource.LEARNED -> Color(0xFFECEEE9)
+        SelfSenderSource.OVERRIDE -> Color(0xFFFBF1DF)
+        SelfSenderSource.UNKNOWN -> Color(0xFFF6DEDA)
+    }
+
+private val SelfSenderSource.stripTextColor: Color
+    get() = when (this) {
+        SelfSenderSource.LEARNED -> Color(0xFF20242B)
+        SelfSenderSource.OVERRIDE -> Color(0xFF6D470B)
+        SelfSenderSource.UNKNOWN -> Color(0xFF6E241F)
+    }
+
+/**
+ * Builds the [SelfSenderStripDisplay] for the chat detail screen's strip.
+ * Reuses [resolveSelfSenderSource] so a LEARNED/OVERRIDE source with a
+ * null-or-blank name falls through to UNKNOWN here too, exactly as
+ * [selfSenderDisplay] and [selfSenderContentDescription] do.
+ */
+fun selfSenderStrip(source: String?, name: String?): SelfSenderStripDisplay {
+    val resolved = resolveSelfSenderSource(source, name)
+    val text = when (resolved) {
+        SelfSenderSource.LEARNED -> "Your messages: from ${name ?: ""}"
+        SelfSenderSource.OVERRIDE -> "Your messages: from ${name ?: ""} (set by you)"
+        SelfSenderSource.UNKNOWN -> "Me not known yet: every message will show as someone else's"
+    }
+    val actionWord = if (resolved == SelfSenderSource.UNKNOWN) "Pick" else "Change"
+    return SelfSenderStripDisplay(text, actionWord, resolved.stripBackground, resolved.stripTextColor)
+}
+
+/**
+ * The chat detail screen's full-width strip: who "Me" resolves to, since
+ * that decides which side every bubble in this chat is drawn on. The whole
+ * row is the tap target, not just the action word, and opens the Me screen.
+ */
+@Composable
+fun SelfSenderStrip(source: String?, name: String?, onClick: () -> Unit) {
+    val display = selfSenderStrip(source, name)
+    val description = selfSenderContentDescription(source, name)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .background(display.background)
+            .clickable(onClickLabel = "Open Me", onClick = onClick)
+            .semantics { contentDescription = description }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            display.text,
+            color = display.textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            display.actionWord,
+            color = display.textColor,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }
