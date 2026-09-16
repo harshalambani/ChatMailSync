@@ -45,12 +45,11 @@ internal fun firstRunStepForward(step: Int): Int = (step + 1).coerceAtMost(4)
 internal fun canEnableAutoImportFromFirstRun(watchedFolderUri: String?): Boolean =
     !watchedFolderUri.isNullOrBlank()
 
-/** The outer four step titles, next to the "Step N of 4" label on steps 2-4.
- * Step 2 hands the screen to MailSetupWizardScreen, which carries its own
- * "Step n of 4" for its four internal sub-steps -- a second, larger-scale
- * "Step 2 of 4" is not drawn on top of it, so this list is only actually read
- * for steps 1, 3 and 4. It stays a list of 4 (not 3) so nothing has to
- * remember the gap, and so a test can assert against it by step number.
+/** The outer four step titles, next to the "Step N of 4" label on every step
+ * but step 1 (the welcome screen carries no counter). Step 2 hands the rest
+ * of its screen to MailSetupWizardScreen with its own counter switched off
+ * (showStepCounter = false), so only this one outer "Step 2 of 4" label is
+ * drawn, not two disagreeing ones.
  *
  * Kept free of the words first-run may never ask about (D7): no cut-off, no
  * chunk size, no after-import policy, no "Me" field. See
@@ -67,7 +66,9 @@ internal val FIRST_RUN_STEP_TITLES = listOf(
  * connect a mailbox, share one chat, and decide whether to automate the
  * rest. Everything here reuses an existing screen or an existing pref/worker
  * rather than inventing a second copy:
- *  - step 2 is the existing MailSetupWizardScreen, unmodified;
+ *  - step 2 is the existing MailSetupWizardScreen with its own step counter
+ *    turned off (showStepCounter = false) so this screen's own "Step 2 of 4"
+ *    label is the only one drawn;
  *  - step 3's "chat arrived?" status is the same inboxFiles queue Home
  *    shows, and "Do a test run" is the same dry-run path Home's Sync-now
  *    offers;
@@ -104,15 +105,32 @@ fun FirstRunScreen(
             onGetStarted = { step = firstRunStepForward(step) },
             onSetUpLater = onSetUpLater,
         )
-        2 -> MailSetupWizardScreen(
-            onExit = { step = firstRunStepBack(step) },
-            onDone = { step = firstRunStepForward(step) },
-            imapProviders = imapProviders,
-            stagePlan = stagePlan,
-            initialProvider = initialProvider,
-            initialEmail = initialEmail,
-            onConnect = onConnect,
-        )
+        2 -> Column(modifier = Modifier.fillMaxSize()) {
+            // The wizard draws its own top bar; its own "Step n of 4" (n up to
+            // 4, for its four internal sub-steps) is switched off below so this
+            // single label is the only step counter on screen, consistent with
+            // steps 3 and 4.
+            Text(
+                "Step 2 of 4 - ${FIRST_RUN_STEP_TITLES[1]}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            Box(modifier = Modifier.weight(1f)) {
+                MailSetupWizardScreen(
+                    onExit = { step = firstRunStepBack(step) },
+                    onDone = { step = firstRunStepForward(step) },
+                    imapProviders = imapProviders,
+                    stagePlan = stagePlan,
+                    initialProvider = initialProvider,
+                    initialEmail = initialEmail,
+                    onConnect = onConnect,
+                    showStepCounter = false,
+                )
+            }
+        }
         3 -> FirstRunShareChatStep(
             onBack = { step = firstRunStepBack(step) },
             queuedChatCount = queuedChatCount,

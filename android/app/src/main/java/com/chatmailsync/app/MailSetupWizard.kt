@@ -94,6 +94,11 @@ fun MailSetupWizardScreen(
     initialProvider: String,
     initialEmail: String,
     onConnect: (String, String, Int, String, String, StageListener, (Boolean, String) -> Unit) -> Unit,
+    // First-run embeds this screen as its own step 2 and already shows a
+    // "Step 2 of 4" label above it; without this, the wizard's own "Step n
+    // of 4" (n up to 4) drew right underneath it, reading as two disagreeing
+    // counters. Every other caller keeps the default and is unaffected.
+    showStepCounter: Boolean = true,
 ) {
     // Non-secret: a rotation (or the process being recreated) resumes on the
     // same step with what was already picked/typed, instead of dropping the
@@ -152,7 +157,7 @@ fun MailSetupWizardScreen(
         topBar = {
             ChatMailTopBar(
                 title = "Set up your mailbox",
-                subtitle = "Step ${step + 1} of 4 - ${WIZARD_TITLES[step]}",
+                subtitle = if (showStepCounter) "Step ${step + 1} of 4 - ${WIZARD_TITLES[step]}" else null,
                 // The two-line title leaves the pill too little room -- it
                 // clipped to "No" on a 1080-wide screen -- and it is redundant
                 // here anyway: this screen exists to change that very state,

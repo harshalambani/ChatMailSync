@@ -42,6 +42,30 @@ class ShouldShowFirstRunTest {
     }
 }
 
+/**
+ * Where the bottom-bar tab handler and the incoming-share handler pop to.
+ *
+ * A fresh install's NavHost startDestination is "first_run", and
+ * NavGraph.findStartDestination() keeps returning "first_run" for the rest
+ * of the process even after the flow finishes and pops itself off the back
+ * stack — popping to a route no longer on the stack is a silent no-op, which
+ * broke both the Home-tab reset and the incoming-share handler. The negative
+ * test below is the one that would have caught it: the pop target must never
+ * be the first-run route, in any session.
+ */
+class FirstRunNavTest {
+
+    @Test
+    fun `the tab pop target is home`() {
+        assertTrue(tabPopTargetRoute() == "home")
+    }
+
+    @Test
+    fun `the tab pop target is never first_run`() {
+        assertFalse(tabPopTargetRoute() == "first_run")
+    }
+}
+
 /** The outer step counter first-run's Back/forward buttons drive. */
 class FirstRunStepTransitionsTest {
 

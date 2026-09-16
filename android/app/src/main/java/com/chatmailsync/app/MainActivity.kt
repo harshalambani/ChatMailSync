@@ -56,7 +56,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -184,6 +183,17 @@ internal fun shouldScanAtLaunch(autoWatchOn: Boolean, watchedFolderUri: String?)
  */
 internal fun shouldShowFirstRun(firstRunDone: Boolean, mailboxConfigured: Boolean): Boolean =
     !firstRunDone && !mailboxConfigured
+
+/** Where the bottom-bar tab handler (and the incoming-share handler) pop to
+ * when resetting/returning to Home. This is deliberately NOT
+ * `navController.graph.findStartDestination()`: for a fresh install the
+ * graph's start destination is "first_run", and that stays true for the rest
+ * of the process even after the flow finishes and pops itself off the back
+ * stack (a NavGraph's start destination is fixed at graph-build time, not
+ * recomputed as the back stack changes). Popping to a route that is no
+ * longer on the stack is a silent no-op, so a literal "home" is required
+ * here, not the graph's start destination. See FirstRunNavTest. */
+internal fun tabPopTargetRoute(): String = "home"
 
 /** The collapsed sync bar — this is a sync app, so "is anything syncing right
  * now" deserves dedicated, permanent real estate rather than being buried in
@@ -703,7 +713,7 @@ fun ChatMailApp(
         // both Home and first-run step 3) is already refreshed above.
         if (navController.currentDestination?.route == "first_run") return
         navController.navigate("home") {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            popUpTo(tabPopTargetRoute()) { saveState = true }
             launchSingleTop = true
         }
     }
@@ -1187,21 +1197,26 @@ fun ChatMailApp(
                             NavigationBarItem(
                                 selected = selectedTab == dest.route,
                                 onClick = {
-                                    // Home is both a tab *and* the graph's start
-                                    // destination, which is where the usual
-                                    // save/restore idiom breaks. Popping to the
-                                    // start with saveState files the popped stack
-                                    // (settings -> mailAccount) against the start
-                                    // destination; navigating to Home with
-                                    // restoreState then hands that very stack back,
-                                    // so tapping Home from a settings sub-screen
-                                    // put you straight back on it and read as a
-                                    // dead button. Home therefore resets instead of
-                                    // restoring; the other tabs keep their state.
-                                    val start = navController.graph.findStartDestination()
-                                    val goingHome = dest.route == start.route
+                                    // Home is a tab, and tabPopTargetRoute() is
+                                    // always "home" -- deliberately not the
+                                    // graph's start destination, which is
+                                    // "first_run" for a fresh install and stays
+                                    // that way for the rest of the process even
+                                    // once the flow finishes (see
+                                    // tabPopTargetRoute's doc). Popping to the
+                                    // start with saveState files the popped
+                                    // stack (settings -> mailAccount) against
+                                    // the start destination; navigating to Home
+                                    // with restoreState then hands that very
+                                    // stack back, so tapping Home from a
+                                    // settings sub-screen put you straight back
+                                    // on it and read as a dead button. Home
+                                    // therefore resets instead of restoring;
+                                    // the other tabs keep their state.
+                                    val homeRoute = tabPopTargetRoute()
+                                    val goingHome = dest.route == homeRoute
                                     navController.navigate(dest.route) {
-                                        popUpTo(start.id) {
+                                        popUpTo(homeRoute) {
                                             saveState = !goingHome
                                         }
                                         launchSingleTop = true
