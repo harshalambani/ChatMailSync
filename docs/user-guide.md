@@ -124,7 +124,7 @@ one. That is section 6.
 When it's done, each chat appears in the list on the left with a green dot and a
 message count. Synced files move out of the inbox automatically.
 
-If a **cutoff date** is set (in Settings), a card above the inbox says so, and
+If a **cutoff date** is set (in Settings → Advanced), a card above the inbox says so, and
 nothing older than that day is sent. The card stays there for as long as the
 cutoff does; it is not a notice to dismiss. The FAQ in section 8 covers what
 the cutoff does and does not do.
@@ -141,7 +141,7 @@ it to do.
 
 ### Setting it up
 
-1. **Settings → Watched folder → Choose folder** and pick the folder (Android's
+1. **Settings → Advanced → Watched folder → Choose folder** and pick the folder (Android's
    own file picker, so it can be a cloud folder your provider exposes there).
 2. **Check and sync** in the same section looks immediately, and sends whatever
    it finds, whether or not auto-import is on.
@@ -507,7 +507,7 @@ while you watch.
 
 ### Q. Can I stop it sending messages from before a certain date?
 
-**A.** Yes. Set a **cutoff date** in Settings and nothing older than that day is
+**A.** Yes. Set a **cutoff date** in Settings → Advanced and nothing older than that day is
 ever sent. It is a floor, not a window: there is no matching "to" date, because
 the whole job of this app is to keep moving forwards. Leave it blank and
 everything is sent.

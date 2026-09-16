@@ -175,7 +175,7 @@ internal val FAQ = listOf(
     "How do I make it sync on a schedule?" to
         "The watched folder is the schedule — there is no separate \"sync every N hours\" setting, " +
         "because with nothing new in the inbox there would be nothing to do. Point Settings -> " +
-        "Watched folder at a folder, turn on \"Auto-import from this folder\", and pick an interval: " +
+        "Advanced -> Watched folder at a folder, turn on \"Auto-import from this folder\", and pick an interval: " +
         "every 15 min (the default), 30 min, hour, 3 hours, 6 hours, 12 hours, or once a day. " +
         "There is no shorter option than 15 minutes: Android's background scheduler enforces that " +
         "floor and no app can go under it. Treat the interval as \"no more often than\" rather than " +
@@ -196,7 +196,7 @@ internal val FAQ = listOf(
         "\"Check and sync\", which run in the foreground while you are watching; it only affects " +
         "unattended checks.",
     "Can I stop it sending messages from before a certain date?" to
-        "Yes. Settings -> Cutoff date takes a day, and nothing older than it is ever sent. It is a " +
+        "Yes. Settings -> Advanced -> Cutoff date takes a day, and nothing older than it is ever sent. It is a " +
         "floor and not a window: there is no matching \"to\" date, because the whole job of this app " +
         "is to keep moving forwards. Leave it blank and everything is sent. A single chat can also " +
         "carry its own cutoff, set from that chat's page under \"Cutoff date\", and that one " +

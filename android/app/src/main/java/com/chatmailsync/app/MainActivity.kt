@@ -151,7 +151,7 @@ internal fun tabForRoute(route: String?): String? = when {
     route == "first_run" -> null
     route == "home" || route == "syncProgress" || route == "importPicker" -> "home"
     route == "chats" || route.startsWith("chat/") -> "chats"
-    route == "settings" || route == "mailAccount" || route == "help" -> "settings"
+    route == "settings" || route == "mailAccount" || route == "help" || route == "advancedSettings" -> "settings"
     // The sync log is reachable from Settings, from the status card on Home,
     // and from the always-visible sync bar on every screen there is. Lighting
     // Settings told two thirds of its visitors they were somewhere they had
@@ -582,6 +582,40 @@ fun ChatMailApp(
         imapHost = ""
         imapPort = 993
         imapEmail = ""
+    }
+
+    /**
+     * Shared by both places "Test connection" is offered (Mail account, and
+     * Advanced settings' Mail server section) so there is exactly one copy of
+     * the five-stage check and its result formatting to keep in sync.
+     */
+    fun testImapConnection(onResult: (String) -> Unit) {
+        if (!imapPasswordSaved) {
+            onResult("Save an IMAP app password first.")
+            return
+        }
+        Thread {
+            val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+            var connected = false
+            val text = try {
+                val mailClient = Python.getInstance().getModule("src.mail_client")
+                val outcome = mailClient.callAttr(
+                    "check_connection",
+                    AppPrefs.getImapHost(context),
+                    AppPrefs.getImapPort(context),
+                    AppPrefs.getImapEmail(context),
+                    password,
+                )
+                connected = outcome.callAttr("get", "ok").toBoolean()
+                mailClient.callAttr("format_connection_result", outcome).toString()
+            } catch (e: Exception) {
+                redactSecret("Could not connect: ${e.message}", password)
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                ConnectionState.record(context, connected)
+                onResult(text)
+            }
+        }.start()
     }
 
     // ---- Which name in an export is yours -----------------------------
@@ -1340,8 +1374,6 @@ fun ChatMailApp(
                             .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
-                    chunkSize = chunkSize,
-                    onChunkSizeChange = { chunkSize = it; AppPrefs.setChunkSize(context, it) },
                     dryRunDefault = dryRunDefault,
                     onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
@@ -1436,26 +1468,10 @@ fun ChatMailApp(
                     mailAccountSummary = mailAccountSummary,
                     onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
-                    onOpenSyncLog = { navController.navigate("syncLog") },
                     onOpenPrivacy = { navController.navigate("privacy") },
+                    onOpenAdvanced = { navController.navigate("advancedSettings") },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
-                    watchedFolderUri = watchedFolderUri,
-                    onChooseFolder = { folderPicker.launch(null) },
-                    onClearFolder = { clearWatchedFolder() },
-                    autoWatchEnabled = autoWatchEnabled,
-                    onAutoWatchChange = { setAutoWatch(it) },
-                    watchIntervalMinutes = watchIntervalMinutes,
-                    onWatchIntervalChange = { setWatchInterval(it) },
-                    onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
-                    syncInProgress = anySyncRunning,
-                    syncedFilePolicy = syncedFilePolicy,
-                    onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
-                    dryRunDefault = dryRunDefault,
-                    onDryRunDefaultChange = {
-                        dryRunDefault = it
-                        AppPrefs.setDryRunDefault(context, it)
-                    },
                     onSaveBackup = {
                         migrationStatus = null
                         saveBackup.launch(Migration.suggestedFileName())
@@ -1470,14 +1486,39 @@ fun ChatMailApp(
                     },
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
+                    selfSenderSource = selfSenderSource,
+                    selfSenderName = selfSenderName,
+                    onOpenMe = { navController.navigate("me") },
+                )
+            }
+            composable("advancedSettings") {
+                AdvancedSettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenSyncLog = { navController.navigate("syncLog") },
+                    watchedFolderUri = watchedFolderUri,
+                    onChooseFolder = { folderPicker.launch(null) },
+                    onClearFolder = { clearWatchedFolder() },
+                    autoWatchEnabled = autoWatchEnabled,
+                    onAutoWatchChange = { setAutoWatch(it) },
+                    watchIntervalMinutes = watchIntervalMinutes,
+                    onWatchIntervalChange = { setWatchInterval(it) },
+                    onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
+                    syncInProgress = anySyncRunning,
+                    syncedFilePolicy = syncedFilePolicy,
+                    onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
                     cutoffDate = cutoffDate,
                     onCutoffDateChange = {
                         cutoffDate = it
                         AppPrefs.setCutoffDate(context, it)
                     },
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
-                    onOpenMe = { navController.navigate("me") },
+                    dryRunDefault = dryRunDefault,
+                    onDryRunDefaultChange = {
+                        dryRunDefault = it
+                        AppPrefs.setDryRunDefault(context, it)
+                    },
+                    chunkSize = chunkSize,
+                    onChunkSizeChange = { chunkSize = it; AppPrefs.setChunkSize(context, it) },
+                    onTestConnection = ::testImapConnection,
                 )
             }
             composable("importPicker") {
@@ -1506,51 +1547,15 @@ fun ChatMailApp(
             composable("mailAccount") {
                 MailAccountScreen(
                     onBack = { navController.popBackStack() },
-                    onTestConnection = { onResult ->
-                        if (!imapPasswordSaved) {
-                            onResult("Save an IMAP app password first.")
-                        } else {
-                            Thread {
-                                val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
-                                // check_connection (the dict) rather than
-                                // check_connection_text (the string it is
-                                // flattened to): the banner dot needs the
-                                // pass/fail as a fact, and parsing it back
-                                // out of display prose would break the
-                                // moment that prose is reworded.
-                                var connected = false
-                                // check_connection_text() runs the five stages
-                                // (DNS/TCP/TLS/LOGIN/FOLDER) and names the one that
-                                // failed, instead of the old labels_list() call whose
-                                // only two outcomes were a raw folder dump or "Could
-                                // not connect". It lives in src/mail_client.py so
-                                // every place this screen reports a connection result
-                                // says the same words. It reports failures as a
-                                // return value rather than an exception, so the catch
-                                // below is only for a bridge-level fault.
-                                val text = try {
-                                    val mailClient = Python.getInstance().getModule("src.mail_client")
-                                    val outcome = mailClient.callAttr(
-                                        "check_connection",
-                                        AppPrefs.getImapHost(context),
-                                        AppPrefs.getImapPort(context),
-                                        AppPrefs.getImapEmail(context),
-                                        password,
-                                    )
-                                    connected = outcome.callAttr("get", "ok").toBoolean()
-                                    // Same formatter check_connection_text
-                                    // uses, so the wording stays consistent.
-                                    mailClient.callAttr("format_connection_result", outcome).toString()
-                                } catch (e: Exception) {
-                                    redactSecret("Could not connect: ${e.message}", password)
-                                }
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    ConnectionState.record(context, connected)
-                                    onResult(text)
-                                }
-                            }.start()
-                        }
-                    },
+                    // check_connection (the dict) rather than
+                    // check_connection_text (the string it is flattened to):
+                    // the banner dot needs the pass/fail as a fact, and
+                    // parsing it back out of display prose would break the
+                    // moment that prose is reworded. See testImapConnection
+                    // for the five-stage check itself -- shared with
+                    // Advanced settings' Mail server section so there is one
+                    // copy of this logic, not two that can drift apart.
+                    onTestConnection = ::testImapConnection,
                     imapProviders = imapProviders,
                     imapProvider = imapProvider,
                     onImapProviderChange = ::onImapProviderChange,
