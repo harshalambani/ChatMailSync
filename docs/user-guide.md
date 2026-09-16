@@ -335,14 +335,12 @@ destination at all.
 ### Q. Which mail services can I use with this app?
 
 **A.** Gmail and Yahoo are tested end to end. iCloud and AOL should work the
-same way but have not been run through that same testing yet — pick **Other
-(IMAP)** if either surprises you, and it will work all the same, just without
-a ready-made host and port. Any other mail service that offers app passwords
-over IMAP should also work through **Other (IMAP)**, including paid ones such
-as Fastmail or Mailbox.org. The one mail service that cannot be used at all is
-Outlook.com or Hotmail (or any other personal Microsoft mailbox): Microsoft no
-longer issues app passwords for those accounts, and this app has no other way
-to sign in.
+same way but haven't been tested yet. Any other mail service that offers app
+passwords over IMAP should also work: pick **Custom** and enter its IMAP
+server and port. That includes paid services such as Fastmail or Mailbox.org.
+Outlook.com and Hotmail (or any other personal Microsoft mailbox) can't be
+used: Microsoft no longer allows app passwords for those accounts, and this
+app has no other way to sign in.
 
 ---
 
