@@ -22,6 +22,7 @@ from src.mail_client import ChunkSize, MailTransport, mailbox_folder_for
 from src.parser import extract_chat_info, parse_file
 from src.state import MailboxNotClearedError, count_archived_messages
 from src.state import delete_chat as state_delete_chat
+from src.state import list_chat_senders as state_list_chat_senders
 from src.state import (
     SELF_SENDER_LEARNED,
     SELF_SENDER_OVERRIDE,
@@ -629,6 +630,16 @@ def get_self_sender() -> dict:
     described["override"] = override
     described["learned"] = learned
     return described
+
+
+def list_chat_senders(chat_id: Optional[str] = None) -> list[dict]:
+    """Senders seen in exports, most active first -- the Me screen's pick list.
+
+    With [chat_id], only that chat's senders; otherwise every chat's, so the
+    Me screen can offer every name ever seen without one call per chat.
+    """
+    init_db(config.STATE_DB_PATH)
+    return state_list_chat_senders(chat_id, config.STATE_DB_PATH)
 
 
 def set_self_sender(name: Optional[str] = None) -> dict:

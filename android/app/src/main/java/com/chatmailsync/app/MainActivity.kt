@@ -536,6 +536,12 @@ fun ChatMailApp(
     var selfSenderSummary by remember { mutableStateOf("") }
     var selfSenderDetail by remember { mutableStateOf("") }
     var selfSenderOverride by remember { mutableStateOf("") }
+    // The masthead Me row's own inputs: the raw source ("learned" /
+    // "unknown" / "override") and the resolved name, fed through
+    // selfSenderDisplay() rather than the summary/detail text above, which
+    // is worded for a settings field, not a 48dp row.
+    var selfSenderSource by remember { mutableStateOf<String?>(null) }
+    var selfSenderName by remember { mutableStateOf<String?>(null) }
 
     fun applySelfSender(described: com.chaquo.python.PyObject) {
         selfSenderSummary = described.callAttr("get", "summary").toString()
@@ -545,6 +551,10 @@ fun ChatMailApp(
         // the moment anything else on the screen was touched.
         val override = described.callAttr("get", "override")
         selfSenderOverride = if (override == null) "" else override.toString()
+        val source = described.callAttr("get", "source")
+        selfSenderSource = source?.toString()
+        val name = described.callAttr("get", "name")
+        selfSenderName = name?.toString()
     }
 
     fun refreshSelfSender() {
@@ -558,6 +568,23 @@ fun ChatMailApp(
             Python.getInstance().getModule("src.android_api")
                 .callAttr("set_self_sender", name)
         )
+    }
+
+    // Every sender name ever seen across every export, most active first --
+    // the Me screen's pick list. android_api.list_chat_senders() returns one
+    // row per (chat_id, sender), because that is how the counts are stored;
+    // collapsed here to one row per name, summed across chats, since the
+    // picker is choosing a name to be, not a chat to be it in.
+    fun listChatSenders(): List<String> {
+        val rows = Python.getInstance().getModule("src.android_api")
+            .callAttr("list_chat_senders").asList()
+        val counts = LinkedHashMap<String, Long>()
+        for (row in rows) {
+            val sender = row.callAttr("get", "sender").toString()
+            val count = row.callAttr("get", "msg_count").toString().toLongOrNull() ?: 0L
+            counts[sender] = (counts[sender] ?: 0L) + count
+        }
+        return counts.entries.sortedByDescending { it.value }.map { it.key }
     }
 
     // ---- Inbox + import (Phase A2) -----------------------------------
@@ -1119,6 +1146,11 @@ fun ChatMailApp(
                 // WorkManager id), the list would keep showing already-synced
                 // files. Re-check every time this screen is (re)entered.
                 LaunchedEffect(Unit) { refreshInbox() }
+                // Same "re-read on entry" reasoning as Settings: this is now
+                // also where the masthead Me row lives, and a sync that ran
+                // while Home sat on the back stack may have just learned a
+                // name.
+                LaunchedEffect(Unit) { refreshSelfSender() }
                 // The pair HomeScreen's connection chip and Sync-now gating
                 // are driven by.
                 val homeAccountLabel = imapEmail.ifBlank { null }
@@ -1131,6 +1163,7 @@ fun ChatMailApp(
                 val lastBackupAt = remember(migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
+                val homeMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
                 HomeScreen(
                     accountLabel = homeAccountLabel,
                     backendReady = homeBackendReady,
@@ -1177,6 +1210,9 @@ fun ChatMailApp(
                     onOpenSyncLog = { navController.navigate("syncLog") },
                     onOpenQueue = { navController.navigate("queue") },
                     onOpenBackup = { navController.navigate("settings") },
+                    meLabel = homeMeDisplay.label,
+                    meColor = homeMeDisplay.color,
+                    onMeClick = { navController.navigate("me") },
                     lastBackupAt = lastBackupAt,
                     cutoffDate = cutoffDate,
                     onOpenSettings = { navController.navigate("settings") },
@@ -1200,6 +1236,11 @@ fun ChatMailApp(
                 )
             }
             composable("chats") {
+                // Same "re-read on entry" reasoning as Home: the Me row
+                // lives here too, and a background sync may have learned
+                // a name while Chats sat on the back stack.
+                LaunchedEffect(Unit) { refreshSelfSender() }
+                val chatsMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
                 ChatsListScreen(
                     onOpenChat = { chatId -> navController.navigate("chat/$chatId") },
                     // The empty state offers the import directly rather than
@@ -1207,6 +1248,9 @@ fun ChatMailApp(
                     // Home's own [Import] button uses, so a file picked from
                     // either place lands in the same inbox.
                     onImportChat = { pickFile.launch(arrayOf("*/*")) },
+                    meLabel = chatsMeDisplay.label,
+                    meColor = chatsMeDisplay.color,
+                    onMeClick = { navController.navigate("me") },
                 )
             }
             composable("chat/{chatId}") { entry ->
@@ -1363,6 +1407,24 @@ fun ChatMailApp(
                     onSaveImapSettings = ::saveImapSettings,
                     onForgetImapPassword = ::forgetImapPassword,
                     onRunWizard = { navController.navigate("mailWizard") },
+                )
+            }
+            composable("me") {
+                // Two ways in - Home and Chats - so the back label is read
+                // off the stack, same as Privacy and the sync log.
+                val from = navController.previousBackStackEntry?.destination?.route
+                LaunchedEffect(Unit) { refreshSelfSender() }
+                var meSenders by remember { mutableStateOf(listOf<String>()) }
+                LaunchedEffect(Unit) { meSenders = listChatSenders() }
+                MeScreen(
+                    display = selfSenderDisplay(selfSenderSource, selfSenderName),
+                    detail = selfSenderDetail,
+                    senders = meSenders,
+                    override = selfSenderOverride,
+                    onPick = { setSelfSender(it) },
+                    onClear = { setSelfSender("") },
+                    onBack = { navController.popBackStack() },
+                    backLabel = if (from == "chats") "Chats" else "Home",
                 )
             }
             composable("mailWizard") {

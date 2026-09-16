@@ -16,6 +16,7 @@ from src.state import (
     get_chat_cutoff,
     init_db,
     insert_message_hashes,
+    record_chat_senders,
     set_app_state,
     set_chat_cutoff,
     start_sync_run,
@@ -718,6 +719,30 @@ def test_an_override_beats_the_app_wide_cutoff_end_to_end(tmp_root, db_path):
 
     assert result["messages_cutoff"] == 0
     assert result["messages_synced"] > 0
+
+
+def test_list_chat_senders_feeds_the_me_screens_pick_list(tmp_root, db_path):
+    record_chat_senders(
+        "chat-a", {"Meera Iyer": 3, "Arjun Mehta": 1}, db_path=config.STATE_DB_PATH
+    )
+    record_chat_senders("chat-b", {"Kavya Rao": 5}, db_path=config.STATE_DB_PATH)
+
+    rows = android_api.list_chat_senders()
+
+    assert {(r["chat_id"], r["sender"]) for r in rows} == {
+        ("chat-a", "Meera Iyer"),
+        ("chat-a", "Arjun Mehta"),
+        ("chat-b", "Kavya Rao"),
+    }
+
+
+def test_list_chat_senders_can_be_scoped_to_one_chat(tmp_root, db_path):
+    record_chat_senders("chat-a", {"Meera Iyer": 3}, db_path=config.STATE_DB_PATH)
+    record_chat_senders("chat-b", {"Kavya Rao": 5}, db_path=config.STATE_DB_PATH)
+
+    rows = android_api.list_chat_senders("chat-a")
+
+    assert [r["sender"] for r in rows] == ["Meera Iyer"]
 
 
 # ---------------------------------------------------------------------------
