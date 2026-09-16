@@ -88,6 +88,13 @@ internal val FAQ = listOf(
         "school (Microsoft 365) accounts lost basic authentication first, and personal " +
         "Outlook.com, Hotmail, Live and MSN accounts followed in September 2024 — so a Microsoft " +
         "mailbox cannot be used as the destination at all.",
+    "Which mail services can I use with this app?" to
+        "Gmail and Yahoo are tested end to end. iCloud and AOL should work the same way but " +
+        "haven't been tested yet. Any other mail service that offers app passwords over IMAP " +
+        "should also work: pick Custom and enter its IMAP server and port. That includes paid " +
+        "services such as Fastmail or Mailbox.org. Outlook.com and Hotmail (or any other " +
+        "personal Microsoft mailbox) can't be used: Microsoft no longer allows app passwords " +
+        "for those accounts, and this app has no other way to sign in.",
     "I set the app up on a new phone, and it wants the password again." to
         "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
         "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +

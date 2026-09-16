@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
@@ -207,13 +208,28 @@ fun MailSetupWizardScreen(
                             pair.forEach { candidate ->
                                 val selected = candidate.key == provider
                                 val onPick = { provider = candidate.key }
-                                if (selected) {
-                                    Button(onClick = onPick, modifier = Modifier.weight(1f)) {
-                                        Text(candidate.label, maxLines = 1)
+                                val tier2Note = PROVIDER_TIER2_NOTE[candidate.key]
+                                Column(modifier = Modifier.weight(1f)) {
+                                    if (selected) {
+                                        Button(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
+                                            Text(candidate.label, maxLines = 1)
+                                        }
+                                    } else {
+                                        OutlinedButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
+                                            Text(candidate.label, maxLines = 1)
+                                        }
                                     }
-                                } else {
-                                    OutlinedButton(onClick = onPick, modifier = Modifier.weight(1f)) {
-                                        Text(candidate.label, maxLines = 1)
+                                    // Batch 3b: iCloud and AOL are promoted as
+                                    // "should work" rather than proven, and this
+                                    // qualifier is what tells the user that at
+                                    // the point they're picking, not after.
+                                    if (tier2Note != null) {
+                                        Text(
+                                            tier2Note,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
                                     }
                                 }
                             }
