@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
@@ -193,7 +194,17 @@ fun SelfSenderStrip(source: String?, name: String?, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(display.text, color = display.textColor)
-        Text(display.actionWord, color = display.textColor)
+        Text(
+            display.text,
+            color = display.textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            display.actionWord,
+            color = display.textColor,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }

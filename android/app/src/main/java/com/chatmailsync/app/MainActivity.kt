@@ -1427,8 +1427,9 @@ fun ChatMailApp(
                 )
             }
             composable("me") {
-                // Two ways in - Home and Chats - so the back label is read
-                // off the stack, same as Privacy and the sync log.
+                // Three ways in - Home, Chats and a chat's own detail screen
+                // (its strip) - so the back label is read off the stack, the
+                // same way the sync log does it.
                 val from = navController.previousBackStackEntry?.destination?.route
                 LaunchedEffect(Unit) { refreshSelfSender() }
                 var meSenders by remember { mutableStateOf(listOf<String>()) }
@@ -1442,7 +1443,11 @@ fun ChatMailApp(
                     onSave = { setSelfSender(it) },
                     onClear = { setSelfSender("") },
                     onBack = { navController.popBackStack() },
-                    backLabel = if (from == "chats") "Chats" else "Home",
+                    backLabel = when (from) {
+                        "chats" -> "Chats"
+                        "chat/{chatId}" -> "Chat"
+                        else -> "Home"
+                    },
                 )
             }
             composable("mailWizard") {

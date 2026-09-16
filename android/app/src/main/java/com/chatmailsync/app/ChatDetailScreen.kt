@@ -107,159 +107,168 @@ fun ChatDetailScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-        SelfSenderStrip(
-            source = selfSenderSource,
-            name = selfSenderName,
-            onClick = onOpenMe,
-        )
-        Column(
-            // Scrollable now that the facts have headings above them: on a
-            // short screen the four action buttons were the first thing to go
-            // off the bottom, and they are the reason the screen exists.
-            modifier = Modifier
-                .fillMaxSize()
-                .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
-                .verticalScrollbar(scrollState)
-                .verticalScroll(scrollState)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val c = chat
-            if (c == null) {
-                Text("Loading…")
-            } else {
-                // Was four bare sentences and four buttons in one flat column,
-                // with "Status: complete" leading -- a database value, read
-                // out. Now the state is said once at the top in the same three
-                // words the list's dot uses, the facts sit under a ruled "This
-                // chat" heading as label/value pairs (DetailSection and
-                // DetailField, shared with the run detail screen), and the
-                // four buttons are visibly a separate group rather than the
-                // continuation of a list of facts.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    StatusDot(c.lastRunStatus)
-                    Text(
-                        chatStatusOf(c.lastRunStatus).description,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
+            // Pinned above the scroll area, not a scrollable child itself --
+            // who "Me" is should stay visible no matter how far down the
+            // chat's facts and buttons are scrolled.
+            SelfSenderStrip(
+                source = selfSenderSource,
+                name = selfSenderName,
+                onClick = onOpenMe,
+            )
+            Column(
+                // Scrollable now that the facts have headings above them: on a
+                // short screen the four action buttons were the first thing to go
+                // off the bottom, and they are the reason the screen exists.
+                // fillMaxWidth + weight(1f), not fillMaxSize: inside this outer
+                // Column, fillMaxSize would claim the full parent height and
+                // ignore the strip sibling above it, pushing these buttons off
+                // the bottom by exactly the strip's height -- weight(1f) takes
+                // only the space the strip leaves.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
+                    .verticalScrollbar(scrollState)
+                    .verticalScroll(scrollState)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val c = chat
+                if (c == null) {
+                    Text("Loading…")
+                } else {
+                    // Was four bare sentences and four buttons in one flat column,
+                    // with "Status: complete" leading -- a database value, read
+                    // out. Now the state is said once at the top in the same three
+                    // words the list's dot uses, the facts sit under a ruled "This
+                    // chat" heading as label/value pairs (DetailSection and
+                    // DetailField, shared with the run detail screen), and the
+                    // four buttons are visibly a separate group rather than the
+                    // continuation of a list of facts.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StatusDot(c.lastRunStatus)
+                        Text(
+                            chatStatusOf(c.lastRunStatus).description,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
 
-                DetailSection("This chat")
-                DetailField("Messages synced", c.messagesSynced.toString())
-                DetailField("Last sync", if (c.lastRunAt != null) formatSyncTime(c.lastRunAt) else "Never")
-                // Not "has a Gmail thread": under IMAP the stored id is the
-                // RFC 822 Message-ID we generated, which is what threads the
-                // archive there.
-                DetailField("Mail thread exists", if (c.hasThread) "Yes" else "No")
-                c.sourceFilename?.let { DetailField("Export file", it) }
+                    DetailSection("This chat")
+                    DetailField("Messages synced", c.messagesSynced.toString())
+                    DetailField("Last sync", if (c.lastRunAt != null) formatSyncTime(c.lastRunAt) else "Never")
+                    // Not "has a Gmail thread": under IMAP the stored id is the
+                    // RFC 822 Message-ID we generated, which is what threads the
+                    // archive there.
+                    DetailField("Mail thread exists", if (c.hasThread) "Yes" else "No")
+                    c.sourceFilename?.let { DetailField("Export file", it) }
 
-                // A floor for this chat alone, overriding the app-wide one.
-                // Same field and same Clear button as the Settings row,
-                // because it is the same question asked at a smaller scale --
-                // and two spellings of one control is how a person ends up
-                // believing they set something they did not.
-                DetailSection("Cutoff date")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = cutoffText,
-                        onValueChange = {
-                            cutoffText = it
-                            // Committed the moment it reads, withheld while
-                            // it does not: there is no Save button on this
-                            // screen, so an uncomparable date has to be
-                            // refused under the field rather than stored and
-                            // met later as a sync that quietly sent nothing.
-                            if (CutoffDate.isReadable(it)) {
+                    // A floor for this chat alone, overriding the app-wide one.
+                    // Same field and same Clear button as the Settings row,
+                    // because it is the same question asked at a smaller scale --
+                    // and two spellings of one control is how a person ends up
+                    // believing they set something they did not.
+                    DetailSection("Cutoff date")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = cutoffText,
+                            onValueChange = {
+                                cutoffText = it
+                                // Committed the moment it reads, withheld while
+                                // it does not: there is no Save button on this
+                                // screen, so an uncomparable date has to be
+                                // refused under the field rather than stored and
+                                // met later as a sync that quietly sent nothing.
+                                if (CutoffDate.isReadable(it)) {
+                                    Python.getInstance().getModule("src.android_api")
+                                        .callAttr("set_cutoff", chatId, it.trim())
+                                }
+                            },
+                            label = { Text("YYYY-MM-DD") },
+                            singleLine = true,
+                            isError = !CutoffDate.isReadable(cutoffText),
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                // Empty means "inherit the app-wide floor again",
+                                // the same state as never having set one -- not a
+                                // separate cutoff of nothing.
+                                cutoffText = ""
                                 Python.getInstance().getModule("src.android_api")
-                                    .callAttr("set_cutoff", chatId, it.trim())
-                            }
-                        },
-                        label = { Text("YYYY-MM-DD") },
-                        singleLine = true,
-                        isError = !CutoffDate.isReadable(cutoffText),
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            // Empty means "inherit the app-wide floor again",
-                            // the same state as never having set one -- not a
-                            // separate cutoff of nothing.
-                            cutoffText = ""
-                            Python.getInstance().getModule("src.android_api")
-                                .callAttr("set_cutoff", chatId, "")
-                        },
-                        enabled = cutoffText.isNotEmpty(),
-                    ) { Text("Clear") }
-                }
-                if (!CutoffDate.isReadable(cutoffText)) {
+                                    .callAttr("set_cutoff", chatId, "")
+                            },
+                            enabled = cutoffText.isNotEmpty(),
+                        ) { Text("Clear") }
+                    }
+                    if (!CutoffDate.isReadable(cutoffText)) {
+                        Text(
+                            "Enter the date as YYYY-MM-DD, or leave it blank to use the app-wide cutoff.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Text(
-                        "Enter the date as YYYY-MM-DD, or leave it blank to use the app-wide cutoff.",
+                        CutoffDate.chatHint(
+                            CutoffDate.format(cutoffText),
+                            CutoffDate.format(AppPrefs.getCutoffDate(context)),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    DetailSection("Actions")
+
+                    // android_api.sync()'s chat_filter param already existed but
+                    // nothing on Android called it with one — every sync always
+                    // covered the whole inbox. This is the CLI's `--chat` filter,
+                    // surfaced here for "just re-sync this one chat" without
+                    // waiting on everything else queued up.
+                    OutlinedButton(
+                        onClick = onSyncThisChat,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !syncInProgress,
+                    ) {
+                        Text(if (syncInProgress) "Current sync is on" else "Sync just this chat")
+                    }
+
+                    Button(
+                        onClick = {
+                            // Ask Python how much mail is already out there before
+                            // showing anything, so the dialog can name a real count
+                            // and the real folder instead of a vague warning.
+                            val preview = Python.getInstance().getModule("src.android_api")
+                                .callAttr("reset_preview", chatId)
+                            archivedCount = preview.callAttr("get", "archived_count")
+                                ?.toString()?.toIntOrNull() ?: 0
+                            mailboxFolder = preview.callAttr("get", "mailbox_folder")
+                                ?.toString() ?: ""
+                            resetStage = 1
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        // Not "re-sync from scratch": this button syncs nothing. It
+                        // clears the record so that a *later* sync starts over.
+                        Text("Reset (forget sync history)")
+                    }
+
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Delete from list")
+                    }
+
+                    resetMessage?.let { Text(it) }
                 }
-                Text(
-                    CutoffDate.chatHint(
-                        CutoffDate.format(cutoffText),
-                        CutoffDate.format(AppPrefs.getCutoffDate(context)),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                DetailSection("Actions")
-
-                // android_api.sync()'s chat_filter param already existed but
-                // nothing on Android called it with one — every sync always
-                // covered the whole inbox. This is the CLI's `--chat` filter,
-                // surfaced here for "just re-sync this one chat" without
-                // waiting on everything else queued up.
-                OutlinedButton(
-                    onClick = onSyncThisChat,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !syncInProgress,
-                ) {
-                    Text(if (syncInProgress) "Current sync is on" else "Sync just this chat")
-                }
-
-                Button(
-                    onClick = {
-                        // Ask Python how much mail is already out there before
-                        // showing anything, so the dialog can name a real count
-                        // and the real folder instead of a vague warning.
-                        val preview = Python.getInstance().getModule("src.android_api")
-                            .callAttr("reset_preview", chatId)
-                        archivedCount = preview.callAttr("get", "archived_count")
-                            ?.toString()?.toIntOrNull() ?: 0
-                        mailboxFolder = preview.callAttr("get", "mailbox_folder")
-                            ?.toString() ?: ""
-                        resetStage = 1
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) {
-                    // Not "re-sync from scratch": this button syncs nothing. It
-                    // clears the record so that a *later* sync starts over.
-                    Text("Reset (forget sync history)")
-                }
-
-                OutlinedButton(
-                    onClick = { showDeleteConfirm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text("Delete from list")
-                }
-
-                resetMessage?.let { Text(it) }
             }
-        }
         }
     }
 
