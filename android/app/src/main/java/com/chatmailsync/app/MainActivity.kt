@@ -1276,6 +1276,9 @@ fun ChatMailApp(
                     onDeleted = { navController.popBackStack() },
                     onSyncThisChat = { startRealSync(chatFilter = chatId) },
                     syncInProgress = anySyncRunning,
+                    selfSenderSource = selfSenderSource,
+                    selfSenderName = selfSenderName,
+                    onOpenMe = { navController.navigate("me") },
                 )
             }
             composable("settings") {

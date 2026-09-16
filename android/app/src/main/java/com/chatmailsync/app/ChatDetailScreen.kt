@@ -38,6 +38,9 @@ fun ChatDetailScreen(
     onDeleted: () -> Unit,
     onSyncThisChat: () -> Unit,
     syncInProgress: Boolean,
+    selfSenderSource: String? = null,
+    selfSenderName: String? = null,
+    onOpenMe: () -> Unit = {},
 ) {
     var chat by remember { mutableStateOf<ChatSummary?>(null) }
     // Reset is a two-gate flow when mail already exists for this chat, so it
@@ -100,12 +103,21 @@ fun ChatDetailScreen(
     ) { padding ->
         val scrollState = rememberScrollState()
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+        SelfSenderStrip(
+            source = selfSenderSource,
+            name = selfSenderName,
+            onClick = onOpenMe,
+        )
+        Column(
             // Scrollable now that the facts have headings above them: on a
             // short screen the four action buttons were the first thing to go
             // off the bottom, and they are the reason the screen exists.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
                 .verticalScrollbar(scrollState)
                 .verticalScroll(scrollState)
@@ -247,6 +259,7 @@ fun ChatDetailScreen(
 
                 resetMessage?.let { Text(it) }
             }
+        }
         }
     }
 
