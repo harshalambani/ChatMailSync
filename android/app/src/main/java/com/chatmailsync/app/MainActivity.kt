@@ -147,6 +147,9 @@ private val bottomDests = listOf(
  * one tab -- see below. */
 internal fun tabForRoute(route: String?): String? = when {
     route == null -> null
+    // Its own full-window flow, not a tab -- same reasoning as the sync log
+    // just below.
+    route == "first_run" -> null
     route == "home" || route == "syncProgress" || route == "importPicker" -> "home"
     route == "chats" || route.startsWith("chat/") -> "chats"
     route == "settings" || route == "mailAccount" || route == "help" -> "settings"
@@ -167,6 +170,20 @@ internal fun tabForRoute(route: String?): String? = when {
  */
 internal fun shouldScanAtLaunch(autoWatchOn: Boolean, watchedFolderUri: String?): Boolean =
     autoWatchOn && !watchedFolderUri.isNullOrBlank()
+
+/**
+ * Whether the four-step first-run setup (D7) is what a launch should open
+ * on, instead of Home.
+ *
+ * Both a fresh install (neither flag) and an upgrader who already has a
+ * working mailbox from before this release existed (mailbox configured, flag
+ * never set) must land on Home -- the second clause is what keeps the
+ * latter out of a "welcome" screen for an app they have used for months.
+ * MainActivity sets the flag for that case on launch (see hasMailAccount's
+ * use below) so it only has to be inferred once.
+ */
+internal fun shouldShowFirstRun(firstRunDone: Boolean, mailboxConfigured: Boolean): Boolean =
+    !firstRunDone && !mailboxConfigured
 
 /** The collapsed sync bar — this is a sync app, so "is anything syncing right
  * now" deserves dedicated, permanent real estate rather than being buried in
@@ -353,6 +370,29 @@ fun ChatMailApp(
     // changes; the pass/fail half of it is written by the two places that
     // actually try the mailbox (Save & connect, Test connection).
     LaunchedEffect(hasMailAccount) { ConnectionState.refresh(context, hasMailAccount) }
+
+    // First-run setup (D7). Read once, before startDestination below is
+    // computed, so a mid-flow process death reopens on first_run rather than
+    // skipping back to Home — the flag is only ever written once the flow is
+    // actually finished (Set up later / Turn on / Not now).
+    var firstRunDone by remember { mutableStateOf(AppPrefs.isFirstRunDone(context)) }
+    // An upgrader who already has a working mailbox from before this release
+    // existed must never see the welcome screen — back-fill the flag for
+    // them on launch so a later reinstall-free re-check (e.g. after
+    // forgetting the password) doesn't retroactively show it either.
+    LaunchedEffect(Unit) {
+        if (!firstRunDone && hasMailAccount) {
+            AppPrefs.setFirstRunDone(context, true)
+            firstRunDone = true
+        }
+    }
+    // Computed once, from the values read at launch, not the possibly-just-
+    // corrected firstRunDone above — for an upgrader hasMailAccount is
+    // already true at this point, so shouldShowFirstRun is false either way
+    // and the LaunchedEffect above and this val never disagree.
+    val firstRunStartDestination = remember {
+        if (shouldShowFirstRun(AppPrefs.isFirstRunDone(context), hasMailAccount)) "first_run" else "home"
+    }
 
     fun onImapProviderChange(provider: String) {
         imapProvider = provider
@@ -656,6 +696,12 @@ fun ChatMailApp(
      * reported. Go where the result is. */
     fun receiveSharedExport(uri: Uri) {
         importAndPreview(uri)
+        // Step 3 of first-run exists to greet exactly this arrival in place —
+        // jumping to Home the moment a share lands would cut the walkthrough
+        // short and land the user somewhere it never explained. Everywhere
+        // else, go where the result is, same as before; inboxFiles (read by
+        // both Home and first-run step 3) is already refreshed above.
+        if (navController.currentDestination?.route == "first_run") return
         navController.navigate("home") {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
@@ -1098,7 +1144,7 @@ fun ChatMailApp(
     val currentRoute = backStackEntry?.destination?.route
     // Every screen keeps the tabs. The one exception is the full-screen sync
     // progress view, which is a modal moment with its own way out.
-    val showBottomBar = currentRoute != "syncProgress"
+    val showBottomBar = currentRoute != "syncProgress" && currentRoute != "first_run"
     val selectedTab = tabForRoute(currentRoute)
     // The sync bar follows the same rule: everywhere except the progress
     // screen, where it would only repeat what already fills the screen.
@@ -1183,9 +1229,43 @@ fun ChatMailApp(
         ) {
         NavHost(
             navController = navController,
-            startDestination = "home",
+            startDestination = firstRunStartDestination,
             modifier = Modifier.padding(padding),
         ) {
+            composable("first_run") {
+                fun finishFirstRun() {
+                    if (!firstRunDone) {
+                        AppPrefs.setFirstRunDone(context, true)
+                        firstRunDone = true
+                    }
+                    // Clears first_run off the back stack rather than merely
+                    // pushing "home" on top of it, so the hardware/gesture
+                    // back button from Home does not return here.
+                    navController.navigate("home") {
+                        popUpTo("first_run") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+                FirstRunScreen(
+                    onSetUpLater = { finishFirstRun() },
+                    imapProviders = imapProviders,
+                    stagePlan = stagePlan,
+                    initialProvider = imapProvider,
+                    initialEmail = imapEmail,
+                    onConnect = ::connectWithStages,
+                    queuedChatCount = inboxFiles.size,
+                    onDoTestRun = { runDryRunSync() },
+                    watchedFolderUri = watchedFolderUri,
+                    onChooseFolder = { folderPicker.launch(null) },
+                    watchIntervalMinutes = watchIntervalMinutes,
+                    onWatchIntervalChange = { setWatchInterval(it) },
+                    onTurnOn = {
+                        setAutoWatch(true)
+                        finishFirstRun()
+                    },
+                    onNotNow = { finishFirstRun() },
+                )
+            }
             composable("home") {
                 // Home's inbox list is only otherwise refreshed right after an
                 // import or a sync completes — if the app was relaunched or
@@ -1555,14 +1635,23 @@ fun ChatMailApp(
                 )
             }
             composable("syncProgress") {
+                // "Do a test run" on first-run step 3 pushes this same screen
+                // on top of first_run rather than home — first_run is the
+                // nav graph's start destination in that case, so "home" is
+                // not on the back stack at all yet and popping to it here
+                // would silently do nothing. Read which one is actually
+                // underneath, same pattern as the settings/help "from" reads
+                // elsewhere on this screen, and pop back to that instead.
+                val from = navController.previousBackStackEntry?.destination?.route
+                val popTarget = if (from == "first_run") "first_run" else "home"
                 SyncProgressScreen(
                     workManager = workManager,
-                    onDone = { navController.popBackStack("home", inclusive = false) },
+                    onDone = { navController.popBackStack(popTarget, inclusive = false) },
                     // Same destination, deliberately different call: onDone
                     // prunes the finished work first, and pruning a run that
                     // is still going would leave the collapsed bar with
                     // nothing to observe.
-                    onMinimize = { navController.popBackStack("home", inclusive = false) },
+                    onMinimize = { navController.popBackStack(popTarget, inclusive = false) },
                 )
             }
         }
