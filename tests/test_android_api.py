@@ -769,3 +769,19 @@ def test_clearing_with_no_argument_is_the_same_as_clearing_with_an_empty_one(
     # The Kotlin side gets one call for both so it has no branch to get wrong.
     android_api.set_self_sender("Sam I.")
     assert android_api.set_self_sender()["source"] == "unknown"
+
+
+def test_get_self_sender_state_is_not_known_by_default(tmp_root, db_path):
+    described = android_api.get_self_sender()
+    assert described["state"] == "not_known"
+
+
+def test_get_self_sender_state_is_worked_out_from_a_learned_name(tmp_root, db_path):
+    set_app_state(SELF_SENDER_LEARNED, "Meera Iyer", config.STATE_DB_PATH)
+    described = android_api.get_self_sender()
+    assert described["state"] == "worked_out"
+
+
+def test_get_self_sender_state_is_set_by_you_once_overridden(tmp_root, db_path):
+    described = android_api.set_self_sender("Arjun Mehta")
+    assert described["state"] == "set_by_you"

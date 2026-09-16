@@ -23,6 +23,7 @@ Partial-sync recovery:
 import logging
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -48,6 +49,7 @@ from src.state import (
     get_app_state,
     insert_message_hashes,
     normalise_cutoff,
+    record_chat_senders,
     set_app_state,
     start_sync_run,
     update_chat_gmail_ids,
@@ -406,6 +408,7 @@ class SyncManager:
             messages_cutoff=n_cutoff,
             db_path=self.db_path,
         )
+        self._record_chat_senders(chat_id, new_messages)
 
         # Move file to processed/ (only after everything succeeded).
         self._move_to_processed(filepath, run_id)
@@ -413,6 +416,21 @@ class SyncManager:
         stats.files_synced += 1
         stats.messages_synced += len(new_messages)
         log.info("%s: done — %d messages synced", display_name, len(new_messages))
+
+    def _record_chat_senders(self, chat_id: str, messages: list) -> None:
+        """Tally per-sender message counts for this batch of pushed messages.
+
+        Best-effort: who-said-how-much is a display nicety, not something a
+        sync should ever fail over, so any error here is logged and dropped
+        rather than propagated.
+        """
+        if not messages:
+            return
+        try:
+            counts = Counter(m.sender for m in messages)
+            record_chat_senders(chat_id, dict(counts), db_path=self.db_path)
+        except Exception:
+            log.warning("Failed to record chat senders for %s", chat_id, exc_info=True)
 
     def _on_chunk_progress(
         self, display_name: str, chunk_index: int, total_chunks: int,
@@ -709,6 +727,7 @@ class SyncManager:
             messages_cutoff=n_cutoff,
             db_path=self.db_path,
         )
+        self._record_chat_senders(chat_id, remaining)
 
         self._move_to_processed(source_file, run_id)
         log.info(

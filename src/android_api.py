@@ -615,8 +615,11 @@ def list_cutoffs() -> list[dict]:
 def get_self_sender() -> dict:
     """What the app currently treats as your own name in exports.
 
-    Returns {"name", "source", "summary", "detail", "override", "learned"}.
-    `source` is "override", "learned" or "unknown"; `summary` and `detail` are
+    Returns {"name", "source", "summary", "detail", "state", "override",
+    "learned"}. `source` is "override", "learned" or "unknown"; `state` is the
+    same three cases as "set_by_you", "worked_out" or "not_known", passed
+    straight through from self_sender.describe() for a caller that wants to
+    branch without knowing `source`'s vocabulary. `summary` and `detail` are
     the display wording, kept in Python so the shared core owns it rather
     than Kotlin.
     `override` and `learned` are the raw stored values, for the text field and

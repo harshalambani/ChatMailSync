@@ -551,3 +551,71 @@ def test_app_state_keys_do_not_collide(db_path):
     state.set_app_state(state.SELF_SENDER_LEARNED, "Sam Iyer", db_path)
     assert state.get_app_state(state.SELF_SENDER_OVERRIDE, db_path) == "Sam"
     assert state.get_app_state(state.SELF_SENDER_LEARNED, db_path) == "Sam Iyer"
+
+
+# ---------------------------------------------------------------------------
+# chat_senders: per-chat, per-sender message tallies
+# ---------------------------------------------------------------------------
+
+def test_record_and_list_chat_senders(db_path):
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 3, "Arjun Mehta": 1}, seen_ts="2026-01-01T00:00:00", db_path=db_path
+    )
+
+    rows = state.list_chat_senders("chat1", db_path)
+    assert [r["sender"] for r in rows] == ["Meera Iyer", "Arjun Mehta"]
+    assert rows[0]["msg_count"] == 3
+    assert rows[0]["first_seen"] == "2026-01-01T00:00:00"
+    assert rows[0]["last_seen"] == "2026-01-01T00:00:00"
+
+
+def test_recording_chat_senders_twice_increments_rather_than_replaces(db_path):
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 3}, seen_ts="2026-01-01T00:00:00", db_path=db_path
+    )
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 2}, seen_ts="2026-02-01T00:00:00", db_path=db_path
+    )
+
+    rows = state.list_chat_senders("chat1", db_path)
+    assert len(rows) == 1
+    assert rows[0]["msg_count"] == 5
+    assert rows[0]["first_seen"] == "2026-01-01T00:00:00"
+    assert rows[0]["last_seen"] == "2026-02-01T00:00:00"
+
+
+def test_chat_senders_are_ordered_by_msg_count_descending(db_path):
+    state.record_chat_senders(
+        "chat1",
+        {"Arjun Mehta": 1, "Kavya Rao": 9, "Rohan Desai": 4},
+        db_path=db_path,
+    )
+
+    rows = state.list_chat_senders("chat1", db_path)
+    assert [r["sender"] for r in rows] == ["Kavya Rao", "Rohan Desai", "Arjun Mehta"]
+
+
+def test_list_chat_senders_with_no_chat_id_covers_every_chat(db_path):
+    state.record_chat_senders("chat1", {"Meera Iyer": 2}, db_path=db_path)
+    state.record_chat_senders("chat2", {"Arjun Mehta": 5}, db_path=db_path)
+
+    rows = state.list_chat_senders(db_path=db_path)
+    assert {(r["chat_id"], r["sender"]) for r in rows} == {
+        ("chat1", "Meera Iyer"), ("chat2", "Arjun Mehta"),
+    }
+
+
+def test_recording_zero_counts_is_a_no_op(db_path):
+    """A sender with nothing to add this run has no business touching
+    first_seen/last_seen either."""
+    state.record_chat_senders("chat1", {"Meera Iyer": 0}, db_path=db_path)
+    assert state.list_chat_senders("chat1", db_path) == []
+
+
+def test_deleting_a_chat_takes_its_senders_with_it(db_path):
+    state.upsert_chat("chat1", "Chat One", "chat1.txt", db_path=db_path)
+    state.record_chat_senders("chat1", {"Meera Iyer": 1}, db_path=db_path)
+
+    state.delete_chat("chat1", db_path)
+
+    assert state.list_chat_senders("chat1", db_path) == []

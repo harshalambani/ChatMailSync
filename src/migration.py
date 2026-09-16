@@ -264,7 +264,7 @@ def _snapshot_db(source: Path, dest: Path) -> None:
 
 def _counts(db: Path) -> dict:
     if not db.exists():
-        return {"chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0}
+        return {"chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0, "senders": 0}
     conn = sqlite3.connect(db)
     try:
         def one(table: str) -> int:
@@ -281,6 +281,10 @@ def _counts(db: Path) -> dict:
             # so a bundle that silently carried none of them should be
             # visible as such rather than discovered months later.
             "cutoffs": one("chat_cutoffs"),
+            # Same reasoning as cutoffs: per-sender counts are learned over
+            # many runs, and a bundle silently carrying none of them should
+            # be visible before the user restores, not discovered later.
+            "senders": one("chat_senders"),
         }
     finally:
         conn.close()
@@ -371,6 +375,7 @@ def import_bundle(root: Path, source: Path) -> dict:
             "runs_added": 0,
             "hashes_added": 0,
             "cutoffs_added": 0,
+            "senders_added": 0,
             "settings": {},
             "manifest": manifest,
             "created_at": str(manifest.get("created_at") or ""),
@@ -394,7 +399,7 @@ def import_bundle(root: Path, source: Path) -> dict:
                 settings = _with_derived_host(settings)
 
             added = {"chats_added": 0, "runs_added": 0,
-                     "hashes_added": 0, "cutoffs_added": 0}
+                     "hashes_added": 0, "cutoffs_added": 0, "senders_added": 0}
             if _DB_NAME in names:
                 with tempfile.TemporaryDirectory() as tmp:
                     incoming = Path(tmp) / _DB_NAME
@@ -557,6 +562,32 @@ def _merge_db(target: Path, incoming: Path) -> dict:
             )
             cutoffs_added += max(cur.rowcount, 0)
 
+        # Per-chat sender tallies. Same INSERT OR IGNORE reasoning as the
+        # cutoffs above: a (chat_id, sender) pair this device has already
+        # started counting keeps its own running total rather than being
+        # overwritten by the incoming bundle's -- summing the two would be
+        # more accurate but risks double-counting messages both devices
+        # already tallied from the same overlapping export.
+        senders_added = 0
+        try:
+            sender_rows = src.execute(
+                "SELECT chat_id, sender, first_seen, last_seen, msg_count "
+                "FROM chat_senders"
+            ).fetchall()
+        except sqlite3.Error:
+            sender_rows = []
+        for row in sender_rows:
+            cur = dst.execute(
+                "INSERT OR IGNORE INTO chat_senders "
+                "(chat_id, sender, first_seen, last_seen, msg_count) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    row["chat_id"], row["sender"], row["first_seen"],
+                    row["last_seen"], row["msg_count"],
+                ),
+            )
+            senders_added += max(cur.rowcount, 0)
+
         # Key/value app state, same INSERT OR IGNORE reasoning as the cutoffs
         # above: this device's own answer stands, and only keys it has no
         # opinion on are inherited. Wrapped because a bundle written before
@@ -598,6 +629,7 @@ def _merge_db(target: Path, incoming: Path) -> dict:
             "runs_added": runs_added,
             "hashes_added": hashes_added,
             "cutoffs_added": cutoffs_added,
+            "senders_added": senders_added,
         }
     except Exception:
         dst.rollback()
