@@ -680,6 +680,30 @@ def test_a_re_confirming_sync_does_not_set_the_pending_banner(tmp_root, db_path)
     ) is None
 
 
+def test_an_override_learning_a_new_name_updates_learned_but_not_pending(
+    tmp_root, db_path
+):
+    """Under an override, the derived name is still tracked in LEARNED so it
+    stays current underneath the override, but the Home banner must never
+    fire for a name the user did not choose to see reported back to them."""
+    from src import state as state_module
+
+    state_module.set_app_state(state_module.SELF_SENDER_OVERRIDE, "Bob", db_path)
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED, db_path
+    ) == _LEARNED_OWNER
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, db_path
+    ) is None
+
+
 def test_a_dry_run_never_writes_the_learned_name_or_the_pending_banner(
     tmp_root, db_path
 ):

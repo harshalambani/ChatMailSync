@@ -561,6 +561,24 @@ fun ChatMailApp(
         )
     }
 
+    // The one-time "the app worked out who you are" Home card. A separate
+    // piece of state from selfSenderName/selfSenderSource above: those are
+    // the masthead's ongoing answer to "who is me", re-read on every screen
+    // entry, while this is a single announcement that must survive exactly
+    // until the user dismisses it and never come back on its own.
+    var pendingSelfSenderBannerName by remember { mutableStateOf<String?>(null) }
+
+    fun refreshSelfSenderBanner() {
+        val name = Python.getInstance().getModule("src.android_api")
+            .callAttr("get_pending_self_sender_banner")
+        pendingSelfSenderBannerName = name?.toString()
+    }
+
+    fun dismissSelfSenderBanner() {
+        Python.getInstance().getModule("src.android_api").callAttr("clear_self_sender_banner")
+        pendingSelfSenderBannerName = null
+    }
+
     fun setSelfSender(name: String) {
         applySelfSender(
             Python.getInstance().getModule("src.android_api")
@@ -836,7 +854,10 @@ fun ChatMailApp(
     // recompute unrelated state.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refreshSelfSender()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshSelfSender()
+                refreshSelfSenderBanner()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -940,6 +961,11 @@ fun ChatMailApp(
                 val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
                 lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
+                // A one-to-one export just synced may be exactly what taught
+                // the app the owner's name -- same reasoning as
+                // refreshSelfSender() just below, but for the one-time
+                // banner rather than the ongoing masthead answer.
+                refreshSelfSenderBanner()
             }
             WorkInfo.State.FAILED -> {
                 lastResult = "Sync failed:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
@@ -998,6 +1024,7 @@ fun ChatMailApp(
         if (autoSyncResultText != null) {
             lastResult = autoSyncResultText
             refreshInbox()
+            refreshSelfSenderBanner()
         }
     }
     val autoSyncRunning = autoSyncWorkInfo?.state == WorkInfo.State.RUNNING ||
@@ -1164,6 +1191,10 @@ fun ChatMailApp(
                 // while Home sat on the back stack may have just learned a
                 // name.
                 LaunchedEffect(Unit) { refreshSelfSender() }
+                // The one-time banner lives only on Home, so this is the one
+                // place it needs a "re-read on entry" alongside ON_RESUME and
+                // the post-sync effects above.
+                LaunchedEffect(Unit) { refreshSelfSenderBanner() }
                 // The pair HomeScreen's connection chip and Sync-now gating
                 // are driven by.
                 val homeAccountLabel = imapEmail.ifBlank { null }
@@ -1230,6 +1261,12 @@ fun ChatMailApp(
                     lastBackupAt = lastBackupAt,
                     cutoffDate = cutoffDate,
                     onOpenSettings = { navController.navigate("settings") },
+                    pendingSelfSenderBannerName = pendingSelfSenderBannerName,
+                    onSelfSenderBannerOk = { dismissSelfSenderBanner() },
+                    onSelfSenderBannerNotMe = {
+                        dismissSelfSenderBanner()
+                        navController.navigate("me")
+                    },
                 )
             }
             composable("queue") {

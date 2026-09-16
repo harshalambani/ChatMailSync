@@ -516,7 +516,8 @@ class SyncManager:
                 "unknown" if not learned else "a different name",
             )
             set_app_state(SELF_SENDER_LEARNED, newly_derived, self.db_path)
-            set_app_state(SELF_SENDER_LEARNED_PENDING, newly_derived, self.db_path)
+            if not (override and override.strip()):
+                set_app_state(SELF_SENDER_LEARNED_PENDING, newly_derived, self.db_path)
 
         return name
 
