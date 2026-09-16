@@ -599,3 +599,61 @@ def test_an_explicit_override_outranks_what_was_learned(tmp_root, db_path):
     _make_manager(tmp_root, db_path, transport).run()
 
     assert sum("flex-end" in b for b in transport.bodies) == 1
+
+
+# ---------------------------------------------------------------------------
+# chat_senders: names for the "Me" screen pick list stay complete even when
+# nothing was pushed -- a whole chat before the cutoff, or a resync with
+# nothing new, must not leave the pick list missing real names.
+# ---------------------------------------------------------------------------
+
+def test_a_chat_entirely_before_the_cutoff_still_records_its_sender_names(
+    tmp_root, db_path
+):
+    from src.state import list_chat_senders
+
+    _write_dated_chat(tmp_root / "inbox", [
+        "20/03/25, 09:00 - Meera Iyer: old one",
+        "21/03/25, 09:00 - Meera Iyer: old two",
+    ])
+    transport = FakeTransport()
+    manager = _manager_with_cutoff(tmp_root, db_path, transport, "2025-03-22")
+
+    stats = manager.run()
+
+    assert stats.messages_synced == 0
+    assert stats.messages_cutoff == 2
+    chat_id, _ = extract_chat_info("WhatsApp Chat with Alice.txt")
+    rows = list_chat_senders(chat_id, db_path)
+    assert [r["sender"] for r in rows] == ["Meera Iyer"]
+    assert rows[0]["msg_count"] == 0
+
+
+def test_a_resync_with_nothing_new_still_records_sender_names(tmp_root, db_path):
+    from src.state import list_chat_senders
+
+    inbox_dir = tmp_root / "inbox"
+    _write_dated_chat(inbox_dir, [
+        "20/03/25, 09:00 - Arjun Mehta: hello",
+        "21/03/25, 09:00 - Kavya Rao: hi back",
+    ])
+    manager = _manager_with_cutoff(tmp_root, db_path, FakeTransport(), None)
+    manager.run()
+
+    chat_id, _ = extract_chat_info("WhatsApp Chat with Alice.txt")
+    # Drop the sender tallies as if this were an older install migrated from
+    # before chat_senders existed, then re-share the identical export.
+    from src.state import _connect
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM chat_senders WHERE chat_id = ?", (chat_id,))
+
+    _write_dated_chat(inbox_dir, [
+        "20/03/25, 09:00 - Arjun Mehta: hello",
+        "21/03/25, 09:00 - Kavya Rao: hi back",
+    ])
+    stats = _manager_with_cutoff(tmp_root, db_path, FakeTransport(), None).run()
+
+    assert stats.messages_synced == 0
+    rows = list_chat_senders(chat_id, db_path)
+    assert {r["sender"] for r in rows} == {"Arjun Mehta", "Kavya Rao"}
+    assert all(r["msg_count"] == 0 for r in rows)

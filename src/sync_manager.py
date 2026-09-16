@@ -23,6 +23,7 @@ Partial-sync recovery:
 import logging
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -48,6 +49,7 @@ from src.state import (
     get_app_state,
     insert_message_hashes,
     normalise_cutoff,
+    record_chat_senders,
     set_app_state,
     start_sync_run,
     update_chat_gmail_ids,
@@ -312,6 +314,7 @@ class SyncManager:
                     messages_cutoff=n_cutoff,
                     db_path=self.db_path,
                 )
+                self._record_chat_senders(chat_id, all_messages, [])
             if not self.dry_run:
                 self._move_to_processed(filepath, run_id)
             return
@@ -406,6 +409,7 @@ class SyncManager:
             messages_cutoff=n_cutoff,
             db_path=self.db_path,
         )
+        self._record_chat_senders(chat_id, all_messages, new_messages)
 
         # Move file to processed/ (only after everything succeeded).
         self._move_to_processed(filepath, run_id)
@@ -413,6 +417,35 @@ class SyncManager:
         stats.files_synced += 1
         stats.messages_synced += len(new_messages)
         log.info("%s: done — %d messages synced", display_name, len(new_messages))
+
+    def _record_chat_senders(
+        self, chat_id: str, all_messages: list, pushed_messages: list
+    ) -> None:
+        """Tally per-sender message counts from this file for the pick list.
+
+        Tallied over every parsed message in the file, not just the pushed
+        ones: a chat whose messages all fall before the cutoff, or a resync
+        where nothing is new, still has real sender names in it, and the "Me"
+        screen's pick list needs those names even though nothing was pushed.
+        Senders that contributed no pushed messages this run are passed with
+        a count of 0; senders with pushed messages get their exact pushed
+        count, which is what actually accumulates in the table.
+
+        Best-effort: who-said-how-much is a display nicety, not something a
+        sync should ever fail over, so any error here is logged and dropped
+        rather than propagated.
+        """
+        if not all_messages:
+            return
+        try:
+            pushed_counts = Counter(m.sender for m in pushed_messages)
+            counts = {
+                sender: pushed_counts.get(sender, 0)
+                for sender in {m.sender for m in all_messages}
+            }
+            record_chat_senders(chat_id, counts, db_path=self.db_path)
+        except Exception:
+            log.warning("Failed to record chat senders for %s", chat_id, exc_info=True)
 
     def _on_chunk_progress(
         self, display_name: str, chunk_index: int, total_chunks: int,
@@ -633,6 +666,7 @@ class SyncManager:
                 messages_cutoff=n_cutoff,
                 db_path=self.db_path,
             )
+            self._record_chat_senders(chat_id, all_messages, [])
             self._move_to_processed(source_file, run_id)
             log.info("Recovery complete (nothing left to push) for run_id=%d", run_id)
             return True
@@ -709,6 +743,7 @@ class SyncManager:
             messages_cutoff=n_cutoff,
             db_path=self.db_path,
         )
+        self._record_chat_senders(chat_id, all_messages, remaining)
 
         self._move_to_processed(source_file, run_id)
         log.info(

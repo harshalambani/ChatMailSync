@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS chat_cutoffs (
     set_at    TEXT NOT NULL
 );
 
+-- Every sender name seen in each chat. This exists for the "Me" screen: rather
+-- than making the user type their own name exactly as WhatsApp spells it, the
+-- app can offer a pick list of real sender names drawn from their own chats.
+-- msg_count is kept alongside for free but is not the point of the table --
+-- names must be complete even when counts are not. Keyed on (chat_id, sender)
+-- rather than given its own id because a sender's row is meaningless outside
+-- its chat and the pair is already unique.
+CREATE TABLE IF NOT EXISTS chat_senders (
+    chat_id    TEXT NOT NULL,
+    sender     TEXT NOT NULL,
+    first_seen TEXT,
+    last_seen  TEXT,
+    msg_count  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (chat_id, sender)
+);
+
 -- Small key/value store for settings that are genuinely about the archive
 -- rather than about the app itself. The Android app keeps its own settings
 -- file for its own concerns (mail account, theme), and that is the right
@@ -157,9 +173,9 @@ def init_db(db_path: Optional[Path] = None) -> None:
             conn.execute("ALTER TABLE sync_runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'")
         except sqlite3.OperationalError:
             pass  # column already exists
-        # Same story for the cutoff counter. chat_cutoffs needs no equivalent:
-        # a whole new table is covered by CREATE TABLE IF NOT EXISTS above,
-        # which is why only the column is repaired here.
+        # Same story for the cutoff counter. chat_cutoffs and chat_senders need
+        # no equivalent: a whole new table is covered by CREATE TABLE IF NOT
+        # EXISTS above, which is why only the column is repaired here.
         try:
             conn.execute(
                 "ALTER TABLE sync_runs ADD COLUMN messages_cutoff INTEGER NOT NULL DEFAULT 0"
@@ -744,6 +760,71 @@ def list_chat_cutoffs(db_path: Optional[Path] = None) -> dict:
     return {row["chat_id"]: row["cutoff_ts"] for row in rows}
 
 
+def record_chat_senders(
+    chat_id: str,
+    counts: dict,
+    seen_ts: Optional[str] = None,
+    db_path: Optional[Path] = None,
+) -> None:
+    """Add [counts] ({sender: message count}) for this sync of [chat_id].
+
+    A positive count upserts: msg_count accumulates, first_seen/last_seen
+    widen to cover [seen_ts] (defaulting to now). A count of zero means the
+    sender was seen in the file but contributed nothing pushed this run --
+    the pick list still needs their name, so a never-seen sender still gets a
+    row (msg_count 0, first_seen/last_seen set), but an existing row is left
+    completely untouched, since a run that pushed nothing for them proves
+    nothing new about when they were first or last seen. Negative counts are
+    skipped, being meaningless here.
+    """
+    if not counts:
+        return
+    ts = seen_ts or _now()
+    with _connect(db_path) as conn:
+        for sender, count in counts.items():
+            count = int(count)
+            if count < 0:
+                continue
+            if count == 0:
+                conn.execute(
+                    "INSERT OR IGNORE INTO chat_senders "
+                    "(chat_id, sender, first_seen, last_seen, msg_count) "
+                    "VALUES (?, ?, ?, ?, 0)",
+                    (chat_id, sender, ts, ts),
+                )
+                continue
+            conn.execute(
+                "INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(chat_id, sender) DO UPDATE SET "
+                "first_seen = MIN(first_seen, excluded.first_seen), "
+                "last_seen = MAX(last_seen, excluded.last_seen), "
+                "msg_count = msg_count + excluded.msg_count",
+                (chat_id, sender, ts, ts, count),
+            )
+
+
+def list_chat_senders(chat_id: Optional[str] = None, db_path: Optional[Path] = None) -> list:
+    """Senders and their counts, most active first.
+
+    With [chat_id], only that chat's senders; otherwise every chat's, still
+    ordered by msg_count within the whole result.
+    """
+    with _connect(db_path) as conn:
+        if chat_id is None:
+            rows = conn.execute(
+                "SELECT chat_id, sender, first_seen, last_seen, msg_count "
+                "FROM chat_senders ORDER BY msg_count DESC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT chat_id, sender, first_seen, last_seen, msg_count "
+                "FROM chat_senders WHERE chat_id = ? ORDER BY msg_count DESC",
+                (chat_id,),
+            ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def delete_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
     """Fully remove a chat and all its sync history from the database.
 
@@ -754,6 +835,7 @@ def delete_chat(chat_id: str, db_path: Optional[Path] = None) -> None:
         conn.execute("DELETE FROM message_hashes WHERE chat_id = ?", (chat_id,))
         conn.execute("DELETE FROM sync_runs WHERE chat_id = ?", (chat_id,))
         conn.execute("DELETE FROM chat_cutoffs WHERE chat_id = ?", (chat_id,))
+        conn.execute("DELETE FROM chat_senders WHERE chat_id = ?", (chat_id,))
         conn.execute("DELETE FROM chats WHERE chat_id = ?", (chat_id,))
 
 

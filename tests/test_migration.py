@@ -258,7 +258,7 @@ def test_exporting_a_device_that_has_never_synced(tmp_path):
 
     summary = migration.export_bundle(old, bundle, settings={"chunk_size": 50})
     assert summary["counts"] == {
-        "chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0,
+        "chats": 0, "runs": 0, "hashes": 0, "cutoffs": 0, "senders": 0,
     }
 
     result = migration.import_bundle(new, bundle)
@@ -276,7 +276,7 @@ def test_read_manifest_describes_what_will_be_restored(tmp_path):
     manifest = migration.read_manifest(bundle)
     assert manifest["app_version"] == "1.16.0"
     assert manifest["counts"] == {
-        "chats": 2, "runs": 2, "hashes": 4, "cutoffs": 0,
+        "chats": 2, "runs": 2, "hashes": 4, "cutoffs": 0, "senders": 0,
     }
     assert manifest["schema_version"] == migration.BUNDLE_SCHEMA_VERSION
     assert manifest["bundle_id"]
@@ -402,6 +402,52 @@ def test_a_bundle_from_before_cutoffs_existed_still_restores(tmp_path):
     assert result["cutoffs_added"] == 0
     assert result["hashes_added"] == 2
     assert result["settings"] == {"chunk_size": 100}
+
+
+# ---------------------------------------------------------------------------
+# Per-chat sender tallies
+# ---------------------------------------------------------------------------
+
+
+def test_chat_senders_move_with_the_bundle(tmp_path):
+    """Same round trip as a cutoff: the new device ends up with what the old
+    one had recorded, without re-deriving it from the exports again."""
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    db = _device(old)
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 4, "Arjun Mehta": 1}, db_path=db
+    )
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+
+    summary = migration.export_bundle(old, bundle, settings={})
+    assert summary["counts"]["senders"] == 2
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["senders_added"] == 2
+    new_db = new / "data" / "sync_state.db"
+    rows = state.list_chat_senders("chat1", new_db)
+    assert {(r["sender"], r["msg_count"]) for r in rows} == {
+        ("Meera Iyer", 4), ("Arjun Mehta", 1),
+    }
+
+
+def test_a_sender_tally_on_this_device_beats_the_one_in_the_bundle(tmp_path):
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old_db = _device(old)
+    state.record_chat_senders("chat1", {"Meera Iyer": 9}, db_path=old_db)
+    new_db = _device(new)
+    state.record_chat_senders("chat1", {"Meera Iyer": 2}, db_path=new_db)
+    bundle = tmp_path / ("backup" + migration.BUNDLE_SUFFIX)
+    migration.export_bundle(old, bundle, settings={})
+
+    result = migration.import_bundle(new, bundle)
+
+    assert result["senders_added"] == 0
+    rows = state.list_chat_senders("chat1", new_db)
+    assert [(r["sender"], r["msg_count"]) for r in rows] == [("Meera Iyer", 2)]
 
 
 def _tamper(bundle, member, payload):
