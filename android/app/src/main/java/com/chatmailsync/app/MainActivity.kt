@@ -829,6 +829,21 @@ fun ChatMailApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // A name the app works out during a background sync only lands in
+    // selfSenderSource/selfSenderName on the next refreshSelfSender() call --
+    // without this, the masthead Me row and Settings' summary row kept
+    // showing a stale answer until Settings happened to be opened. Same
+    // ON_RESUME pattern as the health-issue effect just above, kept as its
+    // own DisposableEffect rather than folded into that one since the two
+    // recompute unrelated state.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshSelfSender()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // ---- Sync defaults (Phase A5 Home sync controls) -------------------
     // Persisted (AppPrefs), not remember-only — previously reset to "day"/
     // false on every process death, and WatchFolderWorker's auto-sync
@@ -1317,10 +1332,9 @@ fun ChatMailApp(
                         cutoffDate = it
                         AppPrefs.setCutoffDate(context, it)
                     },
-                    selfSenderSummary = selfSenderSummary,
-                    selfSenderDetail = selfSenderDetail,
-                    selfSenderOverride = selfSenderOverride,
-                    onSelfSenderChange = { setSelfSender(it) },
+                    selfSenderSource = selfSenderSource,
+                    selfSenderName = selfSenderName,
+                    onOpenMe = { navController.navigate("me") },
                 )
             }
             composable("importPicker") {
@@ -1422,6 +1436,7 @@ fun ChatMailApp(
                     senders = meSenders,
                     override = selfSenderOverride,
                     onPick = { setSelfSender(it) },
+                    onSave = { setSelfSender(it) },
                     onClear = { setSelfSender("") },
                     onBack = { navController.popBackStack() },
                     backLabel = if (from == "chats") "Chats" else "Home",

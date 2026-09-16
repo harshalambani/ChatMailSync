@@ -15,11 +15,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,10 +53,17 @@ fun MeScreen(
     // which entry -- if any -- is the one currently in force.
     override: String,
     onPick: (String) -> Unit,
+    // The Save button below is the only thing that calls this -- unlike the
+    // old Settings field, nothing here commits on keystroke.
+    onSave: (String) -> Unit,
     onClear: () -> Unit,
     onBack: () -> Unit,
     backLabel: String,
 ) {
+    // Keyed on the stored override, so a name the app works out elsewhere
+    // (or a Clear) replaces what is in the box, while a half-typed name
+    // survives recomposition until Save or a fresh load overwrites it.
+    var nameText by remember(override) { mutableStateOf(override) }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -105,10 +117,27 @@ fun MeScreen(
 
             HorizontalDivider()
 
+            Text("Type your name", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = nameText,
+                    onValueChange = { nameText = it },
+                    label = { Text("Your WhatsApp profile name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = { onSave(nameText) },
+                    enabled = nameText.isNotBlank() && nameText != override,
+                ) { Text("Save") }
+            }
+
+            HorizontalDivider()
+
             Text("Pick a name", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Names seen in your exports so far. Tapping one sets it as an " +
-                    "override, the same as typing it in Settings.",
+                "Names seen in your exports so far. Tapping one sets it, the " +
+                    "same as typing it above.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
