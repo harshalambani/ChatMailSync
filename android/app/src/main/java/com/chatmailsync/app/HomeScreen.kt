@@ -189,6 +189,7 @@ fun HomeScreen(
     // them rather than re-deriving the colour language itself.
     meLabel: String = "",
     meColor: Color = Color.Unspecified,
+    meDescription: String = "",
     onMeClick: () -> Unit = {},
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
@@ -222,6 +223,7 @@ fun HomeScreen(
                 showMe = true,
                 meLabel = meLabel,
                 meColor = meColor,
+                meDescription = meDescription,
                 onMeClick = onMeClick,
             )
         },

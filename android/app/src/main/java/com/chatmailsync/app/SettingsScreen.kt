@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 
@@ -159,15 +161,19 @@ fun SettingsScreen(
             // everybody else's -- so the app works out which name is yours,
             // and that decides which side of the conversation every bubble is
             // drawn on. Getting it wrong does not fail loudly; it produces a
-            // perfectly readable archive of the wrong shape. So it is stated,
-            // with where the answer came from, rather than left to be inferred
-            // from an empty box.
+            // perfectly readable archive of the wrong shape. So the answer is
+            // stated here, its colour carrying which of the three states it
+            // is in, one tap away from the detail and the ways to change it.
             val meDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
             OutlinedButton(
                 onClick = onOpenMe,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp),
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        contentDescription =
+                            selfSenderContentDescription(selfSenderSource, selfSenderName)
+                    },
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

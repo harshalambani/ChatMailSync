@@ -533,18 +533,16 @@ fun ChatMailApp(
     // shared state database, not in preferences, because every part of the
     // app that touches an export needs to reach the same answer -- a
     // disagreement would archive one export two different ways.
-    var selfSenderSummary by remember { mutableStateOf("") }
     var selfSenderDetail by remember { mutableStateOf("") }
     var selfSenderOverride by remember { mutableStateOf("") }
     // The masthead Me row's own inputs: the raw source ("learned" /
     // "unknown" / "override") and the resolved name, fed through
-    // selfSenderDisplay() rather than the summary/detail text above, which
-    // is worded for a settings field, not a 48dp row.
+    // selfSenderDisplay() rather than the detail text above, which is worded
+    // for the Me screen, not a 48dp row.
     var selfSenderSource by remember { mutableStateOf<String?>(null) }
     var selfSenderName by remember { mutableStateOf<String?>(null) }
 
     fun applySelfSender(described: com.chaquo.python.PyObject) {
-        selfSenderSummary = described.callAttr("get", "summary").toString()
         selfSenderDetail = described.callAttr("get", "detail").toString()
         // The stored override, deliberately not the resolved name: filling the
         // box with a name the app worked out would turn it into an override
@@ -1227,6 +1225,7 @@ fun ChatMailApp(
                     onOpenBackup = { navController.navigate("settings") },
                     meLabel = homeMeDisplay.label,
                     meColor = homeMeDisplay.color,
+                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
                     onMeClick = { navController.navigate("me") },
                     lastBackupAt = lastBackupAt,
                     cutoffDate = cutoffDate,
@@ -1265,6 +1264,7 @@ fun ChatMailApp(
                     onImportChat = { pickFile.launch(arrayOf("*/*")) },
                     meLabel = chatsMeDisplay.label,
                     meColor = chatsMeDisplay.color,
+                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
                     onMeClick = { navController.navigate("me") },
                 )
             }
