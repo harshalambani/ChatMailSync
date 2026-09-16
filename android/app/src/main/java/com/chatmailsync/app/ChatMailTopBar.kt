@@ -59,14 +59,23 @@ import androidx.compose.ui.unit.sp
  * surface. Everywhere else — launcher, splash — the mark stands alone
  * with no ring, so do not reuse ic_masthead outside the banner.
  *
- * The band carries two rows, not one: a mark+wordmark(+pill) row on top, and
- * below it a second row for whoever "Me" currently resolves to, wide enough
- * to be its own >=48dp tap target rather than a caption squeezed under the
- * title. 112dp is that two-row band -- not a round number, what the two rows
- * plus the padding between them actually need -- so a later row wanting
- * headroom should get its own space rather than stretching this one again.
+ * The band carries one row on most screens, and two when the Me row is
+ * showing: a mark+wordmark(+pill) row always, and below it a second row for
+ * whoever "Me" currently resolves to, wide enough to be its own >=48dp tap
+ * target rather than a caption squeezed under the title. Screens without the
+ * Me row (every pushed screen, Settings) must not pay for headroom they
+ * never fill, so the band's height switches between [MastheadHeightOneRow]
+ * and [MastheadHeightTwoRows] rather than being fixed at the taller value --
+ * see `meVisible` below, which both the TopAppBar's expandedHeight and the
+ * title box read so they never disagree.
  */
-private val MastheadHeight = 112.dp
+private val MastheadHeightOneRow = 88.dp
+
+/** 112dp is the two-row band -- not a round number, what the mark+wordmark
+ *  row, the Me row, and the padding between them actually need -- so a later
+ *  row wanting headroom should get its own space rather than stretching
+ *  this one again. */
+private val MastheadHeightTwoRows = 112.dp
 
 /**
  * The labelled back affordance: `← Chats`, not a bare arrow.
@@ -244,8 +253,10 @@ fun ChatMailTopBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val labelledBack = backLabel != null && onBack != null
+    val meVisible = !labelledBack && showMe && onMeClick != null
+    val mastheadHeight = if (meVisible) MastheadHeightTwoRows else MastheadHeightOneRow
     TopAppBar(
-        expandedHeight = MastheadHeight,
+        expandedHeight = mastheadHeight,
         // Zero for the same reason the screen Scaffolds are zero: the
         // status-bar strip is already paid for by MainActivity's Scaffold,
         // and paying twice made an 88dp band render nearer 120dp.
@@ -264,8 +275,7 @@ fun ChatMailTopBar(
             // mark+wordmark row, rather than as a second TopAppBar slot --
             // TopAppBar only offers title/navigationIcon/actions, none of
             // which is "a second line the whole band tall enough to hold".
-            val meVisible = !labelledBack && showMe && onMeClick != null
-            Box(modifier = androidx.compose.ui.Modifier.height(MastheadHeight), contentAlignment = Alignment.CenterStart) {
+            Box(modifier = androidx.compose.ui.Modifier.height(mastheadHeight), contentAlignment = Alignment.CenterStart) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

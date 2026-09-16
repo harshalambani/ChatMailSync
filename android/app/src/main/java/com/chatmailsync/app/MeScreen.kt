@@ -99,7 +99,7 @@ fun MeScreen(
 
             if (override.isNotBlank()) {
                 TextButton(onClick = onClear) {
-                    Text("Clear override -- go back to working it out automatically")
+                    Text("Work it out automatically instead")
                 }
             }
 
@@ -115,7 +115,7 @@ fun MeScreen(
 
             if (senders.isEmpty()) {
                 Text(
-                    "No senders yet -- import or sync a chat first.",
+                    "No senders yet - import or sync a chat first.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

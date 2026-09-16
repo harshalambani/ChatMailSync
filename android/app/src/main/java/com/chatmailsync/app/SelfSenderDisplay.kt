@@ -62,7 +62,15 @@ val SelfSenderSource.color: Color
  * something it just said it knows.
  */
 fun selfSenderDisplay(source: String?, name: String?): SelfSenderDisplay {
-    val resolved = selfSenderSourceOf(source)
+    val parsed = selfSenderSourceOf(source)
+    // A LEARNED/OVERRIDE source that names no one isn't actually a known
+    // state -- treat it as UNKNOWN for both the label and the colour, rather
+    // than only patching the label and leaving a mismatched colour behind.
+    val resolved = if (parsed != SelfSenderSource.UNKNOWN && name.isNullOrBlank()) {
+        SelfSenderSource.UNKNOWN
+    } else {
+        parsed
+    }
     val label = when (resolved) {
         SelfSenderSource.LEARNED, SelfSenderSource.OVERRIDE -> name ?: ""
         SelfSenderSource.UNKNOWN -> "Me: not known yet"

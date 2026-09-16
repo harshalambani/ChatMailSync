@@ -272,7 +272,7 @@ fun ChatMailApp(
                         "is gone from version 2.0.0 onwards: its Google sign-in " +
                         "was never verified by Google, so consent expired every " +
                         "7 days and only 100 listed accounts could use it at " +
-                        "all.\n\nNothing already archived is affected -- your " +
+                        "all.\n\nNothing already archived is affected - your " +
                         "chats stay in your mailbox exactly as they are.\n\nTo " +
                         "keep syncing, open Settings > Mail account and connect " +
                         "with an app password instead."
