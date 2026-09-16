@@ -554,10 +554,10 @@ def imap_tls_context() -> "ssl.SSLContext":
     CERT_REQUIRED, which is the part that matters; the explicit floor is
     here because "whatever the default happens to be" is not a promise. On
     current CPython the default already refuses TLS 1.0/1.1, but that is a
-    property of the interpreter the app is built against, and this app ships
-    inside two of them (the portable Windows bundle and Chaquopy) whose
-    versions move independently. Gmail, Yahoo, iCloud and Fastmail have
-    all required 1.2+ for years, so the floor costs no real connection.
+    property of the interpreter the app is built against (Chaquopy on
+    Android), whose version moves independently of this code. Gmail, Yahoo,
+    iCloud and Fastmail have all required 1.2+ for years, so the floor costs
+    no real connection.
     """
     ctx = ssl.create_default_context()
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -963,11 +963,10 @@ def connection_stage_plan() -> list:
     """The five stages a UI can draw *before* the check starts, in order.
 
     A progress list that grows a line at a time hides the one fact that makes
-    it useful -- how much is left -- so both front-ends draw all five greyed
-    out and light them up as check_connection's on_stage callback arrives.
-    This exists so neither front-end has to hardcode the labels: Kotlin reads
-    it over the Chaquopy bridge and Windows imports it, which is what keeps
-    the two apps saying the same five things (PLATFORM-PARITY.md).
+    it useful -- how much is left -- so Android draws all five greyed out
+    and lights them up as check_connection's on_stage callback arrives.
+    This exists so Kotlin does not have to hardcode the labels: it reads
+    them over the Chaquopy bridge instead.
     """
     return [{"name": name, "label": _STAGE_LABELS[name]} for name in CONNECTION_STAGES]
 
@@ -1065,11 +1064,11 @@ def _probe_tls(sock: "socket.socket", host: str) -> None:
 def _emit_stage(on_stage, stage: dict) -> None:
     """Hand one finished stage to the caller's progress listener, if any.
 
-    Duck-typed on purpose, because the two front-ends pass two different kinds
-    of object: Windows passes a plain Python callable, and Android passes a
-    Java object (a Kotlin ``StageListener``) across the Chaquopy bridge, which
-    arrives here as a wrapper that is not callable but does have the method.
-    Three primitives rather than the dict, since a dict crossing that bridge is
+    Duck-typed on purpose, because Android passes a Java object (a Kotlin
+    ``StageListener``) across the Chaquopy bridge, which arrives here as a
+    wrapper that is not callable but does have the method, while other
+    callers pass a plain Python callable. Three primitives rather than the
+    dict, since a dict crossing that bridge is
     a conversion this does not need.
 
     Never raises. A listener is a progress indicator; a broken one must not be
@@ -1246,8 +1245,8 @@ def format_connection_result(result: dict) -> str:
     """A check_connection() dict flattened to one display string.
 
     Split out from check_connection_text so a caller that already has the
-    dict -- gui_worker's Save path, which needs to branch on result["ok"] --
-    gets the same sentence without opening a second connection.
+    dict -- one that needs to branch on result["ok"] -- gets the same
+    sentence without opening a second connection.
     """
     if result.get("ok"):
         return result["message"]
@@ -1258,9 +1257,8 @@ def format_connection_result(result: dict) -> str:
 def check_connection_text(host: str, port: int, email: str, password: str) -> str:
     """check_connection() flattened to one display string.
 
-    Exists so both front-ends render the same words: Kotlin calls this over
-    the Chaquopy bridge and CustomTkinter calls it via gui_worker, rather
-    than each inventing its own phrasing from the dict.
+    Exists so callers render the same words: Kotlin calls this over the
+    Chaquopy bridge rather than inventing its own phrasing from the dict.
     """
     return format_connection_result(check_connection(host, port, email, password))
 
@@ -1741,7 +1739,7 @@ def _print_progress(
 
     No-ops silently unless stderr is an interactive terminal -- see
     :func:`_stderr_is_terminal`. Callers that need progress off a console have
-    ``on_chunk``, which is what the GUI and the Android worker already use.
+    ``on_chunk``, which is what the Android worker already uses.
     """
     if not _stderr_is_terminal():
         return

@@ -6,16 +6,22 @@ is that same mark on the icon's own navy, so the listing and the launcher
 agree. Re-run this script rather than editing the PNGs by hand.
 """
 import os
+import sys
 from PIL import Image, ImageDraw, ImageFont
 
-SRC = 'portable/App/AppInfo/appicon_1024.png'
+# The 1024 source is rendered from the icon geometry rather than read from a
+# PNG: the portable/App/AppInfo/appicon_1024.png this used to read went with
+# the Windows app. Run from the repo root.
+sys.path.insert(0, 'tools')
+from render_icons import draw_logo  # noqa: E402
+
 OUT = 'store/galaxy'
 NAVY = (20, 52, 92)          # sampled from the icon's own field
 WHITE = (255, 255, 255)
 MUTED = (168, 186, 210)
 
 os.makedirs(OUT, exist_ok=True)
-icon = Image.open(SRC).convert('RGBA')
+icon = draw_logo(1024)
 
 # --- 512x512 store icon -----------------------------------------------------
 # One LANCZOS step from the 1024 source. Alpha is kept: the corners are

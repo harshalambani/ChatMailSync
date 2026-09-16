@@ -1,12 +1,10 @@
-"""The FAQ is written three times -- once per help surface -- and hand-kept in
-step. These tests hold the three lists to the same questions in the same order,
-so a question added to one surface and forgotten on the others fails here rather
-than drifting for months.
+"""The FAQ is written twice -- in the app's Help screen and in the user guide --
+and hand-kept in step. These tests hold the two lists to the same questions in
+the same order, so a question added to one surface and forgotten on the other
+fails here rather than drifting for months.
 
-Only the *questions* are compared. The answers are deliberately different: each
-one is written for its own platform (Recycle Bin versus a plain delete, DPAPI
-versus the Android Keystore, a window that must stay open versus a system
-scheduler).
+Only the *questions* are compared; the answers may be worded differently.
+Until 2.1.5 the Windows app's help.html was a third surface (tag windows-final).
 """
 
 from __future__ import annotations
@@ -18,7 +16,6 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-HELP_HTML = REPO / "help.html"
 USER_GUIDE = REPO / "docs" / "user-guide.md"
 HELP_SCREEN = (
     REPO
@@ -38,8 +35,8 @@ def _normalise(question: str) -> str:
     """Compare meaning, not typography.
 
     The same question is spelt with an em-dash on one surface and a hyphen on
-    another, with curly or straight quotes, and with HTML entities in the help
-    file. None of that is a parity failure.
+    another, or with curly or straight quotes. None of that is a parity
+    failure.
     """
     text = html.unescape(question)
     for dash in ("—", "–"):
@@ -50,13 +47,6 @@ def _normalise(question: str) -> str:
         text = text.replace(quote, '"')
     text = re.sub(r"<[^>]+>", "", text)
     return " ".join(text.split()).casefold()
-
-
-def help_html_questions() -> list[str]:
-    body = HELP_HTML.read_text(encoding="utf-8")
-    faq = body[body.index('<dl class="faq">') :]
-    faq = faq[: faq.index("</dl>")]
-    return [_normalise(m) for m in re.findall(r"<dt>(.*?)</dt>", faq, re.S)]
 
 
 def user_guide_questions() -> list[str]:
@@ -83,7 +73,6 @@ def help_screen_questions() -> list[str]:
 
 
 ALL_SURFACES = {
-    "help.html": help_html_questions,
     "docs/user-guide.md": user_guide_questions,
     "HelpScreen.kt": help_screen_questions,
 }
@@ -107,11 +96,8 @@ def test_no_surface_repeats_a_question() -> None:
         assert not duplicates, f"{name} asks the same question twice: {duplicates}"
 
 
-def test_all_three_surfaces_ask_the_same_questions_in_the_same_order() -> None:
-    reference = help_html_questions()
-    for name, getter in ALL_SURFACES.items():
-        assert getter() == reference, (
-            f"{name} has drifted from help.html. Every FAQ question must appear "
-            f"on all three surfaces, in the same order; only the answers are "
-            f"written per platform."
-        )
+def test_both_surfaces_ask_the_same_questions_in_the_same_order() -> None:
+    assert user_guide_questions() == help_screen_questions(), (
+        "docs/user-guide.md has drifted from HelpScreen.kt. Every FAQ question "
+        "must appear on both surfaces, in the same order."
+    )

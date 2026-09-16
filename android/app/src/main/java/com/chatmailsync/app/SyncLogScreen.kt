@@ -74,7 +74,7 @@ data class SyncRunLogEntry(
     val lastSyncedTs: String?,
     /** Finished cleanly and uploaded nothing. Computed in the shared core
      * (state.is_uneventful_run, stamped on by android_api.sync_log) rather
-     * than restated here, so both front-ends fold away the same runs. */
+     * than restated here, so the fold-away logic stays in one place. */
     val uneventful: Boolean,
 )
 
@@ -107,8 +107,7 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
  *
  * Computed in the shared core (state.summarize_recent_runs) rather than by
  * folding [loadSyncLog]'s rows here, so the block on Home can never claim a
- * different history than the log screen it links to -- and so Windows can show
- * the same summary from the same query.
+ * different history than the log screen it links to.
  */
 data class SyncSummary(
     val windowDays: Int,
@@ -143,7 +142,7 @@ fun loadSyncStatus(days: Int = 90): SyncSummary {
 
 /** The one-line summary of what a run moved. A run that uploaded nothing says
  * so in words -- "0 synced, 0 skipped" is the same information and reads as a
- * malfunction. Mirrors gui.py's _run_counts_text. */
+ * malfunction. */
 private fun runCountsText(run: SyncRunLogEntry): String = when {
     run.status == "failed" ->
         if (run.messagesSynced > 0) "${run.messagesSynced} synced before it failed"
@@ -164,8 +163,7 @@ private fun formatRunTimeLong(raw: String?): String {
 
 /** "just now" / "2 hours ago" / "yesterday", falling back to the full date once
  * it is far enough back that a count of days stops meaning anything. Home asks
- * "how long ago?", not "at what time?" -- the log screen answers the second.
- * Mirrors gui.py's _relative_time. */
+ * "how long ago?", not "at what time?" -- the log screen answers the second. */
 internal fun relativeTime(raw: String?): String {
     if (raw == null) return "at an unknown time"
     val then = try {
@@ -240,8 +238,7 @@ internal fun RunStatusDot(status: String) {
 /**
  * Ninety days of sync runs, and a way into any one of them.
  *
- * Two things make it readable rather than merely complete, and both are
- * mirrored one-for-one by the Windows _SyncLogPanel:
+ * Two things make it readable rather than merely complete:
  *
  *  - Routine no-op runs fold away. A watched folder produces one row per chat
  *    per tick whether or not anything moved, and the runs worth finding are
@@ -627,7 +624,7 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
 // internal, not private: the chat detail screen is the same kind of page as
 // this one -- a labelled fact per line under a ruled heading -- and two copies
 // of that is how two detail screens end up with different label weights on the
-// same phone. Windows lifted the same pair onto _Panel for the same reason.
+// same phone.
 @Composable
 internal fun DetailSection(title: String) {
     Text(

@@ -103,9 +103,8 @@ object AppPrefs {
         prefs(context).edit().putStringSet(KEY_IMPORTED_DOC_IDS, current).apply()
     }
 
-    /** "system" (default, follows OS) | "light" | "dark" — mirrors the
-     * Windows GUI's manual light/dark toggle button, which is independent
-     * of the OS theme. */
+    /** "system" (default, follows OS) | "light" | "dark" — a manual
+     * light/dark toggle independent of the OS theme. */
     fun getThemeMode(context: Context): String =
         prefs(context).getString(KEY_THEME_MODE, "system") ?: "system"
 
@@ -147,8 +146,7 @@ object AppPrefs {
     /** "hour" | "day" (default) | "week" — Home's "Split into" picker.
      * Previously Compose `remember`-only state, reset to "day" on every
      * process death, and WatchFolderWorker's auto-sync hardcoded "day"
-     * regardless of what the user had actually picked. Windows mirrors this
-     * via data/.settings.json's chunk_size. */
+     * regardless of what the user had actually picked. */
     fun getChunkSize(context: Context): String =
         prefs(context).getString(KEY_CHUNK_SIZE, "day") ?: "day"
 
@@ -160,8 +158,7 @@ object AppPrefs {
      *
      * "" rather than null so it matches what src/state.py's normalise_cutoff
      * already treats as "no floor", and so the value can be handed straight to
-     * Python without a null check inventing a second spelling of nothing.
-     * Windows mirrors this via data/.settings.json's cutoff_date. */
+     * Python without a null check inventing a second spelling of nothing. */
     fun getCutoffDate(context: Context): String =
         prefs(context).getString(KEY_CUTOFF_DATE, "") ?: ""
 
@@ -211,8 +208,9 @@ object AppPrefs {
         getSavedMailBackend(context) == LEGACY_MAIL_BACKEND_GMAIL_OAUTH ||
             getConnectedAccountEmail(context) != null
 
-    /** One-time notice latch, twin of gui.py's "oauth_removed_notice_shown"
-     * setting. Only someone who actually had Google sign-in ever sees it. */
+    /** One-time notice latch. Until 2.1.5 the Windows app's gui.py had a twin
+     * "oauth_removed_notice_shown" setting. Only someone who actually had
+     * Google sign-in ever sees it. */
     fun wasOauthRemovedNoticeShown(context: Context): Boolean =
         prefs(context).getBoolean(KEY_OAUTH_REMOVED_NOTICE_SHOWN, false)
 
@@ -348,8 +346,8 @@ object AppPrefs {
 
     /** Clears every saved IMAP field, including the Keystore-encrypted
      * password — used by Settings' "Forget saved password". Does not touch
-     * mail_backend itself, matching Windows' equivalent Disconnect (which
-     * only clears credentials, leaving the backend selection as-is). */
+     * mail_backend itself: only credentials are cleared, leaving the backend
+     * selection as-is. */
     fun clearImapSettings(context: Context) {
         prefs(context).edit()
             .remove(KEY_IMAP_PROVIDER)

@@ -4,18 +4,6 @@
 #
 #    pip-compile --generate-hashes --output-file=requirements-lock.txt requirements.txt
 #
-customtkinter==6.0.0 \
-    --hash=sha256:704fcbf1d2fca06bd7881b0afacfae72aed9864c9b6de2870e632e55eb3a0456 \
-    --hash=sha256:c782df167bc64ab3fc3140286df06967ac2de4dcc97dd5958426fe9c1a98057b
-    # via -r requirements.txt
-darkdetect==0.8.0 \
-    --hash=sha256:a7509ccf517eaad92b31c214f593dbcf138ea8a43b2935406bbd565e15527a85 \
-    --hash=sha256:b5428e1170263eb5dea44c25dc3895edd75e6f52300986353cd63533fe7df8b1
-    # via customtkinter
-packaging==26.2 \
-    --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e \
-    --hash=sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661
-    # via customtkinter
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
     --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
@@ -24,7 +12,3 @@ six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
     # via python-dateutil
-tkinterdnd2==0.5.0 \
-    --hash=sha256:37a904a384a1f78be850daab9bf2da8c7b4769b3d3d49f48810d4218855568d2 \
-    --hash=sha256:a9356e01ea5e91879f48dadfeaa962e2a8343081a461a01e37ea6978fae0059e
-    # via -r requirements.txt

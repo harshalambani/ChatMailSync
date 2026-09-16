@@ -102,7 +102,7 @@ def test_resolve_mail_backend_defaults_to_imap_and_honours_anything_else(tmp_pat
 
 
 def test_default_root_falls_back_to_project_dir_when_no_override():
-    # No set_root() call in this test — exercises the untouched Windows
+    # No set_root() call in this test — exercises the untouched
     # default path (CHATMAILSYNC_ROOT env var / __file__-relative fallback).
     assert config.PROJECT_ROOT == Path(config.__file__).parent.parent
 
@@ -150,8 +150,8 @@ def test_env_root_uses_chatmailsync_root_and_ignores_the_legacy_name(
 # ---------------------------------------------------------------------------
 # is_gmail_mailbox / mailbox_clear_steps
 #
-# These two exist so gui.py and cli.py cannot give contradictory instructions
-# for the same destructive action (reset), and because getting the Gmail case
+# These two exist so every surface gives the same instructions for the same
+# destructive action (reset), and because getting the Gmail case
 # wrong is worse than saying nothing: Gmail has no folders, only labels, so
 # "delete the folder" unlabels every message and leaves it in All Mail. The
 # user then truthfully answers "yes, I deleted it" and the next sync

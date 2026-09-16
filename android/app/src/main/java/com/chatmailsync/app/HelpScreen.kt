@@ -30,11 +30,11 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Kept in sync with the Windows edition's help.html by hand for now — a
-// shared-markdown generator (per the screen-guides doc §9) is future work,
-// not justified for this single FAQ screen yet. The questions, and their
-// order, are the same on all three surfaces (this screen, help.html and
-// docs/user-guide.md); only the answers are written per platform.
+// Kept in sync with docs/user-guide.md by hand for now — a shared-markdown
+// generator (per the screen-guides doc §9) is future work, not justified for
+// this single FAQ screen yet. The questions, and their order, are the same on
+// both surfaces (this screen and docs/user-guide.md); only the answers may be
+// worded differently.
 internal val FAQ = listOf(
     "How do I export a chat from WhatsApp?" to
         "Open the chat in WhatsApp -> tap the three-dot menu -> More -> Export chat. " +
@@ -67,9 +67,7 @@ internal val FAQ = listOf(
     "Where is my email app password kept?" to
         "Encrypted on this device, with a key held in the Android Keystore that never leaves the " +
         "phone's secure hardware. It's never written into the app's settings, never shown in the " +
-        "password box again after you save it, and never included in any log or error message. " +
-        "(The Windows edition does the same thing with Windows DPAPI, tied to your Windows account " +
-        "on that PC.)",
+        "password box again after you save it, and never included in any log or error message.",
     "The app says \"Not connected\", or authorising fails." to
         "Open Settings -> Mail account and check the host, port and email address, then enter " +
         "your app password again and save. The app password is the usual culprit — providers " +
@@ -90,12 +88,11 @@ internal val FAQ = listOf(
         "school (Microsoft 365) accounts lost basic authentication first, and personal " +
         "Outlook.com, Hotmail, Live and MSN accounts followed in September 2024 — so a Microsoft " +
         "mailbox cannot be used as the destination at all.",
-    "I moved the app to another PC, or set it up on a new phone, and it wants the password again." to
+    "I set the app up on a new phone, and it wants the password again." to
         "That's expected, not a fault. The saved password is encrypted with a key tied to this " +
         "device's Keystore, so it doesn't travel to a new phone and doesn't survive uninstalling " +
         "the app — which is also why nobody who picks up the phone's files can read it. The " +
-        "password is still valid at your provider: enter it again in Settings -> Mail account. " +
-        "The same is true of the Windows edition on a new PC or a different Windows user.",
+        "password is still valid at your provider: enter it again in Settings -> Mail account.",
     "My file doesn't show up in the inbox." to
         "Only .txt and .zip files are accepted. Make sure you exported the chat itself (not a " +
         "screenshot or a contact card), and that the share or the import actually completed — a " +
@@ -167,9 +164,7 @@ internal val FAQ = listOf(
         "left alone — and a file is only ever picked up once, so re-checking costs you nothing. " +
         "Your original is never touched at import time; the \"After import\" setting only takes " +
         "effect once the file has actually reached your mailbox, so a sync that fails or that you " +
-        "stop leaves everything where it was. The Windows edition has the same feature with one " +
-        "difference worth knowing: it can only check while the app is open, and its \"delete\" " +
-        "option sends the file to the Recycle Bin rather than erasing it.",
+        "stop leaves everything where it was.",
     "How do I make it sync on a schedule?" to
         "The watched folder is the schedule — there is no separate \"sync every N hours\" setting, " +
         "because with nothing new in the inbox there would be nothing to do. Point Settings -> " +
@@ -180,8 +175,8 @@ internal val FAQ = listOf(
         "\"exactly\" — the system delays and batches background work to save power, so hourly means " +
         "roughly hourly. The scan needs no network; the sync it triggers does, so an offline tick " +
         "imports the files and leaves them in the inbox for the next run. \"Check and sync\" always runs " +
-        "immediately regardless of the schedule. Unlike the Windows edition, this one keeps checking " +
-        "with the app closed — that is what the system scheduler is for.",
+        "immediately regardless of the schedule. It keeps checking with the app closed — that is " +
+        "what the system scheduler is for.",
     "The schedule stopped running on its own. Why?" to
         "Almost always battery optimisation: Android has put the app to sleep, and a sleeping app " +
         "gets no background ticks. Exempt it once. Stock Android: Settings -> Apps -> Chat Mail " +
@@ -192,8 +187,7 @@ internal val FAQ = listOf(
         "rarely. Xiaomi, Oppo, Vivo and OnePlus also keep a separate \"Autostart\" permission — " +
         "without it background work stops after a reboot. None of this affects manual syncs or " +
         "\"Check and sync\", which run in the foreground while you are watching; it only affects " +
-        "unattended checks. (On Windows the equivalent limit is simpler: the check only runs while " +
-        "the app is open.)",
+        "unattended checks.",
     "Can I stop it sending messages from before a certain date?" to
         "Yes. Settings -> Cutoff date takes a day, and nothing older than it is ever sent. It is a " +
         "floor and not a window: there is no matching \"to\" date, because the whole job of this app " +
@@ -214,16 +208,15 @@ internal val FAQ = listOf(
         "mailbox. That record belongs to this instance of the app, though, not to your mailbox — " +
         "see the next answer.",
     "Can two instances of the app archive into the same mailbox?" to
-        "They can, but they will not know about each other and you will get duplicates. This is not " +
-        "about Android versus Windows: any two instances behave this way — two phones, two PCs, one " +
-        "of each, or two copies of the portable Windows app in different folders. The record of what " +
-        "has been archived belongs to the instance that did the archiving; nothing about it is stored " +
+        "They can, but they will not know about each other and you will get duplicates. Any two " +
+        "instances behave this way — two phones, or two separate installs on the same phone. The " +
+        "record of what has been archived belongs to the instance that did the archiving; nothing about it is stored " +
         "in the mailbox. A second instance signed in to the same account starts from zero knowledge " +
         "and re-files every chat you give it. This app can add mail but never remove it, so clearing " +
         "the duplicates afterwards is manual work. Use one instance per mailbox, or give each its own " +
         "account. Replacing an instance is a different case: carry the sync state across and the new " +
         "one continues where the old one stopped -- see the next answer.",
-    "I am moving to a new PC or phone. How do I take my history with me?" to
+    "I am moving to a new phone. How do I take my history with me?" to
         "Settings -> Backup & restore -> \"Save a backup\". It writes a small file holding the " +
         "record of what has already been sent, plus your preferences; pick anywhere you like to " +
         "put it, and get it to the new phone however you normally move a file. On the new phone, " +
@@ -231,11 +224,10 @@ internal val FAQ = listOf(
         "sync. Your chats themselves are not in that file and do not need to be: they are already " +
         "in your mailbox, which is the archive. What the backup saves you is a second copy of all " +
         "of them landing there. Your mail password is deliberately not included, so the new phone " +
-        "asks for it once. A backup taken on Windows restores on Android and the other way round, " +
-        "and restoring merges rather than replaces, so a restore onto a phone that has already " +
-        "synced something keeps both sides. Restoring the same backup twice does nothing the " +
-        "second time. You will still need to re-import the export files you want to keep syncing " +
-        "from.",
+        "asks for it once. Restoring merges rather than replaces, so a restore onto a phone that " +
+        "has already synced something keeps both sides. Restoring the same backup twice does " +
+        "nothing the second time. You will still need to re-import the export files you want to " +
+        "keep syncing from.",
     "What happens if I reinstall the app or reset my device?" to
         "Your chats are safe either way: they are in your mailbox, and nothing that happens on this " +
         "phone can take them out of it. What a reset, an uninstall or \"Clear data\" destroys is the " +
@@ -243,9 +235,9 @@ internal val FAQ = listOf(
         "second time, into a mailbox that has no way to tell the copies apart. Two things stand " +
         "between you and that. Android's own backup now includes this app, so a restore from Google " +
         "One or Smart Switch brings the record back by itself. And Settings -> Backup & restore -> " +
-        "\"Save a backup\" writes the same record to a file you keep yourself -- the only route that " +
-        "works between Android and Windows, and the only one whose timing is up to you. Keep a recent " +
-        "one. Your mail password is in neither: it never leaves this phone's Keystore, so you enter " +
+        "\"Save a backup\" writes the same record to a file you keep yourself -- the only route " +
+        "whose timing is up to you. Keep a recent one. Your mail password is in neither: it never " +
+        "leaves this phone's Keystore, so you enter " +
         "it once after any restore.",
     "The sync said some media was \"too large to email\"." to
         "Every provider caps how big one email can be — 25 MB at Gmail and Yahoo, 20 MB at " +
@@ -263,8 +255,7 @@ internal val FAQ = listOf(
         "have gone out, whether a mail thread already exists for it and which export file it came " +
         "from — with the same three actions on it: sync just that one chat, reset it, or " +
         "delete it from the list. \"Sync just this chat\" runs a normal sync limited to that " +
-        "one chat instead of everything waiting in the inbox. The Windows app has the same screen: " +
-        "click a chat's row in the list.",
+        "one chat instead of everything waiting in the inbox.",
     "I want to re-do a chat from scratch. What does Reset do?" to
         "It clears this app's local record of what's been synced for that chat. It does NOT delete " +
         "anything already in your mailbox — this app can only add mail, never remove it. The next " +
@@ -304,9 +295,9 @@ internal val FAQ_LINKS = mapOf(
  * An answer with its known links made tappable.
  *
  * The FAQ entries stay plain strings -- they are compared question-for-question
- * against help.html and docs/user-guide.md by tests/test_faq_parity.py, and an
- * AnnotatedString in the table would put Compose markup into text that two
- * other surfaces have to match.
+ * against docs/user-guide.md by tests/test_faq_parity.py, and an
+ * AnnotatedString in the table would put Compose markup into text that the
+ * other surface has to match.
  */
 internal fun linkify(text: String): AnnotatedString = buildAnnotatedString {
     var rest = text

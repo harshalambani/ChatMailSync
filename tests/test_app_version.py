@@ -1,9 +1,8 @@
-"""Tests for src/app_version.py -- the version shown in the desktop UI.
+"""Tests for src/app_version.py -- the version string written into the mail index.
 
 The thing worth protecting here is the failure mode, not the happy path. The
 Android settings screen hardcoded "(dev build)" and kept saying it on a
-release-signed 1.0.1; the desktop equivalent must never invent a number it
-cannot read. So most of these assert that a missing, unreadable or malformed
+release-signed 1.0.1; this reader must never invent a number it cannot read. So most of these assert that a missing, unreadable or malformed
 appinfo.ini produces "development build" rather than something plausible.
 """
 
@@ -43,8 +42,8 @@ def test_reads_display_version(tmp_path):
 
 def test_prefers_display_version_over_package_version(tmp_path):
     """PackageVersion is the 4-part installer form (1.0.1.0) and appears first
-    in the file. DisplayVersion is what build_portable.ps1 treats as the source
-    of truth and what a user recognises from the release page."""
+    in the file. DisplayVersion is the three-part form a user recognises from
+    the release page."""
     assert app_version.read_display_version(_write_ini(tmp_path, APPINFO)) == "1.0.1"
 
 
@@ -125,12 +124,3 @@ def test_both_frozen_layouts(tmp_path, monkeypatch, layout):
     monkeypatch.setattr(sys, "executable", str(exe_dir / "ChatMailSync.exe"))
 
     assert app_version.app_version() == "1.0.1"
-
-
-def test_shipped_appinfo_is_parseable():
-    """Guards the real file, not a fixture. If someone edits appinfo.ini into a
-    shape this cannot read, the app would silently say "development build" on a
-    release build -- exactly the confidently-wrong display this replaced."""
-    shipped = Path(__file__).parent.parent / "portable" / "App" / "AppInfo" / "appinfo.ini"
-    assert shipped.exists(), "portable/App/AppInfo/appinfo.ini is missing"
-    assert app_version.read_display_version(shipped) is not None

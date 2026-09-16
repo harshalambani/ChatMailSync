@@ -39,8 +39,8 @@ import java.io.File
  *     app that never receives another update.
  *
  * If you are here because this test failed: it is not asking you to update the
- * expected value. See PLATFORM-PARITY.md's P3 entry for the migration path a
- * rename would need first.
+ * expected value. A rename would need a real migration path worked out first,
+ * not just an updated assertion.
  */
 class FrozenIdentifiersTest {
 

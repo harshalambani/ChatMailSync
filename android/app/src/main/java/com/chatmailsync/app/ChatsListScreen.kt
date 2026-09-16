@@ -100,9 +100,8 @@ fun loadChatSummaries(): List<ChatSummary> {
  * name containing `"` would otherwise silently corrupt the CSV. */
 private fun csvField(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 
-/** Mirrors the Windows GUI's footer stats label (gui.py _footer_stats_label)
- * — "N chats · M messages synced · last sync ...". Android's Chats tab had
- * no equivalent aggregate summary. */
+/** The Chats tab's footer stats label — "N chats · M messages synced · last
+ * sync ...". */
 fun formatFooterStats(chats: List<ChatSummary>): String {
     val totalChats = chats.size
     val totalMsgs = chats.sumOf { it.messagesSynced }
@@ -120,15 +119,15 @@ fun formatFooterStats(chats: List<ChatSummary>): String {
 
 /** The three states the dot distinguishes, and the words that go with them.
  *
- * Three, not four: the Windows list has a separate amber for "pending", but
- * "pending" here only ever means a run that started and did not record a
- * finish, which from the outside is indistinguishable from never having
- * synced -- the chat is not in the mailbox either way, and the fix is the
- * same. Four colours would be four things to learn for three outcomes. */
+ * Three, not four: "pending" here only ever means a run that started and did
+ * not record a finish, which from the outside is indistinguishable from
+ * never having synced -- the chat is not in the mailbox either way, and the
+ * fix is the same. Four colours would be four things to learn for three
+ * outcomes. */
 internal enum class ChatStatus(
     val description: String,
     /** On the filter chip, where the column is narrow and the word sits next
-     * to a count. Same four labels as the Windows chip row. */
+     * to a count. */
     val chipLabel: String,
     /** Answers "why is this list empty?" in that chip's own terms -- "No
      * chats archived yet" under a [Failed (0)] chip, on an inbox holding
@@ -146,10 +145,9 @@ internal fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunSta
     else -> ChatStatus.NOT_SYNCED
 }
 
-/** The row's at-a-glance state, matching the dot the Windows list has had
- * since _add_chat_row -- this gap ran Android-ward. Colour alone would fail
- * anyone who cannot separate the green from the red, so the same three words
- * are also on the status line and in the content description. */
+/** The row's at-a-glance state. Colour alone would fail anyone who cannot
+ * separate the green from the red, so the same three words are also on the
+ * status line and in the content description. */
 @Composable
 internal fun StatusDot(lastRunStatus: String?) {
     val status = chatStatusOf(lastRunStatus)
@@ -183,9 +181,8 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
     val context = LocalContext.current
 
     // Most-recently-synced first (get_sync_summary's own SQL orders by
-    // display_name, shared with the Windows CLI status command — resorting
-    // here client-side, rather than in the shared query, keeps that command
-    // unaffected).
+    // display_name — resorting here client-side, rather than in the shared
+    // query, keeps other callers of that query unaffected).
     fun refresh() {
         chats = loadChatSummaries().sortedByDescending { it.lastRunAt ?: "" }
     }
@@ -285,9 +282,7 @@ fun ChatsListScreen(onOpenChat: (String) -> Unit, onImportChat: () -> Unit) {
                 )
                 // Counts on the chips answer the question without a tap in
                 // most cases; the chips themselves are for the rest. One
-                // scrolling row here -- the Windows panel is a fixed 236dp and
-                // lays the same four out 2x2, which is a geometry difference,
-                // not a wording one.
+                // scrolling row of four, rather than a fixed grid.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

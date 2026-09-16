@@ -1,10 +1,8 @@
 """Tests for the shared progress model (src/progress.py).
 
-Both front-ends render from ProgressState now instead of each deriving its
-own labels from the raw event stream, so the strings and the bar rules are
-worth pinning here rather than only inside the Windows GUI tests: a change
-that reads fine on one platform has to survive on the other, and this is the
-file that says what both of them will show.
+Android renders from ProgressState instead of deriving its own labels from
+the raw event stream, so the strings and the bar rules are worth pinning
+here: this is the file that says what the app will show.
 """
 
 import types

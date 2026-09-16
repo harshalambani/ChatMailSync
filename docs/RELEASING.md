@@ -32,19 +32,13 @@ Read these before anything else. Neither is recoverable.
 ## Before the release
 
 - [ ] Working tree clean, on `main`, everything intended is merged.
-- [ ] Bump the version in **both** places, they are not linked:
-      `android/app/build.gradle.kts` (`versionCode` **and** `versionName`) and
-      `portable/App/AppInfo/appinfo.ini` (`PackageVersion` is four-part,
-      `DisplayVersion` is three).
+- [ ] Bump `android/app/build.gradle.kts` - `versionCode` **and** `versionName`.
 - [ ] Python suite green: `python -m pytest tests/ -q` (PowerShell - it is
       denied under Bash here).
 - [ ] Android suite green: `cd android && ./gradlew.bat :app:testDebugUnitTest
       --console=plain`.
-- [ ] FAQ parity still holds - `tests/test_faq_parity.py` covers `help.html`,
-      `docs/user-guide.md` and `HelpScreen.kt`. `portable/help.html` is not a
-      parity surface.
-- [ ] If any user-visible behaviour changed, both front-ends changed. See
-      `PLATFORM-PARITY.md`; this is a rule, not a preference.
+- [ ] FAQ parity still holds - `tests/test_faq_parity.py` covers
+      `docs/user-guide.md` and `HelpScreen.kt`.
 
 ## Build
 
@@ -55,15 +49,14 @@ Read these before anything else. Neither is recoverable.
       `C:/Android/Sdk/build-tools/36.0.0/aapt2.exe dump badging <apk>`
       (`aapt2`, not `aapt` - `aapt` silently prints nothing).
       Check package, `versionCode`, `versionName`.
-- [ ] Windows portable: `.\build_portable.ps1 -Installer -Zip`.
-      Never `-SeedCredentials`, never `-InstallCert`, and never zip
-      `dist\ChatMailSyncPortable` by hand - it carries real credentials and
-      real chats in `Data\`.
+
+The Windows portable build ended at 2.1.5 (tag `windows-final`); releases are
+APK-only from 2.2.0.
 
 ## Publish
 
 - [ ] Tag and push: `git tag vX.Y.Z && git push --tags`.
-- [ ] GitHub release with the APK and the portable artifacts attached.
+- [ ] GitHub release with the APK attached.
       Use `gh release create ... --notes-file` - `--body-file` is rejected.
       `gh` is on the PowerShell PATH only.
 - [ ] This is the whole release for **Obtainium** users. It reads the GitHub

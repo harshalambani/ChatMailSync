@@ -1,24 +1,23 @@
 """One definition of "what a sync looks like while it runs".
 
-Both front-ends watch the same event stream (see ``ProgressSyncManager`` in
-src/sync_manager.py for who emits what), and until now both *interpreted* it
-separately: gui.py's ``_handle_sync_event`` built one set of labels and one
-monotonic fraction, and SyncWorker.kt's ``progressText`` / ``eventFraction`` /
-``milestoneText`` built another from the same events. They were written to
-match, and they drifted anyway -- which is exactly what "the progress bar
-functionality is not the same as the android app" was reporting.
+Android watches the event stream that ``ProgressSyncManager`` in
+src/sync_manager.py emits. Until 2.1.5 a Windows build watched the same
+stream and *interpreted* it separately from Android: gui.py's
+``_handle_sync_event`` built one set of labels and one monotonic fraction,
+while SyncWorker.kt's ``progressText`` / ``eventFraction`` / ``milestoneText``
+built another from the same events. They were written to match, and they
+drifted anyway -- which is exactly what "the progress bar functionality is
+not the same as the android app" was reporting at the time.
 
 So the interpretation lives here, once, in the shared core: feed raw events
 in, read a ``ProgressState`` out. Kotlin reads the finished fields through
-``android_api.progress_state()`` rather than restating the rules, and gui.py
-drives its bar and label from the same object. A wording change now happens
-in one place and lands on both platforms in the same commit, which is what
-PLATFORM-PARITY.md asks for.
+``android_api.progress_state()`` rather than restating the rules, so a
+wording change now happens in one place and reaches every consumer in the
+same commit.
 
 The vocabulary deliberately stays small -- phase, the chat being worked on,
-how far along, and one line of text -- because that is all either front-end
-needs to render, from a full-screen progress view down to Android's
-collapsed one-line bar.
+how far along, and one line of text -- because that is all Android needs to
+render, from a full-screen progress view down to its collapsed one-line bar.
 """
 
 from __future__ import annotations
@@ -65,8 +64,8 @@ class ProgressState:
 
     @property
     def line(self) -> str:
-        """headline and detail as the single line both front-ends have
-        always shown ("Syncing: Alice — 128 / 500 messages")."""
+        """headline and detail as the single line the app has always shown
+        ("Syncing: Alice — 128 / 500 messages")."""
         return f"{self.headline} — {self.detail}" if self.detail else self.headline
 
     @property
