@@ -179,6 +179,7 @@ fun ChatsListScreen(
     // them rather than re-deriving the colour language itself.
     meLabel: String = "",
     meColor: Color = Color.Unspecified,
+    meDescription: String = "",
     onMeClick: () -> Unit = {},
 ) {
     var chats by remember { mutableStateOf(listOf<ChatSummary>()) }
@@ -252,6 +253,7 @@ fun ChatsListScreen(
                 showMe = true,
                 meLabel = meLabel,
                 meColor = meColor,
+                meDescription = meDescription,
                 onMeClick = onMeClick,
                 actions = {
                     IconButton(onClick = { refresh() }) {

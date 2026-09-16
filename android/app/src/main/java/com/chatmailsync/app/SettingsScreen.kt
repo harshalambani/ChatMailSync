@@ -10,13 +10,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 
@@ -92,20 +98,15 @@ fun SettingsScreen(
     migrationStatus: String?,
     cutoffDate: String = "",
     onCutoffDateChange: (String) -> Unit = {},
-    selfSenderSummary: String = "",
-    selfSenderDetail: String = "",
-    selfSenderOverride: String = "",
-    onSelfSenderChange: (String) -> Unit = {},
+    selfSenderSource: String? = null,
+    selfSenderName: String? = null,
+    onOpenMe: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // What is on screen, which is not the same as what is saved: a
     // half-typed "2026-0" is neither a cutoff nor a mistake yet, so it lives
     // here and only reaches the preference once it reads as a date.
     var cutoffText by remember { mutableStateOf(cutoffDate) }
-    // Keyed on what was loaded, so a name the app works out while this screen
-    // is open replaces what is in the box -- but a half-typed name does not
-    // get thrown away on every recomposition.
-    var selfSenderText by remember(selfSenderOverride) { mutableStateOf(selfSenderOverride) }
     var themeMenuOpen by remember { mutableStateOf(false) }
     var intervalMenuOpen by remember { mutableStateOf(false) }
     var policyMenuOpen by remember { mutableStateOf(false) }
@@ -160,38 +161,34 @@ fun SettingsScreen(
             // everybody else's -- so the app works out which name is yours,
             // and that decides which side of the conversation every bubble is
             // drawn on. Getting it wrong does not fail loudly; it produces a
-            // perfectly readable archive of the wrong shape. So it is stated,
-            // with where the answer came from, rather than left to be inferred
-            // from an empty box.
-            Text("Your messages", style = MaterialTheme.typography.titleMedium)
-            Text(
-                selfSenderSummary,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                selfSenderDetail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = selfSenderText,
-                    onValueChange = {
-                        selfSenderText = it
-                        // Committed as typed. There is no Save button on this
-                        // screen, and unlike the cutoff there is no shape a
-                        // name has to take, so there is nothing to withhold it
-                        // for.
-                        onSelfSenderChange(it)
+            // perfectly readable archive of the wrong shape. So the answer is
+            // stated here, its colour carrying which of the three states it
+            // is in, one tap away from the detail and the ways to change it.
+            val meDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+            OutlinedButton(
+                onClick = onOpenMe,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        contentDescription =
+                            selfSenderContentDescription(selfSenderSource, selfSenderName)
                     },
-                    label = { Text("Your WhatsApp profile name") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = { selfSenderText = ""; onSelfSenderChange("") },
-                    enabled = selfSenderText.isNotEmpty(),
-                ) { Text("Clear") }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Your messages", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            meDisplay.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = meDisplay.color,
+                        )
+                    }
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                }
             }
 
             HorizontalDivider()

@@ -189,12 +189,13 @@ private fun ConnectionPill(status: ConnectionStatus) {
  * Its own >=48dp tap target, not a caption squeezed under the title -- this
  * is the same information Settings used to be the only place to find, so it
  * earns a real touch target rather than a label that merely happens to be
- * clickable. [label] and [color] come from [selfSenderDisplay], the one
- * place that derives them, so this row never re-derives the colour language
- * on its own.
+ * clickable. [label] and [color] come from [selfSenderDisplay], and
+ * [description] from [selfSenderContentDescription] -- the two places that
+ * derive them, so this row never re-derives the colour or spoken language on
+ * its own.
  */
 @Composable
-private fun MeRow(label: String, color: Color, onClick: () -> Unit) {
+private fun MeRow(label: String, color: Color, description: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -202,7 +203,7 @@ private fun MeRow(label: String, color: Color, onClick: () -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = "Open Me", onClick = onClick)
-            .semantics { contentDescription = label },
+            .semantics { contentDescription = description },
     ) {
         Text(
             label,
@@ -248,6 +249,11 @@ fun ChatMailTopBar(
     showMe: Boolean = false,
     meLabel: String = "",
     meColor: Color = Color.Unspecified,
+    // The spoken counterpart of meLabel/meColor -- from
+    // selfSenderContentDescription(), the same single source the caller
+    // already uses for the label and colour, so this row and Settings' row
+    // never drift into saying this two different ways.
+    meDescription: String = "",
     onMeClick: (() -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
@@ -322,7 +328,7 @@ fun ChatMailTopBar(
                         }
                         if (showConnection) ConnectionPill(ConnectionState.current)
                     }
-                    if (meVisible) MeRow(meLabel, meColor, onMeClick!!)
+                    if (meVisible) MeRow(meLabel, meColor, meDescription, onMeClick!!)
                 }
             }
         },

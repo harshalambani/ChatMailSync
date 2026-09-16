@@ -62,18 +62,44 @@ val SelfSenderSource.color: Color
  * something it just said it knows.
  */
 fun selfSenderDisplay(source: String?, name: String?): SelfSenderDisplay {
-    val parsed = selfSenderSourceOf(source)
-    // A LEARNED/OVERRIDE source that names no one isn't actually a known
-    // state -- treat it as UNKNOWN for both the label and the colour, rather
-    // than only patching the label and leaving a mismatched colour behind.
-    val resolved = if (parsed != SelfSenderSource.UNKNOWN && name.isNullOrBlank()) {
-        SelfSenderSource.UNKNOWN
-    } else {
-        parsed
-    }
+    val resolved = resolveSelfSenderSource(source, name)
     val label = when (resolved) {
         SelfSenderSource.LEARNED, SelfSenderSource.OVERRIDE -> name ?: ""
         SelfSenderSource.UNKNOWN -> "Me: not known yet"
     }
     return SelfSenderDisplay(label, resolved.color)
+}
+
+// A LEARNED/OVERRIDE source that names no one isn't actually a known state --
+// shared by [selfSenderDisplay] and [selfSenderContentDescription] so both
+// treat it as UNKNOWN, rather than one patching its own text and leaving the
+// other mismatched.
+private fun resolveSelfSenderSource(source: String?, name: String?): SelfSenderSource {
+    val parsed = selfSenderSourceOf(source)
+    return if (parsed != SelfSenderSource.UNKNOWN && name.isNullOrBlank()) {
+        SelfSenderSource.UNKNOWN
+    } else {
+        parsed
+    }
+}
+
+/**
+ * The spoken counterpart of [selfSenderDisplay]: the label there carries its
+ * state by colour alone (a bare name for LEARNED and OVERRIDE, distinguished
+ * only by an off-white vs. an amber), which a screen reader can't voice and a
+ * colour-blind reader can't see. This spells the state out in words instead,
+ * e.g. "Your messages: Meera Iyer, worked out automatically",
+ * "Your messages: Meera Iyer, set by you", or "Your messages: not known yet".
+ *
+ * Lives here rather than at each call site so the masthead row and the
+ * Settings row never drift into saying this two different ways -- the same
+ * reason [selfSenderDisplay] and its colour are single-sourced in this file.
+ */
+fun selfSenderContentDescription(source: String?, name: String?): String {
+    val resolved = resolveSelfSenderSource(source, name)
+    return when (resolved) {
+        SelfSenderSource.LEARNED -> "Your messages: ${name ?: ""}, worked out automatically"
+        SelfSenderSource.OVERRIDE -> "Your messages: ${name ?: ""}, set by you"
+        SelfSenderSource.UNKNOWN -> "Your messages: not known yet"
+    }
 }
