@@ -1,6 +1,7 @@
 package com.chatmailsync.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -33,6 +34,15 @@ class TabForRouteTest {
         assertEquals("chats", tabForRoute("chat/Some%20Chat"))
         assertEquals("settings", tabForRoute("mailAccount"))
         assertEquals("settings", tabForRoute("help"))
+        // D8: Advanced settings is reachable only from Settings' own
+        // "Advanced" row, so it lights the same tab Settings does.
+        assertEquals("settings", tabForRoute("advancedSettings"))
+    }
+
+    @Test
+    fun `advanced settings does not light a different or missing tab`() {
+        assertNotEquals("home", tabForRoute("advancedSettings"))
+        org.junit.Assert.assertNotNull(tabForRoute("advancedSettings"))
     }
 
     @Test

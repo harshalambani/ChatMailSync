@@ -23,8 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -212,13 +210,6 @@ private fun SyncStatusBlock(summary: SyncSummary, onOpenSyncLog: () -> Unit) {
     }
 }
 
-private val CHUNK_SIZES = listOf("hour", "day", "week")
-private val CHUNK_LABELS = mapOf(
-    "hour" to "Hourly emails",
-    "day" to "Daily emails",
-    "week" to "Weekly emails",
-)
-
 @Composable
 fun HomeScreen(
     accountLabel: String?,
@@ -229,8 +220,6 @@ fun HomeScreen(
     onImportPick: () -> Unit,
     onPreview: (String) -> String,
     onRemoveFile: (String) -> Unit,
-    chunkSize: String,
-    onChunkSizeChange: (String) -> Unit,
     dryRunDefault: Boolean,
     onDryRunDefaultChange: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
@@ -270,7 +259,6 @@ fun HomeScreen(
         }
     }
     var previewText by remember { mutableStateOf<String?>(null) }
-    var chunkMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
@@ -482,25 +470,7 @@ fun HomeScreen(
 
                     HorizontalDivider()
 
-                    // Split-by-chunk-size: how many messages land in one email.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Split into: ", style = MaterialTheme.typography.bodyMedium)
-                        Box {
-                            TextButton(onClick = { chunkMenuOpen = true }) {
-                                Text(CHUNK_LABELS[chunkSize] ?: chunkSize)
-                            }
-                            DropdownMenu(expanded = chunkMenuOpen, onDismissRequest = { chunkMenuOpen = false }) {
-                                CHUNK_SIZES.forEach { size ->
-                                    DropdownMenuItem(
-                                        text = { Text(CHUNK_LABELS[size] ?: size) },
-                                        onClick = { onChunkSizeChange(size); chunkMenuOpen = false },
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // The switch itself now lives in Settings. It is a
+                    // The switch itself now lives in Settings > Advanced. It is a
                     // persisted setting, not a per-run choice, and giving it a
                     // title-plus-subtitle row directly above the primary button
                     // made the least-used control on the screen the most

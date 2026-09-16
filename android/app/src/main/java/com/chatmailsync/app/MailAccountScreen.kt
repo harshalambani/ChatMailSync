@@ -51,6 +51,14 @@ import java.util.Calendar
  * instantiates/populates it when loading the provider list from Python. */
 data class ImapProviderInfo(val key: String, val label: String, val host: String, val port: Int)
 
+/** Whether the Host/Port fields are shown at all. They only carry meaning
+ * for a custom server — every known provider fills them in automatically
+ * and locks them (see the `enabled = imapProvider == "custom"` fields
+ * below) — so showing two disabled, pre-filled fields for Gmail/Yahoo/
+ * iCloud/AOL/Fastmail was clutter with no decision behind it. Pure so it
+ * can be tested without standing up the screen. */
+internal fun showCustomServerFields(provider: String): Boolean = provider == "custom"
+
 // Moved here with the rest of the account UI it labels; MainActivity.kt uses
 // it too (mail-account summary line).
 //
@@ -411,27 +419,33 @@ fun MailAccountScreen(
                     }
                 }
             }
-            OutlinedTextField(
-                value = imapHost,
-                onValueChange = onImapHostChange,
-                label = { Text(if (imapProvider == "custom") "Host *" else "Host") },
-                enabled = imapProvider == "custom",
-                isError = hostIsError,
-                supportingText = {
-                    if (hostIsError) Text("Required")
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { if (!it.isFocused) hostTouched = true },
-            )
-            OutlinedTextField(
-                value = imapPort.toString(),
-                onValueChange = { it.toIntOrNull()?.let(onImapPortChange) },
-                label = { Text("Port") },
-                enabled = imapProvider == "custom",
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Only a custom server needs these typed in at all -- every known
+            // provider's host/port is filled in and locked automatically, so
+            // showing two disabled, pre-filled fields for Gmail/Yahoo/iCloud/
+            // AOL/Fastmail was clutter with no decision behind it. The values
+            // are still set (see onImapProviderChange) whether or not the
+            // fields are on screen.
+            if (showCustomServerFields(imapProvider)) {
+                OutlinedTextField(
+                    value = imapHost,
+                    onValueChange = onImapHostChange,
+                    label = { Text("Host *") },
+                    isError = hostIsError,
+                    supportingText = {
+                        if (hostIsError) Text("Required")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { if (!it.isFocused) hostTouched = true },
+                )
+                OutlinedTextField(
+                    value = imapPort.toString(),
+                    onValueChange = { it.toIntOrNull()?.let(onImapPortChange) },
+                    label = { Text("Port") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             OutlinedTextField(
                 value = imapEmail,
                 onValueChange = onImapEmailChange,

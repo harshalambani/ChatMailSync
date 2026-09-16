@@ -2,7 +2,6 @@
 
 package com.chatmailsync.app
 
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,16 +15,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,9 +51,9 @@ private val THEME_LABELS = mapOf(
 // platform-enforced, not a WorkManager default) — no shorter interval is
 // achievable regardless of what's offered here.
 //
-// internal, not private: FirstRunScreen's step 4 offers the same interval
-// picker and reads this same table rather than keeping a second copy that
-// could drift from it.
+// internal, not private: FirstRunScreen's step 4 and AdvancedSettingsScreen
+// both offer the same interval picker and read this same table rather than
+// keeping a second copy that could drift from it.
 internal val WATCH_INTERVAL_LABELS = listOf(
     15L to "Every 15 min",
     30L to "Every 30 min",
@@ -68,10 +64,31 @@ internal val WATCH_INTERVAL_LABELS = listOf(
     1440L to "Once a day",
 )
 
-private val SYNCED_FILE_POLICY_LABELS = mapOf(
-    "leave" to "Leave in place",
-    "move" to "Move to a \"synced\" subfolder",
-    "delete" to "Delete after import",
+/** One row of the Basic or Advanced settings list. Kept as plain data (not
+ * built inline in the composable) so the row set itself -- what is on each
+ * screen, and that nothing is on both or missing from either -- can be
+ * asserted by a plain JUnit test without standing up Compose. */
+data class SettingsRowSpec(val id: String, val title: String)
+
+val BASIC_SETTINGS_ROWS = listOf(
+    SettingsRowSpec("mail_account", "Mail account"),
+    SettingsRowSpec("me", "Me"),
+    SettingsRowSpec("theme", "Theme"),
+    SettingsRowSpec("backup_restore", "Backup & restore"),
+    SettingsRowSpec("help_about", "Help & About"),
+    SettingsRowSpec("advanced", "Advanced"),
+)
+
+val ADVANCED_SETTINGS_ROWS = listOf(
+    SettingsRowSpec("watched_folder", "Watched folder"),
+    SettingsRowSpec("auto_import", "Auto-import"),
+    SettingsRowSpec("watch_interval", "Check interval"),
+    SettingsRowSpec("after_import", "After import"),
+    SettingsRowSpec("cutoff_date", "Cutoff date"),
+    SettingsRowSpec("test_run", "Test run"),
+    SettingsRowSpec("sync_log", "Sync log"),
+    SettingsRowSpec("chunk_size", "Chunk size"),
+    SettingsRowSpec("test_connection", "Test connection"),
 )
 
 @Composable
@@ -79,41 +96,20 @@ fun SettingsScreen(
     mailAccountSummary: String,
     onOpenMailAccount: () -> Unit,
     onOpenHelp: () -> Unit,
-    onOpenSyncLog: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenAdvanced: () -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
-    watchedFolderUri: String?,
-    onChooseFolder: () -> Unit,
-    onClearFolder: () -> Unit,
-    autoWatchEnabled: Boolean,
-    onAutoWatchChange: (Boolean) -> Unit,
-    watchIntervalMinutes: Long,
-    onWatchIntervalChange: (Long) -> Unit,
-    onCheckNow: () -> Unit,
-    syncInProgress: Boolean,
-    syncedFilePolicy: String,
-    onSyncedFilePolicyChange: (String) -> Unit,
-    dryRunDefault: Boolean,
-    onDryRunDefaultChange: (Boolean) -> Unit,
     onSaveBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
     migrationBusy: Boolean,
     migrationStatus: String?,
-    cutoffDate: String = "",
-    onCutoffDateChange: (String) -> Unit = {},
     selfSenderSource: String? = null,
     selfSenderName: String? = null,
     onOpenMe: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    // What is on screen, which is not the same as what is saved: a
-    // half-typed "2026-0" is neither a cutoff nor a mistake yet, so it lives
-    // here and only reaches the preference once it reads as a date.
-    var cutoffText by remember { mutableStateOf(cutoffDate) }
     var themeMenuOpen by remember { mutableStateOf(false) }
-    var intervalMenuOpen by remember { mutableStateOf(false) }
-    var policyMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
@@ -214,163 +210,6 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            Text("Watched folder", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    watchedFolderUri?.let { Uri.parse(it).lastPathSegment ?: it }
-                        ?: "No folder chosen",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                if (watchedFolderUri != null) {
-                    TextButton(
-                        onClick = onClearFolder,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text("Clear") }
-                }
-            }
-            OutlinedButton(onClick = onChooseFolder) {
-                Text(if (watchedFolderUri == null) "Choose folder" else "Change folder")
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Auto-import from this folder")
-                    Text(
-                        "Checks and syncs in the background on the interval below. Uses a small " +
-                            "amount of battery — leave off if you'd rather import manually or with " +
-                            "\"Check and sync\".",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = autoWatchEnabled,
-                    onCheckedChange = onAutoWatchChange,
-                    enabled = watchedFolderUri != null,
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box {
-                    OutlinedButton(
-                        onClick = { intervalMenuOpen = true },
-                        enabled = watchedFolderUri != null,
-                    ) {
-                        Text(WATCH_INTERVAL_LABELS.firstOrNull { it.first == watchIntervalMinutes }?.second ?: "Every $watchIntervalMinutes min")
-                    }
-                    DropdownMenu(expanded = intervalMenuOpen, onDismissRequest = { intervalMenuOpen = false }) {
-                        WATCH_INTERVAL_LABELS.forEach { (minutes, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = { onWatchIntervalChange(minutes); intervalMenuOpen = false },
-                            )
-                        }
-                    }
-                }
-                OutlinedButton(
-                    onClick = onCheckNow,
-                    enabled = watchedFolderUri != null && !syncInProgress,
-                ) {
-                    // Not "Sync now": that is Home's button, and this one is a
-                    // different, smaller promise -- look in the watched folder
-                    // first, and only then send whatever turned up. It does both,
-                    // so it names both. Short because it shares its row with the
-                    // interval menu; the section heading above already supplies
-                    // "watched folder", so the button doesn't have to repeat it.
-                    Text(if (syncInProgress) "Current sync is on" else "Check and sync")
-                }
-            }
-            Text("After import, synced files:", style = MaterialTheme.typography.bodyMedium)
-            Box {
-                OutlinedButton(
-                    onClick = { policyMenuOpen = true },
-                    enabled = watchedFolderUri != null,
-                ) {
-                    Text(SYNCED_FILE_POLICY_LABELS[syncedFilePolicy] ?: syncedFilePolicy)
-                }
-                DropdownMenu(expanded = policyMenuOpen, onDismissRequest = { policyMenuOpen = false }) {
-                    SYNCED_FILE_POLICY_LABELS.forEach { (policy, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = { onSyncedFilePolicyChange(policy); policyMenuOpen = false },
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider()
-
-            // Moved off Home. It is a persisted setting, not a per-run choice,
-            // and on Home it sat as a full title-plus-subtitle row directly
-            // above the primary button while silently redefining what that
-            // button does -- the least-used control on the screen given the
-            // most prominent place, with the worst failure mode (leave it on,
-            // and nothing ever reaches the mailbox). Home still says loudly
-            // that it is on, and still offers it once before the first run.
-            // A floor, never a window: "do not send me anything from before
-            // this". There is no matching "to" field on purpose -- the app's
-            // whole job is to keep going forwards, and a ceiling would mean it
-            // stops.
-            Text("Cutoff date", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = cutoffText,
-                    onValueChange = {
-                        cutoffText = it
-                        // Committed the moment it reads, and withheld while it
-                        // does not. There is no Save button on this screen, so
-                        // a date the app cannot compare must be refused here,
-                        // under the field, rather than stored and discovered
-                        // later as a sync that quietly sent nothing.
-                        if (CutoffDate.isReadable(it)) onCutoffDateChange(it.trim())
-                    },
-                    label = { Text("YYYY-MM-DD") },
-                    singleLine = true,
-                    isError = !CutoffDate.isReadable(cutoffText),
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = { cutoffText = ""; onCutoffDateChange("") },
-                    enabled = cutoffText.isNotEmpty(),
-                ) { Text("Clear") }
-            }
-            if (!CutoffDate.isReadable(cutoffText)) {
-                Text(
-                    "Enter the date as YYYY-MM-DD, or leave it blank for no cutoff.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Text(
-                "Messages older than this are never sent. Leave it blank to send " +
-                    "everything. A chat that has already been synced past this date " +
-                    "is unaffected \u2014 the app never goes back over ground it has " +
-                    "covered.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            Text("Test run", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Rehearse without sending",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "Shows what would happen — writes nothing to your mailbox. " +
-                            "Stays on until you turn it off.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = dryRunDefault, onCheckedChange = onDryRunDefaultChange)
-            }
-
-            HorizontalDivider()
-
             // Worth being explicit about what this is for, because "backup" in
             // an archiving app invites the wrong reading: the mailbox is the
             // archive, and it is already safe on a mail server. What is only on
@@ -431,7 +270,7 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            Text("About / Help", style = MaterialTheme.typography.titleMedium)
+            Text("Help & About", style = MaterialTheme.typography.titleMedium)
             // Read from BuildConfig, which gradle generates from versionName /
             // versionCode, so this cannot drift from the APK. It used to be the
             // hardcoded string "Chat Mail Sync — Android (dev build)", which a
@@ -447,7 +286,6 @@ fun SettingsScreen(
                     if (BuildConfig.DEBUG) " — debug build" else "",
             )
             TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
-            TextButton(onClick = onOpenSyncLog) { Text("Sync log") }
             // The policy is carried in the app now, not linked out to. It was
             // a browser link, which is where Indus Appstore put the app on
             // hold: a policy that needs a second app and a live connection
@@ -455,6 +293,33 @@ fun SettingsScreen(
             // goes to a screen that renders offline, with the hosted copy
             // offered from there as a secondary.
             TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
+
+            HorizontalDivider()
+
+            // Everything below this row still exists -- nothing was removed,
+            // only moved one tap deeper -- but none of it is an everyday
+            // decision the way Mail account, Me and Theme are, so it no
+            // longer competes with them for space on the first screen. See
+            // AdvancedSettingsScreen.
+            OutlinedButton(
+                onClick = onOpenAdvanced,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Advanced", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Automatic import, cut-off date, test run and more",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+                }
+            }
         }
     }
 }
