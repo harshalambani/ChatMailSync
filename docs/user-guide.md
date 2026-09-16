@@ -36,8 +36,13 @@ app. It only works for mail, and you can revoke it at any time without changing
 your real password.
 
 1. Create an app password with your provider. For Gmail, go to your Google
-   Account → Security → 2-Step Verification → App passwords. (Most providers
-   require two-factor authentication to be on before they will issue one.)
+   Account → Security → 2-Step Verification → App passwords; Google shows the
+   password as four groups of four letters with spaces between them (like
+   "abcd efgh ijkl mnop") and you can paste it exactly like that, spaces and
+   all. For Yahoo, you can create one inside the Yahoo Mail app, in your
+   account security settings, or from a browser on Yahoo's account security
+   page. (Most providers require two-factor authentication to be on before
+   they will issue one.)
 2. Open the app, click the **gear icon** (top-right) to open Settings. Settings
    opens inside the main window rather than in a separate one — **Back to sync**
    (top-left), or the Escape key, returns you to the sync view.

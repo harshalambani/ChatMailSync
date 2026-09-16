@@ -394,7 +394,11 @@ fun ChatMailApp(
         // (see SettingsScreen), so this is the only way to re-save
         // provider/host/email without re-entering an unchanged password.
         val existingPassword = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
-        val effectivePassword = password.ifBlank { existingPassword ?: "" }
+        // Normalized here, at the point the freshly typed password is used --
+        // not as the user types -- so a copy-pasted Gmail app password
+        // ("abcd efgh ijkl mnop") works whether or not the spaces came along.
+        val normalizedInput = normalizeAppPassword(provider, password)
+        val effectivePassword = normalizedInput.ifBlank { existingPassword ?: "" }
         if (effectivePassword.isBlank()) {
             onResult(false, "Enter the app password to connect with.")
             return
@@ -467,7 +471,11 @@ fun ChatMailApp(
             onResult(false, "Enter a host for a custom IMAP server.")
             return
         }
-        if (email.isBlank() || password.isBlank()) {
+        // Normalized here, at the point the freshly typed password is used --
+        // not as the user types -- so a copy-pasted Gmail app password
+        // ("abcd efgh ijkl mnop") works whether or not the spaces came along.
+        val normalizedPassword = normalizeAppPassword(provider, password)
+        if (email.isBlank() || normalizedPassword.isBlank()) {
             onResult(false, "Enter the email address and app password to connect with.")
             return
         }
@@ -482,13 +490,13 @@ fun ChatMailApp(
                     effectiveHost,
                     port,
                     email,
-                    password,
+                    normalizedPassword,
                     listener,
                 )
                 connected = outcome.callAttr("get", "ok").toBoolean()
                 mailClient.callAttr("format_connection_result", outcome).toString()
             } catch (e: Exception) {
-                redactSecret("Could not connect: ${e.message ?: "unknown error"}", password)
+                redactSecret("Could not connect: ${e.message ?: "unknown error"}", normalizedPassword)
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 ConnectionState.record(context, connected)
@@ -503,7 +511,7 @@ fun ChatMailApp(
                     AppPrefs.setImapHost(context, effectiveHost)
                     AppPrefs.setImapPort(context, port)
                     AppPrefs.setImapEmail(context, email)
-                    SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), password)
+                    SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), normalizedPassword)
                     imapProvider = provider
                     imapHost = effectiveHost
                     imapPort = port

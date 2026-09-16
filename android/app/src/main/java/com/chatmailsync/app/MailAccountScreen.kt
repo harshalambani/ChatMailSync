@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -20,6 +21,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -75,7 +79,12 @@ internal val APP_PASSWORD_HELP_URLS = mapOf(
 
 internal val APP_PASSWORD_HELP_TEXT = mapOf(
     "gmail" to "Gmail app passwords are generated from your Google Account's security settings (requires 2-Step Verification to be on).",
-    "yahoo" to "Yahoo app passwords are generated from your Yahoo Account security page.",
+    // In-app route first (D2 follow-up): most people setting this up have the
+    // Yahoo Mail app installed already, and that is the faster path. The
+    // browser route stays as the fallback for anyone who doesn't.
+    // TODO(2.2.0 Batch 6): confirm exact Yahoo Mail app menu path on the Nord
+    "yahoo" to "You can create one inside the Yahoo Mail app, in your account security settings. You " +
+        "can also do this from a browser, on Yahoo's account security page.",
     "icloud" to "iCloud app-specific passwords are generated at appleid.apple.com, under Sign-In and Security.",
     "fastmail" to "Fastmail app passwords are generated from Settings > Password & Security in your Fastmail account.",
 )
@@ -266,6 +275,7 @@ fun MailAccountScreen(
     // without ever redisplaying the secret: "Leave blank to keep the
     // currently saved password. The password is never shown or logged."
     var imapPasswordInput by remember { mutableStateOf("") }
+    var imapPasswordVisible by remember { mutableStateOf(false) }
     var imapSaveBusy by remember { mutableStateOf(false) }
     var imapSaveStatus by remember { mutableStateOf<String?>(null) }
     val backendUsable = imapPasswordSaved
@@ -408,12 +418,30 @@ fun MailAccountScreen(
                     .fillMaxWidth()
                     .onFocusChanged { if (!it.isFocused) emailTouched = true },
             )
+            val imapPasswordHint = appPasswordHint(imapProvider, normalizeAppPassword(imapProvider, imapPasswordInput))
             OutlinedTextField(
                 value = imapPasswordInput,
                 onValueChange = { imapPasswordInput = it },
                 label = { Text("App password") },
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (imapPasswordVisible) {
+                    androidx.compose.ui.text.input.VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                trailingIcon = {
+                    IconButton(
+                        onClick = { imapPasswordVisible = !imapPasswordVisible },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .semantics {
+                                contentDescription = if (imapPasswordVisible) "Hide password" else "Show password"
+                            },
+                    ) {
+                        Text(if (imapPasswordVisible) "Hide" else "Show")
+                    }
+                },
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password),
+                supportingText = imapPasswordHint?.let { hint -> { Text(hint) } },
                 modifier = Modifier.fillMaxWidth(),
             )
 
