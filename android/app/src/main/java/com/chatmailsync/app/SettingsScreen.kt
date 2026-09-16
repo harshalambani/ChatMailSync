@@ -54,7 +54,11 @@ private val THEME_LABELS = mapOf(
 // WorkManager's PeriodicWorkRequest has a hard 15-minute floor (Android
 // platform-enforced, not a WorkManager default) — no shorter interval is
 // achievable regardless of what's offered here.
-private val WATCH_INTERVAL_LABELS = listOf(
+//
+// internal, not private: FirstRunScreen's step 4 offers the same interval
+// picker and reads this same table rather than keeping a second copy that
+// could drift from it.
+internal val WATCH_INTERVAL_LABELS = listOf(
     15L to "Every 15 min",
     30L to "Every 30 min",
     60L to "Every hour",

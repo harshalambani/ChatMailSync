@@ -50,6 +50,7 @@ object AppPrefs {
     private const val KEY_LAST_CONNECTION_AT = "last_connection_at"
     private const val KEY_LAST_BACKUP_AT = "last_backup_at"
     private const val KEY_CUTOFF_DATE = "cutoff_date"
+    private const val KEY_FIRST_RUN_DONE = "first_run_done"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -342,6 +343,18 @@ object AppPrefs {
             .map { (name, uri) -> "$name$PENDING_SYNCED_FILE_SEPARATOR$uri" }
             .toSet()
         prefs(context).edit().putStringSet(KEY_PENDING_SYNCED_FILES, encoded).apply()
+    }
+
+    /** Whether the four-step first-run setup (D7) has already been shown or
+     * dismissed. Read once at launch to decide the nav graph's start
+     * destination -- see shouldShowFirstRun in MainActivity.kt for the actual
+     * decision, which also folds in whether a mailbox is already configured
+     * so an upgrader who never saw this flag never sees the flow either. */
+    fun isFirstRunDone(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_FIRST_RUN_DONE, false)
+
+    fun setFirstRunDone(context: Context, done: Boolean) {
+        prefs(context).edit().putBoolean(KEY_FIRST_RUN_DONE, done).apply()
     }
 
     /** Clears every saved IMAP field, including the Keystore-encrypted
