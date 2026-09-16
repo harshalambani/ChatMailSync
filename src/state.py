@@ -208,6 +208,11 @@ SELF_SENDER_OVERRIDE = "self_sender_override"
 # one-to-one export corrects it.
 SELF_SENDER_LEARNED = "self_sender_learned"
 
+# Set whenever SELF_SENDER_LEARNED is newly written (first learned, or changed
+# to a different name), so the UI can announce it once. Cleared once the
+# announcement has been shown.
+SELF_SENDER_LEARNED_PENDING = "self_sender_learned_pending"
+
 
 def get_app_state(key: str, db_path: Optional[Path] = None) -> Optional[str]:
     """Return the stored value for [key], or None if it has never been set."""

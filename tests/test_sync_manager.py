@@ -602,6 +602,113 @@ def test_an_explicit_override_outranks_what_was_learned(tmp_root, db_path):
 
 
 # ---------------------------------------------------------------------------
+# self_sender_learned_pending: the Home banner marker. Set whenever the
+# learned name is newly written (first learned, or changed), cleared by a
+# mere re-confirmation, and never touched on a dry run.
+# ---------------------------------------------------------------------------
+
+_LEARNED_OWNER = "Rohan Desai"
+
+
+def test_learning_the_name_for_the_first_time_sets_the_pending_banner(
+    tmp_root, db_path
+):
+    from src import state as state_module
+
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, db_path
+    ) == _LEARNED_OWNER
+
+
+def test_the_learned_name_changing_sets_the_pending_banner_again(
+    tmp_root, db_path
+):
+    from src import state as state_module
+
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+    state_module.set_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, None, db_path
+    )
+
+    _write_export(inbox_dir, "Arjun Mehta", [
+        "22/03/25, 09:00 - Arjun Mehta: morning",
+        "23/03/25, 09:00 - Meera Iyer: morning back",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, db_path
+    ) == "Meera Iyer"
+
+
+def test_a_re_confirming_sync_does_not_set_the_pending_banner(tmp_root, db_path):
+    from src import state as state_module
+
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+    state_module.set_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, None, db_path
+    )
+
+    # A second one-to-one export with the same owner name re-confirms, but
+    # does not newly derive anything -- the pending marker must stay clear.
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+        f"24/03/25, 09:00 - {_LEARNED_OWNER}: still me",
+    ])
+    _make_manager(tmp_root, db_path, CapturingTransport()).run()
+
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, db_path
+    ) is None
+
+
+def test_a_dry_run_never_writes_the_learned_name_or_the_pending_banner(
+    tmp_root, db_path
+):
+    from src import state as state_module
+
+    inbox_dir = tmp_root / "inbox"
+    _write_export(inbox_dir, "Kavya Rao", [
+        "20/03/25, 09:00 - Kavya Rao: morning",
+        f"21/03/25, 09:00 - {_LEARNED_OWNER}: morning back",
+    ])
+    manager = SyncManager(
+        transport=CapturingTransport(),
+        db_path=db_path,
+        inbox_dir=inbox_dir,
+        processed_dir=tmp_root / "processed",
+        trigger="test",
+        dry_run=True,
+    )
+    manager.run()
+
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED, db_path
+    ) is None
+    assert state_module.get_app_state(
+        state_module.SELF_SENDER_LEARNED_PENDING, db_path
+    ) is None
+
+
+# ---------------------------------------------------------------------------
 # chat_senders: names for the "Me" screen pick list stay complete even when
 # nothing was pushed -- a whole chat before the cutoff, or a resync with
 # nothing new, must not leave the pick list missing real names.

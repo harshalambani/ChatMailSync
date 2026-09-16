@@ -25,6 +25,7 @@ from src.state import delete_chat as state_delete_chat
 from src.state import list_chat_senders as state_list_chat_senders
 from src.state import (
     SELF_SENDER_LEARNED,
+    SELF_SENDER_LEARNED_PENDING,
     SELF_SENDER_OVERRIDE,
     clear_chat_cutoff,
     get_app_state,
@@ -630,6 +631,23 @@ def get_self_sender() -> dict:
     described["override"] = override
     described["learned"] = learned
     return described
+
+
+def get_pending_self_sender_banner() -> Optional[str]:
+    """The name to announce on Home, or None if there is nothing to announce.
+
+    Set once when the learned name is first derived or changes to a
+    different name; cleared by clear_self_sender_banner() once the user has
+    seen it.
+    """
+    init_db(config.STATE_DB_PATH)
+    return get_app_state(SELF_SENDER_LEARNED_PENDING, config.STATE_DB_PATH)
+
+
+def clear_self_sender_banner() -> None:
+    """Dismiss the pending Home banner, whether by "OK" or "That's not me"."""
+    init_db(config.STATE_DB_PATH)
+    set_app_state(SELF_SENDER_LEARNED_PENDING, None, config.STATE_DB_PATH)
 
 
 def list_chat_senders(chat_id: Optional[str] = None) -> list[dict]:
