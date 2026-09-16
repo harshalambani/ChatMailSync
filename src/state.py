@@ -82,12 +82,13 @@ CREATE TABLE IF NOT EXISTS chat_cutoffs (
     set_at    TEXT NOT NULL
 );
 
--- Per-chat, per-sender message counts. Lets the app work out who is who in
--- a group without asking -- the account owner is very rarely the person who
--- sends the most messages into their own chats, but everyone else's relative
--- share is a useful hint for display order and for "who is this chat mostly
--- with". Keyed on (chat_id, sender) rather than given its own id because a
--- sender's row is meaningless outside its chat and the pair is already unique.
+-- Every sender name seen in each chat. This exists for the "Me" screen: rather
+-- than making the user type their own name exactly as WhatsApp spells it, the
+-- app can offer a pick list of real sender names drawn from their own chats.
+-- msg_count is kept alongside for free but is not the point of the table --
+-- names must be complete even when counts are not. Keyed on (chat_id, sender)
+-- rather than given its own id because a sender's row is meaningless outside
+-- its chat and the pair is already unique.
 CREATE TABLE IF NOT EXISTS chat_senders (
     chat_id    TEXT NOT NULL,
     sender     TEXT NOT NULL,
@@ -767,17 +768,30 @@ def record_chat_senders(
 ) -> None:
     """Add [counts] ({sender: message count}) for this sync of [chat_id].
 
-    Upserts per sender: msg_count accumulates, first_seen/last_seen widen to
-    cover [seen_ts] (defaulting to now). Zero and negative counts are
-    skipped -- a sender with nothing to add this run has no business
-    touching first_seen/last_seen either.
+    A positive count upserts: msg_count accumulates, first_seen/last_seen
+    widen to cover [seen_ts] (defaulting to now). A count of zero means the
+    sender was seen in the file but contributed nothing pushed this run --
+    the pick list still needs their name, so a never-seen sender still gets a
+    row (msg_count 0, first_seen/last_seen set), but an existing row is left
+    completely untouched, since a run that pushed nothing for them proves
+    nothing new about when they were first or last seen. Negative counts are
+    skipped, being meaningless here.
     """
     if not counts:
         return
     ts = seen_ts or _now()
     with _connect(db_path) as conn:
         for sender, count in counts.items():
-            if not count:
+            count = int(count)
+            if count < 0:
+                continue
+            if count == 0:
+                conn.execute(
+                    "INSERT OR IGNORE INTO chat_senders "
+                    "(chat_id, sender, first_seen, last_seen, msg_count) "
+                    "VALUES (?, ?, ?, ?, 0)",
+                    (chat_id, sender, ts, ts),
+                )
                 continue
             conn.execute(
                 "INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count) "
@@ -786,7 +800,7 @@ def record_chat_senders(
                 "first_seen = MIN(first_seen, excluded.first_seen), "
                 "last_seen = MAX(last_seen, excluded.last_seen), "
                 "msg_count = msg_count + excluded.msg_count",
-                (chat_id, sender, ts, ts, int(count)),
+                (chat_id, sender, ts, ts, count),
             )
 
 

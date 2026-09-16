@@ -605,11 +605,35 @@ def test_list_chat_senders_with_no_chat_id_covers_every_chat(db_path):
     }
 
 
-def test_recording_zero_counts_is_a_no_op(db_path):
-    """A sender with nothing to add this run has no business touching
-    first_seen/last_seen either."""
-    state.record_chat_senders("chat1", {"Meera Iyer": 0}, db_path=db_path)
-    assert state.list_chat_senders("chat1", db_path) == []
+def test_a_zero_count_still_records_a_name_never_seen_before(db_path):
+    """The pick list needs the name even when nothing was pushed this run --
+    e.g. a chat entirely before the cutoff, or a resync with nothing new."""
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 0}, seen_ts="2026-01-01T00:00:00", db_path=db_path
+    )
+    rows = state.list_chat_senders("chat1", db_path)
+    assert len(rows) == 1
+    assert rows[0]["sender"] == "Meera Iyer"
+    assert rows[0]["msg_count"] == 0
+    assert rows[0]["first_seen"] == "2026-01-01T00:00:00"
+    assert rows[0]["last_seen"] == "2026-01-01T00:00:00"
+
+
+def test_a_zero_count_never_touches_an_existing_row(db_path):
+    """A run that pushed nothing for a sender proves nothing new about them --
+    it must not increment msg_count or widen first_seen/last_seen."""
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 3}, seen_ts="2026-01-01T00:00:00", db_path=db_path
+    )
+    state.record_chat_senders(
+        "chat1", {"Meera Iyer": 0}, seen_ts="2026-03-01T00:00:00", db_path=db_path
+    )
+
+    rows = state.list_chat_senders("chat1", db_path)
+    assert len(rows) == 1
+    assert rows[0]["msg_count"] == 3
+    assert rows[0]["first_seen"] == "2026-01-01T00:00:00"
+    assert rows[0]["last_seen"] == "2026-01-01T00:00:00"
 
 
 def test_deleting_a_chat_takes_its_senders_with_it(db_path):

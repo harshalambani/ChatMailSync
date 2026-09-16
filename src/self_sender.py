@@ -178,11 +178,8 @@ def describe(
     has got it wrong, the archive is wrong, and the user is the only one who
     can say so. So both front-ends show this, and both show the same words.
 
-    Returns {"name", "source", "summary", "detail", "state"} where `source` is
-    one of "override", "learned" or "unknown", and `state` is one of
-    "set_by_you", "worked_out" or "not_known" -- the same three cases, spelled
-    for a caller that wants to branch on them without knowing `source`'s
-    history-laden vocabulary. `name` is None only when unknown.
+    Returns {"name", "source", "summary", "detail"} where `source` is one of
+    "override", "learned" or "unknown". `name` is None only when unknown.
     """
     if override and override.strip():
         name = override.strip()
@@ -191,7 +188,6 @@ def describe(
             "source": "override",
             "summary": f"Your messages are the ones from {name}",
             "detail": _OVERRIDE_DETAIL,
-            "state": "set_by_you",
         }
     if learned and learned.strip():
         name = learned.strip()
@@ -200,12 +196,10 @@ def describe(
             "source": "learned",
             "summary": f"Your messages are the ones from {name}",
             "detail": _LEARNED_DETAIL,
-            "state": "worked_out",
         }
     return {
         "name": None,
         "source": "unknown",
         "summary": _UNKNOWN_SUMMARY,
         "detail": _UNKNOWN_DETAIL,
-        "state": "not_known",
     }

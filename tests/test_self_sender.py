@@ -238,21 +238,6 @@ def test_a_blank_override_is_described_as_the_learned_name(blank):
     assert described["source"] == "learned"
 
 
-def test_describe_state_is_set_by_you_when_an_override_is_set():
-    described = self_sender.describe(override="Meera Iyer", learned="Arjun Mehta")
-    assert described["state"] == "set_by_you"
-
-
-def test_describe_state_is_worked_out_when_only_learned_is_set():
-    described = self_sender.describe(learned="Meera Iyer")
-    assert described["state"] == "worked_out"
-
-
-def test_describe_state_is_not_known_when_neither_is_set():
-    described = self_sender.describe()
-    assert described["state"] == "not_known"
-
-
 def test_describe_agrees_with_resolve_on_who_the_owner_is():
     # Two code paths, one answer: a screen that said one thing while the
     # renderer did another would be worse than saying nothing at all.
