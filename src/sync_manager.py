@@ -35,6 +35,7 @@ from src.parser import ParsedMessage, extract_chat_info, parse_file
 from src.self_sender import resolve as resolve_self_sender
 from src.state import (
     SELF_SENDER_LEARNED,
+    SELF_SENDER_LEARNED_PENDING,
     SELF_SENDER_OVERRIDE,
     complete_sync_run,
     compute_message_hash,
@@ -515,6 +516,8 @@ class SyncManager:
                 "unknown" if not learned else "a different name",
             )
             set_app_state(SELF_SENDER_LEARNED, newly_derived, self.db_path)
+            if not (override and override.strip()):
+                set_app_state(SELF_SENDER_LEARNED_PENDING, newly_derived, self.db_path)
 
         return name
 

@@ -8,6 +8,7 @@ from src.mail_client import MailTransport
 from src.parser import extract_chat_info
 from src.state import (
     SELF_SENDER_LEARNED,
+    SELF_SENDER_LEARNED_PENDING,
     SELF_SENDER_OVERRIDE,
     complete_sync_run,
     compute_message_hash,
@@ -786,6 +787,23 @@ def test_clearing_the_override_falls_back_to_what_was_learned(tmp_root, db_path)
     assert described["source"] == "learned"
     assert described["name"] == "Sam Iyer"
     assert described["override"] is None
+
+
+def test_get_pending_self_sender_banner_is_none_when_nothing_to_announce(
+    tmp_root, db_path
+):
+    assert android_api.get_pending_self_sender_banner() is None
+
+
+def test_get_pending_self_sender_banner_returns_the_name(tmp_root, db_path):
+    set_app_state(SELF_SENDER_LEARNED_PENDING, "Rohan Desai", config.STATE_DB_PATH)
+    assert android_api.get_pending_self_sender_banner() == "Rohan Desai"
+
+
+def test_clear_self_sender_banner_clears_the_marker(tmp_root, db_path):
+    set_app_state(SELF_SENDER_LEARNED_PENDING, "Rohan Desai", config.STATE_DB_PATH)
+    android_api.clear_self_sender_banner()
+    assert android_api.get_pending_self_sender_banner() is None
 
 
 def test_clearing_with_no_argument_is_the_same_as_clearing_with_an_empty_one(

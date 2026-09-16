@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -59,6 +60,13 @@ internal fun displayNameFor(filename: String): String {
     return if (stem.lowercase().startsWith(WA_PREFIX)) stem.substring(WA_PREFIX.length) else stem
 }
 
+// internal, not private: exercised directly by a plain unit test rather than
+// a Compose test, since it is the whole decision behind the one-time Home
+// banner -- null (nothing learned yet) and blank (Python state cleared to
+// empty rather than to null) must both suppress the card.
+internal fun shouldShowSelfSenderBanner(pendingName: String?): Boolean =
+    !pendingName.isNullOrBlank()
+
 /**
  * One system setting standing between automatic syncing and actually running.
  *
@@ -81,6 +89,58 @@ private fun BackgroundHealthCard(issue: BackgroundIssue, onAction: () -> Unit) {
             Text(issue.title, style = MaterialTheme.typography.titleSmall)
             Text(issue.detail, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = onAction) { Text(issue.actionLabel) }
+        }
+    }
+}
+
+/**
+ * One-time card telling the owner the app has worked out their name from a
+ * one-to-one export. Shown on Home only, never as a dialog or a snackbar --
+ * this is good news, not an interruption, and it is gone the moment either
+ * button is pressed rather than waiting for the next Python round-trip.
+ *
+ * Deliberately an ordinary surface card: [SelfSenderSource.color] and the Me
+ * strip's palette exist to distinguish "override" from "learned" from
+ * "unknown" at a glance elsewhere in the app, and reusing either one here
+ * would wrongly imply this card is part of that status language rather than
+ * a one-off announcement.
+ *
+ * Never names the chat that revealed the name -- the app worked it out from
+ * the export, not from a person the owner may not want named back to them.
+ */
+@Composable
+private fun SelfSenderLearnedBanner(
+    name: String,
+    onOk: () -> Unit,
+    onNotMe: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("The app worked out who you are", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Your name is $name. Messages from that name are drawn as yours.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            // Its own row, below the text: a long name must wrap the body
+            // text above rather than squeeze these buttons toward the edge
+            // of the screen.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(
+                    onClick = onNotMe,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("That's not me")
+                }
+                Button(
+                    onClick = onOk,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("OK")
+                }
+            }
         }
     }
 }
@@ -191,6 +251,11 @@ fun HomeScreen(
     meColor: Color = Color.Unspecified,
     meDescription: String = "",
     onMeClick: () -> Unit = {},
+    // The one-time "the app worked out who you are" card -- null/blank
+    // means nothing was ever learned, or it was already dismissed.
+    pendingSelfSenderBannerName: String? = null,
+    onSelfSenderBannerOk: () -> Unit = {},
+    onSelfSenderBannerNotMe: () -> Unit = {},
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
@@ -324,6 +389,17 @@ fun HomeScreen(
                         OutlinedButton(onClick = onOpenSettings) { Text("Change") }
                     }
                 }
+            }
+
+            // Nothing to show when the name is null or blank -- either
+            // nothing has ever been learned, or the card was already
+            // dismissed and MainActivity cleared the state.
+            if (shouldShowSelfSenderBanner(pendingSelfSenderBannerName)) {
+                SelfSenderLearnedBanner(
+                    name = pendingSelfSenderBannerName!!,
+                    onOk = onSelfSenderBannerOk,
+                    onNotMe = onSelfSenderBannerNotMe,
+                )
             }
 
             // Inbox + sync — one card: these two are really one workflow
