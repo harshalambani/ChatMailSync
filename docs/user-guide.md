@@ -43,30 +43,33 @@ your real password.
    account security settings, or from a browser on Yahoo's account security
    page. (Most providers require two-factor authentication to be on before
    they will issue one.)
-2. Open the app, click the **gear icon** (top-right) to open Settings. Settings
-   opens inside the main window rather than in a separate one — **Back to sync**
-   (top-left), or the Escape key, returns you to the sync view.
-3. Under **Mail account**, click **Change…**. That opens the Mail account screen
-   the same way, with **Back to settings** to come out of it.
+2. Open the app and tap the **Settings** tab (bottom of the screen).
+3. Tap **Mail account**. That opens the Mail account screen, with a labelled
+   back arrow to return to Settings.
 4. Choose your provider (Gmail, Yahoo, iCloud, AOL, Fastmail, or a custom
    IMAP server — host and port fill in automatically for the known ones).
-5. Enter your email address and the app password, then **Save**.
-6. The indicator turns **green** and says **Connected**.
+5. Enter your email address and the app password, then tap **Save & connect**.
+6. The connection pill (shown at the top of every screen) turns **green** and
+   says **Connected**.
 
-This does not expire. To disconnect later, click **Forget saved password**.
+This does not expire. To disconnect later, open **Mail account** and tap
+**Forget saved password**.
 
 ---
 
 ## 3. Exporting a WhatsApp chat to a file
 
-Do this on your phone, then move the file to your computer (email it to yourself,
-use a USB cable, or any cloud drive).
+Chat Mail Sync is an Android app. If you're exporting from WhatsApp on the same
+Android phone, you can share the export straight into Chat Mail Sync (see
+section 4) — nothing needs to leave the device. Exporting from an iPhone means
+getting the file onto an Android phone with Chat Mail Sync installed first
+(email it to yourself, AirDrop/cable to a computer and back, or any cloud drive).
 
 > **One chat at a time.** WhatsApp has no multi-select export — you cannot tick
 > several chats and export them together. Each chat has to be exported on its
 > own, from inside that chat. The app itself has no such limit: once the files
-> are on your computer you can add as many as you like at once and sync them in
-> one run.
+> are on the phone you can add as many as you like at once and sync them in one
+> run.
 
 ### On Android
 
@@ -92,11 +95,16 @@ media). The app accepts both.
 
 ## 4. Adding chat files to the app
 
-Once the export file is on your computer:
+Once the export file is on your phone:
 
-- **Drag and drop** the `.txt` or `.zip` file onto the app window, **or**
-- Click **Browse Files…** and pick it, **or**
-- Click **Open Inbox Folder** and copy the file into that folder yourself.
+- **Share it straight from WhatsApp** — after exporting, pick this app from the
+  share sheet. It lands in the queue with nothing else to do, **or**
+- On the **Home** tab, tap **Choose exports to import** (or **Add more
+  exports…** once something is already queued) and pick the file(s) with
+  Android's own file picker — you can select several `.txt`/`.zip` files at
+  once, **or**
+- Nominate a **watched folder** and let the app collect files from it for you
+  (see section 6 below).
 
 Added files appear in the **Files in inbox** list, with a count like
 "2 files ready to sync". You can add several chats at once.
@@ -111,18 +119,25 @@ one. That is section 6.
 
 ## 5. Running a sync
 
-1. Make sure the indicator at the top says **Connected** (green).
-2. Check the options at the bottom-right:
-   - **Dry run** — tick this to do a practice run that reports what *would* happen
-     without changing your mailbox. Great for a first try.
-   - **Chunk size** — how much of the conversation goes into each email:
-     **day** (default), **hour**, or **week**. "Day" means one email per day of chat.
-3. Click **▶ Sync Now**.
-4. Watch the progress bar and the log at the bottom. You can click **⏹ Stop** to
-   stop after the current file finishes.
+1. On the **Home** tab, make sure the connection pill (top of the screen) says
+   **Connected**.
+2. With one or more exports in the **Files in inbox** list, tap **Sync now**.
+   - Want a practice run first? Tap **Try it first, without sending anything**
+     (shown the first time, before you've ever synced) to turn on **Test run**.
+     While it's on, the button reads **Run test sync** and reports what *would*
+     happen without changing your mailbox — turn it off again from the banner
+     above the button, or in **Settings → Advanced**.
+   - **Chunk size** — how much of the conversation goes into each email
+     (**hourly**, **daily** (default), or **weekly**) — is set ahead of time in
+     **Settings → Advanced**, not chosen at sync time.
+3. A progress screen opens and shows how far along the sync is. Backing out of
+   it (or the app being closed) doesn't stop the sync — it keeps running, and
+   the collapsed sync bar at the bottom of every screen shows it's still going
+   and reopens the full view on tap.
 
-When it's done, each chat appears in the list on the left with a green dot and a
-message count. Synced files move out of the inbox automatically.
+When it's done, the result appears on Home under **Last result**, and each
+synced chat is browsable under the **Chats** tab. Synced files move out of the
+inbox automatically.
 
 If a **cutoff date** is set (in Settings → Advanced), a card above the inbox says so, and
 nothing older than that day is sent. The card stays there for as long as the
@@ -197,8 +212,8 @@ affects unattended checks.
 
 ### What is *not* scheduled
 
-- **Nothing is scheduled unless you nominate a watched folder.** Files you drag
-  in or import by hand sit in the inbox until you sync.
+- **Nothing is scheduled unless you nominate a watched folder.** Files you
+  share in or import by hand sit in the inbox until you sync.
 - **There is no continuous, live sync.** Each run is a single pass over whatever
   is waiting.
 
@@ -206,7 +221,7 @@ affects unattended checks.
 
 - Only the nominated folder is looked at. Subfolders are ignored — which is also
   why the `synced` subfolder is never re-imported.
-- `.txt` and `.zip` only, the same as drag-and-drop.
+- `.txt` and `.zip` only, the same as a manual import.
 - Each source file is picked up exactly once, however often the check runs.
 - The **After syncing / After import** rule is applied only once a file has
   genuinely reached your mailbox. A sync that fails, or that you stop, leaves
@@ -301,9 +316,9 @@ message.
 ### Q. The app says "Not connected", or authorising fails.
 
 **A.** Double-check the email address and app password under **Settings → Mail
-account → Change…**, and that the app password hasn't been revoked by your
-provider. The app password is the usual culprit — providers revoke it if you
-turn off two-factor authentication, and some expire it on their own.
+account**, and that the app password hasn't been revoked by your provider. The
+app password is the usual culprit — providers revoke it if you turn off
+two-factor authentication, and some expire it on their own.
 
 ---
 
@@ -359,8 +374,9 @@ under **Settings → Mail account** on the new device.
 
 **A.** Only `.txt` and `.zip` files are accepted. Make sure you exported the chat
 (not a screenshot or contact card), and that the file actually arrived — shared
-to the app or picked with **Import a WhatsApp export**. Pull the Home list to
-refresh if you imported from another app.
+to the app or picked with **Choose exports to import** on Home. Leaving Home and
+coming back re-reads the queue, if it was changed from somewhere else (e.g. a
+watched folder or another app).
 
 ---
 

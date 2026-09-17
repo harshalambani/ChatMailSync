@@ -84,52 +84,6 @@ fun Modifier.fadingEdges(
 }
 
 /**
- * The same statement, made sideways, for a row of filter chips that runs off
- * the edge of the screen. Chips are the one place where what is hidden is a
- * *control* rather than content, so the cue matters more here, not less.
- */
-@Composable
-fun Modifier.fadingEdgesHorizontal(
-    state: ScrollableState,
-    color: Color = MaterialTheme.colorScheme.background,
-    width: Dp = DefaultFadeHeight,
-): Modifier {
-    val startAlpha by animateFloatAsState(
-        targetValue = if (state.canScrollBackward) 1f else 0f,
-        label = "startFade",
-    )
-    val endAlpha by animateFloatAsState(
-        targetValue = if (state.canScrollForward) 1f else 0f,
-        label = "endFade",
-    )
-    return this.drawWithContent {
-        drawContent()
-        val band = width.toPx().coerceAtMost(size.width / 2f)
-        if (startAlpha > 0f) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(color.copy(alpha = startAlpha), Color.Transparent),
-                    startX = 0f,
-                    endX = band,
-                ),
-                size = Size(band, size.height),
-            )
-        }
-        if (endAlpha > 0f) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color.Transparent, color.copy(alpha = endAlpha)),
-                    startX = size.width - band,
-                    endX = size.width,
-                ),
-                topLeft = Offset(size.width - band, 0f),
-                size = Size(band, size.height),
-            )
-        }
-    }
-}
-
-/**
  * A scrollbar that is actually there.
  *
  * Android's own is transient by design: it appears while your finger is moving

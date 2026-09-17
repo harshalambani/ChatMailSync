@@ -40,8 +40,8 @@ android {
         // released without ever being published; v1.4.1 was the first release
         // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
         // and this repo is Android-only from here on.
-        versionCode = 41
-        versionName = "2.1.5"
+        versionCode = 42
+        versionName = "2.2.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back

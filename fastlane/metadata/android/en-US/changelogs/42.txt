@@ -1,0 +1,16 @@
+2.2.0: the app now learns your name from a one-to-one export, so your own
+messages land on the right side of the conversation without asking. A Me row
+on the masthead and on each chat shows who the app thinks you are, with a
+one-time banner the first time it works this out, and a place to set or
+correct it by hand.
+
+Setup is faster: four short steps end-to-end, easier app-password entry, and
+the common providers (including AOL) listed first. Settings is reorganised
+into Basic and Advanced sections, with polish across labels, back buttons and
+chip wrapping.
+
+Saving your mailbox and testing the connection can no longer hang the app --
+both now return within a fixed time, every time, whether the network answers
+or not.
+
+The Windows desktop app is retired; this app is Android-only from here on.
