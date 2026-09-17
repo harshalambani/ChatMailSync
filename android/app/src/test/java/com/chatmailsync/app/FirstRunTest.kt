@@ -240,3 +240,76 @@ class BackLabelForRouteTest {
         assertFalse(backLabelForRoute("not_a_real_route") == "Home")
     }
 }
+
+/**
+ * Batch 7 follow-up: the welcome step's "Moving from another phone? Restore
+ * from a backup" option. Must appear only on a genuine fresh install -- the
+ * same condition as [shouldShowFirstRun] itself, narrowed by [cameFrom] so
+ * "Run setup again" (H7, reopened from Advanced settings) never offers it a
+ * second time next to the Backup & restore screen it already has.
+ */
+class ShouldOfferRestoreOnFirstRunTest {
+
+    @Test
+    fun `a brand new install with nothing configured is offered it`() {
+        assertTrue(shouldOfferRestoreOnFirstRun(cameFrom = null, firstRunDone = false, mailboxConfigured = false))
+    }
+
+    @Test
+    fun `already finished first-run is not offered it`() {
+        assertFalse(shouldOfferRestoreOnFirstRun(cameFrom = null, firstRunDone = true, mailboxConfigured = false))
+    }
+
+    @Test
+    fun `a mailbox already configured is not offered it`() {
+        assertFalse(shouldOfferRestoreOnFirstRun(cameFrom = null, firstRunDone = false, mailboxConfigured = true))
+    }
+
+    @Test
+    fun `reopened from Advanced settings -- H7 -- is never offered it`() {
+        // The negative case the whole cameFrom parameter exists for: even
+        // with both flags in the "fresh install" shape, arriving from
+        // advancedSettings means this is "Run setup again", not day one.
+        assertFalse(
+            shouldOfferRestoreOnFirstRun(cameFrom = "advancedSettings", firstRunDone = false, mailboxConfigured = false),
+        )
+    }
+}
+
+/**
+ * Batch 7 follow-up: classifying a restore's status message, which drives
+ * the welcome step's choice between offering the restore button again and
+ * offering "Continue" into mail setup.
+ */
+class RestoreOutcomeIsSuccessTest {
+
+    @Test
+    fun `a real success message from Migration importFrom reads as success`() {
+        assertTrue(restoreOutcomeIsSuccess("Restored 42 chat(s) and your settings."))
+    }
+
+    @Test
+    fun `a null status -- nothing attempted, or a cancelled picker -- is not success`() {
+        // Negative: a cancelled OpenDocument picker (null uri) never sets
+        // migrationStatus at all -- restoreBackup's launcher only proceeds
+        // past its `if (uri != null)` guard -- so this null case doubles as
+        // the cancel guard: it must never be misread as success.
+        assertFalse(restoreOutcomeIsSuccess(null))
+    }
+
+    @Test
+    fun `an already-imported message is not success`() {
+        assertFalse(restoreOutcomeIsSuccess("That backup has already been restored on this phone. Nothing changed."))
+    }
+
+    @Test
+    fun `a failure message is not success`() {
+        assertFalse(restoreOutcomeIsSuccess("That backup could not be restored: the file was not readable."))
+    }
+
+    @Test
+    fun `an interim busy message is not success`() {
+        assertFalse(restoreOutcomeIsSuccess("Reading..."))
+        assertFalse(restoreOutcomeIsSuccess("some backup, 2026-09-10 - restoring..."))
+    }
+}

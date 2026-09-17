@@ -102,13 +102,36 @@ fun FirstRunScreen(
     // current mailbox" instead of steering the user through reconnecting
     // one that already works.
     hasExistingMailbox: Boolean = false,
+    // Batch 7 follow-up: the welcome step's "Moving from another phone?
+    // Restore from a backup" option. Only ever true on a genuine fresh
+    // install (see shouldOfferRestoreOnFirstRun in MainActivity) -- "Run
+    // setup again" (H7) never passes true here, restoring already lives on
+    // the Backup & restore screen for that path.
+    offerRestore: Boolean = false,
+    migrationBusy: Boolean = false,
+    migrationStatus: String? = null,
+    onRestoreFromBackup: () -> Unit = {},
 ) {
     var step by rememberSaveable { mutableStateOf(1) }
+    // Which sub-step MailSetupWizardScreen (step 2) opens on. Stays 0 (its
+    // own default -- the provider picker) for every ordinary path through
+    // this screen; only a successful first-run restore's "Continue" sets it
+    // to 2 ("Sign in", where the app password is entered), since a restore
+    // already answered the provider/email questions steps 0-1 exist to ask.
+    var wizardInitialStep by remember { mutableStateOf(0) }
 
     when (step) {
         1 -> FirstRunWelcomeStep(
             onGetStarted = { step = firstRunStepForward(step) },
             onSetUpLater = onSetUpLater,
+            offerRestore = offerRestore,
+            migrationBusy = migrationBusy,
+            migrationStatus = migrationStatus,
+            onRestoreFromBackup = onRestoreFromBackup,
+            onContinueAfterRestore = {
+                wizardInitialStep = 2
+                step = firstRunStepForward(step)
+            },
         )
         2 -> Column(modifier = Modifier.fillMaxSize()) {
             // The wizard draws its own top bar; its own "Step n of 4" (n up to
@@ -135,6 +158,7 @@ fun FirstRunScreen(
                     showStepCounter = false,
                     hasExistingMailbox = hasExistingMailbox,
                     onKeepCurrentMailbox = { step = firstRunStepForward(step) },
+                    initialStep = wizardInitialStep,
                 )
             }
         }
@@ -158,7 +182,15 @@ fun FirstRunScreen(
 }
 
 @Composable
-private fun FirstRunWelcomeStep(onGetStarted: () -> Unit, onSetUpLater: () -> Unit) {
+private fun FirstRunWelcomeStep(
+    onGetStarted: () -> Unit,
+    onSetUpLater: () -> Unit,
+    offerRestore: Boolean = false,
+    migrationBusy: Boolean = false,
+    migrationStatus: String? = null,
+    onRestoreFromBackup: () -> Unit = {},
+    onContinueAfterRestore: () -> Unit = {},
+) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { ChatMailTopBar(title = "Chat Mail Sync", showConnection = false) },
@@ -176,11 +208,45 @@ private fun FirstRunWelcomeStep(onGetStarted: () -> Unit, onSetUpLater: () -> Un
                     "server or company in between.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            // "Get started" stays the primary action either way -- restoring
+            // is a quieter option below it, not a fork in the road.
             Button(onClick = onGetStarted, modifier = Modifier.fillMaxWidth()) {
                 Text("Get started")
             }
             TextButton(onClick = onSetUpLater, modifier = Modifier.fillMaxWidth()) {
                 Text("Set up later")
+            }
+            if (offerRestore) {
+                // Never a dialog/pop-up: the result of a restore attempt --
+                // success, failure, already-imported -- draws inline on this
+                // same step, same as Backup & restore's own screen does.
+                if (!migrationBusy && migrationStatus != null) {
+                    val restored = restoreOutcomeIsSuccess(migrationStatus)
+                    Text(
+                        migrationStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (restored) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                    if (restored) {
+                        Button(onClick = onContinueAfterRestore, modifier = Modifier.fillMaxWidth()) {
+                            Text("Continue")
+                        }
+                    }
+                }
+                val restoreSucceeded = !migrationBusy && restoreOutcomeIsSuccess(migrationStatus)
+                if (!restoreSucceeded) {
+                    TextButton(
+                        onClick = onRestoreFromBackup,
+                        enabled = !migrationBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (migrationBusy) "Restoring..." else "Moving from another phone? Restore from a backup")
+                    }
+                }
             }
         }
     }

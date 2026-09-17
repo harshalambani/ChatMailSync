@@ -105,11 +105,21 @@ fun MailSetupWizardScreen(
     // pre-filled either way, only the existing connection is kept as-is.
     hasExistingMailbox: Boolean = false,
     onKeepCurrentMailbox: (() -> Unit)? = null,
+    // Batch 7 follow-up: first-run's welcome step can restore a backup
+    // before ever opening this wizard, at which point [initialProvider] and
+    // [initialEmail] are already the restored account -- landing on step 0
+    // (provider picker) would ask a question the answer to which just
+    // arrived. 2 ("Sign in", where the app password itself is entered) is
+    // the step that request means by "the app-password step"; the password
+    // field is never pre-filled regardless of where this starts, so there
+    // is nothing here for a restore to leak. Every other caller keeps the
+    // default of 0 and is unaffected.
+    initialStep: Int = 0,
 ) {
     // Non-secret: a rotation (or the process being recreated) resumes on the
     // same step with what was already picked/typed, instead of dropping the
     // user back to step 1.
-    var step by rememberSaveable { mutableStateOf(0) }
+    var step by rememberSaveable { mutableStateOf(initialStep) }
     var provider by rememberSaveable { mutableStateOf(initialProvider) }
     var email by rememberSaveable { mutableStateOf(initialEmail) }
     // Deliberately plain remember, not rememberSaveable: rememberSaveable

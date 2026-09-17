@@ -30,6 +30,17 @@ Six batches of work since the 2.1.5 / `windows-final` tag:
   own screen, reached the same way as Mail account, Me and Advanced; its
   Settings row now carries a status pill ("Backed up `<date>`", "Backup due"
   or "No backup") so the state is visible without opening the screen.
+- **Batch 7 follow-up** -- fixed a bug (confirmed on the Nord) where the Mail
+  account screen and Settings kept showing the pre-restore mailbox (e.g.
+  Gmail with a blank email) right after a successful restore, even though
+  the restored settings were already correctly saved -- reopening the app
+  was the only workaround, and pressing "Save & connect" without it would
+  have overwritten the restored account with defaults. Also added a "Moving
+  from another phone? Restore from a backup" option on the very first screen
+  of a fresh install, so setting up a new phone from a backup no longer
+  means clicking through to Settings first; a successful restore there can
+  continue straight into mail setup with the restored provider and email
+  already filled in.
 
 The Windows desktop app is not part of this or any future release; it ended
 at v2.1.5 (tag `windows-final`), per `docs/RELEASING.md`.
