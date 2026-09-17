@@ -94,20 +94,6 @@ android {
         // fails on an unresolved reference.
         buildConfig = true
     }
-
-    testOptions {
-        unitTests {
-            // JVM unit tests run against the unmodified `android.jar` stub,
-            // where every framework method throws "not mocked" rather than
-            // doing nothing -- fine as long as nothing under test calls one.
-            // runConnectionCheckWithScheduler's watchdog/throwing-check paths
-            // (ConnectionCheckHelpersTest) call Log.i, so testing those paths
-            // directly needs this. Robolectric would be the heavier
-            // alternative; this project still has none, so returning harmless
-            // defaults (false/0/null) is the actual fix, not a workaround.
-            isReturnDefaultValues = true
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

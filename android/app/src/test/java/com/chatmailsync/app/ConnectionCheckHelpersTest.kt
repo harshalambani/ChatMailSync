@@ -91,6 +91,7 @@ class ConnectionCheckHelpersTest {
         val delivered = CountDownLatch(1)
         var lastConnected = true
         var lastText = ""
+        val loggedLines = mutableListOf<String>()
 
         runConnectionCheckWithScheduler(
             password = password,
@@ -105,12 +106,19 @@ class ConnectionCheckHelpersTest {
                 delivered.countDown()
             },
             check = { throw OutOfMemoryError("simulated bridge crash near $password") },
+            log = { loggedLines.add(it) },
         )
 
         assertTrue("onResult was never called", delivered.await(5, TimeUnit.SECONDS))
         assertEquals(1, resultCount.get())
         assertFalse("a thrown check must not report connected", lastConnected)
         assertFalse("the password must not appear in the delivered text", lastText.contains(password))
+        // Negative: the log seam exists specifically so the (stage-only) log
+        // lines are reachable from a test -- assert none of them ever carry
+        // the password, not just that the delivered result text doesn't.
+        for (line in loggedLines) {
+            assertFalse("a logged line must not contain the password: $line", line.contains(password))
+        }
     }
 
     // Negative (GA4.1 / item 5): if the watchdog fires before a slow check
@@ -123,6 +131,7 @@ class ConnectionCheckHelpersTest {
         val password = "fake-app-password"
         val resultCount = AtomicInteger(0)
         val texts = mutableListOf<String>()
+        val loggedLines = mutableListOf<String>()
         var watchdog: Runnable? = null
         val checkStarted = CountDownLatch(1)
         val allowCheckToFinish = CountDownLatch(1)
@@ -146,6 +155,7 @@ class ConnectionCheckHelpersTest {
                 assertTrue("test setup: check was never released", allowCheckToFinish.await(5, TimeUnit.SECONDS))
                 true to "connected, all good, arrived far too late"
             },
+            log = { loggedLines.add(it) },
         )
 
         assertTrue("check never started", checkStarted.await(5, TimeUnit.SECONDS))
@@ -155,6 +165,9 @@ class ConnectionCheckHelpersTest {
         assertEquals(1, resultCount.get())
         assertTrue(texts.single().contains("timed out", ignoreCase = true))
         assertFalse("the password must not appear in the watchdog text", texts.single().contains(password))
+        for (line in loggedLines) {
+            assertFalse("a logged line must not contain the password: $line", line.contains(password))
+        }
 
         // Now let the slow check finish and attempt to deliver its own,
         // different result -- it must be swallowed by the exactly-once gate.
@@ -185,6 +198,7 @@ class ConnectionCheckHelpersTest {
                 delivered.countDown()
             },
             check = { true to "connected, all good" },
+            log = { },
         )
 
         assertTrue(delivered.await(5, TimeUnit.SECONDS))

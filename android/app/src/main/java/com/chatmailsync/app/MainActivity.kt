@@ -290,6 +290,7 @@ internal fun runConnectionCheck(
         recordConnection = { connected -> ConnectionState.record(context, connected) },
         onResult = onResult,
         check = check,
+        log = { Log.i(ConnectionLogTag, it) },
     )
 }
 
@@ -308,6 +309,13 @@ internal fun runConnectionCheck(
  * injected, a test can supply a same-thread `post`/`postDelayed` and drive
  * both the "watchdog fires first" and "check finishes first" orderings
  * directly -- see ConnectionCheckHelpersTest.
+ *
+ * [log] is likewise injected rather than calling `android.util.Log` directly:
+ * the JVM unit test stub for `android.jar` throws "not mocked" on every
+ * framework call, and this function's watchdog/throwing-check paths used to
+ * be the only reason the module needed `isReturnDefaultValues = true` in
+ * build.gradle.kts. A plain lambda closes that gap without hiding other,
+ * unrelated unmocked framework calls in the same test run.
  */
 internal fun runConnectionCheckWithScheduler(
     password: String?,
@@ -317,11 +325,12 @@ internal fun runConnectionCheckWithScheduler(
     recordConnection: (connected: Boolean) -> Unit,
     onResult: (connected: Boolean, text: String) -> Unit,
     check: () -> Pair<Boolean, String>,
+    log: (String) -> Unit,
 ) {
     val delivered = AtomicBoolean(false)
     val watchdog = Runnable {
         if (delivered.compareAndSet(false, true)) {
-            Log.i(ConnectionLogTag, "watchdog fired before a result arrived")
+            log("watchdog fired before a result arrived")
             recordConnection(false)
             onResult(false, connectionWatchdogTimeoutText())
         }
@@ -335,7 +344,7 @@ internal fun runConnectionCheckWithScheduler(
             connected = c
             text = t
         } catch (t: Throwable) {
-            Log.i(ConnectionLogTag, "connection check threw")
+            log("connection check threw")
             text = redactSecretText("Could not connect: ${t.message ?: "unknown error"}", password)
         } finally {
             post {
