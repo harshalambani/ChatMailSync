@@ -22,15 +22,6 @@ import java.io.File
  * involves knowing what a bundle is. That keeps one implementation of the merge
  * rules for both front-ends rather than two that agree until they don't.
  */
-/** Named for meaning, not colour -- a pill's tone is never the only thing
- *  that says what it means, its label already does, but this is what a
- *  renderer maps to an actual colour pair. */
-enum class BackupPillTone { GOOD, WARN, BAD }
-
-/** What [Migration.backupPillState] returns: the words for the pill and the
- *  tone to render them in. */
-data class BackupPillInfo(val label: String, val tone: BackupPillTone)
-
 object Migration {
 
     /** The extension the file picker suggests; the bundle is a zip underneath. */
@@ -384,3 +375,12 @@ object Migration {
         }
     }
 }
+
+/** Named for meaning, not colour -- a pill's tone is never the only thing
+ *  that says what it means, its label already does, but this is what a
+ *  renderer maps to an actual colour pair. */
+enum class BackupPillTone { GOOD, WARN, BAD }
+
+/** What [Migration.backupPillState] returns: the words for the pill and the
+ *  tone to render them in. */
+data class BackupPillInfo(val label: String, val tone: BackupPillTone)

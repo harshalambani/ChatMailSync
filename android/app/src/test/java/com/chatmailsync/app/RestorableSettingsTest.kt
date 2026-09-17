@@ -3,7 +3,9 @@ package com.chatmailsync.app
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Batch 7 follow-up: after a restore, MainActivity's mail-account/settings
@@ -16,36 +18,93 @@ import org.junit.Test
  * [Migration.buildRestorableSettings] is the pure seam this reload goes
  * through: a key -> value reader in, [Migration.RestorableSettings] out,
  * no Context or SharedPreferences needed here.
+ *
+ * The key-list guards below read Migration.kt's own source rather than
+ * comparing RESTORABLE_SETTINGS_KEYS against a second hand-copied list --
+ * a hand copy of the same list can drift right alongside it and this test
+ * would keep passing; it has to be checked against what applySettings and
+ * readRestorableSettings actually do, or it cannot catch the bug it is
+ * named for.
  */
 class RestorableSettingsTest {
 
-    /** Mirrors MainActivity's own reload -- reloadRestoredSettingsState
-     *  reads exactly these keys off Migration.readRestorableSettings. Kept
-     *  as a literal list, not a reference to the production constant, so
-     *  this test would actually fail if MainActivity's reload silently
-     *  dropped or renamed one -- see the equality assertion below, which
-     *  is the guard this list exists for. */
-    private val mainActivityReloadKeys = listOf(
-        "chunk_size",
-        "watch_interval_minutes",
-        "synced_file_policy",
-        "theme_mode",
-        "dry_run_default",
-        "mail_backend",
-        "imap_provider",
-        "imap_host",
-        "imap_port",
-        "imap_email",
-    )
+    private fun migrationSource(): String {
+        var dir: File? = File("").absoluteFile
+        while (dir != null) {
+            val candidate = File(dir, "src/main/java/com/chatmailsync/app/Migration.kt")
+            if (candidate.isFile) return candidate.readText()
+            val fallback = File(dir, "app/src/main/java/com/chatmailsync/app/Migration.kt")
+            if (fallback.isFile) return fallback.readText()
+            dir = dir.parentFile
+        }
+        throw AssertionError("could not locate Migration.kt from ${File("").absolutePath}")
+    }
+
+    /** Every `obj.has("key")` guard inside applySettings' body -- the actual
+     *  set of prefs a restore JSON can change, read off the source rather
+     *  than assumed. */
+    private fun applySettingsKeys(source: String): Set<String> {
+        val start = source.indexOf("private fun applySettings")
+        assertTrue("applySettings not found in Migration.kt", start >= 0)
+        val end = source.indexOf("val RESTORABLE_SETTINGS_KEYS", start)
+        assertTrue("could not find the end of applySettings in Migration.kt", end > start)
+        val body = source.substring(start, end)
+        return Regex("""obj\.has\("([a-z_]+)"\)""").findAll(body).map { it.groupValues[1] }.toSet()
+    }
+
+    /** Every key branch inside readRestorableSettings' `when` -- the actual
+     *  set of prefs MainActivity's post-restore reload re-reads. */
+    private fun readRestorableSettingsKeys(source: String): Set<String> {
+        val start = source.indexOf("fun readRestorableSettings")
+        assertTrue("readRestorableSettings not found in Migration.kt", start >= 0)
+        val body = source.substring(start)
+        return Regex(""""([a-z_]+)" ->""").findAll(body)
+            .map { it.groupValues[1] }
+            .filter { it != "else" }
+            .toSet()
+    }
 
     @Test
-    fun `MainActivity's reload key list matches Migration applySettings' own, key for key`() {
+    fun `RESTORABLE_SETTINGS_KEYS matches applySettings' own obj-has guards, key for key`() {
         // The regression this guards: a key added to applySettings (a new
-        // portable setting) but not to MainActivity's post-restore reload
-        // would restore correctly into AppPrefs and then silently vanish
-        // from the running app's own state -- exactly this bug, for a
-        // field nobody thought to update both lists for.
-        assertEquals(Migration.RESTORABLE_SETTINGS_KEYS, mainActivityReloadKeys)
+        // portable setting) but not to the published constant would restore
+        // correctly into AppPrefs and then silently vanish from the
+        // running app's own state -- exactly this bug, for a field nobody
+        // thought to update both places for.
+        val source = migrationSource()
+        assertEquals(applySettingsKeys(source), Migration.RESTORABLE_SETTINGS_KEYS.toSet())
+    }
+
+    @Test
+    fun `readRestorableSettings has a branch for every listed key, and no others`() {
+        val source = migrationSource()
+        assertEquals(Migration.RESTORABLE_SETTINGS_KEYS.toSet(), readRestorableSettingsKeys(source))
+    }
+
+    @Test
+    fun `buildRestorableSettings requests exactly the listed keys from its reader, no more and no fewer`() {
+        val requestedKeys = mutableListOf<String>()
+        Migration.buildRestorableSettings { key ->
+            requestedKeys.add(key)
+            null
+        }
+        assertEquals(Migration.RESTORABLE_SETTINGS_KEYS.toSet(), requestedKeys.toSet())
+    }
+
+    @Test
+    fun `no restorable key is, or resembles, a secret`() {
+        // Same tripwire as src/migration.py: a password/secret/token/
+        // credential field must never end up on the list a restore reload
+        // reads back into live app state.
+        val forbidden = listOf("password", "secret", "token", "credential")
+        for (key in Migration.RESTORABLE_SETTINGS_KEYS) {
+            for (word in forbidden) {
+                assertFalse(
+                    "\"$key\" looks like a secret field (\"$word\") and must not be restorable",
+                    key.contains(word, ignoreCase = true),
+                )
+            }
+        }
     }
 
     private fun fakeYahooRestore(): (String) -> Any? = { key ->

@@ -331,17 +331,37 @@ fun SettingsScreen(
                     )
 
                     "theme" -> {
-                        Text("Theme", style = MaterialTheme.typography.titleMedium)
-                        Box {
-                            OutlinedButton(onClick = { themeMenuOpen = true }) {
-                                Text(THEME_LABELS[themeMode] ?: themeMode)
-                            }
-                            DropdownMenu(expanded = themeMenuOpen, onDismissRequest = { themeMenuOpen = false }) {
-                                THEME_LABELS.forEach { (mode, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = { onThemeModeChange(mode); themeMenuOpen = false },
-                                    )
+                        // One row, title and control side by side -- matches
+                        // the nav rows above/below rather than the earlier
+                        // stacked title-then-button layout. The title takes
+                        // whatever width the button leaves it (weight(1f) is
+                        // RowScope's own, no separate import needed) and
+                        // ellipsizes first if the two can't both fit, e.g. at
+                        // 320dp width or 200% font scale.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Theme",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Box {
+                                OutlinedButton(onClick = { themeMenuOpen = true }) {
+                                    Text(THEME_LABELS[themeMode] ?: themeMode)
+                                }
+                                DropdownMenu(expanded = themeMenuOpen, onDismissRequest = { themeMenuOpen = false }) {
+                                    THEME_LABELS.forEach { (mode, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = { onThemeModeChange(mode); themeMenuOpen = false },
+                                        )
+                                    }
                                 }
                             }
                         }
