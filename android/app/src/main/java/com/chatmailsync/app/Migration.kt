@@ -146,16 +146,16 @@ object Migration {
      * Merge, never replace: an older backup must not be able to delete newer
      * history, because deleting history here does not lose data, it re-sends it.
      */
-    fun importFrom(context: Context, uri: Uri): String {
+    fun importFrom(context: Context, uri: Uri): RestoreOutcome {
         val staged = File(context.cacheDir, "backup-in$SUFFIX")
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 staged.outputStream().use { input.copyTo(it) }
-            } ?: return "That file could not be opened."
+            } ?: return RestoreOutcome("That file could not be opened.", success = false)
 
             val result = api().callAttr("import_backup", staged.absolutePath)
             if (!result.callAttr("get", "ok").toBoolean()) {
-                return result.callAttr("get", "error").toString()
+                return RestoreOutcome(result.callAttr("get", "error").toString(), success = false)
             }
             // Recorded before the early return as well as after it: a bundle
             // that was already restored here still covers this device's
@@ -164,10 +164,14 @@ object Migration {
             recordCoverFrom(context, result)
 
             if (result.callAttr("get", "already_imported").toBoolean()) {
-                return "That backup has already been restored on this phone. Nothing changed."
+                return RestoreOutcome(
+                    "That backup has already been restored on this phone. Nothing changed.",
+                    success = false,
+                )
             }
 
-            applySettings(context, result.callAttr("get", "settings_json").toString())
+            val settingsJson = result.callAttr("get", "settings_json").toString()
+            applySettings(context, settingsJson)
 
             val chats = result.callAttr("get", "chats_added").toString().toIntOrNull() ?: 0
             val hashes = result.callAttr("get", "hashes_added").toString().toIntOrNull() ?: 0
@@ -188,13 +192,67 @@ object Migration {
                     AppPrefs.hasImapPassword(context)
                 else AppPrefs.getConnectedAccountEmail(context) != null
             val finish = if (connected) "" else " Enter your mail password once to finish."
-            return "Restored ${plural(chats, "chat")} and ${plural(hashes, "message")} of " +
+            val message = "Restored ${plural(chats, "chat")} and ${plural(hashes, "message")} of " +
                 "history — those will not be sent again.$carried$finish"
+
+            val summary = restoreSummary(
+                chats = chats,
+                hashes = hashes,
+                cutoffs = cutoffs,
+                appliedSettings = parseAppliedSettings(settingsJson),
+                passwordSaved = connected,
+                providerLabels = currentProviderLabels(),
+            )
+            return RestoreOutcome(
+                message = message,
+                success = true,
+                restoredLines = summary.restored,
+                notRestoredLines = summary.notRestored,
+            )
         } catch (e: Exception) {
-            return "That backup could not be restored: ${e.message}"
+            return RestoreOutcome("That backup could not be restored: ${e.message}", success = false)
         } finally {
             staged.delete()
         }
+    }
+
+    /** Provider key -> display label, read fresh from the Python side (the
+     *  same config.IMAP_PROVIDERS table MainActivity's own provider picker
+     *  reads), for [restoreSummary]'s "Mail account" line. */
+    private fun currentProviderLabels(): Map<String, String> =
+        api().callAttr("imap_providers").asList().associate { entry ->
+            entry.callAttr("get", "key").toString() to entry.callAttr("get", "label").toString()
+        }
+
+    /**
+     * The subset of a restored settings bundle [restoreSummary] can turn into
+     * a confirmation line, typed and present only for keys the bundle
+     * actually carried -- mirrors [applySettings]'s own `obj.has(...)` guards
+     * so "only list settings the bundle actually carried" and "only apply
+     * settings the bundle actually carried" can never disagree.
+     *
+     * Deliberately narrower than [RESTORABLE_SETTINGS_KEYS]: `imap_host` and
+     * `mail_backend` are applied but never surfaced here (imap_host is not a
+     * fact a person reads meaning into, and mail_backend has no line of its
+     * own in the D7/D8 settings vocabulary this reuses).
+     */
+    private fun parseAppliedSettings(json: String): Map<String, Any?> {
+        val obj = try {
+            JSONObject(json)
+        } catch (e: Exception) {
+            return emptyMap()
+        }
+        val map = mutableMapOf<String, Any?>()
+        if (obj.has("imap_provider")) map["imap_provider"] = obj.optString("imap_provider")
+        if (obj.has("imap_email")) map["imap_email"] = obj.optString("imap_email")
+        if (obj.has("theme_mode")) map["theme_mode"] = obj.optString("theme_mode")
+        if (obj.has("chunk_size")) map["chunk_size"] = obj.optString("chunk_size")
+        if (obj.has("watch_interval_minutes")) {
+            map["watch_interval_minutes"] = obj.optLong("watch_interval_minutes")
+        }
+        if (obj.has("synced_file_policy")) map["synced_file_policy"] = obj.optString("synced_file_policy")
+        if (obj.has("dry_run_default")) map["dry_run_default"] = obj.optBoolean("dry_run_default")
+        return map
     }
 
     /**
@@ -384,3 +442,113 @@ enum class BackupPillTone { GOOD, WARN, BAD }
 /** What [Migration.backupPillState] returns: the words for the pill and the
  *  tone to render them in. */
 data class BackupPillInfo(val label: String, val tone: BackupPillTone)
+
+/**
+ * What [Migration.importFrom] reports back, in place of the plain String it
+ * used to return.
+ *
+ * [message] is the existing one-line result (unchanged wording, unchanged
+ * callers -- Settings' save flow and every existing `migrationStatus`
+ * consumer keep working exactly as before). [success] replaces sniffing that
+ * message for a "Restored " prefix (see [restoreOutcomeIsSuccess] in
+ * MainActivity), which broke the moment the message below it needed to carry
+ * more than one sentence. [restoredLines]/[notRestoredLines] are empty for
+ * every non-success outcome (already-imported, failure) on purpose (batch
+ * 7b's "For already_imported or failure: no list, just the existing
+ * message.") -- callers never need to branch on success to decide whether to
+ * draw them, an empty list already draws nothing.
+ */
+data class RestoreOutcome(
+    val message: String,
+    val success: Boolean,
+    val restoredLines: List<String> = emptyList(),
+    val notRestoredLines: List<String> = emptyList(),
+)
+
+/** The two lists [restoreSummary] builds: what a successful restore actually
+ *  carried, and what it could not carry regardless. */
+internal data class RestoreSummaryLines(val restored: List<String>, val notRestored: List<String>)
+
+/**
+ * The restore-confirmation detail lines shown under a successful restore's
+ * one-line result, on both the first-run welcome step and the Backup &
+ * restore screen (batch 7b: "and some confirmation - that what all got
+ * restored").
+ *
+ * Pure -- no Context, no Python -- so every combination of what a bundle did
+ * and did not carry is a plain JUnit test rather than something only a
+ * manual restore-and-look would catch. [appliedSettings] mirrors exactly
+ * what [Migration.applySettings] wrote (see [Migration.parseAppliedSettings]
+ * for how it is built from the same settings_json), so a setting only
+ * appears here when the bundle actually carried it -- a fresh install's
+ * settings_json with no `theme_mode` key produces no "Theme: ..." line, not
+ * one guessing at the platform default.
+ *
+ * Every value that has a label map elsewhere in the app (theme, chunk size,
+ * synced-file policy, watch interval) is translated through that same map
+ * rather than printed raw, so this never shows someone a pref key's on-disk
+ * spelling ("system", "delete", "day") in place of the words Settings/
+ * Advanced already uses for it.
+ *
+ * [providerLabels] is passed in rather than read here (there is no Python
+ * bridge to call from a pure function) -- [Migration.currentProviderLabels]
+ * is what a real restore supplies; tests supply a small fake map instead.
+ *
+ * `imap_host` is deliberately never read from [appliedSettings]: it is
+ * carried and applied ([Migration.RESTORABLE_SETTINGS_KEYS]), but it is not
+ * a fact this summary states -- the provider name already says which host,
+ * and the raw host string is not something a person reads meaning into.
+ */
+internal fun restoreSummary(
+    chats: Int,
+    hashes: Int,
+    cutoffs: Int,
+    appliedSettings: Map<String, Any?>,
+    passwordSaved: Boolean,
+    providerLabels: Map<String, String>,
+): RestoreSummaryLines {
+    val restored = mutableListOf<String>()
+    restored += "Chats: $chats"
+    restored += "Messages already sent: $hashes (won't be sent again)"
+    // Named only when there are any -- same reasoning as the one-line
+    // message above it: a phone that never set a per-chat cutoff should not
+    // be told about a feature it does not use.
+    if (cutoffs > 0) restored += "Per-chat cutoff dates: $cutoffs"
+
+    val provider = appliedSettings["imap_provider"] as? String
+    val email = appliedSettings["imap_email"] as? String
+    if (!provider.isNullOrBlank() || !email.isNullOrBlank()) {
+        val providerName = provider?.let { providerLabels[it] ?: it } ?: "Unknown provider"
+        restored += "Mail account: $providerName – ${email.orEmpty()}"
+    }
+
+    (appliedSettings["theme_mode"] as? String)?.let {
+        restored += "Theme: ${THEME_LABELS[it] ?: it}"
+    }
+    (appliedSettings["chunk_size"] as? String)?.let {
+        restored += "Email grouping: ${CHUNK_LABELS[it] ?: it}"
+    }
+    (appliedSettings["watch_interval_minutes"] as? Long)?.let { minutes ->
+        val label = WATCH_INTERVAL_LABELS.firstOrNull { it.first == minutes }?.second
+            ?: "Every $minutes min"
+        restored += "Check interval: $label"
+    }
+    (appliedSettings["synced_file_policy"] as? String)?.let {
+        restored += "After import: ${SYNCED_FILE_POLICY_LABELS[it] ?: it}"
+    }
+    (appliedSettings["dry_run_default"] as? Boolean)?.let {
+        restored += "Rehearse without sending: ${if (it) "On" else "Off"}"
+    }
+
+    val notRestored = mutableListOf<String>()
+    // Only when there is not already one saved -- restoring onto a phone
+    // that is already connected has nothing left to ask for here either,
+    // same reasoning as the one-line message's own "Enter your mail
+    // password once to finish."
+    if (!passwordSaved) notRestored += "Your app password (enter it once)"
+    // Always -- Android's SAF folder permission is granted per-device and
+    // cannot travel in a backup file regardless of what the bundle carries.
+    notRestored += "Watched folder (choose it again in Settings > Advanced)"
+
+    return RestoreSummaryLines(restored, notRestored)
+}

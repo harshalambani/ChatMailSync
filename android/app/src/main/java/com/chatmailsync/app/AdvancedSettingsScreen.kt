@@ -33,7 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-private val SYNCED_FILE_POLICY_LABELS = mapOf(
+// internal, not private: Migration's restoreSummary (Batch 7b) reuses these
+// same label maps for its restore-confirmation lines rather than keeping a
+// second copy that could drift from what this screen shows.
+internal val SYNCED_FILE_POLICY_LABELS = mapOf(
     "leave" to "Leave in place",
     "move" to "Move to a \"synced\" subfolder",
     "delete" to "Delete after import",
@@ -43,7 +46,7 @@ private val SYNCED_FILE_POLICY_LABELS = mapOf(
 // keeps company with; not copied, so there is exactly one place that knows
 // what a chunk size string means.
 private val CHUNK_SIZES = listOf("hour", "day", "week")
-private val CHUNK_LABELS = mapOf(
+internal val CHUNK_LABELS = mapOf(
     "hour" to "Hourly emails",
     "day" to "Daily emails",
     "week" to "Weekly emails",

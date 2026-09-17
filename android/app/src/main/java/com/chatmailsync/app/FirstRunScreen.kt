@@ -62,6 +62,39 @@ internal val FIRST_RUN_STEP_TITLES = listOf(
 )
 
 /**
+ * Where the mailbox step (outer step 2) goes once it finishes, for someone
+ * who restored an existing archive on this same first-run welcome step.
+ *
+ * They already have chats and have already sent their history once, so
+ * steps 3 ("Share your first chat") and 4 ("Keep it automatic?") ask about
+ * things that already happened -- null (finish first-run entirely, the same
+ * path "Set up later"/"Not now" use) skips both rather than showing either.
+ * Anyone who did not restore keeps the normal path onward to step 3.
+ *
+ * Kept as a pure function, same reasoning as [firstRunStepForward]: a wrong
+ * branch here is a unit test away from being caught instead of only a
+ * manual click-through noticing steps 3/4 reappearing after a restore.
+ */
+internal fun firstRunNextStepAfterMailbox(restored: Boolean): Int? = if (restored) null else 3
+
+/**
+ * The outer step-counter label shown above the mailbox step (outer step 2).
+ *
+ * Ordinarily "Step N of 4 - <title>", matching [FIRST_RUN_STEP_TITLES] and
+ * the "Step 2 of 4" counters steps 3 and 4 use. For someone who just
+ * restored an existing archive on the welcome step, the mailbox step is the
+ * last thing first-run asks of them (see [firstRunNextStepAfterMailbox]),
+ * so a "2 of 4" counter would promise two more steps that are never shown --
+ * this drops the count entirely for that one case.
+ */
+internal fun firstRunStepLabel(step: Int, restored: Boolean): String =
+    if (step == 2 && restored) {
+        "Finish restoring - enter your app password"
+    } else {
+        "Step $step of 4 - ${FIRST_RUN_STEP_TITLES[step - 1]}"
+    }
+
+/**
  * The four-step guided path a brand-new install lands on (D7): welcome,
  * connect a mailbox, share one chat, and decide whether to automate the
  * rest. Everything here reuses an existing screen or an existing pref/worker
@@ -110,6 +143,11 @@ fun FirstRunScreen(
     offerRestore: Boolean = false,
     migrationBusy: Boolean = false,
     migrationStatus: String? = null,
+    // Batch 7b: same "what got restored" detail Backup & restore shows,
+    // reused here rather than a second copy of the restore-confirmation UI.
+    migrationSuccess: Boolean? = null,
+    migrationRestoredLines: List<String> = emptyList(),
+    migrationNotRestoredLines: List<String> = emptyList(),
     onRestoreFromBackup: () -> Unit = {},
 ) {
     var step by rememberSaveable { mutableStateOf(1) }
@@ -119,6 +157,19 @@ fun FirstRunScreen(
     // to 2 ("Sign in", where the app password is entered), since a restore
     // already answered the provider/email questions steps 0-1 exist to ask.
     var wizardInitialStep by remember { mutableStateOf(0) }
+    // Non-secret: which finish-first-run branch the mailbox step should take
+    // once it's done, and whether its outer label should drop the "of 4"
+    // count. Set only by a genuine successful restore's "Continue" (see
+    // onContinueAfterRestore below); rememberSaveable so it survives a
+    // rotation the same as [step] and [wizardInitialStep] -- otherwise a
+    // rotation mid-mailbox-step would fall back to the normal step-3 routing
+    // for someone who restored.
+    var restoredOnFirstRun by rememberSaveable { mutableStateOf(false) }
+
+    fun finishOrAdvanceFromMailboxStep() {
+        val next = firstRunNextStepAfterMailbox(restoredOnFirstRun)
+        if (next == null) onSetUpLater() else step = next
+    }
 
     when (step) {
         1 -> FirstRunWelcomeStep(
@@ -127,9 +178,13 @@ fun FirstRunScreen(
             offerRestore = offerRestore,
             migrationBusy = migrationBusy,
             migrationStatus = migrationStatus,
+            migrationSuccess = migrationSuccess,
+            migrationRestoredLines = migrationRestoredLines,
+            migrationNotRestoredLines = migrationNotRestoredLines,
             onRestoreFromBackup = onRestoreFromBackup,
             onContinueAfterRestore = {
                 wizardInitialStep = 2
+                restoredOnFirstRun = true
                 step = firstRunStepForward(step)
             },
         )
@@ -137,9 +192,10 @@ fun FirstRunScreen(
             // The wizard draws its own top bar; its own "Step n of 4" (n up to
             // 4, for its four internal sub-steps) is switched off below so this
             // single label is the only step counter on screen, consistent with
-            // steps 3 and 4.
+            // steps 3 and 4 -- except in restored mode, where there is no "of
+            // 4" to draw at all (see firstRunStepLabel).
             Text(
-                "Step 2 of 4 - ${FIRST_RUN_STEP_TITLES[1]}",
+                firstRunStepLabel(2, restoredOnFirstRun),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -149,7 +205,7 @@ fun FirstRunScreen(
             Box(modifier = Modifier.weight(1f)) {
                 MailSetupWizardScreen(
                     onExit = { step = firstRunStepBack(step) },
-                    onDone = { step = firstRunStepForward(step) },
+                    onDone = { finishOrAdvanceFromMailboxStep() },
                     imapProviders = imapProviders,
                     stagePlan = stagePlan,
                     initialProvider = initialProvider,
@@ -157,7 +213,7 @@ fun FirstRunScreen(
                     onConnect = onConnect,
                     showStepCounter = false,
                     hasExistingMailbox = hasExistingMailbox,
-                    onKeepCurrentMailbox = { step = firstRunStepForward(step) },
+                    onKeepCurrentMailbox = { finishOrAdvanceFromMailboxStep() },
                     initialStep = wizardInitialStep,
                 )
             }
@@ -188,6 +244,9 @@ private fun FirstRunWelcomeStep(
     offerRestore: Boolean = false,
     migrationBusy: Boolean = false,
     migrationStatus: String? = null,
+    migrationSuccess: Boolean? = null,
+    migrationRestoredLines: List<String> = emptyList(),
+    migrationNotRestoredLines: List<String> = emptyList(),
     onRestoreFromBackup: () -> Unit = {},
     onContinueAfterRestore: () -> Unit = {},
 ) {
@@ -221,7 +280,7 @@ private fun FirstRunWelcomeStep(
                 // success, failure, already-imported -- draws inline on this
                 // same step, same as Backup & restore's own screen does.
                 if (!migrationBusy && migrationStatus != null) {
-                    val restored = restoreOutcomeIsSuccess(migrationStatus)
+                    val restored = restoreOutcomeIsSuccess(migrationSuccess)
                     Text(
                         migrationStatus,
                         style = MaterialTheme.typography.bodySmall,
@@ -231,13 +290,46 @@ private fun FirstRunWelcomeStep(
                             MaterialTheme.colorScheme.error
                         },
                     )
+                    // Batch 7b: "and some confirmation - that what all got
+                    // restored" -- the same restore-confirmation detail
+                    // Backup & restore shows, drawn here too since a restore
+                    // can start from this welcome step as well. Empty for
+                    // failure/already-imported (see Migration.RestoreOutcome),
+                    // so nothing extra draws for those.
                     if (restored) {
+                        if (migrationRestoredLines.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                migrationRestoredLines.forEach { line ->
+                                    Text(
+                                        "• $line",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        if (migrationNotRestoredLines.isNotEmpty()) {
+                            Text(
+                                "Not restored:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                migrationNotRestoredLines.forEach { line ->
+                                    Text(
+                                        "• $line",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         Button(onClick = onContinueAfterRestore, modifier = Modifier.fillMaxWidth()) {
                             Text("Continue")
                         }
                     }
                 }
-                val restoreSucceeded = !migrationBusy && restoreOutcomeIsSuccess(migrationStatus)
+                val restoreSucceeded = !migrationBusy && restoreOutcomeIsSuccess(migrationSuccess)
                 if (!restoreSucceeded) {
                     TextButton(
                         onClick = onRestoreFromBackup,

@@ -43,6 +43,15 @@ fun BackupRestoreScreen(
     onRestoreBackup: () -> Unit,
     migrationBusy: Boolean,
     migrationStatus: String?,
+    // Batch 7b: "and some confirmation - that what all got restored" -- a
+    // successful restore's one-line [migrationStatus] gets a short list of
+    // exactly what came back (Migration.restoreSummary) directly under it,
+    // still inline, never a dialog/pop-up/toast. Empty for every non-restore
+    // state and for a failed/already-imported restore alike, so nothing
+    // extra draws for those without this screen needing to know why.
+    migrationSuccess: Boolean? = null,
+    migrationRestoredLines: List<String> = emptyList(),
+    migrationNotRestoredLines: List<String> = emptyList(),
 ) {
     val context = LocalContext.current
     Scaffold(
@@ -116,6 +125,40 @@ fun BackupRestoreScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+            }
+            // Only ever non-empty for a successful restore (see
+            // Migration.RestoreOutcome) -- an already-imported or failed
+            // attempt leaves both lists empty, so nothing draws here beyond
+            // the one-line message above, per batch 7b's "no list, just the
+            // existing message."
+            if (!migrationBusy && restoreOutcomeIsSuccess(migrationSuccess)) {
+                if (migrationRestoredLines.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        migrationRestoredLines.forEach { line ->
+                            Text(
+                                "• $line",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                if (migrationNotRestoredLines.isNotEmpty()) {
+                    Text(
+                        "Not restored:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        migrationNotRestoredLines.forEach { line ->
+                            Text(
+                                "• $line",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
             Text(
                 "Your mail password is never included in a backup.",

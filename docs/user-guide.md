@@ -598,6 +598,12 @@ already synced something keeps both sides, and restoring the same backup twice
 does nothing the second time. You will still need to add your export files again
 on the new phone.
 
+Restoring during first-run setup takes you straight to entering your app
+password and then Home — it does not walk you back through the rest of the
+welcome steps, since a restored phone already knows the rest. Either way, the
+app shows what came back and what you still need to redo, right under the
+restore button.
+
 ---
 
 ### Q. What happens if I reinstall the app or reset my device?

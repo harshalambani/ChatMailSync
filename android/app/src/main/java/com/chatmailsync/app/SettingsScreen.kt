@@ -48,7 +48,10 @@ import androidx.compose.ui.unit.dp
 // same URL.
 internal const val PRIVACY_POLICY_URL = "https://chatmailsync.ambani.tech/privacy.html"
 
-private val THEME_LABELS = mapOf(
+// internal, not private: Migration's restoreSummary (Batch 7b) reuses this
+// same label map for its restore-confirmation "Theme: ..." line rather than
+// keeping a second copy that could drift from what this screen shows.
+internal val THEME_LABELS = mapOf(
     "system" to "Match system",
     "light" to "Light",
     "dark" to "Dark",
