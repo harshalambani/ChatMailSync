@@ -586,7 +586,9 @@ with your preferences. Put it wherever you like and move it across however you
 normally move a file.
 
 On the new one: install the app, then **Restore from a backup** in the same place,
-before the first sync. Your chats are not in that file and do not need to be —
+before the first sync — or tap **Moving from another phone? Restore from a backup**
+right on the app's first screen, which does the same thing without waiting to
+reach Settings. Your chats are not in that file and do not need to be —
 they are already in your mailbox, which is the archive. What the backup saves you
 is a second copy of every one of them landing there.
 

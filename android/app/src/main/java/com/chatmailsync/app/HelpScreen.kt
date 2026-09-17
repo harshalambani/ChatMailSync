@@ -39,7 +39,7 @@ internal val FAQ = listOf(
     "How do I export a chat from WhatsApp?" to
         "Open the chat in WhatsApp -> tap the three-dot menu -> More -> Export chat. " +
         "Choose \"Include media\" for a .zip with photos/videos, or \"Without media\" for a plain .txt. " +
-        "Then share it to this app (or use \"Import a WhatsApp export\" on Home). " +
+        "Then share it to this app (or use \"Choose exports to import\" on Home). " +
         "One chat at a time: WhatsApp has no multi-select export, so you cannot tick several chats " +
         "and export them together — each one has to be exported from inside that chat. This app has " +
         "no such limit; once the files are here you can import and sync as many as you like at once.",
@@ -228,7 +228,9 @@ internal val FAQ = listOf(
         "record of what has already been sent, plus your preferences; pick anywhere you like to " +
         "put it, and get it to the new phone however you normally move a file. On the new phone, " +
         "install the app and use \"Restore from a backup\" in the same place before your first " +
-        "sync. Your chats themselves are not in that file and do not need to be: they are already " +
+        "sync -- or, on that very first screen the app shows you, \"Moving from another phone? " +
+        "Restore from a backup\" does the same thing without waiting for Settings. Your chats " +
+        "themselves are not in that file and do not need to be: they are already " +
         "in your mailbox, which is the archive. What the backup saves you is a second copy of all " +
         "of them landing there. Your mail password is deliberately not included, so the new phone " +
         "asks for it once. Restoring merges rather than replaces, so a restore onto a phone that " +

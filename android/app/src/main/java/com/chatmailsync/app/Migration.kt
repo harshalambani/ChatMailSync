@@ -71,6 +71,34 @@ object Migration {
     fun backupIsStale(atMillis: Long, now: Long = System.currentTimeMillis()): Boolean =
         atMillis <= 0L || now - atMillis > BACKUP_STALE_AFTER_DAYS * 24L * 60L * 60L * 1000L
 
+    /**
+     * The status pill shown on Settings' "Backup & restore" nav row.
+     *
+     * Pure so it can be unit-tested without Compose or a Context:
+     * [lastBackupAt] is [AppPrefs.getLastBackupAt], [now] defaults to the
+     * real clock but is overridable for the exactly-30-days boundary test.
+     * The "no backup at all" case is checked before [backupIsStale] so its
+     * own `atMillis <= 0L` branch is never what answers it here -- the two
+     * still agree (both call it BAD/stale), this just picks the more
+     * specific label ("No backup" vs "Backup due").
+     *
+     * A future [lastBackupAt] (clock skew, or a restored device with a
+     * clock behind the backup's own timestamp) is deliberately treated as
+     * GOOD rather than crashing or reporting "due"/"No backup": the backup
+     * demonstrably exists, so understating that would be its own kind of
+     * lie.
+     */
+    fun backupPillState(lastBackupAt: Long, now: Long = System.currentTimeMillis()): BackupPillInfo = when {
+        lastBackupAt <= 0L -> BackupPillInfo("No backup", BackupPillTone.BAD)
+        backupIsStale(lastBackupAt, now) -> BackupPillInfo("Backup due", BackupPillTone.WARN)
+        else -> BackupPillInfo(
+            "Backed up " + java.text.SimpleDateFormat(
+                "d MMM", java.util.Locale.getDefault(),
+            ).format(java.util.Date(lastBackupAt)),
+            BackupPillTone.GOOD,
+        )
+    }
+
     /** "Last backup: 28 Aug 2026", or the plain fact that there isn't one. */
     fun describeLastBackup(atMillis: Long): String =
         if (atMillis <= 0L) "No backup saved yet."
@@ -252,4 +280,107 @@ object Migration {
         // phone that cannot connect yet.
         AppPrefs.clearLastConnectionResult(context)
     }
+
+    /**
+     * The exact prefs [applySettings] can change on a restore -- and so the
+     * exact prefs MainActivity's post-restore reload must re-read.
+     *
+     * The bug this exists to prevent: MainActivity holds each of these in a
+     * `remember { mutableStateOf(AppPrefs.getX(context)) }` read once at
+     * first composition (imapProvider, imapEmail, chunk size, watch
+     * interval, synced-file policy, theme mode, dry-run default, mail
+     * backend, host and port). [applySettings] writes straight to AppPrefs
+     * and never told any of that remembered state to re-read, so after a
+     * real restore (verified: force-stop and relaunch showed the restored
+     * Yahoo account correctly) the still-live Compose state kept showing
+     * the pre-restore values -- Mail account showed "Gmail" with a blank
+     * email, and Save & connect there would have overwritten the just-
+     * restored settings with form defaults.
+     *
+     * One list, used by both sides ([RestorableSettingsTest] asserts
+     * MainActivity's own reload key list equals this one), so a key added
+     * to [applySettings] and not to the reload fails a test instead of
+     * quietly reintroducing this bug for that one field.
+     */
+    val RESTORABLE_SETTINGS_KEYS: List<String> = listOf(
+        "chunk_size",
+        "watch_interval_minutes",
+        "synced_file_policy",
+        "theme_mode",
+        "dry_run_default",
+        "mail_backend",
+        "imap_provider",
+        "imap_host",
+        "imap_port",
+        "imap_email",
+    )
+
+    /** The values behind [RESTORABLE_SETTINGS_KEYS], read fresh. */
+    data class RestorableSettings(
+        val chunkSize: String,
+        val watchIntervalMinutes: Long,
+        val syncedFilePolicy: String,
+        val themeMode: String,
+        val dryRunDefault: Boolean,
+        val mailBackend: String,
+        val imapProvider: String,
+        val imapHost: String,
+        val imapPort: Int,
+        val imapEmail: String,
+    )
+
+    /**
+     * Builds [RestorableSettings] from a generic key -> value [reader]
+     * rather than a Context directly, so it can be unit-tested with a fake
+     * map standing in for AppPrefs (see RestorableSettingsTest) with no
+     * Robolectric involved. [readRestorableSettings] below is the real,
+     * AppPrefs-backed caller MainActivity uses after a restore.
+     *
+     * Never reads the password: [AppPrefs.getImapPasswordSecretKey]'s key
+     * is not in [RESTORABLE_SETTINGS_KEYS], and this function has no path
+     * to SecretStore at all to read it even by mistake.
+     */
+    fun buildRestorableSettings(reader: (String) -> Any?): RestorableSettings = RestorableSettings(
+        chunkSize = reader("chunk_size") as? String ?: "",
+        watchIntervalMinutes = (reader("watch_interval_minutes") as? Long)
+            ?: AppPrefs.MIN_WATCH_INTERVAL_MINUTES,
+        syncedFilePolicy = reader("synced_file_policy") as? String ?: "",
+        themeMode = reader("theme_mode") as? String ?: "system",
+        dryRunDefault = (reader("dry_run_default") as? Boolean) ?: false,
+        mailBackend = reader("mail_backend") as? String ?: "",
+        imapProvider = reader("imap_provider") as? String ?: "",
+        imapHost = reader("imap_host") as? String ?: "",
+        imapPort = (reader("imap_port") as? Int) ?: 993,
+        imapEmail = reader("imap_email") as? String ?: "",
+    )
+
+    /** [buildRestorableSettings], reading today's real AppPrefs values --
+     *  what MainActivity calls after every restore attempt (success,
+     *  failure or already-imported alike) to re-seed its remembered state.
+     *  Harmless when nothing changed: reading unchanged AppPrefs back into
+     *  the same state is a no-op, not a wipe to defaults. */
+    fun readRestorableSettings(context: Context): RestorableSettings = buildRestorableSettings { key ->
+        when (key) {
+            "chunk_size" -> AppPrefs.getChunkSize(context)
+            "watch_interval_minutes" -> AppPrefs.getWatchIntervalMinutes(context)
+            "synced_file_policy" -> AppPrefs.getSyncedFilePolicy(context)
+            "theme_mode" -> AppPrefs.getThemeMode(context)
+            "dry_run_default" -> AppPrefs.isDryRunDefault(context)
+            "mail_backend" -> AppPrefs.resolveMailBackend(context)
+            "imap_provider" -> AppPrefs.getImapProvider(context)
+            "imap_host" -> AppPrefs.getImapHost(context)
+            "imap_port" -> AppPrefs.getImapPort(context)
+            "imap_email" -> AppPrefs.getImapEmail(context)
+            else -> null
+        }
+    }
 }
+
+/** Named for meaning, not colour -- a pill's tone is never the only thing
+ *  that says what it means, its label already does, but this is what a
+ *  renderer maps to an actual colour pair. */
+enum class BackupPillTone { GOOD, WARN, BAD }
+
+/** What [Migration.backupPillState] returns: the words for the pill and the
+ *  tone to render them in. */
+data class BackupPillInfo(val label: String, val tone: BackupPillTone)

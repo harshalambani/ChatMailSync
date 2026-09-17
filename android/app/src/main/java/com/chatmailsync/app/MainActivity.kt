@@ -159,6 +159,10 @@ internal fun tabForRoute(route: String?): String? = when {
     // Settings told two thirds of its visitors they were somewhere they had
     // never been. No tab lit is honest; the wrong tab lit is not.
     route.startsWith("syncLog") -> null
+    // Same reasoning as the sync log just above: Backup & restore has two
+    // doors now, Settings' own nav row and the stale-backup banner on Home,
+    // so lighting either tab would be wrong for whoever came from the other.
+    route == "backupRestore" -> null
     else -> null
 }
 
@@ -185,6 +189,39 @@ internal fun shouldScanAtLaunch(autoWatchOn: Boolean, watchedFolderUri: String?)
  */
 internal fun shouldShowFirstRun(firstRunDone: Boolean, mailboxConfigured: Boolean): Boolean =
     !firstRunDone && !mailboxConfigured
+
+/**
+ * Whether the welcome step's quiet "Moving from another phone? Restore from
+ * a backup" option should be offered.
+ *
+ * Deliberately the same fresh-install condition as [shouldShowFirstRun] --
+ * nothing else would make sense, only a phone with nothing configured needs
+ * restoring onto -- narrowed further by [cameFrom]: null exactly when
+ * first_run is the nav graph's own start destination (a genuine fresh
+ * install, with no previous back-stack entry to have arrived from), as
+ * opposed to "Run setup again" (H7) reopening first_run from Advanced
+ * settings, where restoring already lives on the Backup & restore screen
+ * and does not need repeating here.
+ */
+internal fun shouldOfferRestoreOnFirstRun(
+    cameFrom: String?,
+    firstRunDone: Boolean,
+    mailboxConfigured: Boolean,
+): Boolean = cameFrom == null && shouldShowFirstRun(firstRunDone, mailboxConfigured)
+
+/**
+ * Whether a restore attempt's status message reads as success, for the
+ * welcome step to decide between staying put (offer the restore option
+ * again) and offering "Continue" into mail setup.
+ *
+ * Matched on the one prefix [Migration.importFrom] uses for its success
+ * case ("Restored N chat(s) and ..."); failure, already-imported, and a
+ * cancelled picker (which never sets a status at all -- see restoreBackup's
+ * launcher below, which only proceeds when a uri was actually picked) are
+ * every other shape and none of them start this way.
+ */
+internal fun restoreOutcomeIsSuccess(migrationStatus: String?): Boolean =
+    migrationStatus != null && migrationStatus.startsWith("Restored ")
 
 /**
  * The word beside a labelled back arrow, derived from the actual previous
@@ -214,6 +251,12 @@ internal fun backLabelForRoute(route: String?): String = when {
     route == "privacy" -> "Privacy"
     route == "mailAccount" -> "Mail account"
     route == "me" -> "Me"
+    // Matches the route composable("backupRestore") navigates to, added
+    // below -- the row id "backup_restore" (SettingsRowSpec) is a different
+    // string on purpose, see BASIC_SETTINGS_ROWS' own comment, and must NOT
+    // be matched here: falling through to plain "Back" for it is the point
+    // of the guard test, not a gap to close.
+    route == "backupRestore" -> "Backup & restore"
     route == "syncLog" || route?.startsWith("syncLog/") == true -> "Sync log"
     route == "queue" -> "Queue"
     route == "importPicker" -> "Import"
@@ -1008,6 +1051,11 @@ fun ChatMailApp(
     // pattern the rest of this file uses for Python calls.
     var migrationBusy by remember { mutableStateOf(false) }
     var migrationStatus by remember { mutableStateOf<String?>(null) }
+    // Bumped after every restore attempt completes (success, failure or
+    // already-imported alike) to trigger reloadRestoredSettingsState below
+    // -- a plain Int rather than keying off migrationStatus itself, because
+    // a save's status message changes too and has nothing to reload.
+    var restoreGeneration by remember { mutableStateOf(0) }
 
     val saveBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(Migration.MIME_TYPE),
@@ -1048,6 +1096,11 @@ fun ChatMailApp(
                     migrationStatus = message
                     migrationBusy = false
                     refreshInbox()
+                    // See reloadRestoredSettingsState below: this is what
+                    // tells the mail-account/settings state, held in
+                    // remember blocks read once, that a restore may have
+                    // just changed what AppPrefs holds underneath them.
+                    restoreGeneration++
                 }
             }.start()
         }
@@ -1169,6 +1222,46 @@ fun ChatMailApp(
     var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
     var cutoffDate by remember { mutableStateOf(AppPrefs.getCutoffDate(context)) }
     var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
+
+    // ---- Reload after a restore (batch 7 follow-up) ---------------------
+    // Every var below is re-read from AppPrefs on every restore attempt
+    // (Migration.readRestorableSettings, whose key list is
+    // Migration.RESTORABLE_SETTINGS_KEYS -- kept equal to this list by
+    // RestorableSettingsTest). Harmless when a restore failed, was
+    // cancelled or was already-imported: applySettings never ran, so
+    // AppPrefs is unchanged and this just re-sets the same values --
+    // never a wipe to form defaults.
+    //
+    // cutoffDate, watchedFolderUri, autoWatchEnabled and imapPasswordSaved
+    // are deliberately absent: none of them is a key applySettings ever
+    // writes (a per-chat cutoff and the watched-folder pick are this
+    // phone's own choices, and the password never leaves the old device).
+    fun reloadRestoredSettingsState() {
+        val restored = Migration.readRestorableSettings(context)
+        mailBackend = restored.mailBackend
+        imapProvider = restored.imapProvider
+        imapHost = restored.imapHost
+        imapPort = restored.imapPort
+        imapEmail = restored.imapEmail
+        chunkSize = restored.chunkSize
+        watchIntervalMinutes = restored.watchIntervalMinutes
+        syncedFilePolicy = restored.syncedFilePolicy
+        dryRunDefault = restored.dryRunDefault
+        // Goes through the same setter onCreate wires up, not a direct
+        // assignment -- themeMode itself lives one composable up (over
+        // ChatMailApp), so this is the only way to reach it from here, and
+        // it happens to also be what keeps AppPrefs and the live value in
+        // sync for every other caller of onThemeModeChange.
+        onThemeModeChange(restored.themeMode)
+        // applySettings clears the saved connection verdict (the password
+        // did not travel, so a stale "Connected" would be a green light on
+        // a mailbox this phone cannot reach yet) -- re-derive the pill
+        // rather than leave it showing whatever it said before the restore.
+        ConnectionState.refresh(context, imapPasswordSaved)
+    }
+    LaunchedEffect(restoreGeneration) {
+        if (restoreGeneration > 0) reloadRestoredSettingsState()
+    }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
     val workManager = remember { WorkManager.getInstance(context) }
@@ -1521,6 +1614,22 @@ fun ChatMailApp(
                     },
                     onNotNow = { finishFirstRun() },
                     hasExistingMailbox = imapPasswordSaved,
+                    // Batch 7 follow-up: restore-on-first-run. Reuses the
+                    // exact restoreBackup launcher and migrationBusy/
+                    // migrationStatus state Backup & restore itself uses --
+                    // no second copy of the restore flow -- so a success here
+                    // also runs reloadRestoredSettingsState below, the same
+                    // as it would from Settings.
+                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, imapPasswordSaved),
+                    migrationBusy = migrationBusy,
+                    migrationStatus = migrationStatus,
+                    onRestoreFromBackup = {
+                        // Clears any earlier attempt's message before a new
+                        // pick, the same as re-opening the picker would from
+                        // Backup & restore.
+                        migrationStatus = null
+                        restoreBackup.launch(arrayOf("*/*"))
+                    },
                 )
             }
             composable("home") {
@@ -1596,7 +1705,7 @@ fun ChatMailApp(
                     },
                     onOpenSyncLog = { navController.navigate("syncLog") },
                     onOpenQueue = { navController.navigate("queue") },
-                    onOpenBackup = { navController.navigate("settings") },
+                    onOpenBackup = { navController.navigate("backupRestore") },
                     meLabel = homeMeDisplay.label,
                     meColor = homeMeDisplay.color,
                     meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
@@ -1672,14 +1781,33 @@ fun ChatMailApp(
                 // UI lives on its own screen.
                 val mailAccountSummary =
                     if (imapPasswordSaved) imapEmail else "Not connected"
+                // Re-read on entry and whenever the shared migration state
+                // moves -- same "walking Settings -> save -> Home clears the
+                // line" reasoning Home's own lastBackupAt carries, now that
+                // the row here is a pill rather than the buttons themselves.
+                val lastBackupAt = remember(migrationStatus) {
+                    AppPrefs.getLastBackupAt(context)
+                }
                 SettingsScreen(
                     mailAccountSummary = mailAccountSummary,
                     onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
                     onOpenPrivacy = { navController.navigate("privacy") },
                     onOpenAdvanced = { navController.navigate("advancedSettings") },
+                    onOpenBackupRestore = { navController.navigate("backupRestore") },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
+                    lastBackupAt = lastBackupAt,
+                    selfSenderSource = selfSenderSource,
+                    selfSenderName = selfSenderName,
+                    onOpenMe = { navController.navigate("me") },
+                )
+            }
+            composable("backupRestore") {
+                val from = navController.previousBackStackEntry?.destination?.route
+                BackupRestoreScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
                     onSaveBackup = {
                         migrationStatus = null
                         saveBackup.launch(Migration.suggestedFileName())
@@ -1694,9 +1822,6 @@ fun ChatMailApp(
                     },
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
-                    onOpenMe = { navController.navigate("me") },
                 )
             }
             composable("advancedSettings") {
