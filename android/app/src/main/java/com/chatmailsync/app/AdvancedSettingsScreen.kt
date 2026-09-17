@@ -59,7 +59,9 @@ private val CHUNK_LABELS = mapOf(
 @Composable
 fun AdvancedSettingsScreen(
     onBack: () -> Unit,
+    backLabel: String = "Settings",
     onOpenSyncLog: () -> Unit,
+    onRunSetupAgain: () -> Unit = {},
     watchedFolderUri: String?,
     onChooseFolder: () -> Unit,
     onClearFolder: () -> Unit,
@@ -98,7 +100,7 @@ fun AdvancedSettingsScreen(
         topBar = {
             ChatMailTopBar(
                 title = "Advanced",
-                backLabel = "Settings",
+                backLabel = backLabel,
                 onBack = onBack,
             )
         },
@@ -298,6 +300,25 @@ fun AdvancedSettingsScreen(
                 Text("Test connection")
             }
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+
+            HorizontalDivider()
+
+            // Re-opens the first-run walkthrough on demand, e.g. to redo the
+            // mail setup steps or revisit the auto-import explanation --
+            // without resetting anything. Nothing here is cleared just by
+            // opening it: an existing mailbox, folder, or interval only
+            // changes if the walkthrough is actually completed with new
+            // values.
+            Text("Setup walkthrough", style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = onRunSetupAgain) {
+                Text("Run setup again")
+            }
+            Text(
+                "Goes through mail setup and auto-import again. Nothing is " +
+                    "cleared unless you choose to change it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

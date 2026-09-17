@@ -288,6 +288,11 @@ internal val FAQ = listOf(
         "background continuously — each sync is a one-time pass over whatever's waiting in the " +
         "inbox. It also can't remove anything from your mailbox, which is why some answers above " +
         "ask you to clear a folder by hand.",
+    "Can I run the setup walkthrough again?" to
+        "Yes — Settings -> Advanced -> \"Run setup again\" reopens it. Nothing is cleared unless " +
+        "you choose to change it: an existing mailbox, watched folder or interval is left exactly " +
+        "as it is unless you complete a new step that changes it, and mail setup offers \"Keep " +
+        "current mailbox\" if one is already connected.",
 )
 
 // Bare hostnames as they appear in the answers above. Written out rather
@@ -358,7 +363,7 @@ private fun QaLine(tag: String, text: String, style: TextStyle) {
 }
 
 @Composable
-fun HelpScreen(onBack: () -> Unit, onOpenPrivacy: () -> Unit) {
+fun HelpScreen(onBack: () -> Unit, onOpenPrivacy: () -> Unit, backLabel: String = "Settings") {
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
         // this NavHost for the status bar and the bottom bars, and insets
@@ -371,7 +376,7 @@ fun HelpScreen(onBack: () -> Unit, onOpenPrivacy: () -> Unit) {
         topBar = {
             ChatMailTopBar(
                 title = "Help & FAQ",
-                backLabel = "Settings",
+                backLabel = backLabel,
                 onBack = onBack,
             )
         },

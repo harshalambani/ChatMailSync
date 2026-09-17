@@ -267,6 +267,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
 @Composable
 fun MailAccountScreen(
     onBack: () -> Unit,
+    backLabel: String = "Settings",
     onTestConnection: ((String) -> Unit) -> Unit,
     imapProviders: List<ImapProviderInfo>,
     imapProvider: String,
@@ -333,7 +334,7 @@ fun MailAccountScreen(
         topBar = {
             ChatMailTopBar(
                 title = "Mail account",
-                backLabel = "Settings",
+                backLabel = backLabel,
                 onBack = onBack,
             )
         },

@@ -184,6 +184,55 @@ internal fun shouldScanAtLaunch(autoWatchOn: Boolean, watchedFolderUri: String?)
 internal fun shouldShowFirstRun(firstRunDone: Boolean, mailboxConfigured: Boolean): Boolean =
     !firstRunDone && !mailboxConfigured
 
+/**
+ * The word beside a labelled back arrow, derived from the actual previous
+ * back-stack entry's route rather than hard-coded per screen.
+ *
+ * Several screens (Me, Mail account -- reachable from the connection pill on
+ * every masthead, not just Settings) can be opened from more than one place,
+ * and a fixed "Home" or "Settings" string was right for only some of those
+ * paths and silently wrong for the rest. Back itself already uses
+ * `popBackStack()` everywhere (so it always lands where you actually came
+ * from); this is only the label that names that destination.
+ *
+ * Deliberately narrow: unknown and "first_run" both fall through to plain
+ * "Back" rather than guessing, and null (no previous entry -- e.g. this
+ * route is the graph's start destination) does too.
+ */
+internal fun backLabelForRoute(route: String?): String = when {
+    route == "home" -> "Home"
+    route == "settings" -> "Settings"
+    route == "advancedSettings" -> "Advanced"
+    route == "chats" || route?.startsWith("chat/") == true -> "Chats"
+    route == "help" -> "Help"
+    route == "privacy" -> "Privacy"
+    route == "mailAccount" -> "Mail account"
+    route == "me" -> "Me"
+    route == "syncLog" || route?.startsWith("syncLog/") == true -> "Sync log"
+    route == "queue" -> "Queue"
+    route == "importPicker" -> "Import"
+    route == "mailWizard" -> "Mail setup"
+    else -> "Back"
+}
+
+/**
+ * Where the four-step first-run flow (D7) returns to when it finishes or is
+ * skipped, given the route it was entered from.
+ *
+ * Two distinct launches share this same "first_run" route: a fresh install,
+ * where the flow is the nav graph's start destination and so has no previous
+ * back-stack entry (`cameFrom == null`), and "Run setup again" from Advanced
+ * settings (H7), which pushes "first_run" on top of "advancedSettings" and
+ * so has one. The fresh-install case must always land on Home; the manual
+ * case must always return to Advanced -- neither may leak into the other's
+ * outcome, which is exactly what a shared boolean flag or a single default
+ * target would risk. Kept pure and read once, at the moment "first_run" is
+ * entered, rather than re-derived after the flow has popped itself off the
+ * stack.
+ */
+internal fun firstRunFinishTarget(cameFrom: String?): String =
+    if (cameFrom == "advancedSettings") "advancedSettings" else "home"
+
 /** Where the bottom-bar tab handler (and the incoming-share handler) pop to
  * when resetting/returning to Home. This is deliberately NOT
  * `navController.graph.findStartDestination()`: for a fresh install the
@@ -1282,15 +1331,22 @@ fun ChatMailApp(
             modifier = Modifier.padding(padding),
         ) {
             composable("first_run") {
+                // Read once, at entry: a fresh install has no previous
+                // back-stack entry (first_run is the graph's start
+                // destination), while "Run setup again" from Advanced
+                // settings (H7) pushes first_run on top of it, so this
+                // single read is what tells the two launches apart.
+                val cameFrom = navController.previousBackStackEntry?.destination?.route
+                val finishTarget = firstRunFinishTarget(cameFrom)
                 fun finishFirstRun() {
                     if (!firstRunDone) {
                         AppPrefs.setFirstRunDone(context, true)
                         firstRunDone = true
                     }
                     // Clears first_run off the back stack rather than merely
-                    // pushing "home" on top of it, so the hardware/gesture
-                    // back button from Home does not return here.
-                    navController.navigate("home") {
+                    // pushing the target on top of it, so the hardware/
+                    // gesture back button does not return here.
+                    navController.navigate(finishTarget) {
                         popUpTo("first_run") { inclusive = true }
                         launchSingleTop = true
                     }
@@ -1313,6 +1369,7 @@ fun ChatMailApp(
                         finishFirstRun()
                     },
                     onNotNow = { finishFirstRun() },
+                    hasExistingMailbox = imapPasswordSaved,
                 )
             }
             composable("home") {
@@ -1492,9 +1549,17 @@ fun ChatMailApp(
                 )
             }
             composable("advancedSettings") {
+                val from = navController.previousBackStackEntry?.destination?.route
                 AdvancedSettingsScreen(
                     onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
                     onOpenSyncLog = { navController.navigate("syncLog") },
+                    // Opens the walkthrough exactly as first-run leaves it —
+                    // no preference write here, only a navigate. first_run
+                    // itself reads where it came from (see firstRunFinishTarget)
+                    // to send "Turn on"/"Set up later"/"Not now" back here
+                    // instead of to Home.
+                    onRunSetupAgain = { navController.navigate("first_run") },
                     watchedFolderUri = watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
                     onClearFolder = { clearWatchedFolder() },
@@ -1545,8 +1610,13 @@ fun ChatMailApp(
                 )
             }
             composable("mailAccount") {
+                // Reachable from the connection pill on every masthead, not
+                // just Settings -- so unlike most rows here, "Settings" is
+                // not a safe default.
+                val from = navController.previousBackStackEntry?.destination?.route
                 MailAccountScreen(
                     onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
                     // check_connection (the dict) rather than
                     // check_connection_text (the string it is flattened to):
                     // the banner dot needs the pass/fail as a fact, and
@@ -1588,11 +1658,7 @@ fun ChatMailApp(
                     onSave = { setSelfSender(it) },
                     onClear = { setSelfSender("") },
                     onBack = { navController.popBackStack() },
-                    backLabel = when (from) {
-                        "chats" -> "Chats"
-                        "chat/{chatId}" -> "Chat"
-                        else -> "Home"
-                    },
+                    backLabel = backLabelForRoute(from),
                 )
             }
             composable("mailWizard") {
@@ -1608,12 +1674,16 @@ fun ChatMailApp(
                     initialProvider = imapProvider,
                     initialEmail = imapEmail,
                     onConnect = ::connectWithStages,
+                    hasExistingMailbox = imapPasswordSaved,
+                    onKeepCurrentMailbox = { navController.popBackStack() },
                 )
             }
             composable("help") {
+                val from = navController.previousBackStackEntry?.destination?.route
                 HelpScreen(
                     onBack = { navController.popBackStack() },
                     onOpenPrivacy = { navController.navigate("privacy") },
+                    backLabel = backLabelForRoute(from),
                 )
             }
             composable("privacy") {
@@ -1622,7 +1692,7 @@ fun ChatMailApp(
                 val from = navController.previousBackStackEntry?.destination?.route
                 PrivacyScreen(
                     onBack = { navController.popBackStack() },
-                    backLabel = if (from == "help") "Help" else "Settings",
+                    backLabel = backLabelForRoute(from),
                 )
             }
             composable("syncLog") {
@@ -1634,12 +1704,7 @@ fun ChatMailApp(
                 val from = navController.previousBackStackEntry?.destination?.route
                 SyncLogScreen(
                     onBack = { navController.popBackStack() },
-                    backLabel = when (from) {
-                        "home" -> "Home"
-                        "settings" -> "Settings"
-                        "chats" -> "Chats"
-                        else -> "Back"
-                    },
+                    backLabel = backLabelForRoute(from),
                     onOpenRun = { runId -> navController.navigate("syncLog/$runId") },
                 )
             }

@@ -685,3 +685,12 @@ your synced chats.
 cannot sync continuously in the background — each sync is a one-time pass over
 whatever is waiting in the inbox. It also cannot remove anything from your
 mailbox, which is why several answers above ask you to clear a folder by hand.
+
+---
+
+### Q. Can I run the setup walkthrough again?
+
+**A.** Yes — Settings → Advanced → "Run setup again" reopens it. Nothing is
+cleared unless you choose to change it: an existing mailbox, watched folder or
+interval is left exactly as it is unless you complete a new step that changes
+it, and mail setup offers "Keep current mailbox" if one is already connected.
