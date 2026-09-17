@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.chatmailsync.app
 
@@ -11,11 +14,10 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -288,7 +290,6 @@ fun ChatsListScreen(
             )
         },
     ) { padding ->
-        val chipScroll = rememberScrollState()
         val chatListState = rememberLazyListState()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (chats.isNotEmpty()) {
@@ -313,15 +314,19 @@ fun ChatsListScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 // Counts on the chips answer the question without a tap in
-                // most cases; the chips themselves are for the rest. One
-                // scrolling row of four, rather than a fixed grid.
-                Row(
+                // most cases; the chips themselves are for the rest. A
+                // horizontally-scrolling row here used to run the last chip
+                // ("Never synced (0)") off the right edge at 384dp -- it was
+                // technically reachable by scrolling, but nothing on screen
+                // signalled that, so it just read as a cut-off, broken row.
+                // FlowRow wraps onto a second line instead: every chip is
+                // always fully visible, at any width this app supports.
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(chipScroll)
-                        .fadingEdgesHorizontal(chipScroll)
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     FilterChip(
                         selected = statusFilter == null,

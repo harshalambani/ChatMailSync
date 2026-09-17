@@ -21,11 +21,13 @@ import getpass
 import imaplib
 import logging
 import os
+import queue
 import re
 import socket
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -593,12 +595,17 @@ class ImapTransport:
         password: str,
         connection_factory: Optional[Callable[[], "imaplib.IMAP4"]] = None,
         set_seen: bool = True,
+        # Overridable so the interactive "Test connection" check (below) can
+        # bind this to a much shorter, UI-appropriate bound than the default,
+        # which is sized for a large background sync (see MAIL_SOCKET_TIMEOUT).
+        timeout: float = MAIL_SOCKET_TIMEOUT,
     ) -> None:
         self._host = host
         self._port = port
         self._email = email
         self._password = password
         self._set_seen = set_seen
+        self._timeout = timeout
         # Constructor-injected fake connection factory for tests; production
         # callers (build_imap_transport) leave this None and get a real
         # imaplib.IMAP4_SSL login via _default_connection_factory().
@@ -626,7 +633,7 @@ class ImapTransport:
                 self._host,
                 self._port,
                 ssl_context=imap_tls_context(),
-                timeout=MAIL_SOCKET_TIMEOUT,
+                timeout=self._timeout,
             )
         except ssl.SSLError as exc:
             raise MailTransportError(
@@ -950,6 +957,22 @@ def build_imap_transport(host: str, port: int, email: str, password: str) -> Mai
 # folders are five different afternoons.
 CONNECTION_STAGES = ("DNS", "TCP", "TLS", "LOGIN", "FOLDER")
 
+# check_connection() is interactive -- someone is watching a spinner -- so it
+# binds every stage to this much shorter timeout rather than
+# MAIL_SOCKET_TIMEOUT (180s, sized for a large background sync). Device
+# testing found the test-connection button going silent for minutes with no
+# result and no crash: the LOGIN stage was opening its IMAP4_SSL connection
+# with the 180s sync timeout, so a server that accepted the TCP/TLS handshake
+# and then never answered LOGIN simply sat there for up to three minutes
+# before the caller got any outcome at all.
+#
+# At up to this many seconds per stage across the five stages, the worst
+# case (every stage independently failing to respond) stays inside the
+# ~30-45s budget this function is required to meet; in practice at most one
+# stage times out per call, since check_connection returns as soon as one
+# fails.
+CONNECTION_TEST_STAGE_TIMEOUT = 8  # seconds
+
 _STAGE_LABELS = {
     "DNS": "Finding the server",
     "TCP": "Reaching the server",
@@ -1045,20 +1068,76 @@ def login_failure_hint(host: str, email: str) -> str:
     )
 
 
+class _StageTimedOut(Exception):
+    """Raised locally by _run_with_timeout(); never crosses a thread boundary."""
+
+
+def _run_with_timeout(fn: Callable, timeout_seconds: float, *args, **kwargs):
+    """Run fn(*args, **kwargs) on a helper thread and wait up to
+    timeout_seconds for it to finish.
+
+    A backstop for every check_connection() stage, not only a convenience for
+    the ones that already take an explicit socket timeout: this is what
+    guarantees a bounded worst case even if some stage's own timeout is not
+    honoured for whatever reason (a proxy that accepts writes but never
+    delivers a read timeout, a library that resets a socket's timeout
+    internally, or simply a stage this file adds later without remembering to
+    wire a timeout through it by hand).
+
+    The worker thread is a daemon: if fn() never returns, it is abandoned
+    rather than allowed to block the caller, and it dies with the process.
+    Deliberately catches BaseException, not just Exception, so a worker that
+    hits something JVM/Chaquopy-side that Python does not model as a normal
+    Exception still reports back instead of vanishing without a trace.
+    """
+    result_box: "queue.Queue" = queue.Queue(maxsize=1)
+
+    def _worker() -> None:
+        try:
+            result_box.put(("ok", fn(*args, **kwargs)))
+        except BaseException as exc:  # noqa: BLE001 - relayed to the caller, never swallowed
+            result_box.put(("error", exc))
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    try:
+        kind, payload = result_box.get(timeout=timeout_seconds)
+    except queue.Empty:
+        raise _StageTimedOut(f"no reply from the server within {timeout_seconds} seconds")
+    if kind == "error":
+        raise payload
+    return payload
+
+
 def _probe_dns(host: str, port: int) -> None:
     socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
 
 
 def _probe_tcp(host: str, port: int) -> "socket.socket":
-    return socket.create_connection((host, port), timeout=MAIL_SOCKET_TIMEOUT)
+    return socket.create_connection((host, port), timeout=CONNECTION_TEST_STAGE_TIMEOUT)
 
 
 def _probe_tls(sock: "socket.socket", host: str) -> None:
     # The same context the real transport uses — a test that is laxer than
     # the real connection would pass and then leave the user with a sync
     # that fails.
-    wrapped = imap_tls_context().wrap_socket(sock, server_hostname=host)
-    wrapped.close()
+    #
+    # This function owns the probe socket's lifetime from here on: it always
+    # closes it, success or failure, rather than leaving that to whichever
+    # caller happens to still hold the `sock` reference. A caller-side close
+    # only on the exception paths (the previous shape of this code) is
+    # exactly the gap that leaves a socket to the garbage collector instead
+    # of an explicit close() on some path nobody enumerated.
+    try:
+        wrapped = imap_tls_context().wrap_socket(sock, server_hostname=host)
+    except Exception:
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise
+    else:
+        wrapped.close()
 
 
 def _emit_stage(on_stage, stage: dict) -> None:
@@ -1144,7 +1223,14 @@ def check_connection(
     # 1. DNS
     reached = "DNS"
     try:
-        _probe_dns(host, port)
+        _run_with_timeout(_probe_dns, CONNECTION_TEST_STAGE_TIMEOUT, host, port)
+    except _StageTimedOut:
+        record("DNS", False)
+        return outcome(
+            "DNS",
+            f"Looking up {host} timed out after {CONNECTION_TEST_STAGE_TIMEOUT} "
+            f"seconds. Check the server name and your network connection.",
+        )
     except OSError as exc:
         record("DNS", False)
         return outcome(
@@ -1158,7 +1244,15 @@ def check_connection(
     reached = "TCP"
     sock = None
     try:
-        sock = _probe_tcp(host, port)
+        sock = _run_with_timeout(_probe_tcp, CONNECTION_TEST_STAGE_TIMEOUT, host, port)
+    except _StageTimedOut:
+        record("TCP", False)
+        return outcome(
+            "TCP",
+            f"Opening port {port} on {host} timed out after "
+            f"{CONNECTION_TEST_STAGE_TIMEOUT} seconds. A firewall or VPN may be "
+            f"silently dropping the connection.",
+        )
     except OSError as exc:
         record("TCP", False)
         return outcome(
@@ -1172,7 +1266,18 @@ def check_connection(
     # 3. TLS
     reached = "TLS"
     try:
-        _probe_tls(sock, host)
+        _run_with_timeout(_probe_tls, CONNECTION_TEST_STAGE_TIMEOUT, sock, host)
+    except _StageTimedOut:
+        record("TLS", False)
+        try:
+            sock.close()
+        except OSError:
+            pass
+        return outcome(
+            "TLS",
+            f"Negotiating security with {host}:{port} timed out after "
+            f"{CONNECTION_TEST_STAGE_TIMEOUT} seconds. No password was sent.",
+        )
     except (ssl.SSLError, OSError) as exc:
         record("TLS", False)
         try:
@@ -1188,15 +1293,33 @@ def check_connection(
         )
     record("TLS", True)
 
-    # 4. LOGIN — real transport from here on.
+    # 4. LOGIN — real transport from here on. A short, UI-appropriate socket
+    # timeout (rather than the multi-minute one background syncs use) so a
+    # server that accepts the TCP connection but never replies to LOGIN
+    # cannot leave this hanging near-indefinitely.
     reached = "LOGIN"
     # ImapTransport directly rather than build_imap_transport(): the staged
     # test needs _get_conn()/close(), which are on the class and not on the
     # 3-method MailTransport Protocol that the builder is annotated to return.
-    transport = ImapTransport(host=host, port=port, email=email, password=password)
+    transport = ImapTransport(
+        host=host,
+        port=port,
+        email=email,
+        password=password,
+        timeout=CONNECTION_TEST_STAGE_TIMEOUT,
+    )
     try:
         try:
-            transport._get_conn()  # noqa: SLF001 — same package, deliberate.
+            # noqa: SLF001 — same package, deliberate.
+            _run_with_timeout(transport._get_conn, CONNECTION_TEST_STAGE_TIMEOUT)
+        except _StageTimedOut:
+            record("LOGIN", False)
+            return outcome(
+                "LOGIN",
+                f"Signing in to {host}:{port} timed out after "
+                f"{CONNECTION_TEST_STAGE_TIMEOUT} seconds. The server accepted "
+                f"the connection but never replied to sign-in.",
+            )
         except MailTransportError as exc:
             record("LOGIN", False)
             if exc.status == 401:
@@ -1218,7 +1341,19 @@ def check_connection(
         # 5. FOLDER
         reached = "FOLDER"
         try:
-            transport.labels_create({"name": LABEL_PARENT})
+            _run_with_timeout(
+                transport.labels_create,
+                CONNECTION_TEST_STAGE_TIMEOUT,
+                {"name": LABEL_PARENT},
+            )
+        except _StageTimedOut:
+            record("FOLDER", False)
+            return outcome(
+                "FOLDER",
+                f"Signed in as {email}, but creating the '{LABEL_PARENT}' "
+                f"folder timed out after {CONNECTION_TEST_STAGE_TIMEOUT} "
+                f"seconds.",
+            )
         except Exception as exc:  # noqa: BLE001
             record("FOLDER", False)
             return outcome(

@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -211,6 +212,10 @@ private fun MeRow(label: String, color: Color, description: String, onClick: () 
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            // Weighted so a long "Me" label ellipsizes instead of pushing the
+            // chevron off the end of the row at narrow widths (320dp).
+            modifier = Modifier.weight(1f, fill = false),
         )
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -295,6 +300,13 @@ fun ChatMailTopBar(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            // Weighted (and allowed to shrink below its own
+                            // content size via fill = false) so a long title
+                            // ellipsizes instead of overlapping or pushing off
+                            // the connection pill/action icons at 320dp -- the
+                            // mark+wordmark row previously had no width limit
+                            // of its own here.
+                            modifier = Modifier.weight(1f, fill = false),
                         ) {
                             if (!labelledBack) Image(
                                 painter = painterResource(R.drawable.ic_masthead),
@@ -309,12 +321,14 @@ fun ChatMailTopBar(
                                 // "as large as the new two-row band allows".
                                 modifier = androidx.compose.ui.Modifier.size(40.dp),
                             )
-                            Column {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
                                     title,
                                     fontFamily = FontFamily.Serif,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 18.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 subtitle?.let {
                                     Text(
@@ -322,6 +336,8 @@ fun ChatMailTopBar(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = 1.4.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }

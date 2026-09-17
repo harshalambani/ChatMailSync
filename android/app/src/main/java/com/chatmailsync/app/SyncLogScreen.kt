@@ -1,13 +1,16 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.chatmailsync.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -295,17 +298,19 @@ fun SyncLogScreen(
             )
         },
     ) { padding ->
-        val chipScroll = rememberScrollState()
         val runListState = rememberLazyListState()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (runs.isNotEmpty()) {
-                Row(
+                // Wraps instead of scrolling off-screen -- same treatment as
+                // the Chats filter chips, and for the same reason: a chip a
+                // narrow phone cannot show in full must never be the one
+                // that is silently cut off.
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(chipScroll)
-                        .fadingEdgesHorizontal(chipScroll)
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     // Counts come from the whole 90 days, never from what is
                     // currently shown: a chip reading "Errors (0)" only

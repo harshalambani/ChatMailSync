@@ -89,6 +89,11 @@ fun AdvancedSettingsScreen(
     var policyMenuOpen by remember { mutableStateOf(false) }
     var chunkMenuOpen by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    // True from the moment the button is tapped until a result (success,
+    // failure or timeout) arrives -- shown immediately rather than waiting
+    // on the network, and also what disables the button so a second tap
+    // cannot start a second check while one is already running.
+    var testingConnection by remember { mutableStateOf(false) }
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
@@ -295,10 +300,20 @@ fun AdvancedSettingsScreen(
             // affordance.
             Text("Mail server", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(
-                onClick = { onTestConnection { result -> testResult = result } },
+                enabled = !testingConnection,
+                onClick = {
+                    testingConnection = true
+                    testResult = "Testing connection…"
+                    onTestConnection { result ->
+                        testingConnection = false
+                        testResult = result
+                    }
+                },
             ) {
                 Text("Test connection")
             }
+            // Directly under the button, always -- the same spot whether it
+            // is the in-progress line or the final result.
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
 
             HorizontalDivider()

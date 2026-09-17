@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -69,6 +70,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.chaquo.python.Python
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : ComponentActivity() {
 
@@ -203,7 +205,11 @@ internal fun backLabelForRoute(route: String?): String = when {
     route == "home" -> "Home"
     route == "settings" -> "Settings"
     route == "advancedSettings" -> "Advanced"
-    route == "chats" || route?.startsWith("chat/") == true -> "Chats"
+    route == "chats" -> "Chats"
+    // A single chat thread, not the list -- "Chats" here would name the
+    // wrong screen for anyone who opened a thread from a share or a
+    // notification and backed out of it.
+    route?.startsWith("chat/") == true -> "Chat"
     route == "help" -> "Help"
     route == "privacy" -> "Privacy"
     route == "mailAccount" -> "Mail account"
@@ -213,6 +219,98 @@ internal fun backLabelForRoute(route: String?): String = when {
     route == "importPicker" -> "Import"
     route == "mailWizard" -> "Mail setup"
     else -> "Back"
+}
+
+/**
+ * Backstop for "Test connection": how long the UI waits for a result before
+ * giving up on it and reporting a timeout of its own, regardless of what the
+ * Python side is doing.
+ *
+ * check_connection()'s own worst case is five stages at
+ * CONNECTION_TEST_STAGE_TIMEOUT (8s) each, about 40s -- this is set above
+ * that so the Python-side timeout is normally the one that fires and names
+ * the actual stage, with this one only as insurance against the Chaquopy
+ * bridge itself wedging (a non-Exception Throwable, a call that never
+ * returns control at all) rather than the network call inside it.
+ */
+internal const val ConnectionWatchdogTimeoutMs = 50_000L
+
+/** The line "Test connection" shows if the Kotlin-side watchdog above fires
+ * before a real result arrives -- pulled out as a pure function so the exact
+ * wording is pinned by a unit test without needing a running check. */
+internal fun connectionWatchdogTimeoutText(): String =
+    "Test connection timed out. Check your network and try again."
+
+/** Log tag for the connection-test stage progress and failure path. Never
+ * carries host, email or password -- only ever a stage name or a fixed,
+ * already-redacted string, see [runConnectionCheck] and [redactSecretText]. */
+internal const val ConnectionLogTag = "ChatMailSync.Connection"
+
+/** The same substring redaction as ChatMailApp's local `redactSecret`, as a
+ * top-level pure function so [runConnectionCheck] -- which runs outside any
+ * Composable's scope -- can use it too without either duplicating the logic
+ * or reaching back into composition state from a background thread. */
+internal fun redactSecretText(text: String, secret: String?): String =
+    if (!secret.isNullOrEmpty() && text.contains(secret)) text.replace(secret, "********") else text
+
+/**
+ * Runs [check] on a background thread and always delivers exactly one result
+ * to [onResult], on the main thread -- whichever of two paths gets there
+ * first:
+ *
+ *  - the worker thread finishes, whether [check] succeeds, returns a normal
+ *    check_connection() failure outcome, or throws -- `catch (t: Throwable)`
+ *    here, deliberately not `catch (e: Exception)`, so a non-Exception
+ *    failure crossing the Chaquopy bridge still reports back instead of
+ *    silently ending the thread with the UI never told; or
+ *  - [ConnectionWatchdogTimeoutMs] elapses with no result yet, in which case
+ *    this reports its own timeout and leaves the worker thread to finish (or
+ *    not) on its own.
+ *
+ * This is the fix for "test connection never returns": before this, the
+ * *only* path to the UI was a `Handler.post` inside the worker thread's own
+ * try block, so anything that kept that thread from ever reaching it left
+ * the button and the screen exactly as they were, indefinitely. The
+ * `finally` block (not a post at the end of `try`) plus the watchdog's own
+ * independent post are what close that gap: something now always reaches
+ * [onResult], on the main thread, at most once.
+ */
+internal fun runConnectionCheck(
+    context: android.content.Context,
+    password: String?,
+    onResult: (connected: Boolean, text: String) -> Unit,
+    check: () -> Pair<Boolean, String>,
+) {
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    val delivered = AtomicBoolean(false)
+    val watchdog = Runnable {
+        if (delivered.compareAndSet(false, true)) {
+            Log.i(ConnectionLogTag, "watchdog fired before a result arrived")
+            ConnectionState.record(context, false)
+            onResult(false, connectionWatchdogTimeoutText())
+        }
+    }
+    mainHandler.postDelayed(watchdog, ConnectionWatchdogTimeoutMs)
+    Thread {
+        var connected = false
+        var text = "Could not connect."
+        try {
+            val (c, t) = check()
+            connected = c
+            text = t
+        } catch (t: Throwable) {
+            Log.i(ConnectionLogTag, "connection check threw")
+            text = redactSecretText("Could not connect: ${t.message ?: "unknown error"}", password)
+        } finally {
+            mainHandler.post {
+                if (delivered.compareAndSet(false, true)) {
+                    mainHandler.removeCallbacks(watchdog)
+                    ConnectionState.record(context, connected)
+                    onResult(connected, text)
+                }
+            }
+        }
+    }.start()
 }
 
 /**
@@ -578,27 +676,15 @@ fun ChatMailApp(
             onResult(false, "Enter the email address and app password to connect with.")
             return
         }
-        Thread {
-            var connected = false
-            // check_connection reports a connection problem as a return value,
-            // not an exception, so this catch is only for a bridge-level fault.
-            val text = try {
-                val mailClient = Python.getInstance().getModule("src.mail_client")
-                val outcome = mailClient.callAttr(
-                    "check_connection",
-                    effectiveHost,
-                    port,
-                    email,
-                    normalizedPassword,
-                    listener,
-                )
-                connected = outcome.callAttr("get", "ok").toBoolean()
-                mailClient.callAttr("format_connection_result", outcome).toString()
-            } catch (e: Exception) {
-                redactSecret("Could not connect: ${e.message ?: "unknown error"}", normalizedPassword)
-            }
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                ConnectionState.record(context, connected)
+        // check_connection reports a connection problem as a return value,
+        // not an exception; runConnectionCheck's own Throwable catch covers
+        // a bridge-level fault (including a stage that never returns at
+        // all), and its watchdog is the backstop above that -- see its doc
+        // comment.
+        runConnectionCheck(
+            context = context,
+            password = normalizedPassword,
+            onResult = { connected, text ->
                 if (connected) {
                     // The wizard only ever sets up IMAP (D2), so finishing it
                     // is also the moment the account becomes an IMAP one --
@@ -618,8 +704,23 @@ fun ChatMailApp(
                     imapPasswordSaved = true
                 }
                 onResult(connected, text)
-            }
-        }.start()
+            },
+        ) {
+            Log.i(ConnectionLogTag, "check_connection (wizard): starting")
+            val mailClient = Python.getInstance().getModule("src.mail_client")
+            val outcome = mailClient.callAttr(
+                "check_connection",
+                effectiveHost,
+                port,
+                email,
+                normalizedPassword,
+                listener,
+            )
+            val connected = outcome.callAttr("get", "ok").toBoolean()
+            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            Log.i(ConnectionLogTag, "check_connection (wizard): finished, ok=$connected")
+            connected to text
+        }
     }
 
     fun forgetImapPassword() {
@@ -643,28 +744,31 @@ fun ChatMailApp(
             onResult("Save an IMAP app password first.")
             return
         }
-        Thread {
-            val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
-            var connected = false
-            val text = try {
-                val mailClient = Python.getInstance().getModule("src.mail_client")
-                val outcome = mailClient.callAttr(
-                    "check_connection",
-                    AppPrefs.getImapHost(context),
-                    AppPrefs.getImapPort(context),
-                    AppPrefs.getImapEmail(context),
-                    password,
-                )
-                connected = outcome.callAttr("get", "ok").toBoolean()
-                mailClient.callAttr("format_connection_result", outcome).toString()
-            } catch (e: Exception) {
-                redactSecret("Could not connect: ${e.message}", password)
-            }
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                ConnectionState.record(context, connected)
-                onResult(text)
-            }
-        }.start()
+        val password = SecretStore.getSecret(context, AppPrefs.getImapPasswordSecretKey())
+        // runConnectionCheck guarantees onResult fires exactly once, on the
+        // main thread, either with a real outcome or its own watchdog
+        // timeout — see its doc comment for why the previous version (a
+        // Handler.post reachable only from inside this try block) could hang
+        // the UI forever on a stalled LOGIN/FOLDER stage.
+        runConnectionCheck(
+            context = context,
+            password = password,
+            onResult = { _, text -> onResult(text) },
+        ) {
+            Log.i(ConnectionLogTag, "check_connection: starting")
+            val mailClient = Python.getInstance().getModule("src.mail_client")
+            val outcome = mailClient.callAttr(
+                "check_connection",
+                AppPrefs.getImapHost(context),
+                AppPrefs.getImapPort(context),
+                AppPrefs.getImapEmail(context),
+                password,
+            )
+            val connected = outcome.callAttr("get", "ok").toBoolean()
+            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            Log.i(ConnectionLogTag, "check_connection: finished, ok=$connected")
+            connected to text
+        }
     }
 
     // ---- Which name in an export is yours -----------------------------

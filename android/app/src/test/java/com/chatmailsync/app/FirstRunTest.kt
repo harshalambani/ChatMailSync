@@ -209,7 +209,10 @@ class BackLabelForRouteTest {
     fun `route templates with arguments still match by prefix`() {
         // previousBackStackEntry's route is the NavHost template, e.g.
         // "chat/{chatId}", never a resolved path with the id filled in.
-        assertTrue(backLabelForRoute("chat/{chatId}") == "Chats")
+        assertTrue(backLabelForRoute("chat/{chatId}") == "Chat")
+        // Negative: a single thread is not the list -- the plural would name
+        // the wrong screen for someone backing out of one chat.
+        assertFalse(backLabelForRoute("chat/{chatId}") == "Chats")
         assertTrue(backLabelForRoute("syncLog/{runId}") == "Sync log")
         assertTrue(backLabelForRoute("syncLog") == "Sync log")
     }

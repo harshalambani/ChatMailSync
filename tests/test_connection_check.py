@@ -8,6 +8,8 @@ probe helper and the transport's connection factory are monkeypatched.
 
 import socket
 import ssl
+import threading
+import time
 
 import pytest
 
@@ -44,17 +46,31 @@ def all_probes_pass(monkeypatch):
     return sock
 
 
-def _patch_transport(monkeypatch, *, login_exc=None, create_exc=None):
+def _patch_transport(monkeypatch, *, login_exc=None, create_exc=None, login_blocks=False):
     """Replace ImapTransport with a stub whose login/create outcomes are set
-    per test, so stages 4 and 5 can fail independently of each other."""
+    per test, so stages 4 and 5 can fail independently of each other.
+
+    login_blocks=True makes _get_conn() never return (an Event that is never
+    set), simulating a server that accepts the connection but never replies
+    to LOGIN -- the exact shape of the bug check_connection's stage timeout
+    exists to bound. The caller is expected to also shrink
+    mail_client.CONNECTION_TEST_STAGE_TIMEOUT for the test so this does not
+    actually take 8+ seconds to run.
+    """
     closed = {"value": False}
 
     class StubTransport:
-        def __init__(self, host, port, email, password):
+        # timeout accepted (and ignored) only so this stub's signature keeps
+        # matching the real ImapTransport.__init__, which check_connection
+        # always calls with timeout=CONNECTION_TEST_STAGE_TIMEOUT.
+        def __init__(self, host, port, email, password, timeout=None):
             self.host, self.port = host, port
             self.email, self.password = email, password
+            self.timeout = timeout
 
         def _get_conn(self):
+            if login_blocks:
+                threading.Event().wait()  # never set: blocks until timed out
             if login_exc is not None:
                 raise login_exc
             return object()
@@ -465,3 +481,83 @@ def test_incomplete_details_report_no_stages_at_all(monkeypatch):
     result = check_connection("", PORT, EMAIL, PASSWORD, on_stage=lambda *a: seen.append(a))
     assert seen == []
     assert result["stages"] == []
+
+
+# ---------------------------------------------------------------------------
+# Stage timeouts: the "test connection never returns" regression
+# ---------------------------------------------------------------------------
+#
+# A real device showed a ResourceWarning for an unclosed SSLSocket within
+# 5-12s and then total silence for 3+ minutes: check_connection's LOGIN
+# stage was reusing the 180s bulk-sync socket timeout instead of a bounded,
+# UI-appropriate one. These tests use a login that blocks forever (an Event
+# that is never set) and assert the call still returns, quickly, naming
+# LOGIN as the failed stage -- never ok=True, and never actually hanging.
+
+
+def test_a_login_that_blocks_forever_still_returns_within_the_bound(monkeypatch, all_probes_pass):
+    # Shrink the stage timeout so this test does not itself take 8+ seconds.
+    monkeypatch.setattr(mail_client, "CONNECTION_TEST_STAGE_TIMEOUT", 0.2)
+    _patch_transport(monkeypatch, login_blocks=True)
+
+    started = time.monotonic()
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD)
+    elapsed = time.monotonic() - started
+
+    # Negative: it does not hang, and it does not report success.
+    assert elapsed < 5, f"check_connection took {elapsed}s against a 0.2s stage timeout"
+    assert result["ok"] is False
+    assert result["failed_stage"] == "LOGIN"
+    assert "timed out" in result["message"]
+
+
+def test_probe_socket_is_closed_when_tls_stage_times_out(monkeypatch):
+    monkeypatch.setattr(mail_client, "CONNECTION_TEST_STAGE_TIMEOUT", 0.2)
+    monkeypatch.setattr(mail_client, "_probe_dns", lambda host, port: None)
+    sock = _FakeSocket()
+    monkeypatch.setattr(mail_client, "_probe_tcp", lambda host, port: sock)
+
+    def hangs_forever(s, host):
+        threading.Event().wait()
+
+    monkeypatch.setattr(mail_client, "_probe_tls", hangs_forever)
+
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD)
+
+    assert result["failed_stage"] == "TLS"
+    assert "timed out" in result["message"]
+    # The negative case this test exists for: a timed-out probe must not
+    # leave its socket open for the garbage collector to warn about later.
+    assert sock.closed is True
+
+
+def test_the_password_never_appears_in_a_timeout_message(monkeypatch, all_probes_pass):
+    monkeypatch.setattr(mail_client, "CONNECTION_TEST_STAGE_TIMEOUT", 0.2)
+    _patch_transport(monkeypatch, login_blocks=True)
+
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD)
+
+    assert PASSWORD not in result["message"]
+    assert all(PASSWORD not in s.get("label", "") for s in result["stages"])
+
+
+def test_worst_case_across_all_five_stages_stays_well_under_the_ci_budget(monkeypatch):
+    # Every stage blocks forever: this is the true worst case the "under
+    # about 30-45s" requirement describes. Exercised here at a shrunk
+    # per-stage timeout so the suite itself stays fast, but it walks through
+    # all five stages rather than stopping at the first one, so a future
+    # stage that forgets to wire a timeout through would still be caught.
+    monkeypatch.setattr(mail_client, "CONNECTION_TEST_STAGE_TIMEOUT", 0.2)
+
+    def hangs_forever(*_a, **_k):
+        threading.Event().wait()
+
+    monkeypatch.setattr(mail_client, "_probe_dns", hangs_forever)
+
+    started = time.monotonic()
+    result = check_connection(HOST, PORT, EMAIL, PASSWORD)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5
+    assert result["ok"] is False
+    assert result["failed_stage"] == "DNS"
