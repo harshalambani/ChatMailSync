@@ -159,6 +159,10 @@ internal fun tabForRoute(route: String?): String? = when {
     // Settings told two thirds of its visitors they were somewhere they had
     // never been. No tab lit is honest; the wrong tab lit is not.
     route.startsWith("syncLog") -> null
+    // Same reasoning as the sync log just above: Backup & restore has two
+    // doors now, Settings' own nav row and the stale-backup banner on Home,
+    // so lighting either tab would be wrong for whoever came from the other.
+    route == "backupRestore" -> null
     else -> null
 }
 
@@ -214,6 +218,12 @@ internal fun backLabelForRoute(route: String?): String = when {
     route == "privacy" -> "Privacy"
     route == "mailAccount" -> "Mail account"
     route == "me" -> "Me"
+    // Matches the route composable("backupRestore") navigates to, added
+    // below -- the row id "backup_restore" (SettingsRowSpec) is a different
+    // string on purpose, see BASIC_SETTINGS_ROWS' own comment, and must NOT
+    // be matched here: falling through to plain "Back" for it is the point
+    // of the guard test, not a gap to close.
+    route == "backupRestore" -> "Backup & restore"
     route == "syncLog" || route?.startsWith("syncLog/") == true -> "Sync log"
     route == "queue" -> "Queue"
     route == "importPicker" -> "Import"
@@ -1596,7 +1606,7 @@ fun ChatMailApp(
                     },
                     onOpenSyncLog = { navController.navigate("syncLog") },
                     onOpenQueue = { navController.navigate("queue") },
-                    onOpenBackup = { navController.navigate("settings") },
+                    onOpenBackup = { navController.navigate("backupRestore") },
                     meLabel = homeMeDisplay.label,
                     meColor = homeMeDisplay.color,
                     meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
@@ -1672,14 +1682,33 @@ fun ChatMailApp(
                 // UI lives on its own screen.
                 val mailAccountSummary =
                     if (imapPasswordSaved) imapEmail else "Not connected"
+                // Re-read on entry and whenever the shared migration state
+                // moves -- same "walking Settings -> save -> Home clears the
+                // line" reasoning Home's own lastBackupAt carries, now that
+                // the row here is a pill rather than the buttons themselves.
+                val lastBackupAt = remember(migrationStatus) {
+                    AppPrefs.getLastBackupAt(context)
+                }
                 SettingsScreen(
                     mailAccountSummary = mailAccountSummary,
                     onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
                     onOpenPrivacy = { navController.navigate("privacy") },
                     onOpenAdvanced = { navController.navigate("advancedSettings") },
+                    onOpenBackupRestore = { navController.navigate("backupRestore") },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
+                    lastBackupAt = lastBackupAt,
+                    selfSenderSource = selfSenderSource,
+                    selfSenderName = selfSenderName,
+                    onOpenMe = { navController.navigate("me") },
+                )
+            }
+            composable("backupRestore") {
+                val from = navController.previousBackStackEntry?.destination?.route
+                BackupRestoreScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
                     onSaveBackup = {
                         migrationStatus = null
                         saveBackup.launch(Migration.suggestedFileName())
@@ -1694,9 +1723,6 @@ fun ChatMailApp(
                     },
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
-                    onOpenMe = { navController.navigate("me") },
                 )
             }
             composable("advancedSettings") {

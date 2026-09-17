@@ -39,7 +39,7 @@ internal val FAQ = listOf(
     "How do I export a chat from WhatsApp?" to
         "Open the chat in WhatsApp -> tap the three-dot menu -> More -> Export chat. " +
         "Choose \"Include media\" for a .zip with photos/videos, or \"Without media\" for a plain .txt. " +
-        "Then share it to this app (or use \"Import a WhatsApp export\" on Home). " +
+        "Then share it to this app (or use \"Choose exports to import\" on Home). " +
         "One chat at a time: WhatsApp has no multi-select export, so you cannot tick several chats " +
         "and export them together — each one has to be exported from inside that chat. This app has " +
         "no such limit; once the files are here you can import and sync as many as you like at once.",

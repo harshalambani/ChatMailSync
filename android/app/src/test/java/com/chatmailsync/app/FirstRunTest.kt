@@ -203,6 +203,19 @@ class BackLabelForRouteTest {
         assertTrue(backLabelForRoute("queue") == "Queue")
         assertTrue(backLabelForRoute("importPicker") == "Import")
         assertTrue(backLabelForRoute("mailWizard") == "Mail setup")
+        assertTrue(backLabelForRoute("backupRestore") == "Backup & restore")
+    }
+
+    @Test
+    fun `backupRestore route is camelCase, the row id is not a route`() {
+        // Batch 7 pill correction: "backupRestore" is the route this screen
+        // is pushed under (composable("backupRestore") in MainActivity), but
+        // "backup_restore" is BASIC_SETTINGS_ROWS' row id -- a different
+        // string on purpose, never pushed as a route. Matching it here would
+        // be guessing at a route that does not exist, which is exactly what
+        // this guard exists to catch.
+        assertTrue(backLabelForRoute("backup_restore") == "Back")
+        assertFalse(backLabelForRoute("backup_restore") == "Backup & restore")
     }
 
     @Test

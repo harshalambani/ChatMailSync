@@ -3,6 +3,8 @@
 package com.chatmailsync.app
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -32,8 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,6 +121,13 @@ private fun SettingsNavRow(
     onClick: () -> Unit,
     contentDescriptionOverride: String? = null,
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    // Opt-in, trailing, between the text and the chevron -- only the Backup
+    // & restore row uses this (item 2, batch 7). The title Text below is the
+    // one given the weight, not the whole Column, so a long pill label can
+    // never push the chevron off the end of the row; the title ellipsizes
+    // first, and at the very narrowest widths the pill itself may wrap onto
+    // its own line below the title rather than clip.
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     OutlinedButton(
         onClick = onClick,
@@ -137,13 +148,19 @@ private fun SettingsNavRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    trailing?.let {
+                        Box(modifier = Modifier.padding(start = 8.dp)) { it() }
+                    }
+                }
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -161,6 +178,65 @@ private fun SettingsNavRow(
     }
 }
 
+/**
+ * The Backup & restore row's status pill: a coloured dot and a few words, in
+ * the same visual language as ChatMailTopBar's ConnectionPill (a rounded
+ * filled shape, the words carrying the meaning and the colour only backing
+ * them up -- never the only signal, since about one man in twelve cannot
+ * tell a used green from a used red).
+ *
+ * Unlike ConnectionPill this sits on an ordinary surface background, not
+ * the navy masthead, so its colours are the theme's own container roles
+ * (tertiary/error) rather than the fixed dark-scheme literals that pill
+ * hardcodes for the banner -- those stay legible on the one background they
+ * were chosen for and nowhere else.
+ */
+@Composable
+private fun BackupStatusPill(info: BackupPillInfo) {
+    val (container, content) = when (info.tone) {
+        BackupPillTone.GOOD -> MaterialTheme.colorScheme.tertiaryContainer to
+            MaterialTheme.colorScheme.onTertiaryContainer
+        BackupPillTone.WARN -> AmberPillColors()
+        BackupPillTone.BAD -> MaterialTheme.colorScheme.errorContainer to
+            MaterialTheme.colorScheme.onErrorContainer
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(RoundedCornerShape(50))
+                .background(content),
+        )
+        Text(
+            info.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * No amber role exists on this theme (see ChatMailTheme.kt's own "EVERY role
+ * is assigned deliberately" note -- amber was never one of them), so this is
+ * a small local pair, not a borrowed one. Values chosen the same way the
+ * theme's own container/on-container pairs are: readable text-on-fill in
+ * both schemes, not a system default that would drift from the rest of the
+ * palette.
+ */
+@Composable
+private fun AmberPillColors(): Pair<Color, Color> =
+    if (isSystemInDarkTheme()) Color(0xFF5C4300) to Color(0xFFF7E4B8)
+    else Color(0xFFF7E4B8) to Color(0xFF4A3200)
+
 @Composable
 fun SettingsScreen(
     mailAccountSummary: String,
@@ -168,17 +244,19 @@ fun SettingsScreen(
     onOpenHelp: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenAdvanced: () -> Unit,
+    onOpenBackupRestore: () -> Unit,
     themeMode: String,
     onThemeModeChange: (String) -> Unit,
-    onSaveBackup: () -> Unit,
-    onRestoreBackup: () -> Unit,
-    migrationBusy: Boolean,
-    migrationStatus: String?,
+    // Read by MainActivity from AppPrefs.getLastBackupAt and re-derived
+    // whenever the shared migration state moves, so the pill here reflects
+    // a save or restore done on BackupRestoreScreen without this screen
+    // reaching into AppPrefs itself -- see the "settings" composable in
+    // MainActivity.kt.
+    lastBackupAt: Long,
     selfSenderSource: String? = null,
     selfSenderName: String? = null,
     onOpenMe: () -> Unit = {},
 ) {
-    val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
     // Computed here, not inside the row loop below, so the masthead's own Me
     // row (added for item 2 -- see the topBar block) and the Mail account/Me
@@ -231,10 +309,10 @@ fun SettingsScreen(
             // Rendered in BASIC_SETTINGS_ROWS' own order (item 1 / SettingsRowsTest),
             // so a reorder of that list is a reorder on screen, not just in a
             // test fixture that could quietly drift from what actually renders.
-            // Theme, Backup & restore and Help & About stay their own bespoke
-            // bodies (a dropdown, two buttons, a couple of links) rather than
-            // being forced into the nav-row shape -- but their position on
-            // screen still comes from this same list.
+            // Theme and Help & About stay their own bespoke bodies (a
+            // dropdown, a couple of links) rather than being forced into the
+            // nav-row shape -- but their position on screen still comes from
+            // this same list.
             BASIC_SETTINGS_ROWS.forEachIndexed { index, row ->
                 when (row.id) {
                     "mail_account" -> SettingsNavRow(
@@ -269,70 +347,20 @@ fun SettingsScreen(
                         }
                     }
 
-                    "backup_restore" -> {
-                        // Worth being explicit about what this is for, because
-                        // "backup" in an archiving app invites the wrong
-                        // reading: the mailbox is the archive, and it is
-                        // already safe on a mail server. What is only on this
-                        // phone is the record of which messages have already
-                        // been sent. Lose that and nothing is lost --
-                        // everything is sent again, into a mailbox that has no
-                        // way to tell the copies apart.
-                        //
-                        // Headed "Move to a new phone" until v1.17.0, which
-                        // hid it from everyone who was not moving: the same
-                        // file is what gets you back after a reset, a
-                        // reinstall or Clear data, and those happen to people
-                        // who never buy a phone.
-                        Text("Backup & restore", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Saves what this phone knows about what it has already sent. Keep one, " +
-                                "and a reset, a reinstall or another device carries on from here " +
-                                "instead of mailing everything a second time. Your chats are already " +
-                                "safe in your mailbox — this is not a copy of them.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = onSaveBackup, enabled = !migrationBusy) {
-                                Text("Save a backup")
-                            }
-                            OutlinedButton(onClick = onRestoreBackup, enabled = !migrationBusy) {
-                                Text("Restore from a backup")
-                            }
-                        }
-                        // Re-read whenever the migration state moves, which is
-                        // what a save finishing looks like from here -- a
-                        // backup nobody can date is a backup nobody trusts,
-                        // and "I think I did one" is exactly the belief that
-                        // costs a mailbox its second copy of everything.
-                        val lastBackupAt = remember(migrationBusy, migrationStatus) {
-                            AppPrefs.getLastBackupAt(context)
-                        }
-                        Text(
-                            Migration.describeLastBackup(lastBackupAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (Migration.backupIsStale(lastBackupAt))
-                                MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        // In place, under the buttons -- not a dialog.
-                        // Everything this can say is an outcome to read, and
-                        // none of it needs a decision, so a box demanding to
-                        // be dismissed would only add a tap.
-                        migrationStatus?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        Text(
-                            "Your mail password is never included in a backup.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    // Moved off this list onto its own screen (batch 7) --
+                    // the explanation, the two buttons, the dated status
+                    // line and the password disclaimer that used to be a
+                    // bespoke inline body here now live in
+                    // BackupRestoreScreen, reached via this same nav-row
+                    // shape as Mail account/Me/Advanced. Only the pill is
+                    // new: it is what used to take opening this row to find
+                    // out (is there a backup, and how stale is it).
+                    "backup_restore" -> SettingsNavRow(
+                        title = "Backup & restore",
+                        subtitle = "Save your sync history, or restore it on a new phone",
+                        onClick = onOpenBackupRestore,
+                        trailing = { BackupStatusPill(Migration.backupPillState(lastBackupAt)) },
+                    )
 
                     "advanced" -> SettingsNavRow(
                         title = "Advanced",

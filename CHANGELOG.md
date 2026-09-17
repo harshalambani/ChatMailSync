@@ -26,6 +26,10 @@ Six batches of work since the 2.1.5 / `windows-final` tag:
   `HelpScreen.kt` and `docs/user-guide.md`, and the user guide's leftover
   Windows-desktop wording corrected to describe the Android app; version
   bump to 2.2.0 (versionCode 42).
+- **Batch 7** -- Backup & restore moved out of the Settings row list into its
+  own screen, reached the same way as Mail account, Me and Advanced; its
+  Settings row now carries a status pill ("Backed up `<date>`", "Backup due"
+  or "No backup") so the state is visible without opening the screen.
 
 The Windows desktop app is not part of this or any future release; it ended
 at v2.1.5 (tag `windows-final`), per `docs/RELEASING.md`.

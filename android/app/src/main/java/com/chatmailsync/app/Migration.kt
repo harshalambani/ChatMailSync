@@ -22,6 +22,15 @@ import java.io.File
  * involves knowing what a bundle is. That keeps one implementation of the merge
  * rules for both front-ends rather than two that agree until they don't.
  */
+/** Named for meaning, not colour -- a pill's tone is never the only thing
+ *  that says what it means, its label already does, but this is what a
+ *  renderer maps to an actual colour pair. */
+enum class BackupPillTone { GOOD, WARN, BAD }
+
+/** What [Migration.backupPillState] returns: the words for the pill and the
+ *  tone to render them in. */
+data class BackupPillInfo(val label: String, val tone: BackupPillTone)
+
 object Migration {
 
     /** The extension the file picker suggests; the bundle is a zip underneath. */
@@ -70,6 +79,34 @@ object Migration {
 
     fun backupIsStale(atMillis: Long, now: Long = System.currentTimeMillis()): Boolean =
         atMillis <= 0L || now - atMillis > BACKUP_STALE_AFTER_DAYS * 24L * 60L * 60L * 1000L
+
+    /**
+     * The status pill shown on Settings' "Backup & restore" nav row.
+     *
+     * Pure so it can be unit-tested without Compose or a Context:
+     * [lastBackupAt] is [AppPrefs.getLastBackupAt], [now] defaults to the
+     * real clock but is overridable for the exactly-30-days boundary test.
+     * The "no backup at all" case is checked before [backupIsStale] so its
+     * own `atMillis <= 0L` branch is never what answers it here -- the two
+     * still agree (both call it BAD/stale), this just picks the more
+     * specific label ("No backup" vs "Backup due").
+     *
+     * A future [lastBackupAt] (clock skew, or a restored device with a
+     * clock behind the backup's own timestamp) is deliberately treated as
+     * GOOD rather than crashing or reporting "due"/"No backup": the backup
+     * demonstrably exists, so understating that would be its own kind of
+     * lie.
+     */
+    fun backupPillState(lastBackupAt: Long, now: Long = System.currentTimeMillis()): BackupPillInfo = when {
+        lastBackupAt <= 0L -> BackupPillInfo("No backup", BackupPillTone.BAD)
+        backupIsStale(lastBackupAt, now) -> BackupPillInfo("Backup due", BackupPillTone.WARN)
+        else -> BackupPillInfo(
+            "Backed up " + java.text.SimpleDateFormat(
+                "d MMM", java.util.Locale.getDefault(),
+            ).format(java.util.Date(lastBackupAt)),
+            BackupPillTone.GOOD,
+        )
+    }
 
     /** "Last backup: 28 Aug 2026", or the plain fact that there isn't one. */
     fun describeLastBackup(atMillis: Long): String =
