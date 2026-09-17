@@ -236,7 +236,10 @@ internal val FAQ = listOf(
         "asks for it once. Restoring merges rather than replaces, so a restore onto a phone that " +
         "has already synced something keeps both sides. Restoring the same backup twice does " +
         "nothing the second time. You will still need to re-import the export files you want to " +
-        "keep syncing from.",
+        "keep syncing from. Restoring during first-run setup goes straight to entering your app " +
+        "password and then Home, skipping the rest of the welcome steps -- and either way, the " +
+        "app shows what came back and what you still need to redo, right under the restore " +
+        "button.",
     "What happens if I reinstall the app or reset my device?" to
         "Your chats are safe either way: they are in your mailbox, and nothing that happens on this " +
         "phone can take them out of it. What a reset, an uninstall or \"Clear data\" destroys is the " +

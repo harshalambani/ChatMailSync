@@ -41,6 +41,13 @@ Six batches of work since the 2.1.5 / `windows-final` tag:
   means clicking through to Settings first; a successful restore there can
   continue straight into mail setup with the restored provider and email
   already filled in.
+- **Batch 7b** -- a restore during first-run setup no longer walks the user
+  through "Step 3 of 4" and "Step 4 of 4"; it finishes at the app-password
+  step and lands on Home, the same as skipping mail setup for later. Every
+  successful restore, on first run and on the Backup & restore screen, now
+  shows an inline summary of what came back (chats, already-sent count,
+  cutoffs, mail account and the settings the bundle carried) and what still
+  needs redoing (app password, watched folder) -- never a dialog or toast.
 
 The Windows desktop app is not part of this or any future release; it ended
 at v2.1.5 (tag `windows-final`), per `docs/RELEASING.md`.

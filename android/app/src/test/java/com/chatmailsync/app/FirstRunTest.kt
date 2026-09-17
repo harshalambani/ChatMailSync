@@ -277,39 +277,106 @@ class ShouldOfferRestoreOnFirstRunTest {
 }
 
 /**
- * Batch 7 follow-up: classifying a restore's status message, which drives
- * the welcome step's choice between offering the restore button again and
- * offering "Continue" into mail setup.
+ * Batch 7b: user feedback while testing 2.2.0 -- "after restore it is asking
+ * for 3 of 4 - not appropriate". Someone who restored an existing archive on
+ * the welcome step already has chats and has already sent their history, so
+ * the mailbox step must be the last thing asked of them, with a counter that
+ * does not promise two more steps that are never shown.
+ */
+class FirstRunNextStepAfterMailboxTest {
+
+    @Test
+    fun `restored finishes first-run instead of continuing to step 3`() {
+        assertTrue(firstRunNextStepAfterMailbox(restored = true) == null)
+    }
+
+    @Test
+    fun `not restored still goes on to step 3, the fresh-install path unchanged`() {
+        assertTrue(firstRunNextStepAfterMailbox(restored = false) == 3)
+    }
+
+    @Test
+    fun `restored mode never routes to step 3 or step 4`() {
+        // Negative: the specific bug reported -- restoring must never land on
+        // either of the two steps that describe things that already happened.
+        val next = firstRunNextStepAfterMailbox(restored = true)
+        assertFalse(next == 3)
+        assertFalse(next == 4)
+    }
+}
+
+/** Batch 7b: the outer label above the mailbox step (outer step 2). */
+class FirstRunStepLabelTest {
+
+    @Test
+    fun `restored mode drops the step counter entirely`() {
+        assertFalse(firstRunStepLabel(2, restored = true).contains("of 4"))
+    }
+
+    @Test
+    fun `restored mode still mentions the app password`() {
+        assertTrue(firstRunStepLabel(2, restored = true).contains("app password"))
+    }
+
+    @Test
+    fun `normal mode keeps the familiar Step 2 of 4 label`() {
+        assertTrue(firstRunStepLabel(2, restored = false) == "Step 2 of 4 - Connect your mailbox")
+    }
+}
+
+/**
+ * Batch 7b negative: the routing decision takes only the restored flag, so
+ * there is no parameter a password value could ever flow through -- pins
+ * that this fix introduces no new channel for the app password to leak into
+ * (it was already never pre-filled; see MailSetupWizardScreen's `password`
+ * state, which is a plain `remember`, not `rememberSaveable`, and is always
+ * seeded as "" regardless of `initialStep`).
+ */
+class FirstRunRoutingCarriesNoPasswordTest {
+
+    @Test
+    fun `firstRunNextStepAfterMailbox takes only the restored boolean`() {
+        val method = Class.forName("com.chatmailsync.app.FirstRunScreenKt")
+            .getMethod("firstRunNextStepAfterMailbox", Boolean::class.java)
+        assertTrue(method.parameterTypes.size == 1)
+        assertTrue(method.parameterTypes[0] == Boolean::class.java)
+    }
+}
+
+/**
+ * Batch 7 follow-up, updated batch 7b: classifying a restore attempt, which
+ * drives the welcome step's choice between offering the restore button again
+ * and offering "Continue" into mail setup, and Backup & restore's choice of
+ * whether to draw the restore-confirmation lines.
+ *
+ * Batch 7b changed this from sniffing the message text for a "Restored "
+ * prefix to reading [Migration.RestoreOutcome.success] directly -- the
+ * prefix match broke the moment the message needed a multi-line confirmation
+ * next to it. These cases are the same ones the old prefix test covered,
+ * now expressed on the boolean the real success/failure paths actually
+ * produce.
  */
 class RestoreOutcomeIsSuccessTest {
 
     @Test
-    fun `a real success message from Migration importFrom reads as success`() {
-        assertTrue(restoreOutcomeIsSuccess("Restored 42 chat(s) and your settings."))
+    fun `a real success outcome from Migration importFrom reads as success`() {
+        assertTrue(restoreOutcomeIsSuccess(true))
     }
 
     @Test
-    fun `a null status -- nothing attempted, or a cancelled picker -- is not success`() {
+    fun `a null outcome -- nothing attempted, or a cancelled picker -- is not success`() {
         // Negative: a cancelled OpenDocument picker (null uri) never sets
-        // migrationStatus at all -- restoreBackup's launcher only proceeds
+        // migrationSuccess at all -- restoreBackup's launcher only proceeds
         // past its `if (uri != null)` guard -- so this null case doubles as
         // the cancel guard: it must never be misread as success.
         assertFalse(restoreOutcomeIsSuccess(null))
     }
 
     @Test
-    fun `an already-imported message is not success`() {
-        assertFalse(restoreOutcomeIsSuccess("That backup has already been restored on this phone. Nothing changed."))
-    }
-
-    @Test
-    fun `a failure message is not success`() {
-        assertFalse(restoreOutcomeIsSuccess("That backup could not be restored: the file was not readable."))
-    }
-
-    @Test
-    fun `an interim busy message is not success`() {
-        assertFalse(restoreOutcomeIsSuccess("Reading..."))
-        assertFalse(restoreOutcomeIsSuccess("some backup, 2026-09-10 - restoring..."))
+    fun `an already-imported or failed outcome is not success`() {
+        // Both already-imported and failure set Migration.RestoreOutcome
+        // .success = false; there is only one "not success" shape now, not a
+        // message to pattern-match per case.
+        assertFalse(restoreOutcomeIsSuccess(false))
     }
 }
