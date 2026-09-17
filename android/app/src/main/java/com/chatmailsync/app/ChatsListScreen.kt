@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.chatmailsync.app
 
@@ -11,11 +14,10 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -146,6 +148,22 @@ internal fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunSta
     else -> ChatStatus.NOT_SYNCED
 }
 
+/** Below this row width (dp), the "N messages" count is dropped from the
+ * chat row rather than wrapped or clipped. A OnePlus Nord (1080px, ~411dp
+ * at density 420) still clipped the status/time text against this count
+ * once a longer chat name pushed the row's flexible column tight; the
+ * count itself is not lost information -- it is one tap away on the
+ * chat's own detail screen -- so dropping it is preferable to truncating
+ * either the chat name or the status line, which are both more useful at
+ * a glance. */
+internal const val ChatRowNarrowWidthDp = 360
+
+/** Pure width decision pulled out of the row Composable so it is testable
+ * without Compose/Robolectric: does a row at [rowWidthDp] have room for
+ * the message-count column? */
+internal fun chatRowShowsMessageCount(rowWidthDp: Int): Boolean =
+    rowWidthDp >= ChatRowNarrowWidthDp
+
 /** The row's at-a-glance state. Colour alone would fail anyone who cannot
  * separate the green from the red, so the same three words are also on the
  * status line and in the content description. */
@@ -272,7 +290,6 @@ fun ChatsListScreen(
             )
         },
     ) { padding ->
-        val chipScroll = rememberScrollState()
         val chatListState = rememberLazyListState()
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (chats.isNotEmpty()) {
@@ -297,15 +314,19 @@ fun ChatsListScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 // Counts on the chips answer the question without a tap in
-                // most cases; the chips themselves are for the rest. One
-                // scrolling row of four, rather than a fixed grid.
-                Row(
+                // most cases; the chips themselves are for the rest. A
+                // horizontally-scrolling row here used to run the last chip
+                // ("Never synced (0)") off the right edge at 384dp -- it was
+                // technically reachable by scrolling, but nothing on screen
+                // signalled that, so it just read as a cut-off, broken row.
+                // FlowRow wraps onto a second line instead: every chip is
+                // always fully visible, at any width this app supports.
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(chipScroll)
-                        .fadingEdgesHorizontal(chipScroll)
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     FilterChip(
                         selected = statusFilter == null,
@@ -388,6 +409,13 @@ fun ChatsListScreen(
                     }
                 }
             } else {
+            // Row width decision is pulled into chatRowShowsMessageCount() so
+            // it is unit-testable; screenWidthDp is stable for the life of
+            // this composition (it only changes on rotation, which
+            // recomposes the whole screen), so it is read once here rather
+            // than per row.
+            val rowWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+            val showMessageCount = chatRowShowsMessageCount(rowWidthDp)
             LazyColumn(
                 state = chatListState,
                 modifier = Modifier
@@ -405,7 +433,12 @@ fun ChatsListScreen(
                     ) {
                         StatusDot(chat.lastRunStatus)
                         Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(chat.displayName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                chat.displayName,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
                             // Was "complete · 142 messages · 3 Aug, 2:14 PM":
                             // three facts of different kinds strung into one
                             // sentence. Now when on the left, how much on the
@@ -431,13 +464,23 @@ fun ChatsListScreen(
                                     color = if (status == ChatStatus.FAILED)
                                         MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f),
                                 )
-                                if (chat.messagesSynced > 0) {
+                                // Numeric column: kept at its own intrinsic
+                                // width (no weight) so it is never the thing
+                                // that gets squeezed, but dropped outright
+                                // below ChatRowNarrowWidthDp rather than
+                                // wrapping onto a second line or clipping
+                                // against the status text above.
+                                if (chat.messagesSynced > 0 && showMessageCount) {
                                     Text(
                                         "${chat.messagesSynced} messages",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     )
                                 }
                             }

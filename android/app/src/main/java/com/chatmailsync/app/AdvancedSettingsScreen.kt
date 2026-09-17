@@ -59,7 +59,9 @@ private val CHUNK_LABELS = mapOf(
 @Composable
 fun AdvancedSettingsScreen(
     onBack: () -> Unit,
+    backLabel: String = "Settings",
     onOpenSyncLog: () -> Unit,
+    onRunSetupAgain: () -> Unit = {},
     watchedFolderUri: String?,
     onChooseFolder: () -> Unit,
     onClearFolder: () -> Unit,
@@ -87,6 +89,11 @@ fun AdvancedSettingsScreen(
     var policyMenuOpen by remember { mutableStateOf(false) }
     var chunkMenuOpen by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    // True from the moment the button is tapped until a result (success,
+    // failure or timeout) arrives -- shown immediately rather than waiting
+    // on the network, and also what disables the button so a second tap
+    // cannot start a second check while one is already running.
+    var testingConnection by remember { mutableStateOf(false) }
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
@@ -98,7 +105,7 @@ fun AdvancedSettingsScreen(
         topBar = {
             ChatMailTopBar(
                 title = "Advanced",
-                backLabel = "Settings",
+                backLabel = backLabel,
                 onBack = onBack,
             )
         },
@@ -293,11 +300,40 @@ fun AdvancedSettingsScreen(
             // affordance.
             Text("Mail server", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(
-                onClick = { onTestConnection { result -> testResult = result } },
+                enabled = !testingConnection,
+                onClick = {
+                    testingConnection = true
+                    testResult = "Testing connection…"
+                    onTestConnection { result ->
+                        testingConnection = false
+                        testResult = result
+                    }
+                },
             ) {
                 Text("Test connection")
             }
+            // Directly under the button, always -- the same spot whether it
+            // is the in-progress line or the final result.
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+
+            HorizontalDivider()
+
+            // Re-opens the first-run walkthrough on demand, e.g. to redo the
+            // mail setup steps or revisit the auto-import explanation --
+            // without resetting anything. Nothing here is cleared just by
+            // opening it: an existing mailbox, folder, or interval only
+            // changes if the walkthrough is actually completed with new
+            // values.
+            Text("Setup walkthrough", style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = onRunSetupAgain) {
+                Text("Run setup again")
+            }
+            Text(
+                "Goes through mail setup and auto-import again. Nothing is " +
+                    "cleared unless you choose to change it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

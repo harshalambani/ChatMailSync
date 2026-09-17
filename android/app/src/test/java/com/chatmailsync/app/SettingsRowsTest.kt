@@ -18,8 +18,25 @@ class SettingsRowsTest {
     @Test
     fun `basic settings holds exactly the six everyday rows`() {
         assertEquals(
-            listOf("mail_account", "me", "theme", "backup_restore", "help_about", "advanced"),
+            listOf("mail_account", "me", "theme", "backup_restore", "advanced", "help_about"),
             BASIC_SETTINGS_ROWS.map { it.id },
+        )
+    }
+
+    @Test
+    fun `advanced row sits above Help and About, not last`() {
+        // Batch 5b item 1: Advanced used to be the last row, one more tap
+        // past Help & About than it needed to be for something used far
+        // more often than the FAQ. The regression this guards is Advanced
+        // drifting back to the end of the list.
+        val ids = BASIC_SETTINGS_ROWS.map { it.id }
+        val advancedIndex = ids.indexOf("advanced")
+        val helpIndex = ids.indexOf("help_about")
+        assertTrue("advanced row is missing from BASIC_SETTINGS_ROWS", advancedIndex >= 0)
+        assertTrue("advanced row must come before Help & About", advancedIndex < helpIndex)
+        assertFalse(
+            "advanced row must not be last",
+            advancedIndex == BASIC_SETTINGS_ROWS.lastIndex,
         )
     }
 

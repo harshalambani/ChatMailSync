@@ -99,6 +99,12 @@ fun MailSetupWizardScreen(
     // of 4" (n up to 4) drew right underneath it, reading as two disagreeing
     // counters. Every other caller keeps the default and is unaffected.
     showStepCounter: Boolean = true,
+    // H7: true when a mailbox is already connected and this launch is "Run
+    // setup again" rather than a first-time setup. Offers a way out of the
+    // whole reconnect flow on step 0 -- the password is never re-shown or
+    // pre-filled either way, only the existing connection is kept as-is.
+    hasExistingMailbox: Boolean = false,
+    onKeepCurrentMailbox: (() -> Unit)? = null,
 ) {
     // Non-secret: a rotation (or the process being recreated) resumes on the
     // same step with what was already picked/typed, instead of dropping the
@@ -194,6 +200,25 @@ fun MailSetupWizardScreen(
         ) {
             when (step) {
                 0 -> {
+                    if (hasExistingMailbox && onKeepCurrentMailbox != null) {
+                        Text(
+                            if (initialEmail.isNotBlank()) {
+                                "Already connected as $initialEmail."
+                            } else {
+                                "A mailbox is already connected."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedButton(onClick = onKeepCurrentMailbox, modifier = Modifier.fillMaxWidth()) {
+                            Text("Keep current mailbox")
+                        }
+                        Text(
+                            "Or connect a different one below.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HorizontalDivider()
+                    }
                     Text(
                         "Pick the service your email address belongs to. It decides where " +
                             "Chat Mail Sync files your chats, and how you get the password it needs.",

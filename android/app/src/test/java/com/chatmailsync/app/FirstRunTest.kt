@@ -148,3 +148,82 @@ class FirstRunStepTitlesTest {
         assertTrue(FIRST_RUN_STEP_TITLES.size == 4)
     }
 }
+
+/**
+ * Batch 5b item 7: "Run setup again" opens the same "first_run" route a
+ * fresh install uses, but it must land back in Advanced settings rather
+ * than Home when it finishes -- the walkthrough is being replayed by
+ * someone with an app full of synced mail, not someone seeing it for the
+ * first time.
+ */
+class FirstRunFinishTargetTest {
+
+    @Test
+    fun `manual run from Advanced returns to Advanced, never Home`() {
+        val target = firstRunFinishTarget(cameFrom = "advancedSettings")
+        assertTrue(target == "advancedSettings")
+        assertFalse(target == "home")
+    }
+
+    @Test
+    fun `a fresh install with no previous entry finishes to Home, never Advanced`() {
+        val target = firstRunFinishTarget(cameFrom = null)
+        assertTrue(target == "home")
+        assertFalse(target == "advancedSettings")
+    }
+
+    @Test
+    fun `any other previous route also finishes to Home`() {
+        // Only the one known manual-launch site (Advanced settings) redirects
+        // the finish target; anything else falls back to the fresh-install
+        // behaviour rather than guessing.
+        assertTrue(firstRunFinishTarget(cameFrom = "settings") == "home")
+        assertTrue(firstRunFinishTarget(cameFrom = "chats") == "home")
+    }
+}
+
+/**
+ * Batch 5b items 8/9: the back label must say where the button actually
+ * goes, not a screen-specific guess. This directly pins the regression
+ * found on Settings -> Me, which used to show "Home" for any route it did
+ * not explicitly recognise.
+ */
+class BackLabelForRouteTest {
+
+    @Test
+    fun `known routes map to their screen name`() {
+        assertTrue(backLabelForRoute("home") == "Home")
+        assertTrue(backLabelForRoute("settings") == "Settings")
+        assertTrue(backLabelForRoute("advancedSettings") == "Advanced")
+        assertTrue(backLabelForRoute("chats") == "Chats")
+        assertTrue(backLabelForRoute("help") == "Help")
+        assertTrue(backLabelForRoute("privacy") == "Privacy")
+        assertTrue(backLabelForRoute("mailAccount") == "Mail account")
+        assertTrue(backLabelForRoute("me") == "Me")
+        assertTrue(backLabelForRoute("queue") == "Queue")
+        assertTrue(backLabelForRoute("importPicker") == "Import")
+        assertTrue(backLabelForRoute("mailWizard") == "Mail setup")
+    }
+
+    @Test
+    fun `route templates with arguments still match by prefix`() {
+        // previousBackStackEntry's route is the NavHost template, e.g.
+        // "chat/{chatId}", never a resolved path with the id filled in.
+        assertTrue(backLabelForRoute("chat/{chatId}") == "Chat")
+        // Negative: a single thread is not the list -- the plural would name
+        // the wrong screen for someone backing out of one chat.
+        assertFalse(backLabelForRoute("chat/{chatId}") == "Chats")
+        assertTrue(backLabelForRoute("syncLog/{runId}") == "Sync log")
+        assertTrue(backLabelForRoute("syncLog") == "Sync log")
+    }
+
+    @Test
+    fun `null, unknown and first_run all fall back to the safe default, never Home`() {
+        assertTrue(backLabelForRoute(null) == "Back")
+        assertFalse(backLabelForRoute(null) == "Home")
+        assertTrue(backLabelForRoute("first_run") == "Back")
+        assertFalse(backLabelForRoute("first_run") == "Home")
+        assertTrue(backLabelForRoute("not_a_real_route") == "Back")
+        assertFalse(backLabelForRoute("not_a_real_route") == "Home")
+    }
+}

@@ -267,6 +267,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
 @Composable
 fun MailAccountScreen(
     onBack: () -> Unit,
+    backLabel: String = "Settings",
     onTestConnection: ((String) -> Unit) -> Unit,
     imapProviders: List<ImapProviderInfo>,
     imapProvider: String,
@@ -293,6 +294,11 @@ fun MailAccountScreen(
     // explains.
     val passwordWasLost = remember { SecretStore.consumeSecretLost(context) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    // True from the moment the button is tapped until a result (success,
+    // failure or timeout) arrives -- shown immediately rather than waiting
+    // on the network, and also what disables the button so a second tap
+    // cannot start a second check while one is already running.
+    var testingConnection by remember { mutableStateOf(false) }
     var providerMenuOpen by remember { mutableStateOf(false) }
     // Password is deliberately never pre-filled from a saved value — Compose
     // state here is plain (unencrypted) memory, and re-displaying a saved
@@ -333,7 +339,7 @@ fun MailAccountScreen(
         topBar = {
             ChatMailTopBar(
                 title = "Mail account",
-                backLabel = "Settings",
+                backLabel = backLabel,
                 onBack = onBack,
             )
         },
@@ -574,12 +580,19 @@ fun MailAccountScreen(
             Text("Connection", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(
                 onClick = {
-                    onTestConnection { result -> testResult = result }
+                    testingConnection = true
+                    testResult = "Testing connection…"
+                    onTestConnection { result ->
+                        testingConnection = false
+                        testResult = result
+                    }
                 },
-                enabled = backendUsable,
+                enabled = backendUsable && !testingConnection,
             ) {
                 Text("Test connection")
             }
+            // Directly under the button, always -- the same spot whether it
+            // is the in-progress line or the final result.
             testResult?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
         }
     }

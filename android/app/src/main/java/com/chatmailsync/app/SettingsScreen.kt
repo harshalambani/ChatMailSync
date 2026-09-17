@@ -2,6 +2,7 @@
 
 package com.chatmailsync.app
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,9 +32,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 
@@ -70,13 +73,19 @@ internal val WATCH_INTERVAL_LABELS = listOf(
  * asserted by a plain JUnit test without standing up Compose. */
 data class SettingsRowSpec(val id: String, val title: String)
 
+// Advanced sits above Help & About (moved here from last place) -- it is
+// where the everyday-vs-everything-else split (D8) actually lives, so it
+// belongs beside the other navigational rows rather than after the mostly
+// static Help & About block. SettingsScreen renders its navigational rows
+// from this list's order (see the `forEach` below), so a reorder here is a
+// reorder on screen, not just in the test fixture.
 val BASIC_SETTINGS_ROWS = listOf(
     SettingsRowSpec("mail_account", "Mail account"),
     SettingsRowSpec("me", "Me"),
     SettingsRowSpec("theme", "Theme"),
     SettingsRowSpec("backup_restore", "Backup & restore"),
-    SettingsRowSpec("help_about", "Help & About"),
     SettingsRowSpec("advanced", "Advanced"),
+    SettingsRowSpec("help_about", "Help & About"),
 )
 
 val ADVANCED_SETTINGS_ROWS = listOf(
@@ -90,6 +99,67 @@ val ADVANCED_SETTINGS_ROWS = listOf(
     SettingsRowSpec("chunk_size", "Chunk size"),
     SettingsRowSpec("test_connection", "Test connection"),
 )
+
+/**
+ * A full-row navigational entry: title, subtitle, and a trailing chevron --
+ * the shape "Mail account", "Your messages" (Me) and "Advanced" already
+ * shared informally, and Mail account was quietly missing the chevron the
+ * other two had (item 5). Pulled out once so all three -- and any row added
+ * here later -- get the same emphasis: a full-strength onSurface title and
+ * chevron rather than a dimmer inherited tint, and an explicit outline so
+ * the row reads as a bounded tappable card at normal emphasis (item 6). The
+ * subtitle stays onSurfaceVariant, which is still readable at this weight.
+ */
+@Composable
+private fun SettingsNavRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    contentDescriptionOverride: String? = null,
+    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .let {
+                if (contentDescriptionOverride != null) {
+                    it.semantics { contentDescription = contentDescriptionOverride }
+                } else {
+                    it
+                }
+            },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = subtitleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
 
 @Composable
 fun SettingsScreen(
@@ -110,6 +180,10 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var themeMenuOpen by remember { mutableStateOf(false) }
+    // Computed here, not inside the row loop below, so the masthead's own Me
+    // row (added for item 2 -- see the topBar block) and the Mail account/Me
+    // nav rows in the list both read the same value.
+    val meDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
@@ -120,7 +194,28 @@ fun SettingsScreen(
         // on every screen, which is how two exports ended up below the
         // fold on the import picker.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { ChatMailTopBar(title = "Settings") },
+        topBar = {
+            // item 2: Home and Chats already show the masthead's Me row
+            // (showMe = true), which is what made their band 112dp tall
+            // against Settings' plain 88dp band -- the one real structural
+            // difference between the three, since all three already share
+            // this one ChatMailTopBar component for height, title style,
+            // padding and the connection pill's placement. Settings is the
+            // only one of the three with nowhere else on screen to reach
+            // Me from other than its own nav row, but the masthead row is
+            // one tap closer and matches the other two tabs, so it gets it
+            // too rather than being the odd one out. Nothing existing is
+            // dropped: Settings had no top-bar actions to keep, and the Me
+            // nav row lower on the screen stays exactly where it was.
+            ChatMailTopBar(
+                title = "Settings",
+                showMe = true,
+                meLabel = meDisplay.label,
+                meColor = meDisplay.color,
+                meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
+                onMeClick = onOpenMe,
+            )
+        },
     ) { padding ->
         val scrollState = rememberScrollState()
         Column(
@@ -133,192 +228,148 @@ fun SettingsScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Mail backend/account setup moved to its own screen
-            // (MailAccountScreen) — it was the single longest section here
-            // and the one users revisit least often once configured, so this
-            // screen now just shows a status summary and a way in, instead
-            // of making everyone scroll past the full IMAP form to reach
-            // Theme and Watched folder.
-            OutlinedButton(
-                onClick = onOpenMailAccount,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Mail account", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        mailAccountSummary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Rendered in BASIC_SETTINGS_ROWS' own order (item 1 / SettingsRowsTest),
+            // so a reorder of that list is a reorder on screen, not just in a
+            // test fixture that could quietly drift from what actually renders.
+            // Theme, Backup & restore and Help & About stay their own bespoke
+            // bodies (a dropdown, two buttons, a couple of links) rather than
+            // being forced into the nav-row shape -- but their position on
+            // screen still comes from this same list.
+            BASIC_SETTINGS_ROWS.forEachIndexed { index, row ->
+                when (row.id) {
+                    "mail_account" -> SettingsNavRow(
+                        title = "Mail account",
+                        subtitle = mailAccountSummary,
+                        onClick = onOpenMailAccount,
                     )
-                }
-            }
 
-            HorizontalDivider()
+                    "me" -> SettingsNavRow(
+                        title = "Your messages",
+                        subtitle = meDisplay.label,
+                        onClick = onOpenMe,
+                        contentDescriptionOverride =
+                            selfSenderContentDescription(selfSenderSource, selfSenderName),
+                        subtitleColor = meDisplay.color,
+                    )
 
-            // Above every other setting here, because it is the only one the
-            // app answers on its own. An export does not mark your own
-            // messages -- it writes your profile name exactly as it writes
-            // everybody else's -- so the app works out which name is yours,
-            // and that decides which side of the conversation every bubble is
-            // drawn on. Getting it wrong does not fail loudly; it produces a
-            // perfectly readable archive of the wrong shape. So the answer is
-            // stated here, its colour carrying which of the three states it
-            // is in, one tap away from the detail and the ways to change it.
-            val meDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
-            OutlinedButton(
-                onClick = onOpenMe,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .semantics {
-                        contentDescription =
-                            selfSenderContentDescription(selfSenderSource, selfSenderName)
-                    },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Your messages", style = MaterialTheme.typography.bodyLarge)
+                    "theme" -> {
+                        Text("Theme", style = MaterialTheme.typography.titleMedium)
+                        Box {
+                            OutlinedButton(onClick = { themeMenuOpen = true }) {
+                                Text(THEME_LABELS[themeMode] ?: themeMode)
+                            }
+                            DropdownMenu(expanded = themeMenuOpen, onDismissRequest = { themeMenuOpen = false }) {
+                                THEME_LABELS.forEach { (mode, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = { onThemeModeChange(mode); themeMenuOpen = false },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    "backup_restore" -> {
+                        // Worth being explicit about what this is for, because
+                        // "backup" in an archiving app invites the wrong
+                        // reading: the mailbox is the archive, and it is
+                        // already safe on a mail server. What is only on this
+                        // phone is the record of which messages have already
+                        // been sent. Lose that and nothing is lost --
+                        // everything is sent again, into a mailbox that has no
+                        // way to tell the copies apart.
+                        //
+                        // Headed "Move to a new phone" until v1.17.0, which
+                        // hid it from everyone who was not moving: the same
+                        // file is what gets you back after a reset, a
+                        // reinstall or Clear data, and those happen to people
+                        // who never buy a phone.
+                        Text("Backup & restore", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            meDisplay.label,
+                            "Saves what this phone knows about what it has already sent. Keep one, " +
+                                "and a reset, a reinstall or another device carries on from here " +
+                                "instead of mailing everything a second time. Your chats are already " +
+                                "safe in your mailbox — this is not a copy of them.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = meDisplay.color,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
-                }
-            }
-
-            HorizontalDivider()
-
-            Text("Theme", style = MaterialTheme.typography.titleMedium)
-            Box {
-                OutlinedButton(onClick = { themeMenuOpen = true }) {
-                    Text(THEME_LABELS[themeMode] ?: themeMode)
-                }
-                DropdownMenu(expanded = themeMenuOpen, onDismissRequest = { themeMenuOpen = false }) {
-                    THEME_LABELS.forEach { (mode, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = { onThemeModeChange(mode); themeMenuOpen = false },
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider()
-
-            // Worth being explicit about what this is for, because "backup" in
-            // an archiving app invites the wrong reading: the mailbox is the
-            // archive, and it is already safe on a mail server. What is only on
-            // this phone is the record of which messages have already been
-            // sent. Lose that and nothing is lost -- everything is sent again,
-            // into a mailbox that has no way to tell the copies apart.
-            //
-            // Headed "Move to a new phone" until v1.17.0, which hid it from
-            // everyone who was not moving: the same file is what gets you back
-            // after a reset, a reinstall or Clear data, and those happen to
-            // people who never buy a phone.
-            Text("Backup & restore", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Saves what this phone knows about what it has already sent. Keep one, " +
-                    "and a reset, a reinstall or another device carries on from here " +
-                    "instead of mailing everything a second time. Your chats are already " +
-                    "safe in your mailbox — this is not a copy of them.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onSaveBackup, enabled = !migrationBusy) {
-                    Text("Save a backup")
-                }
-                OutlinedButton(onClick = onRestoreBackup, enabled = !migrationBusy) {
-                    Text("Restore from a backup")
-                }
-            }
-            // Re-read whenever the migration state moves, which is what a save
-            // finishing looks like from here -- a backup nobody can date is a
-            // backup nobody trusts, and "I think I did one" is exactly the
-            // belief that costs a mailbox its second copy of everything.
-            val lastBackupAt = remember(migrationBusy, migrationStatus) {
-                AppPrefs.getLastBackupAt(context)
-            }
-            Text(
-                Migration.describeLastBackup(lastBackupAt),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (Migration.backupIsStale(lastBackupAt))
-                    MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            // In place, under the buttons -- not a dialog. Everything this can
-            // say is an outcome to read, and none of it needs a decision, so a
-            // box demanding to be dismissed would only add a tap.
-            migrationStatus?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Text(
-                "Your mail password is never included in a backup.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-
-            Text("Help & About", style = MaterialTheme.typography.titleMedium)
-            // Read from BuildConfig, which gradle generates from versionName /
-            // versionCode, so this cannot drift from the APK. It used to be the
-            // hardcoded string "Chat Mail Sync — Android (dev build)", which a
-            // release-signed 1.0.1 went on displaying -- worse than showing
-            // nothing, because it was confidently wrong.
-            //
-            // versionCode is shown alongside the name because it is the number
-            // `adb shell dumpsys package` reports and the one the store orders
-            // by, so it is what actually answers "am I on the current build?".
-            //
-            Text(
-                "Chat Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
-                    if (BuildConfig.DEBUG) " — debug build" else "",
-            )
-            TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
-            // The policy is carried in the app now, not linked out to. It was
-            // a browser link, which is where Indus Appstore put the app on
-            // hold: a policy that needs a second app and a live connection
-            // before it can be read is not really inside the app at all. This
-            // goes to a screen that renders offline, with the hosted copy
-            // offered from there as a secondary.
-            TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
-
-            HorizontalDivider()
-
-            // Everything below this row still exists -- nothing was removed,
-            // only moved one tap deeper -- but none of it is an everyday
-            // decision the way Mail account, Me and Theme are, so it no
-            // longer competes with them for space on the first screen. See
-            // AdvancedSettingsScreen.
-            OutlinedButton(
-                onClick = onOpenAdvanced,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Advanced", style = MaterialTheme.typography.bodyLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = onSaveBackup, enabled = !migrationBusy) {
+                                Text("Save a backup")
+                            }
+                            OutlinedButton(onClick = onRestoreBackup, enabled = !migrationBusy) {
+                                Text("Restore from a backup")
+                            }
+                        }
+                        // Re-read whenever the migration state moves, which is
+                        // what a save finishing looks like from here -- a
+                        // backup nobody can date is a backup nobody trusts,
+                        // and "I think I did one" is exactly the belief that
+                        // costs a mailbox its second copy of everything.
+                        val lastBackupAt = remember(migrationBusy, migrationStatus) {
+                            AppPrefs.getLastBackupAt(context)
+                        }
                         Text(
-                            "Automatic import, cut-off date, test run and more",
+                            Migration.describeLastBackup(lastBackupAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (Migration.backupIsStale(lastBackupAt))
+                                MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // In place, under the buttons -- not a dialog.
+                        // Everything this can say is an outcome to read, and
+                        // none of it needs a decision, so a box demanding to
+                        // be dismissed would only add a tap.
+                        migrationStatus?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Text(
+                            "Your mail password is never included in a backup.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null)
+
+                    "advanced" -> SettingsNavRow(
+                        title = "Advanced",
+                        subtitle = "Automatic import, cut-off date, test run and more",
+                        onClick = onOpenAdvanced,
+                    )
+
+                    "help_about" -> {
+                        Text("Help & About", style = MaterialTheme.typography.titleMedium)
+                        // Read from BuildConfig, which gradle generates from
+                        // versionName / versionCode, so this cannot drift from
+                        // the APK. It used to be the hardcoded string "Chat
+                        // Mail Sync — Android (dev build)", which a
+                        // release-signed 1.0.1 went on displaying -- worse
+                        // than showing nothing, because it was confidently
+                        // wrong.
+                        //
+                        // versionCode is shown alongside the name because it
+                        // is the number `adb shell dumpsys package` reports
+                        // and the one the store orders by, so it is what
+                        // actually answers "am I on the current build?".
+                        Text(
+                            "Chat Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
+                                if (BuildConfig.DEBUG) " — debug build" else "",
+                        )
+                        TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
+                        // The policy is carried in the app now, not linked out
+                        // to. It was a browser link, which is where Indus
+                        // Appstore put the app on hold: a policy that needs a
+                        // second app and a live connection before it can be
+                        // read is not really inside the app at all. This goes
+                        // to a screen that renders offline, with the hosted
+                        // copy offered from there as a secondary.
+                        TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
+                    }
                 }
+                if (index != BASIC_SETTINGS_ROWS.lastIndex) HorizontalDivider()
             }
         }
     }

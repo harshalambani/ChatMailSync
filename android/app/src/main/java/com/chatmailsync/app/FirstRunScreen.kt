@@ -97,6 +97,11 @@ fun FirstRunScreen(
     onWatchIntervalChange: (Long) -> Unit,
     onTurnOn: () -> Unit,
     onNotNow: () -> Unit,
+    // True when this launch is "Run setup again" (H7) over an already-
+    // connected mailbox, not a fresh install -- lets step 2 offer "Keep
+    // current mailbox" instead of steering the user through reconnecting
+    // one that already works.
+    hasExistingMailbox: Boolean = false,
 ) {
     var step by rememberSaveable { mutableStateOf(1) }
 
@@ -128,6 +133,8 @@ fun FirstRunScreen(
                     initialEmail = initialEmail,
                     onConnect = onConnect,
                     showStepCounter = false,
+                    hasExistingMailbox = hasExistingMailbox,
+                    onKeepCurrentMailbox = { step = firstRunStepForward(step) },
                 )
             }
         }
