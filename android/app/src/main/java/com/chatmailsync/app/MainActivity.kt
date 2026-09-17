@@ -282,15 +282,51 @@ internal fun runConnectionCheck(
     check: () -> Pair<Boolean, String>,
 ) {
     val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    runConnectionCheckWithScheduler(
+        password = password,
+        post = { mainHandler.post(it) },
+        postDelayed = { delayMs, runnable -> mainHandler.postDelayed(runnable, delayMs) },
+        removeCallbacks = { mainHandler.removeCallbacks(it) },
+        recordConnection = { connected -> ConnectionState.record(context, connected) },
+        onResult = onResult,
+        check = check,
+    )
+}
+
+/**
+ * The actual exactly-once-delivery/watchdog race behind [runConnectionCheck],
+ * with the main-thread scheduler (normally `Handler(Looper.getMainLooper())`)
+ * and the [ConnectionState] write taken as parameters instead of reached for
+ * directly.
+ *
+ * Pulled out for exactly one reason: this module has no Robolectric, so
+ * nothing that touches a real `Handler`/`Looper` is reachable from a plain
+ * JVM unit test -- before this split, the exactly-once guarantee this
+ * function exists to provide (see [runConnectionCheck]'s doc comment) had no
+ * test coverage of its own beyond the pure helpers it calls into
+ * ([connectionWatchdogTimeoutText], [redactSecretText]). With the scheduler
+ * injected, a test can supply a same-thread `post`/`postDelayed` and drive
+ * both the "watchdog fires first" and "check finishes first" orderings
+ * directly -- see ConnectionCheckHelpersTest.
+ */
+internal fun runConnectionCheckWithScheduler(
+    password: String?,
+    post: (Runnable) -> Unit,
+    postDelayed: (delayMs: Long, runnable: Runnable) -> Unit,
+    removeCallbacks: (Runnable) -> Unit,
+    recordConnection: (connected: Boolean) -> Unit,
+    onResult: (connected: Boolean, text: String) -> Unit,
+    check: () -> Pair<Boolean, String>,
+) {
     val delivered = AtomicBoolean(false)
     val watchdog = Runnable {
         if (delivered.compareAndSet(false, true)) {
             Log.i(ConnectionLogTag, "watchdog fired before a result arrived")
-            ConnectionState.record(context, false)
+            recordConnection(false)
             onResult(false, connectionWatchdogTimeoutText())
         }
     }
-    mainHandler.postDelayed(watchdog, ConnectionWatchdogTimeoutMs)
+    postDelayed(ConnectionWatchdogTimeoutMs, watchdog)
     Thread {
         var connected = false
         var text = "Could not connect."
@@ -302,10 +338,10 @@ internal fun runConnectionCheck(
             Log.i(ConnectionLogTag, "connection check threw")
             text = redactSecretText("Could not connect: ${t.message ?: "unknown error"}", password)
         } finally {
-            mainHandler.post {
+            post {
                 if (delivered.compareAndSet(false, true)) {
-                    mainHandler.removeCallbacks(watchdog)
-                    ConnectionState.record(context, connected)
+                    removeCallbacks(watchdog)
+                    recordConnection(connected)
                     onResult(connected, text)
                 }
             }
@@ -561,13 +597,16 @@ fun ChatMailApp(
         }
     }
 
-    // Never echoes the secret itself back into a UI string, even on
-    // failure — imaplib/ssl exception text doesn't normally embed the
-    // password, but this is a zero-cost belt-and-braces check against the
-    // "must never reach ... an exception message" constraint.
-    fun redactSecret(text: String, secret: String?): String =
-        if (!secret.isNullOrEmpty() && text.contains(secret)) text.replace(secret, "********") else text
-
+    /**
+     * Save & connect: the same bounded, exactly-once path as "Test
+     * connection" and the wizard's connectWithStages ([runConnectionCheck]
+     * around check_connection's timed stages), not a bare Thread with only
+     * an `Exception` catch and no watchdog -- see the "test connection
+     * never returns" history on [runConnectionCheck] itself. Before this,
+     * Save & connect's own catch was narrower (Exception only, no
+     * timeout), so the exact hang that button was written to fix for "Test
+     * connection" was still reachable from here.
+     */
     fun saveImapSettings(
         provider: String,
         host: String,
@@ -600,30 +639,15 @@ fun ChatMailApp(
             onResult(false, "Enter the app password to connect with.")
             return
         }
-        Thread {
-            var transport: com.chaquo.python.PyObject? = null
-            val errorText = try {
-                transport = Python.getInstance().getModule("src.mail_client")
-                    .callAttr("build_imap_transport", effectiveHost, port, email, effectivePassword)
-                // Forces a real login so a wrong host/port/password/
-                // app-password is caught here, not on the next real sync.
-                transport?.callAttr("labels_list")
-                null
-            } catch (e: Exception) {
-                redactSecret("Could not connect: ${e.message ?: "unknown error"}", effectivePassword)
-            } finally {
-                try {
-                    transport?.callAttr("close")
-                } catch (_: Exception) {
-                    // Best-effort logout only.
-                }
-            }
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                // A real login was attempted either way by this point -- the
-                // argument checks above return before the thread starts -- so
-                // this outcome is worth recording whichever way it went.
-                ConnectionState.record(context, errorText == null)
-                if (errorText == null) {
+        runConnectionCheck(
+            context = context,
+            password = effectivePassword,
+            onResult = { connected, text ->
+                // Persist only on a real, successful login -- exactly the
+                // paths the old build_imap_transport+labels_list() version
+                // persisted on, now reached through check_connection's own
+                // "ok" outcome instead of "no exception was thrown".
+                if (connected) {
                     AppPrefs.setImapProvider(context, provider)
                     AppPrefs.setImapHost(context, effectiveHost)
                     AppPrefs.setImapPort(context, port)
@@ -636,10 +660,24 @@ fun ChatMailApp(
                     imapPasswordSaved = true
                     onResult(true, "Connected — settings saved.")
                 } else {
-                    onResult(false, errorText)
+                    onResult(false, text)
                 }
-            }
-        }.start()
+            },
+        ) {
+            Log.i(ConnectionLogTag, "check_connection (save): starting")
+            val mailClient = Python.getInstance().getModule("src.mail_client")
+            val outcome = mailClient.callAttr(
+                "check_connection",
+                effectiveHost,
+                port,
+                email,
+                effectivePassword,
+            )
+            val connected = outcome.callAttr("get", "ok").toBoolean()
+            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            Log.i(ConnectionLogTag, "check_connection (save): finished, ok=$connected")
+            connected to text
+        }
     }
 
     /**

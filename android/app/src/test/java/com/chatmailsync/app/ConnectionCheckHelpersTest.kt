@@ -4,15 +4,35 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Unit coverage for the pure pieces of the "test connection never returns"
- * fix -- [runConnectionCheck] itself needs a background Thread + Handler
+ * Unit coverage for the "test connection never returns" fix.
+ *
+ * [runConnectionCheck] itself needs a real `Handler(Looper.getMainLooper())`
  * loop that isn't exercisable from a plain JVM unit test (no Robolectric
- * here), but the two things that make its guarantees meaningful on their
- * own -- the watchdog's user-facing text, and the redaction it applies to
- * whatever an exception says -- are ordinary functions and are covered
- * directly.
+ * here). [runConnectionCheckWithScheduler] exists precisely so the
+ * exactly-once/watchdog race it implements *is* reachable from a test: the
+ * scheduler (`post`/`postDelayed`/`removeCallbacks`) and the
+ * [ConnectionState] write are passed in rather than reached for directly, so
+ * a test can supply a same-thread `post` and drive both orderings --
+ * watchdog-first and check-first -- deterministically. The one part that
+ * still runs on a real background `Thread` is the `check` lambda itself, so
+ * those tests synchronize on it with latches instead of assuming ordering.
+ *
+ * Save & connect (`saveImapSettings` in MainActivity.kt) reuses
+ * [runConnectionCheck] directly and is not separately covered here: its own
+ * "only persist when the callback says connected == true" gate is a single
+ * `if (connected)` block around the AppPrefs/SecretStore writes, so the
+ * "failed Save & connect must not mark the password saved" guarantee reduces
+ * to "onResult is never called with connected == true unless the check
+ * itself reported success" -- which is exactly what the watchdog-first and
+ * throwing-check tests below establish for [runConnectionCheckWithScheduler].
+ * `saveImapSettings` itself captures Composable-local state and a real
+ * `Context`/`SecretStore`/`AppPrefs`, and is not reachable from a
+ * Robolectric-free JVM test.
  */
 class ConnectionCheckHelpersTest {
 
@@ -55,5 +75,120 @@ class ConnectionCheckHelpersTest {
         // A null or blank secret must be a safe no-op, not a crash.
         assertEquals("unchanged", redactSecretText("unchanged", null))
         assertEquals("unchanged", redactSecretText("unchanged", ""))
+    }
+
+    // Negative (GA4.1 / item 5): a check that fails with a non-Exception
+    // Throwable -- e.g. something crossing the Chaquopy bridge as an Error --
+    // must still reach onResult exactly once, and the password must not be
+    // in the text it delivers. Before the `catch (t: Throwable)` in
+    // runConnectionCheckWithScheduler (deliberately not `catch (e:
+    // Exception)`), this class of failure silently ended the worker thread
+    // with the UI never told -- the same class of hang GA4.1 exists to close.
+    @Test
+    fun `a check that throws a non-Exception Throwable still delivers exactly one result`() {
+        val password = "fake-app-password"
+        val resultCount = AtomicInteger(0)
+        val delivered = CountDownLatch(1)
+        var lastConnected = true
+        var lastText = ""
+
+        runConnectionCheckWithScheduler(
+            password = password,
+            post = { it.run() },
+            postDelayed = { _, _ -> /* watchdog never fires in this test */ },
+            removeCallbacks = { },
+            recordConnection = { },
+            onResult = { connected, text ->
+                resultCount.incrementAndGet()
+                lastConnected = connected
+                lastText = text
+                delivered.countDown()
+            },
+            check = { throw OutOfMemoryError("simulated bridge crash near $password") },
+        )
+
+        assertTrue("onResult was never called", delivered.await(5, TimeUnit.SECONDS))
+        assertEquals(1, resultCount.get())
+        assertFalse("a thrown check must not report connected", lastConnected)
+        assertFalse("the password must not appear in the delivered text", lastText.contains(password))
+    }
+
+    // Negative (GA4.1 / item 5): if the watchdog fires before a slow check
+    // finishes, exactly one result (the watchdog's timeout text) is
+    // delivered -- and when the slow check *does* eventually finish and
+    // tries to report its own (different) result, that second attempt must
+    // be silently swallowed, not delivered on top of the first.
+    @Test
+    fun `a never-returning check triggers the watchdog text and does not also deliver a second result`() {
+        val password = "fake-app-password"
+        val resultCount = AtomicInteger(0)
+        val texts = mutableListOf<String>()
+        var watchdog: Runnable? = null
+        val checkStarted = CountDownLatch(1)
+        val allowCheckToFinish = CountDownLatch(1)
+        val firstResultDelivered = CountDownLatch(1)
+
+        runConnectionCheckWithScheduler(
+            password = password,
+            post = { it.run() },
+            postDelayed = { _, runnable -> watchdog = runnable },
+            removeCallbacks = { },
+            recordConnection = { },
+            onResult = { _, text ->
+                resultCount.incrementAndGet()
+                texts.add(text)
+                firstResultDelivered.countDown()
+            },
+            check = {
+                checkStarted.countDown()
+                // Stands in for a check that never returns in time -- the
+                // test controls exactly when it is allowed to finish.
+                assertTrue("test setup: check was never released", allowCheckToFinish.await(5, TimeUnit.SECONDS))
+                true to "connected, all good, arrived far too late"
+            },
+        )
+
+        assertTrue("check never started", checkStarted.await(5, TimeUnit.SECONDS))
+        // Fire the watchdog before the check has any chance to finish.
+        watchdog!!.run()
+        assertTrue("watchdog result was never delivered", firstResultDelivered.await(5, TimeUnit.SECONDS))
+        assertEquals(1, resultCount.get())
+        assertTrue(texts.single().contains("timed out", ignoreCase = true))
+        assertFalse("the password must not appear in the watchdog text", texts.single().contains(password))
+
+        // Now let the slow check finish and attempt to deliver its own,
+        // different result -- it must be swallowed by the exactly-once gate.
+        allowCheckToFinish.countDown()
+        Thread.sleep(300) // give the background thread's finally-block post a chance to run, if it were going to
+        assertEquals("the late result must not be delivered a second time", 1, resultCount.get())
+    }
+
+    // Negative (GA4.1 / item 5): a successful check must not leave the
+    // watchdog able to fire afterwards and overwrite the real result with a
+    // spurious timeout -- removeCallbacks is expected to be used for this,
+    // and this test fails if it is not.
+    @Test
+    fun `a normal successful check delivers exactly one result and cancels the watchdog`() {
+        val resultCount = AtomicInteger(0)
+        var removeCallbacksCalled = false
+        val delivered = CountDownLatch(1)
+
+        runConnectionCheckWithScheduler(
+            password = "fake-app-password",
+            post = { it.run() },
+            postDelayed = { _, _ -> /* not fired in this test */ },
+            removeCallbacks = { removeCallbacksCalled = true },
+            recordConnection = { },
+            onResult = { connected, _ ->
+                resultCount.incrementAndGet()
+                assertTrue("a successful check must report connected", connected)
+                delivered.countDown()
+            },
+            check = { true to "connected, all good" },
+        )
+
+        assertTrue(delivered.await(5, TimeUnit.SECONDS))
+        assertEquals(1, resultCount.get())
+        assertTrue("the watchdog must be cancelled once a real result arrives", removeCallbacksCalled)
     }
 }

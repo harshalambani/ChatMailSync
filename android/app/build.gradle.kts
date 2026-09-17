@@ -40,8 +40,8 @@ android {
         // released without ever being published; v1.4.1 was the first release
         // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
         // and this repo is Android-only from here on.
-        versionCode = 41
-        versionName = "2.1.5"
+        versionCode = 42
+        versionName = "2.2.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
@@ -93,6 +93,20 @@ android {
         // from the APK; without this the class does not exist and the build
         // fails on an unresolved reference.
         buildConfig = true
+    }
+
+    testOptions {
+        unitTests {
+            // JVM unit tests run against the unmodified `android.jar` stub,
+            // where every framework method throws "not mocked" rather than
+            // doing nothing -- fine as long as nothing under test calls one.
+            // runConnectionCheckWithScheduler's watchdog/throwing-check paths
+            // (ConnectionCheckHelpersTest) call Log.i, so testing those paths
+            // directly needs this. Robolectric would be the heavier
+            // alternative; this project still has none, so returning harmless
+            // defaults (false/0/null) is the actual fix, not a workaround.
+            isReturnDefaultValues = true
+        }
     }
 }
 
