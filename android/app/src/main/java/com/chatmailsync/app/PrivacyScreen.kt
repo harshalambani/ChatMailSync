@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 // behaviour, and the two platforms must not say different things about it.
 
 internal const val PRIVACY_LAST_UPDATED =
-    "Last updated: September 12, 2026 - revised for version 2.1.5."
+    "Last updated: September 17, 2026 - revised for version 2.1.5."
 
 internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "Summary" to listOf(
@@ -160,9 +160,10 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "new \"Last updated\" date, and is carried in the app from the next release.",
     ),
     "Contact" to listOf(
-        "Questions about this policy or the app can be raised as an issue on the GitHub " +
-            "repository. The full source is there too, for anyone who would rather read the " +
-            "code than the promise: github.com/harshalambani/ChatMailSync",
+        "Questions about this policy or the app can be sent to the developer at " +
+            "chat.mail.sync+privacy@gmail.com, or raised as an issue on the GitHub repository. The " +
+            "full source is there too, for anyone who would rather read the code than the " +
+            "promise: github.com/harshalambani/ChatMailSync",
     ),
 )
 
