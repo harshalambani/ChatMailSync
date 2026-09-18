@@ -99,7 +99,7 @@ const val SELF_SENDER_FALLBACK = "You"
  *   which pins this gap rather than hiding it.
  */
 internal fun normaliseSender(name: String): String =
-    pythonCasefold(name.replace("‎", "").trim { it.isWhitespaceLikePython() })
+    pythonCasefold(name.replace("\u200E", "").trim { it.isWhitespaceLikePython() })
 
 /**
  * Twin of Python's `str.isspace()` character set, which is what `str.strip()`

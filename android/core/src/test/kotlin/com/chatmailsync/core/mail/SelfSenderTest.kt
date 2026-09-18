@@ -82,7 +82,7 @@ class SelfSenderTest {
         // of a profile name is not stable between them.
         assertEquals(
             "Rohan Mehta",
-            deriveFromOneToOne("Priya Nair", listOf("‎PRIYA NAIR", "Rohan Mehta")),
+            deriveFromOneToOne("Priya Nair", listOf("\u200EPRIYA NAIR", "Rohan Mehta")),
         )
     }
 
@@ -172,7 +172,7 @@ class SelfSenderTest {
         val result = resolve(
             learned = "Rohan Mehta",
             displayName = "Priya Nair",
-            senders = listOf("Priya Nair", "‎rohan mehta"),
+            senders = listOf("Priya Nair", "\u200Erohan mehta"),
         )
         assertNull(result.newlyDerived)
     }
@@ -310,7 +310,7 @@ class SelfSenderTest {
         // comparison behaviour from that raw-passthrough behaviour.
         assertEquals(
             "Rohan Mehta",
-            deriveFromOneToOne(" Priya Nair ", listOf("Priya Nair", "Rohan Mehta")),
+            deriveFromOneToOne("\u00A0Priya Nair\u202F", listOf("Priya Nair", "Rohan Mehta")),
         )
     }
 
@@ -414,11 +414,11 @@ class SelfSenderTest {
     @Test
     fun anNbspOnlyOverrideIsStillTreatedAsAbsent() {
         val result = resolve(
-            override = "  ",
+            override = "\u00A0\u202F",
             learned = "Rohan Mehta",
         )
         assertEquals("Rohan Mehta", result.name)
-        assertEquals("learned", describe(override = "  ", learned = "Rohan Mehta").source)
+        assertEquals("learned", describe(override = "\u00A0\u202F", learned = "Rohan Mehta").source)
     }
 
     // NEGATIVE: duplicate senders (the same person appearing many times in

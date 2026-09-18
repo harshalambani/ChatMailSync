@@ -46,7 +46,7 @@ object MimeBuilder {
             // Mirrors Python's str.splitlines(): our port covers the common
             // line separators (\n, \r\n, \r); Python additionally splits on a
             // handful of rarer unicode line boundaries (\v, \f, \x1c-\x1e,
-            // \x85,  ,  ), which chat text never contains -- a
+            // \x85, U+2028, U+2029), which chat text never contains -- a
             // documented, deliberate gap.
             val bodyLines = splitLines(msg.body)
             if (bodyLines.isNotEmpty()) {
