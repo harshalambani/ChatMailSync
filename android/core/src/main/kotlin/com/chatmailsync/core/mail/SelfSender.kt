@@ -23,7 +23,7 @@ package com.chatmailsync.core.mail
  * else's:
  *
  * ```
- * 18/11/25, 16:18 - Harshal Ambani: on my way
+ * 18/11/25, 16:18 - Rohan Mehta: on my way
  * ```
  *
  * For a long time the renderer assumed that name was the literal string
@@ -82,14 +82,21 @@ const val SELF_SENDER_FALLBACK = "You"
  *   true for any Unicode `Zs` code point) includes them, so the `||`
  *   recovers Python's behaviour. See [aNbspAndNarrowNbspAreStrippedLikePython]
  *   in the test twin.
- * - `str.casefold()` is a strictly more aggressive fold than `str.lower()`:
- *   for example the German "ß" casefolds to "ss" (a length-changing fold),
- *   which `.lowercase()` does not do. A full Unicode casefold table is out
- *   of scope for a module that only ever compares human display names typed
- *   or exported by WhatsApp -- overwhelmingly Latin-script -- so
- *   [pythonCasefold] below implements `.lowercase(Locale.ROOT)` plus the one
- *   divergence realistic enough to pin (ß/ss), and documents the gap rather
- *   than silently presenting `.lowercase()` as equivalent.
+ * - `str.casefold()` is a strictly more aggressive, context-independent fold
+ *   than `str.lower()`: German "ß" casefolds to "ss" (a length-changing
+ *   fold), the archaic "ſ" (LATIN SMALL LETTER LONG S) folds to "s", and
+ *   ligatures such as "ﬁ" fold to "fi" -- none of which `.lowercase()` alone
+ *   does. [pythonCasefold] below approximates this with `.uppercase(Locale.ROOT)`
+ *   followed by `.lowercase(Locale.ROOT)`, which recovers all of the above
+ *   (uppercasing expands "ß"/"ſ"/"ﬁ" to their multi-character forms, which
+ *   then lowercase cleanly) and was verified directly against a running JVM
+ *   for exactly those three cases. It has one known remaining divergence:
+ *   Java's `lowercase()`, unlike Python's context-independent `casefold()`,
+ *   applies Unicode's `Final_Sigma` rule, so a capital sigma ("Σ") ending a
+ *   run of cased letters folds to the Greek *final* sigma "ς" in Kotlin
+ *   rather than the plain "σ" Python's `casefold()` always produces. See
+ *   [greekFinalSigmaAtWordEndDivergesFromPythonsCasefold] in the test twin,
+ *   which pins this gap rather than hiding it.
  */
 internal fun normaliseSender(name: String): String =
     pythonCasefold(name.replace("‎", "").trim { it.isWhitespaceLikePython() })
@@ -113,12 +120,12 @@ private fun Char.isWhitespaceLikePython(): Boolean =
     Character.isWhitespace(this) || Character.isSpaceChar(this)
 
 /**
- * Twin of Python's `str.casefold()` for the Latin-script names this module
- * actually compares. See [normaliseSender]'s KDoc for what is and is not
- * covered.
+ * Twin of Python's `str.casefold()`. See [normaliseSender]'s KDoc for what
+ * is and is not covered, including the one known divergence (Greek
+ * word-final sigma).
  */
 internal fun pythonCasefold(name: String): String =
-    name.lowercase(java.util.Locale.ROOT).replace("ß", "ss")
+    name.uppercase(java.util.Locale.ROOT).lowercase(java.util.Locale.ROOT)
 
 /**
  * Twin of Python's `str.strip()`, using the same Unicode whitespace set as
