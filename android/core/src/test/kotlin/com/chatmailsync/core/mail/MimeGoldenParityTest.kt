@@ -43,7 +43,7 @@ class MimeGoldenParityTest {
         ParsedMessage(
             chatId = chatId,
             timestamp = LocalDateTime.of(2019, 5, 3, 10, 16, 0),
-            sender = "Bijal Ambani",
+            sender = "Kavya Menon",
             body = "line one\nline two continuation",
         ),
     )

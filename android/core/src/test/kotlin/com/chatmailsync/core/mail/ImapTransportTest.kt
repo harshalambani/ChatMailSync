@@ -487,8 +487,8 @@ class ImapTransportTest {
     fun ownsLabelIdRejectsOpaqueHandleAndAcceptsItsOwn() {
         val (transport, _) = makeTransport()
 
-        assertFalse(transport.ownsLabelId("Label_5928374102938", "Bijal Ambani"))
-        assertTrue(transport.ownsLabelId(fullLabelName("Bijal Ambani"), "Bijal Ambani"))
+        assertFalse(transport.ownsLabelId("Label_5928374102938", "Kavya Menon"))
+        assertTrue(transport.ownsLabelId(fullLabelName("Kavya Menon"), "Kavya Menon"))
     }
 
     // ---------------------------------------------------------------------

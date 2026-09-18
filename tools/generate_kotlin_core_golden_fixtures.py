@@ -48,7 +48,7 @@ FIXTURE_CHUNK = [
     ParsedMessage(
         chat_id=FIXTURE_CHAT_ID,
         timestamp=datetime(2019, 5, 3, 10, 16, 0),
-        sender="Bijal Ambani",
+        sender="Kavya Menon",
         body="line one\nline two continuation",
     ),
 ]

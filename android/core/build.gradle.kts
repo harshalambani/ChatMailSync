@@ -23,7 +23,22 @@ kotlin {
     }
 }
 
+// A third source set, separate from `main` and `test`, that holds only
+// LiveImapHarness.kt (the interactive, human-run, real-network entry
+// point). It is never part of `main` — see the harnessJar task below —
+// so it can never end up in the `:core` jar a later phase wires the app
+// to. It compiles against `main`'s output (ImapTransport, checkConnection,
+// etc.) but is otherwise independent of `test`.
+sourceSets {
+    create("harness") {
+        kotlin.srcDir("src/harness/kotlin")
+        compileClasspath += sourceSets["main"].output + sourceSets["main"].compileClasspath
+        runtimeClasspath += sourceSets["main"].output + sourceSets["main"].runtimeClasspath
+    }
+}
+
 dependencies {
+    "harnessImplementation"(kotlin("stdlib"))
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
 }
@@ -32,15 +47,35 @@ tasks.test {
     useJUnit()
 }
 
-// Interactive live-IMAP harness for a human to run by hand, typing an app
-// password at a prompt (never echoed, never read from a file or env var).
-// Deliberately NOT part of `test` or any task CI runs — see
-// LiveImapHarness.kt and the PR body for how to invoke it.
-tasks.register<JavaExec>("liveImapHarness") {
+// A runnable jar bundling the `harness` and `main` classes, with a
+// Main-Class manifest entry — built specifically so the harness can be
+// launched with a plain `java -jar ...` from a real terminal, bypassing
+// the Gradle daemon entirely. Gradle's own JavaExec (the previous approach
+// here) never attaches a real console, so System.console() is always null
+// there and a masked password prompt is impossible from inside Gradle —
+// see LiveImapHarness.kt's doc comment for the full explanation and the
+// exact run command. Deliberately NOT part of `test`, `build`, `assemble`,
+// or any task CI runs.
+tasks.register<Jar>("harnessJar") {
     group = "verification"
-    description = "Interactive, human-run IMAP connect+APPEND check against a real mailbox " +
-        "(Yahoo only — never Gmail). Prompts for the app password; never touched by CI or `test`."
-    mainClass.set("com.chatmailsync.core.mail.LiveImapHarnessKt")
-    classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
-    standardInput = System.`in`
+    description = "Builds a runnable jar for the interactive, human-run live IMAP harness " +
+        "(Yahoo only — never Gmail). Run it with: java -jar core/build/libs/core-harness.jar " +
+        "(never through Gradle — see LiveImapHarness.kt for why). Never touched by CI or `test`."
+    archiveFileName.set("core-harness.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes("Main-Class" to "com.chatmailsync.core.mail.LiveImapHarnessKt")
+    }
+    // Fat jar: `main` + `harness` classes, plus every runtime dependency
+    // (kotlin-stdlib) unpacked in, so `java -jar core-harness.jar` is a
+    // fully standalone invocation from a real terminal -- no extra
+    // -classpath wiring for a human to get right by hand.
+    from(sourceSets["main"].output)
+    from(sourceSets["harness"].output)
+    from({
+        (sourceSets["harness"].runtimeClasspath - sourceSets["main"].output - sourceSets["harness"].output)
+            .filter { it.exists() }
+            .map { if (it.isDirectory) it else zipTree(it) }
+    })
+    dependsOn("harnessClasses")
 }
