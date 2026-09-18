@@ -28,7 +28,7 @@ from pathlib import Path
 
 from dateutil import parser as dateutil_parser
 
-from src import mail_index
+from src import mail_index, state
 from src.mail_client import _build_mime_message
 from src.parser import ParsedMessage, extract_chat_info, parse_file
 
@@ -296,6 +296,187 @@ def generate_time_of_day_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
 
 
+# ---------------------------------------------------------------------------
+# state.compute_message_hash golden sweep (Phase 2 "state" port)
+#
+# Runs the real state.compute_message_hash over every message already parsed
+# by generate_parser_goldens() (real dates/times through every
+# TIMESTAMP_PATTERNS format, Unicode-digit timestamps, multiline bodies,
+# attachments, system messages) plus a handful of synthetic entries added
+# here specifically for hash edge cases the parser fixtures above don't
+# happen to cover on their own (emoji, U+202F, an empty body). The Kotlin
+# JUnit test (StateHashGoldenParityTest.kt) asserts computeMessageHash
+# reproduces every one of these byte-for-byte.
+# ---------------------------------------------------------------------------
+
+HASH_SWEEP_EXTRA: list[dict[str, str]] = [
+    {"chatId": "chat_unicode", "timestampIso": "2025-03-14T09:41:00", "sender": "Priya Nair", "body": "emoji body \U0001f600\U0001f64f"},
+    {"chatId": "chat_unicode", "timestampIso": "2025-03-14T09:41:00", "sender": "Kavya Menon \U0001f600", "body": "sender has an emoji too"},
+    # U+202F NARROW NO-BREAK SPACE, as WhatsApp iOS exports use before AM/PM.
+    {"chatId": "chat_nnbsp", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "narrow no-break space in the body itself"},
+    {"chatId": "chat_empty", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan Mehta", "body": ""},
+    {"chatId": "chat_multiline", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "line one\nline two\nline three"},
+    {"chatId": "chat_attachment", "timestampIso": "2025-03-14T09:41:00", "sender": "Priya Nair", "body": "IMG-20250314-WA0001.jpg (file attached)"},
+    # A body containing the hash's own NUL separator character -- proves the
+    # separator choice does not make two different messages collide.
+    {"chatId": "chat1", "timestampIso": "2025-03-14T09:41:00", "sender": "Alice", "body": "Hello\x00Bob"},
+]
+
+
+def generate_state_hash_golden() -> None:
+    entries: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    def add(chat_id: str, timestamp_iso: str, sender: str, body: str) -> None:
+        key = (chat_id, timestamp_iso, sender, body)
+        if key in seen:
+            return
+        seen.add(key)
+        entries.append(
+            {
+                "chatId": chat_id,
+                "timestampIso": timestamp_iso,
+                "sender": sender,
+                "body": body,
+                "hash": state.compute_message_hash(chat_id, timestamp_iso, sender, body),
+            }
+        )
+
+    # Every message already parsed for the parser golden sweep -- real
+    # timestamps, real Unicode-digit inputs, real multiline/attachment
+    # bodies, run through the real Python parser and then the real hash
+    # function, so this sweep is provably built from parser output rather
+    # than from hand-typed strings that might not match what parse_file()
+    # actually produces.
+    for name, text in PARSER_FIXTURES.items():
+        fixture_path = GOLDEN_DIR / f"__tmp_hash_{name}.txt"
+        fixture_path.write_text(text, encoding="utf-8")
+        try:
+            messages = list(parse_file(fixture_path, chat_id=f"golden_{name}"))
+        finally:
+            fixture_path.unlink()
+        for m in messages:
+            add(m.chat_id, m.timestamp_iso, m.sender, m.body)
+
+    for extra in HASH_SWEEP_EXTRA:
+        add(extra["chatId"], extra["timestampIso"], extra["sender"], extra["body"])
+
+    payload = {"entries": entries}
+    out_path = GOLDEN_DIR / "state_hash_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
+
+
+# ---------------------------------------------------------------------------
+# Cross-language sync_state.db fixture (Phase 2 "state" port)
+#
+# Built with the *real* state.py functions -- init_db, upsert_chat,
+# start_sync_run, complete_sync_run, insert_message_hashes, set_chat_cutoff,
+# record_chat_senders, set_app_state -- against a throwaway path, then copied
+# out as a committed binary test resource. StateDbGoldenParityTest.kt (JVM,
+# xerial sqlite-jdbc) opens this exact file and asserts every row reads back
+# correctly through StateRepository, and that Kotlin can also write further
+# rows into it without disturbing what Python wrote -- proving Python-written
+# databases are readable and writable from the Kotlin side. See this
+# function's own return value note on determinism: every stored value here is
+# a literal, fixed string (never `_now()`), specifically so two runs of this
+# generator produce byte-identical file content module SQLite's own internal
+# page/vacuum bookkeeping -- see the PR body for the exact determinism check
+# performed.
+# ---------------------------------------------------------------------------
+
+
+def generate_state_db_golden() -> None:
+    import shutil
+    import sqlite3
+    import tempfile
+    from unittest import mock
+
+    # state.py's own writer functions (upsert_chat, start_sync_run,
+    # complete_sync_run, fail_sync_run, set_chat_cutoff, ...) all stamp
+    # wall-clock state._now() into the rows they write. Left unpatched, that
+    # makes this fixture's created_at/updated_at/started_at/completed_at/
+    # set_at columns differ on every regeneration, which fails the "run the
+    # generator twice, no diff" requirement even at the logical (iterdump)
+    # level, not just byte-for-byte. Freezing state._now() to a single fixed
+    # literal for the duration of this function makes every stored value a
+    # deterministic function of the calls below, matching the doc comment a
+    # few lines up.
+    frozen_now = "2025-03-14T09:40:00"
+    tmp_dir = Path(tempfile.mkdtemp(prefix="cms_state_golden_"))
+    try:
+        with mock.patch.object(state, "_now", return_value=frozen_now):
+            _write_state_db_golden_rows(tmp_dir)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _write_state_db_golden_rows(tmp_dir: Path) -> None:
+    import shutil
+    import sqlite3
+
+    db_path = tmp_dir / "sync_state.db"
+    state.init_db(db_path)
+
+    state.upsert_chat("chat_meera", "Meera Iyer", "Meera Iyer.txt", db_path=db_path)
+    state.upsert_chat("chat_team", "Team Sales", "WhatsApp Chat with Team Sales.txt", db_path=db_path)
+    state.update_chat_gmail_ids(
+        "chat_meera", gmail_thread_id="thread-1", gmail_label_id="WhatsApp/Meera Iyer",
+        anchor_message_id="<golden-anchor@local>", db_path=db_path,
+    )
+
+    run1 = state.start_sync_run("chat_meera", trigger="manual", db_path=db_path)
+    h1 = state.compute_message_hash("chat_meera", "2025-03-14T09:41:00", "Meera Iyer", "hello from the golden fixture")
+    h2 = state.compute_message_hash("chat_meera", "2025-03-14T09:41:30", "Rohan Mehta", "line one\nline two")
+    state.insert_message_hashes(
+        [
+            (h1, "chat_meera", "2025-03-14T09:41:00", run1),
+            (h2, "chat_meera", "2025-03-14T09:41:30", run1),
+        ],
+        db_path=db_path,
+    )
+    state.complete_sync_run(
+        run1,
+        last_synced_ts="2025-03-14T09:41:30",
+        last_synced_hash=h2,
+        messages_parsed=2,
+        messages_synced=2,
+        messages_skipped=0,
+        messages_cutoff=0,
+        db_path=db_path,
+    )
+
+    run2 = state.start_sync_run("chat_team", trigger="watched_folder", db_path=db_path)
+    state.fail_sync_run(run2, "golden fixture: simulated network error", db_path=db_path)
+
+    state.set_chat_cutoff("chat_meera", "2025-01-01", db_path=db_path)
+    state.record_chat_senders(
+        "chat_meera",
+        {"Meera Iyer": 1, "Rohan Mehta": 1, "Priya Nair": 0},
+        seen_ts="2025-03-14T09:41:30",
+        db_path=db_path,
+    )
+    state.set_app_state(state.SELF_SENDER_LEARNED, "Priya Nair", db_path=db_path)
+
+    # Checkpoint WAL into the main file and drop the -wal/-shm sidecars so
+    # exactly one file (sync_state.db) needs to be committed and read back
+    # -- see the PR body for why a plain byte-diff isn't used to prove
+    # determinism instead (SQLite's own free-page bookkeeping isn't
+    # byte-stable run to run even with identical logical content).
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.commit()
+    conn.close()
+
+    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = GOLDEN_DIR / "state_fixture_python_written.db"
+    shutil.copyfile(db_path, out_path)
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -325,6 +506,8 @@ def main() -> None:
 
     generate_parser_goldens()
     generate_time_of_day_golden()
+    generate_state_hash_golden()
+    generate_state_db_golden()
 
 
 if __name__ == "__main__":

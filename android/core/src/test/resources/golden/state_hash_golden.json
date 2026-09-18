@@ -1,0 +1,179 @@
+{
+  "entries": [
+    {
+      "body": "hello from bracketed ampm",
+      "chatId": "golden_bracketed_ampm_seconds",
+      "hash": "d8ff81148c642d912b099c9373206f3787bd9e6b9104aea762aef35309749059",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-04-03T14:05:33"
+    },
+    {
+      "body": "hello from bracketed 24h",
+      "chatId": "golden_bracketed_24h_seconds",
+      "hash": "722a1d740c7062daf27ba9d00a876b2f58b327797ec08686e82c36eb70738057",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-03-14T09:41:23"
+    },
+    {
+      "body": "hello from plain ampm",
+      "chatId": "golden_plain_ampm",
+      "hash": "51bd71dbe163d78c080ba45d03ee9c1e10382de162e5ed0792211c3babc99749",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "narrow no-break space before PM",
+      "chatId": "golden_plain_ampm",
+      "hash": "adee638bcd389ad0780c76b4203bb97ecbdb4ab656892fc663fc04b370b959fc",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-03-14T21:41:00"
+    },
+    {
+      "body": "hello from plain 24h",
+      "chatId": "golden_plain_24h",
+      "hash": "a2d1b0fb303fcda76122243bbea69ac60668316baa03e983ab2553b8f6019f6d",
+      "sender": "Priya Nair",
+      "timestampIso": "2026-05-23T16:42:00"
+    },
+    {
+      "body": "hello from dash 24h",
+      "chatId": "golden_dash_24h",
+      "hash": "648e4cf8ca604bb472bb9eb03f53204089101351e4d09a98057f795d15363515",
+      "sender": "Kavya Menon",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "day exceeds 12 so this locks DMY",
+      "chatId": "golden_date_order_dmy_definitive",
+      "hash": "c9495733859a91e098cf070ca9f42f22a1f15b34aa43f3bdde13f6b29df001a1",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "second field exceeds 12 so this locks MDY",
+      "chatId": "golden_date_order_mdy_definitive",
+      "hash": "6b82eed4e276e3a6386e33c9b0c61ad37f9a083ab9b8b44271c6caffad88a55c",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "year 49 becomes 2049",
+      "chatId": "golden_two_digit_year_pivot",
+      "hash": "03d46e1537f8d6641eaa627233fc8fbd521cb79e8a0501fda23796c9565812bc",
+      "sender": "Meera Iyer",
+      "timestampIso": "2049-01-01T10:00:00"
+    },
+    {
+      "body": "year 50 becomes 1950",
+      "chatId": "golden_two_digit_year_pivot",
+      "hash": "bace5edd95f7c99eb0e8b0e6b6e65055b21e0e391135872e94634f9b0ca452de",
+      "sender": "Meera Iyer",
+      "timestampIso": "1950-01-01T10:00:00"
+    },
+    {
+      "body": "Hey there!",
+      "chatId": "golden_system_messages_and_attachments",
+      "hash": "9703a1060a5a55d9c72a0cd4bb7fa77312d02cca41a5bb6455c066d5fdf5b453",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:23"
+    },
+    {
+      "body": "Hi Meera, how are you?\nThis is a continuation line",
+      "chatId": "golden_system_messages_and_attachments",
+      "hash": "a0ba30ae1ba27478b9328baed4549a6d2e60b7f3afbd8aa70a5cfa6782a9b2d5",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-03-14T09:41:45"
+    },
+    {
+      "body": "IMG-20250314-WA0001.jpg (file attached)",
+      "chatId": "golden_system_messages_and_attachments",
+      "hash": "50658c817cba2084454e8a0220a1c29e49f8e6cb85402652983e67e7236353d7",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:42:00"
+    },
+    {
+      "body": "I left my charger at the office",
+      "chatId": "golden_system_messages_and_attachments",
+      "hash": "0efe80692977107b8a810e59041a9f19978cbce51d50bda064cb2bb824159300",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-03-14T09:42:30"
+    },
+    {
+      "body": "Hey there!",
+      "chatId": "golden_ios_attachment",
+      "hash": "970792259576ccf16138298fffb93287dc09dbc26c6cbf7c8c91c991633ee5e8",
+      "sender": "Priya Nair",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "<attached: 00000123-PHOTO-2025-03-14-09-41-23.jpg>",
+      "chatId": "golden_ios_attachment",
+      "hash": "aba7b996ea61a3ac7c8da61227438d0a7a58f346f72803bd3407058ea63eb6ac",
+      "sender": "Kavya Menon",
+      "timestampIso": "2025-03-14T09:42:00"
+    },
+    {
+      "body": "hello from arabic-indic digits",
+      "chatId": "golden_arabic_indic_digits",
+      "hash": "e994b19ffbca2ff7121f4bd65a475511abff556f7ca5c2dc27e06b12b9f90865",
+      "sender": "Priya Nair",
+      "timestampIso": "2026-05-23T16:42:00"
+    },
+    {
+      "body": "hello from persian digits",
+      "chatId": "golden_persian_digits",
+      "hash": "db585992001052d1c8d869129e19c356d714abce18dd01ee2b05953adea12d3a",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-04-03T14:05:33"
+    },
+    {
+      "body": "emoji body 😀🙏",
+      "chatId": "chat_unicode",
+      "hash": "76ce45366b1e4768c4115da53377ee3a4d572c55c5f91909796d80b70ea26abd",
+      "sender": "Priya Nair",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "sender has an emoji too",
+      "chatId": "chat_unicode",
+      "hash": "8895ebb038ad167e93fb5ae8489208683251ca4ae813daa263fa41c9010f33af",
+      "sender": "Kavya Menon 😀",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "narrow no-break space in the body itself",
+      "chatId": "chat_nnbsp",
+      "hash": "214c9b8b0d60f6900b248e3f90c7b45d0e9e27d12260eeb5e9a0a25f00490393",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "",
+      "chatId": "chat_empty",
+      "hash": "1599a5a1b3539f136f3752da6bfb682b8687eb108564632b56393e8f5a6076a7",
+      "sender": "Rohan Mehta",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "line one\nline two\nline three",
+      "chatId": "chat_multiline",
+      "hash": "1cb7f857a9acec4e42deae596ee168cc408c34c58e6c2c4914f7b6fffeb7e016",
+      "sender": "Meera Iyer",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "IMG-20250314-WA0001.jpg (file attached)",
+      "chatId": "chat_attachment",
+      "hash": "f252922c96e0011ef30e861e55bd1ca966f9696dffcc585f961a7d4fc487ccad",
+      "sender": "Priya Nair",
+      "timestampIso": "2025-03-14T09:41:00"
+    },
+    {
+      "body": "Hello\u0000Bob",
+      "chatId": "chat1",
+      "hash": "3d5fc0fe9c5927bd8bf8f814202f87768d7f3f830f9965c9051000f05287cc60",
+      "sender": "Alice",
+      "timestampIso": "2025-03-14T09:41:00"
+    }
+  ]
+}
