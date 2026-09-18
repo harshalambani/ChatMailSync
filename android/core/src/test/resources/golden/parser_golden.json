@@ -1,0 +1,175 @@
+{
+  "chatInfo": [
+    {
+      "chatId": "priya_nair",
+      "displayName": "Priya Nair",
+      "filename": "WhatsApp Chat with Priya Nair.txt"
+    },
+    {
+      "chatId": "priya_nair",
+      "displayName": "Priya Nair",
+      "filename": "Priya Nair.txt"
+    },
+    {
+      "chatId": "priya_nair",
+      "displayName": "Priya Nair",
+      "filename": "WhatsApp Chat with Priya Nair (1).txt"
+    },
+    {
+      "chatId": "team_2_sales",
+      "displayName": "Team (2) Sales",
+      "filename": "WhatsApp Chat with Team (2) Sales.txt"
+    },
+    {
+      "chatId": "kavyas_caf",
+      "displayName": "Kavya's Café 😀",
+      "filename": "WhatsApp Chat with Kavya's Café 😀.txt"
+    }
+  ],
+  "fixtureTexts": {
+    "bracketed_24h_seconds": "[14/03/25, 09:41:23] - Rohan Mehta: hello from bracketed 24h\n",
+    "bracketed_ampm_seconds": "[3/4/25, 2:05:33 PM] - Meera Iyer: hello from bracketed ampm\n",
+    "dash_24h": "14-03-2025 09:41 - Kavya Menon: hello from dash 24h\n",
+    "date_order_dmy_definitive": "14/03/25, 09:41 - Meera Iyer: day exceeds 12 so this locks DMY\n",
+    "date_order_mdy_definitive": "3/14/25, 09:41 - Meera Iyer: second field exceeds 12 so this locks MDY\n",
+    "ios_attachment": "3/14/25, 9:41 AM - Priya Nair: Hey there!\n3/14/25, 9:42 AM - Kavya Menon: <attached: 00000123-PHOTO-2025-03-14-09-41-23.jpg>\n",
+    "plain_24h": "23/05/26, 16:42 - Priya Nair: hello from plain 24h\n",
+    "plain_ampm": "3/14/25, 9:41 AM - Meera Iyer: hello from plain ampm\n3/14/25, 9:41 PM - Rohan Mehta: narrow no-break space before PM\n",
+    "system_messages_and_attachments": "[14/03/25, 09:40:00] - Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.\n[14/03/25, 09:41:23] - Meera Iyer: Hey there!\n[14/03/25, 09:41:45] - Rohan Mehta: Hi Meera, how are you?\nThis is a continuation line\n[14/03/25, 09:42:00] - Meera Iyer: IMG-20250314-WA0001.jpg (file attached)\n[14/03/25, 09:42:10] - Rohan Mehta: <Media omitted>\n[14/03/25, 09:42:20] - Meera Iyer: This message was deleted\n[14/03/25, 09:42:30] - Rohan Mehta: I left my charger at the office\n",
+    "two_digit_year_pivot": "01/01/49, 10:00 - Meera Iyer: year 49 becomes 2049\n01/01/50, 10:00 - Meera Iyer: year 50 becomes 1950\n"
+  },
+  "parsedMessages": {
+    "bracketed_24h_seconds": [
+      {
+        "attachmentFilename": null,
+        "body": "hello from bracketed 24h",
+        "chatId": "golden_chat",
+        "sender": "Rohan Mehta",
+        "timestampIso": "2025-03-14T09:41:23"
+      }
+    ],
+    "bracketed_ampm_seconds": [
+      {
+        "attachmentFilename": null,
+        "body": "hello from bracketed ampm",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-04-03T14:05:33"
+      }
+    ],
+    "dash_24h": [
+      {
+        "attachmentFilename": null,
+        "body": "hello from dash 24h",
+        "chatId": "golden_chat",
+        "sender": "Kavya Menon",
+        "timestampIso": "2025-03-14T09:41:00"
+      }
+    ],
+    "date_order_dmy_definitive": [
+      {
+        "attachmentFilename": null,
+        "body": "day exceeds 12 so this locks DMY",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-03-14T09:41:00"
+      }
+    ],
+    "date_order_mdy_definitive": [
+      {
+        "attachmentFilename": null,
+        "body": "second field exceeds 12 so this locks MDY",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-03-14T09:41:00"
+      }
+    ],
+    "ios_attachment": [
+      {
+        "attachmentFilename": null,
+        "body": "Hey there!",
+        "chatId": "golden_chat",
+        "sender": "Priya Nair",
+        "timestampIso": "2025-03-14T09:41:00"
+      },
+      {
+        "attachmentFilename": "00000123-PHOTO-2025-03-14-09-41-23.jpg",
+        "body": "<attached: 00000123-PHOTO-2025-03-14-09-41-23.jpg>",
+        "chatId": "golden_chat",
+        "sender": "Kavya Menon",
+        "timestampIso": "2025-03-14T09:42:00"
+      }
+    ],
+    "plain_24h": [
+      {
+        "attachmentFilename": null,
+        "body": "hello from plain 24h",
+        "chatId": "golden_chat",
+        "sender": "Priya Nair",
+        "timestampIso": "2026-05-23T16:42:00"
+      }
+    ],
+    "plain_ampm": [
+      {
+        "attachmentFilename": null,
+        "body": "hello from plain ampm",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-03-14T09:41:00"
+      },
+      {
+        "attachmentFilename": null,
+        "body": "narrow no-break space before PM",
+        "chatId": "golden_chat",
+        "sender": "Rohan Mehta",
+        "timestampIso": "2025-03-14T21:41:00"
+      }
+    ],
+    "system_messages_and_attachments": [
+      {
+        "attachmentFilename": null,
+        "body": "Hey there!",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-03-14T09:41:23"
+      },
+      {
+        "attachmentFilename": null,
+        "body": "Hi Meera, how are you?\nThis is a continuation line",
+        "chatId": "golden_chat",
+        "sender": "Rohan Mehta",
+        "timestampIso": "2025-03-14T09:41:45"
+      },
+      {
+        "attachmentFilename": "IMG-20250314-WA0001.jpg",
+        "body": "IMG-20250314-WA0001.jpg (file attached)",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2025-03-14T09:42:00"
+      },
+      {
+        "attachmentFilename": null,
+        "body": "I left my charger at the office",
+        "chatId": "golden_chat",
+        "sender": "Rohan Mehta",
+        "timestampIso": "2025-03-14T09:42:30"
+      }
+    ],
+    "two_digit_year_pivot": [
+      {
+        "attachmentFilename": null,
+        "body": "year 49 becomes 2049",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "2049-01-01T10:00:00"
+      },
+      {
+        "attachmentFilename": null,
+        "body": "year 50 becomes 1950",
+        "chatId": "golden_chat",
+        "sender": "Meera Iyer",
+        "timestampIso": "1950-01-01T10:00:00"
+      }
+    ]
+  }
+}
