@@ -11,9 +11,9 @@
 # opens here.
 #
 # The job pins 3.13 to match the Chaquopy runtime in
-# android/app/build.gradle.kts. Until 2.1.5 a Windows 3.14 job tested the
-# desktop build too (tag windows-final); the matrix stays so another target is
-# one entry away.
+# android/app/build.gradle.kts. Kept as a one-entry matrix (rather than a
+# plain python-version step) so another target is one entry away if it's
+# ever needed.
 #
 # Note on failure modes: no step here uses continue-on-error, deliberately.
 # pytest exits non-zero for collection errors (2) and "no tests collected" (5)
@@ -81,18 +81,17 @@ jobs:
       - name: Run tests
         run: python -m pytest tests -q -rs --strict-markers
 
-  # The Kotlin half of the OAuth-visibility contract (v1.6.0). It exists as a
+  # The Kotlin unit test suite (android/app/src/test/...). It exists as a
   # separate job rather than a step above because it needs the whole Android
   # toolchain -- JDK, SDK platform, and a host Python for Chaquopy -- and
   # because it must be able to fail on its own terms.
   #
-  # This is the repo's only Kotlin test, and it runs here rather than nowhere
-  # for one reason: the truth table it asserts is the same one
-  # tests/test_config.py asserts on the Python side. A parity rule that only
-  # one platform actually checks is a comment, not a rule.
+  # Several of these tests assert the same contract from the Kotlin side that
+  # a pytest file asserts from the Python side (e.g. FrozenIdentifiersTest
+  # alongside tests/test_config.py) -- a parity rule that only one platform
+  # actually checks is a comment, not a rule.
   #
-  # Plain JVM unit tests -- no emulator, no Robolectric. See
-  # android/app/src/test/.../OauthVisibilityTest.kt.
+  # Plain JVM unit tests -- no emulator, no Robolectric.
   android-unit-tests:
     name: Android unit tests (Kotlin)
     runs-on: ubuntu-latest

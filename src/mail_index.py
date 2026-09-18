@@ -38,7 +38,6 @@ from email import encoders as _encoders
 from email.mime.base import MIMEBase
 from typing import TYPE_CHECKING, Any, Union
 
-from src.app_version import app_version
 from src.state import compute_message_hash
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checkers
@@ -48,6 +47,33 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checke
 # Bumped only on a breaking change to the document's shape. A reader that does
 # not recognise the value should refuse the file rather than guess at it.
 INDEX_SCHEMA = 1
+
+# The running app's version, e.g. "2.2.0" — always Android now, so there is
+# exactly one source of truth: BuildConfig.VERSION_NAME, generated from
+# android/app/build.gradle.kts at build time and handed in once via
+# set_app_version() (ChatMailApplication.onCreate(), right after
+# config.set_root()) before any sync runs. A source checkout that never calls
+# it, or an empty string, resolves to UNKNOWN_VERSION rather than a made-up
+# number or the old desktop-era "development build" placeholder.
+UNKNOWN_VERSION = "unknown"
+
+_app_version: str = UNKNOWN_VERSION
+
+
+def set_app_version(version: "str | None") -> None:
+    """Record the running app's version for build_index() to stamp on indexes.
+
+    Called once per process, from Kotlin. None or "" is treated the same as
+    never having called it — app_version() still returns UNKNOWN_VERSION
+    rather than raising or silently keeping a stale prior value.
+    """
+    global _app_version
+    _app_version = version if version else UNKNOWN_VERSION
+
+
+def app_version() -> str:
+    """The version to stamp on a built index, e.g. "2.2.0" or UNKNOWN_VERSION."""
+    return _app_version
 
 INDEX_FILENAME = "chatmailsync-index.json"
 INDEX_MIME_TYPE = ("application", "json")

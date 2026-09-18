@@ -13,10 +13,9 @@ import org.junit.Test
  * shared Python core are telling the same user two different things about
  * the same mailbox.
  *
- * Plain JUnit, no Robolectric, for the same reason OauthVisibilityTest is:
- * connectionStatusOf takes two plain values and touches no Context. The
- * ConnectionState singleton around it does need one and stays covered by the
- * device checklist.
+ * Plain JUnit, no Robolectric: connectionStatusOf takes two plain values and
+ * touches no Context. The ConnectionState singleton around it does need one
+ * and stays covered by the device checklist.
  */
 class ConnectionStatusTest {
 

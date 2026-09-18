@@ -1,0 +1,7 @@
+Outlook.com is no longer offered as a mailbox.
+
+Microsoft turned off the sign-in method this app uses for personal
+Outlook.com, Hotmail and Live mailboxes, so choosing Outlook could never
+actually work - only fail at login with no fix available. Every mention of
+it in the app, help text and app-password steps is gone. Gmail, Yahoo,
+iCloud and Fastmail are unaffected.

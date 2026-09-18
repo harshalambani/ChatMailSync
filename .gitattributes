@@ -16,8 +16,7 @@
 *.kt   text eol=lf
 *.spec text eol=lf
 
-# Windows-native scripts stay CRLF in the working tree
-*.ps1  text eol=crlf
+# gradlew.bat is the only Windows-native script format left; stays CRLF.
 *.bat  text eol=crlf
 
 # Binaries — never touch
@@ -27,4 +26,3 @@
 *.ico  binary
 *.jpg  binary
 *.apk  binary
-*.exe  binary

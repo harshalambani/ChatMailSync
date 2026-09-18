@@ -17,15 +17,12 @@ Chunking:
 
 import base64
 import email as _email
-import getpass
 import imaplib
 import logging
-import os
 import queue
 import re
 import socket
 import ssl
-import subprocess
 import sys
 import threading
 import time
@@ -67,94 +64,6 @@ from src.media_extractor import MediaExtractor
 from src.parser import ParsedMessage
 
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
-
-
-def _current_username() -> Optional[str]:
-    """Best available identity to hand to an icacls /grant, or None.
-
-    %USERNAME% is the normal source but is simply absent in some service and
-    scheduled-task contexts, which used to make ACL hardening a silent no-op.
-    getpass.getuser() consults the same environment variables first, so the
-    real fallback is `whoami`: it reports the process token's identity from
-    the OS instead of trusting the environment.
-    """
-    username = os.environ.get("USERNAME")
-    if username:
-        return username
-    try:
-        username = getpass.getuser()
-        if username:
-            return username
-    except Exception:  # getpass raises varied errors when it can't resolve
-        pass
-    if os.name == "nt":
-        try:
-            done = subprocess.run(
-                ["whoami"], check=True, capture_output=True, text=True
-            )
-            username = done.stdout.strip()
-            if username:
-                return username
-        except (subprocess.CalledProcessError, OSError):
-            pass
-    return None
-
-
-def _restrict_acl(target: Path, grant: str) -> bool:
-    """Strip inherited ACEs from target and grant the current user only.
-
-    Returns True only if the ACL was actually applied. Callers that hold a
-    plaintext secret must check the return value -- a False here means the
-    path is still readable by other local accounts.
-    """
-    username = _current_username()
-    if not username:
-        log.warning(
-            "Could not determine current username; ACL restriction on %s did "
-            "NOT happen and the path may be readable by other local accounts",
-            target,
-        )
-        return False
-    try:
-        subprocess.run(
-            ["icacls", str(target), "/inheritance:r", "/grant:r", f"{username}:{grant}"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        log.debug("Restricted ACL on %s to user %s", target, username)
-        return True
-    except (subprocess.CalledProcessError, OSError) as _acl_err:
-        log.warning("Could not restrict ACL on %s: %s", target, _acl_err)
-        return False
-
-
-def _restrict_auth_dir_acl(auth_dir: Path) -> bool:
-    """Restrict the auth directory's NTFS ACL to the current user only (Windows).
-
-    Strips inherited permissions and grants full control solely to the
-    logged-in user, so the saved IMAP credentials file is not readable by
-    other local accounts. (OI)(CI) makes that grant the
-    inherited default for files created in the directory afterwards.
-
-    Callers persisting a credential must check the return value; the
-    directory grant itself is best-effort.
-    """
-    return _restrict_acl(auth_dir, "(OI)(CI)F")
-
-
-def _restrict_file_acl(path: Path) -> bool:
-    """Restrict a single file's NTFS ACL to the current user only (Windows).
-
-    Same as _restrict_auth_dir_acl but without the (OI)(CI) inheritance flags,
-    which are meaningless on a file and make icacls reject the grant.
-    """
-    return _restrict_acl(path, "F")
-
 
 # ---------------------------------------------------------------------------
 # Transport interface

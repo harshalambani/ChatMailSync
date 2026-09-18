@@ -1,0 +1,6 @@
+The privacy policy is now carried in the app, not just linked to it.
+
+Settings > About and Help & FAQ both open a screen with the full policy
+text, no browser or connection required. The hosted page is still offered
+below it as a copy. Opening any outside link on a device with no browser
+installed no longer crashes the app - it shows the address instead.

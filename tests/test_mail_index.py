@@ -29,10 +29,13 @@ from src.mail_index import (
     HEADER_VERSION,
     INDEX_FILENAME,
     INDEX_SCHEMA,
+    UNKNOWN_VERSION,
+    app_version,
     build_index,
     build_index_part,
     estimate_index_bytes,
     index_bytes,
+    set_app_version,
 )
 from src.parser import ParsedMessage
 from src.state import compute_message_hash
@@ -67,6 +70,16 @@ def _index_from(msg):
     raise AssertionError(f"no {INDEX_FILENAME} attachment found")
 
 
+@pytest.fixture(autouse=True)
+def _reset_app_version():
+    """set_app_version() is process-global state (Kotlin calls it once at
+    startup); reset it around every test so one test's call can't leak into
+    the next."""
+    set_app_version(None)
+    yield
+    set_app_version(None)
+
+
 def _html_message(chunk, attachments=None, display_name="Alice"):
     rendered = render_chunk(chunk, display_name, None, "")
     if attachments:
@@ -98,6 +111,35 @@ def test_index_records_every_message_in_order():
     assert index["first_ts"] == chunk[0].timestamp_iso
     assert index["last_ts"] == chunk[-1].timestamp_iso
     assert [e["n"] for e in index["messages"]] == [1, 2, 3, 4, 5]
+
+
+def test_index_app_version_reflects_kotlin_supplied_value():
+    """Android hands the real version in once via set_app_version(); the
+    index stamps exactly that, not a placeholder."""
+    set_app_version("2.2.0")
+    index = build_index("Alice", _chunk(1), "day", "<mid@local>")
+    assert index["app_version"] == "2.2.0"
+
+
+def test_index_app_version_never_says_development_build():
+    """Regression guard: src/app_version.py (the desktop-only resolver that
+    fell back to the literal string "development build") is gone. Neither a
+    real version, a missing one, nor an empty one may produce that string
+    anywhere in the built index or its serialised bytes."""
+    for version in ("2.2.0", None, ""):
+        set_app_version(version)
+        index = build_index("Alice", _chunk(1), "day", "<mid@local>")
+        assert index["app_version"] != "development build"
+        assert b"development build" not in index_bytes(index)
+
+
+def test_index_app_version_missing_does_not_crash():
+    """No set_app_version() call yet (source checkout, or a test that never
+    calls it) must not raise and must not silently invent a version."""
+    # _reset_app_version already called set_app_version(None) for us.
+    index = build_index("Alice", _chunk(1), "day", "<mid@local>")
+    assert index["app_version"] == UNKNOWN_VERSION
+    assert app_version() == UNKNOWN_VERSION
 
 
 def test_index_hashes_match_the_dedup_hash():

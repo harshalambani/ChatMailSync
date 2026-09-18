@@ -292,3 +292,29 @@ def test_a_single_message_the_server_will_not_take_still_fails():
             label_id="L1",
             chunk_size="day",
         )
+
+
+# ---------------------------------------------------------------------------
+# NTFS-ACL leftovers (Phase 0 cleanup) — regression guard
+#
+# _current_username/_restrict_acl/_restrict_auth_dir_acl/_restrict_file_acl
+# were Windows-only icacls hardening with no caller anywhere in this
+# Android-only app. Removed along with the getpass/subprocess imports they
+# alone used; this pins them gone so they cannot be reintroduced silently.
+# ---------------------------------------------------------------------------
+
+
+def test_ntfs_acl_helpers_are_gone():
+    import src.mail_client as mail_client
+
+    for name in (
+        "_current_username",
+        "_restrict_acl",
+        "_restrict_auth_dir_acl",
+        "_restrict_file_acl",
+    ):
+        assert not hasattr(mail_client, name), f"{name} should have been removed"
+
+    # And the imports they alone used should not have come back either.
+    assert "getpass" not in dir(mail_client)
+    assert "subprocess" not in dir(mail_client)

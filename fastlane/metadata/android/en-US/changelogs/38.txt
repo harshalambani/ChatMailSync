@@ -1,0 +1,5 @@
+A privacy policy link, reachable from inside the app.
+
+The policy was always hosted and reachable by URL, but there was no way to
+get to it from inside the app itself. One link now sits in About / Help,
+next to Help & FAQ, opening the same page the store listing points at.
