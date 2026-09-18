@@ -1,0 +1,8 @@
+Your own messages are now shown as yours.
+
+A WhatsApp export never marks which name is you - it writes your own
+profile name the same way it writes everyone else's. Against a real
+export this meant nothing matched, and the whole chat could render as if
+every message came from the other person. The app now works out which
+name is yours from a one-to-one export, with a Settings screen showing
+what it found and letting you correct it.
