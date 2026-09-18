@@ -9,25 +9,22 @@ from pathlib import Path
 # Project root and directory layout
 # ---------------------------------------------------------------------------
 
-# The retired Windows app (a PyInstaller bundle launched by PortableApps,
-# gone as of 2.1.5) set CHATMAILSYNC_ROOT before starting the exe, since
-# __file__ points inside the frozen binary and relative paths break there.
+# Android (via Chaquopy) has no env var to set and no __file__-relative
+# layout to fall back to — app-private storage lives under
+# Context.getFilesDir() — so it calls set_root() explicitly on startup
+# instead (see ChatMailApplication.onCreate()).
 #
-# An Android/Chaquopy caller has no env var to set and no __file__-relative
-# layout to fall back to (app-private storage lives under
-# Context.getFilesDir()), so it calls set_root() explicitly instead.
+# CHATMAILSYNC_ROOT stays as a fallback for anything that runs this module
+# from a plain source checkout rather than through set_root() — a local dev
+# shell, a test runner, a one-off script — so the root can still be pointed
+# somewhere other than the repo layout below.
 _explicit_root: Path | None = None
 
 
 def _compute_root() -> Path:
     if _explicit_root is not None:
         return _explicit_root
-    # CHATMAILSYNC_ROOT is the only accepted name. A WAGMAIL_ROOT fallback lived
-    # here until 2026-08-08, for portable installs built before the
-    # WAGmailSync -> WA Mail Sync rename whose launcher still exported the old
-    # variable. Dropped deliberately: a PortableApps upgrade replaces the
-    # launcher .ini along with App\, so the old name only survived a hand-copy
-    # of App\ over a pre-1.0.0 install, and those were prereleases.
+    # CHATMAILSYNC_ROOT is the only accepted name.
     env_root = os.environ.get("CHATMAILSYNC_ROOT")
     return Path(env_root) if env_root else Path(__file__).parent.parent
 
@@ -52,14 +49,10 @@ def _apply_root(root: Path) -> None:
     # Retained only to recognise (and clean up after) a pre-v2.0.0 Google
     # sign-in user; nothing authenticates with it. See is_legacy_oauth_user.
     g["LEGACY_TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
-    # IMAP backend (Road B, phase 1): the confirmed storage decision is an
-    # ACL-locked file (Windows NTFS ACL hardening on top of a scheme that
-    # also has to work on Android, which has neither NTFS ACLs nor DPAPI —
-    # so the *file layout/format* is what's shared cross-platform, and
-    # per-OS hardening is layered on separately). Phase 1 writes nothing
-    # here; this constant only reserves the path (routed through
-    # _apply_root like CREDENTIALS_FILE/TOKEN_FILE above) as the seam
-    # Phase 2 will use.
+    # IMAP backend: reserves the path (routed through _apply_root, like
+    # LEGACY_TOKEN_FILE above) for where IMAP app-password credentials would
+    # live on disk if a future change needs to persist them outside
+    # Android's own encrypted storage. Nothing writes here today.
     g["IMAP_CREDENTIALS_FILE"] = g["AUTH_DIR"] / "imap_credentials.json"
 
 
