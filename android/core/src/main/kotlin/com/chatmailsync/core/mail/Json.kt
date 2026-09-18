@@ -29,7 +29,7 @@ fun jsonQuote(s: String): String {
             '\r' -> sb.append("\\r")
             '\t' -> sb.append("\\t")
             '\b' -> sb.append("\\b")
-            '' -> sb.append("\\f")
+            12.toChar() -> sb.append("\\f")
             else -> {
                 if (ch.code < 0x20) {
                     sb.append(String.format("\\u%04x", ch.code))
