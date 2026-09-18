@@ -360,20 +360,49 @@ class ParserTest {
      * ASCII-only and would NOT match this. */
     @Test
     fun aNarrowNoBreakSpaceBeforeAmPmMatchesLikePython() {
-        val line = "3/14/25, 9:41 AM - Alice: hi"
+        val line = "3/14/25, 9:41\u202FAM - Alice: hi"
         val detected = detectFormat(listOf(line))
         assertNotNull(detected)
         assertEquals("plain_ampm", detected!!.formatKey)
     }
 
-    /** `\d` is deliberately kept ASCII-only here -- a full-width digit
-     * (U+FF10 '０') does NOT match, unlike Python's Unicode-aware `\d`. This
-     * is an intentional, documented divergence (see Parser.kt's top-level
-     * KDoc): real WhatsApp exports never use non-ASCII digits in timestamps. */
+    /** `\d` is Unicode-aware here, matching Python's `\d` in default
+     * (Unicode) mode -- a full-width digit (U+FF10 '０') DOES match and
+     * parses to the same value Python's `int()` would produce. An earlier
+     * revision of this file kept `\d` ASCII-only and pinned the opposite
+     * result via `aFullWidthDigitDoesNotMatchUnlikePython`; that divergence
+     * was found to be reachable in practice (a phone locale that substitutes
+     * native-script digits into exported timestamps) and has been removed --
+     * see Parser.kt's top-level KDoc. */
     @Test
-    fun aFullWidthDigitDoesNotMatchUnlikePython() {
+    fun aFullWidthDigitMatchesLikePython() {
         val line = "１４/03/25, 09:41 - Alice: hi" // "14/03/25" with full-width "14"
-        assertNull(detectFormat(listOf(line)))
+        val detected = detectFormat(listOf(line))
+        assertNotNull(detected)
+        val m = detected!!.lineRegex.matcher(line)
+        assertTrue(m.lookingAt() && m.matches())
+        assertEquals(14, m.group(1).split("/")[0].toInt())
+    }
+
+    /** Arabic-Indic digits (U+0660-0669) throughout a timestamp -- date,
+     * month, year, hour, minute -- parse to the same [LocalDateTime] Python's
+     * `_parse_timestamp` produces. Digit-by-digit: "٢٣/٠٥/٢٦, ١٦:٤٢" is
+     * "23/05/26, 16:42". */
+    @Test
+    fun anArabicIndicDigitTimestampParsesLikePython() {
+        val ts = parseTimestamp("٢٣/٠٥/٢٦", "١٦:٤٢", "plain_24h", "DMY")
+        assertEquals(LocalDateTime.of(2026, 5, 23, 16, 42), ts)
+    }
+
+    /** Extended Arabic-Indic (Persian/Urdu) digits (U+06F0-06F9) in the
+     * time-of-day half, including an ASCII AM/PM marker -- the marker
+     * letters are never digit-substituted. "۲:۰۵:۳۳ PM" is "2:05:33 PM". */
+    @Test
+    fun aPersianDigitTimeOfDayParsesLikeDateutil() {
+        val (h, m, s) = parseTimeOfDay("۲:۰۵:۳۳ PM")
+        assertEquals(14, h)
+        assertEquals(5, m)
+        assertEquals(33, s)
     }
 
     /** 2-digit year pivot: < 50 -> 2000s, >= 50 -> 1900s. */
@@ -466,7 +495,7 @@ class ParserTest {
      * a line boundary; Java's usual line splitters do not. */
     @Test
     fun aFormFeedIsALineBoundaryLikePython() {
-        val lines = pythonSplitlines("ab")
+        val lines = pythonSplitlines("a\u000Cb")
         assertEquals(listOf("a", "b"), lines)
     }
 
@@ -487,15 +516,15 @@ class ParserTest {
     /** U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are boundaries. */
     @Test
     fun unicodeLineAndParagraphSeparatorsAreBoundaries() {
-        assertEquals(listOf("a", "b"), pythonSplitlines("a b"))
-        assertEquals(listOf("a", "b"), pythonSplitlines("a b"))
+        assertEquals(listOf("a", "b"), pythonSplitlines("a\u2028b"))
+        assertEquals(listOf("a", "b"), pythonSplitlines("a\u2029b"))
     }
 
     /** U+200E/U+200F/U+FEFF/U+200B are stripped before matching, per
      * `_clean_text`. */
     @Test
     fun unicodeArtifactsAreStrippedBeforeMatching() {
-        val cleaned = cleanText("‎14/03/25‏, 09:41﻿ - Alice​: hi")
+        val cleaned = cleanText("\u200E14/03/25\u200F, 09:41\uFEFF - Alice\u200B: hi")
         assertEquals("14/03/25, 09:41 - Alice: hi", cleaned)
     }
 

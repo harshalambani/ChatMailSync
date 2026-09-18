@@ -14,38 +14,43 @@ import java.util.zip.ZipFile
  * D/E, which calls this "the fragile one" and lays out the specific
  * regex-flag, date-parsing and file-reading traps this file has to avoid). A
  * faithful behavioural twin of the Python module's public functions, except
- * for two deliberate, explicitly-noted divergences below (`\d` scope, and
- * replacing `dateutil.parser.parse` with a hand-rolled time-of-day parser
- * that reproduces its answers for exactly the inputs `TIMESTAMP_PATTERNS`
- * can ever hand it).
+ * for one deliberate, explicitly-noted divergence below: replacing
+ * `dateutil.parser.parse` with a hand-rolled time-of-day parser that
+ * reproduces its answers for exactly the inputs `TIMESTAMP_PATTERNS` can
+ * ever hand it.
  *
  * NOT wired into `:app` yet — `:app`/`SyncWorker.kt` still reach
  * `src/parser.py` through Chaquopy (`sync_manager.py` calls it internally).
  *
- * ## Regex flags and the Python/Java divergences this file pins deliberately
+ * ## Regex flags: matching Python's Unicode-aware `\s` and `\d`
  *
  * Every pattern below is compiled with [Pattern.UNICODE_CHARACTER_CLASS], so
- * `\s` matches the same Unicode `White_Space`-property characters Python's
- * `\s` matches in default (Unicode) mode — critically including U+202F
- * NARROW NO-BREAK SPACE, which iOS inserts before AM/PM in exported
- * timestamps (`[3/4/25, 2:05:33␣PM]` where `␣` is U+202F, not U+0020). Java's
- * `\s` *without* that flag is ASCII-only ([ \t\n\x0B\f\r]) and would silently
- * fail to lock the AM/PM formats against a real iOS export. See
- * [aNarrowNoBreakSpaceBeforeAmPmMatchesLikePython] in the test twin.
- *
- * `\d`, by contrast, is deliberately kept **ASCII-only** here
- * ([toAsciiDigitPattern] rewrites every `\d` to `[0-9]` before compiling),
- * which *diverges* from Python: Python's `\d` in Unicode mode also matches
- * non-ASCII decimal-digit characters (e.g. Devanagari ٠-٩ or full-width
- * ０-９), so a WhatsApp export using non-Western digits in its timestamps
- * would still lock a format in Python and would not in Kotlin. This is the
- * plan document's explicit recommendation (section D: "decide explicitly
- * (recommend ASCII digits only and assert the difference in a negative
- * test)") — real WhatsApp exports use Western Arabic numerals for
- * timestamps regardless of device locale, so the divergence is believed to
- * be unreachable in practice, and pinning it loudly beats reproducing a
- * behaviour nobody asked for. See [aFullWidthDigitDoesNotMatchUnlikePython]
- * in the test twin.
+ * `\s` and `\d` match the same Unicode-property characters Python's `re`
+ * matches in its default (Unicode) mode:
+ *  - `\s` matches Unicode `White_Space` — critically including U+202F
+ *    NARROW NO-BREAK SPACE, which iOS inserts before AM/PM in exported
+ *    timestamps (`[3/4/25, 2:05:33␣PM]` where `␣` is U+202F, not U+0020).
+ *    Java's `\s` *without* that flag is ASCII-only (a space, tab, newline, form feed or carriage return) and
+ *    would silently fail to lock the AM/PM formats against a real iOS
+ *    export. See [aNarrowNoBreakSpaceBeforeAmPmMatchesLikePython] in the
+ *    test twin.
+ *  - `\d` matches any Unicode decimal digit (category `Nd`) — e.g.
+ *    Arabic-Indic ٠-٩, Extended Arabic-Indic/Persian ۰-۹, or
+ *    Devanagari ०-९ — exactly like Python's `\d` in Unicode mode. An
+ *    earlier revision of this file rewrote `\d` to the ASCII-only `[0-9]`
+ *    before compiling, reasoning that real WhatsApp exports always use
+ *    Western Arabic numerals for timestamps regardless of device locale;
+ *    that assumption was wrong (a phone set to a locale with native-script
+ *    digits substitutes them into exported timestamps too), and the
+ *    ASCII-only rewrite would have silently parsed zero messages from such
+ *    an export. `\d` is Unicode-aware here now, matching Python.
+ *    `Integer.parseInt`/Kotlin's `String.toIntOrNull()` already convert
+ *    Unicode decimal-digit strings the same way Python's `int()` does (both
+ *    ultimately decode digit-by-digit via `Character.digit(c, 10)`),
+ *    confirmed on JDK 17 -- so no separate digit-conversion helper is
+ *    needed once the surrounding regexes accept the characters. Pinned by
+ *    the `arabic_indic_digits`/`persian_digits` golden fixtures and by
+ *    [aUnicodeDigitTimestampParsesLikePython] in the test twin.
  */
 
 // ---------------------------------------------------------------------------
@@ -412,17 +417,17 @@ private fun decodeUtf8SigReplace(raw: ByteArray): String {
 // Format detection
 // ---------------------------------------------------------------------------
 
-/** Rewrites every `\d` in [raw] to the ASCII-only `[0-9]` -- see this file's
- * top-level KDoc for why `\d` is deliberately not Unicode-aware here. */
-private fun toAsciiDigitPattern(raw: String): String = raw.replace("\\d", "[0-9]")
-
 /**
  * Wrap a raw timestamp pattern into a full message-line regex. Twin of
  * `parser.py:_build_line_re`. The resulting pattern captures three groups:
  * (1) date_part (2) time_part (3) remainder (sender: body or system text).
+ * Compiled with [Pattern.UNICODE_CHARACTER_CLASS], so the `\d`s already
+ * present in [TIMESTAMP_PATTERNS]'s raw pattern strings become Unicode-aware
+ * automatically, matching Python's `re` default (Unicode) mode -- see this
+ * file's top-level KDoc.
  */
 fun buildLineRegex(tsPattern: String): Pattern =
-    Pattern.compile("^" + toAsciiDigitPattern(tsPattern) + " - (.+)$", Pattern.UNICODE_CHARACTER_CLASS)
+    Pattern.compile("^$tsPattern - (.+)$", Pattern.UNICODE_CHARACTER_CLASS)
 
 /**
  * Return (format_key, line_regex) for the first pattern that matches any
@@ -487,8 +492,15 @@ fun resolveDateOrder(lines: List<String>, lineRe: Pattern, formatKey: String): S
 // Timestamp construction
 // ---------------------------------------------------------------------------
 
+// `\d` here relies on [Pattern.UNICODE_CHARACTER_CLASS] (below) to match any
+// Unicode decimal digit, exactly like Python's `\d` in default (Unicode)
+// mode -- see this file's top-level KDoc. The AM/PM marker also accepts an
+// optional trailing period after each letter ("a.m.", "P.M.", ...): real
+// `TIMESTAMP_PATTERNS` output never contains periods, but `dateutil.parser`
+// accepts the dotted form with the same hour semantics, so this is a
+// harmless widening pinned by the `time_of_day_golden.json` sweep.
 private val TIME_OF_DAY_RE: Pattern = Pattern.compile(
-    "^([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?(?:\\s*([AaPp][Mm]))?$",
+    "^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?(?:\\s*([AaPp]\\.?[Mm]\\.?))?$",
     Pattern.UNICODE_CHARACTER_CLASS,
 )
 
@@ -603,12 +615,12 @@ fun isSystemBody(body: String): Boolean {
  * Strip the Unicode artifacts WhatsApp injects into exported text: U+200E
  * (LEFT-TO-RIGHT MARK), U+200F (RIGHT-TO-LEFT MARK), U+FEFF (BOM / ZERO
  * WIDTH NO-BREAK SPACE), U+200B (ZERO WIDTH SPACE). Twin of
- * `parser.py:_clean_text` (`str.maketrans("", "", "‎‏﻿​")`).
+ * `parser.py:_clean_text` (`str.maketrans("", "", "\u200E\u200F\uFEFF\u200B")`).
  * Written as `\u` escapes per this repo's "no literal control/invisible
  * characters in Kotlin sources" rule.
  */
 fun cleanText(text: String): String =
-    text.filterNot { it == '‎' || it == '‏' || it == '﻿' || it == '​' }
+    text.filterNot { it == '\u200E' || it == '\u200F' || it == '\uFEFF' || it == '\u200B' }
 
 /**
  * Split [text] on every line-boundary character Python's `str.splitlines()`
@@ -620,7 +632,7 @@ fun cleanText(text: String): String =
  *
  * Boundary set (from the CPython `str.splitlines` docs): `\n`, `\r`, `\r\n`
  * (counted once), `\v`/`\x0b`, `\f`/`\x0c`, `\x1c`, `\x1d`, `\x1e`, `\x85`
- * (NEL), ` ` (LINE SEPARATOR), ` ` (PARAGRAPH SEPARATOR).
+ * (NEL), `\u2028` (LINE SEPARATOR), `\u2029` (PARAGRAPH SEPARATOR).
  */
 fun pythonSplitlines(text: String): List<String> {
     val result = mutableListOf<String>()
@@ -646,7 +658,7 @@ fun pythonSplitlines(text: String): List<String> {
 }
 
 private fun isPythonLineBoundary(c: Char): Boolean = when (c) {
-    '\n', '\r', '', '', '', '', '', '', ' ', ' ' -> true
+    '\n', '\r', '\u000B', '\u000C', '\u001C', '\u001D', '\u001E', '\u0085', '\u2028', '\u2029' -> true
     else -> false
 }
 

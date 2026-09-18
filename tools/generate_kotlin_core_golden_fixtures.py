@@ -26,6 +26,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from dateutil import parser as dateutil_parser
+
 from src import mail_index
 from src.mail_client import _build_mime_message
 from src.parser import ParsedMessage, extract_chat_info, parse_file
@@ -117,6 +119,23 @@ PARSER_FIXTURES: dict[str, str] = {
         "3/14/25, 9:41 AM - Priya Nair: Hey there!\n"
         "3/14/25, 9:42 AM - Kavya Menon: <attached: 00000123-PHOTO-2025-03-14-09-41-23.jpg>\n"
     ),
+    # Item 1 of the two-change follow-up (PR #92 review): an export whose
+    # timestamp uses Arabic-Indic digits (U+0660-0669) throughout -- date,
+    # month, year, hour and minute -- exercising the plain_24h format with a
+    # non-ASCII (but still decimal, Unicode category Nd) digit script. The
+    # separators ("/", ",", ":", " - ") stay ASCII, matching how phone-locale
+    # digit substitution actually behaves (only the digit glyphs change).
+    "arabic_indic_digits": (
+        "٢٣/٠٥/٢٦, ١٦:٤٢"
+        " - Priya Nair: hello from arabic-indic digits\n"
+    ),
+    # Extended Arabic-Indic (Persian/Urdu) digits, U+06F0-06F9, on the
+    # bracketed_ampm_seconds format, which also carries an ASCII AM/PM
+    # marker -- the marker letters are never digit-substituted.
+    "persian_digits": (
+        "[۳/۴/۲۵, ۲:۰۵:۳۳ PM]"
+        " - Rohan Mehta: hello from persian digits\n"
+    ),
 }
 
 PARSER_CHAT_INFO_FIXTURES: list[str] = [
@@ -170,6 +189,113 @@ def generate_parser_goldens() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
+# ---------------------------------------------------------------------------
+# Time-of-day golden sweep (item 2 of the PR #92 follow-up review)
+#
+# `Parser.kt:parseTimeOfDay` is a hand-rolled replacement for
+# `dateutil_parser.parse(time_str.strip(), default=datetime(1900, 1, 1))`,
+# the only third-party dependency on `parser.py`'s hash-input path. This
+# sweep runs the *real* dateutil against every input and records either its
+# (hour, minute, second) or the exception class name it raised, so the
+# Kotlin JUnit test can assert `parseTimeOfDay` reproduces dateutil exactly
+# for every one of them, or at minimum documents precisely where it cannot.
+# ---------------------------------------------------------------------------
+
+ARABIC_INDIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
+PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
+ASCII_DIGITS = "0123456789"
+
+
+def _to_digits(n: int, script: str, width: int = 0) -> str:
+    s = str(n)
+    if width:
+        s = s.zfill(width)
+    return "".join(script[int(c)] for c in s)
+
+
+def _dateutil_result(raw: str) -> dict[str, object]:
+    try:
+        r = dateutil_parser.parse(raw.strip(), default=datetime(1900, 1, 1))
+        return {"input": raw, "ok": True, "hour": r.hour, "minute": r.minute, "second": r.second}
+    except Exception as exc:  # noqa: BLE001 -- recording whatever dateutil raises, by design
+        return {"input": raw, "ok": False, "exceptionClass": type(exc).__name__}
+
+
+def generate_time_of_day_golden() -> None:
+    import warnings
+
+    warnings.filterwarnings("ignore")  # dateutil's UnknownTimezoneWarning on "...M" suffixes
+    entries: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def add(raw: str) -> None:
+        if raw in seen:
+            return
+        seen.add(raw)
+        entries.append(_dateutil_result(raw))
+
+    hours = list(range(0, 25))
+    minutes_sample = [0, 5, 30, 59]
+    seconds_modes = [None, 0, 30, 59]
+    core_markers = [None, " AM", " PM", " am", " pm"]
+
+    # Tier A: full hour sweep x minute/second sample x core marker forms
+    # (space + upper/lower AM/PM, and no marker at all -- the 24h case).
+    for h in hours:
+        for mi in minutes_sample:
+            for se in seconds_modes:
+                time_part = f"{h}:{mi:02d}" if se is None else f"{h}:{mi:02d}:{se:02d}"
+                for marker in core_markers:
+                    add(time_part + (marker or ""))
+
+    # Tier B: exotic marker forms (no space, narrow no-break space U+202F,
+    # no-break space U+00A0, "a.m."/"p.m." dotted forms), at a representative
+    # hour sample that covers the AM/PM edge cases explicitly called out
+    # (0, 12, 13, 23, 24) plus a few ordinary hours.
+    hour_sample = [0, 1, 9, 11, 12, 13, 23, 24]
+    exotic_markers = [
+        "AM", "PM",  # no space before marker
+        " AM", " PM",  # narrow no-break space (iOS)
+        " AM", " PM",  # no-break space
+        " a.m.", " p.m.", " A.M.", " P.M.",  # dotted forms
+    ]
+    for h in hour_sample:
+        for mi in [0, 30]:
+            for marker in exotic_markers:
+                add(f"{h}:{mi:02d}" + marker)
+
+    # Tier C: zero-padded ("HH:MM") vs unpadded ("H:MM") hour, crossed with
+    # the core markers, at the same representative hour sample.
+    for h in hour_sample:
+        for marker in core_markers:
+            add(f"{h:02d}:30" + (marker or ""))
+
+    # Tier D: leading/trailing whitespace around an otherwise-ordinary string
+    # (parseTimeOfDay strips first, same as `time_str.strip()` in parser.py).
+    for wrapped in ["9:41 AM", "13:05:33", "0:00 AM", "23:59:59"]:
+        add(f"  {wrapped}  ")
+        add(f"\t{wrapped}\n")
+
+    # Tier E: Unicode-digit versions (item 1) of a representative slice,
+    # with and without an (ASCII-lettered) AM/PM marker -- WhatsApp never
+    # digit-substitutes the AM/PM letters themselves.
+    for script in (ARABIC_INDIC_DIGITS, PERSIAN_DIGITS):
+        for h in hour_sample:
+            for mi in [0, 30]:
+                h_digits = _to_digits(h, script)
+                mi_digits = _to_digits(mi, script, width=2)
+                for marker in [None, " AM", " PM"]:
+                    add(f"{h_digits}:{mi_digits}" + (marker or ""))
+
+    payload = {"entries": entries}
+    out_path = GOLDEN_DIR / "time_of_day_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -198,6 +324,7 @@ def main() -> None:
     print(f"Wrote {GOLDEN_DIR / 'index_golden.json'} ({len(index_raw)} bytes)")
 
     generate_parser_goldens()
+    generate_time_of_day_golden()
 
 
 if __name__ == "__main__":

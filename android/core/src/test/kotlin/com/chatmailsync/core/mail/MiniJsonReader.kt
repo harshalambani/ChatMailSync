@@ -7,14 +7,16 @@ package com.chatmailsync.core.mail
  * so golden fixtures written by `tools/generate_kotlin_core_golden_fixtures.py`
  * as JSON need a reader from somewhere. This one supports exactly the value
  * shapes the golden fixtures use: objects, arrays, strings (with the
- * standard JSON escapes, including `\uXXXX` and surrogate pairs), and
- * `null`. No numbers or booleans are needed by any current golden fixture,
- * so they are deliberately not implemented.
+ * standard JSON escapes, including `\uXXXX` and surrogate pairs), numbers
+ * (integers only -- every numeric golden field so far is an hour/minute/
+ * second, always a non-negative integer), booleans, and `null`.
  */
 sealed class JsonNode {
     data class Obj(val fields: Map<String, JsonNode>) : JsonNode()
     data class Arr(val items: List<JsonNode>) : JsonNode()
     data class Str(val value: String) : JsonNode()
+    data class Num(val value: Long) : JsonNode()
+    data class Bool(val value: Boolean) : JsonNode()
     object Null : JsonNode()
 
     fun asObj(): Obj = this as Obj
@@ -25,6 +27,8 @@ sealed class JsonNode {
         else -> error("not a string/null: $this")
     }
     fun asString(): String = (this as Str).value
+    fun asInt(): Int = (this as Num).value.toInt()
+    fun asBoolean(): Boolean = (this as Bool).value
 
     operator fun get(key: String): JsonNode =
         asObj().fields[key] ?: error("missing key '$key' in $this")
@@ -49,7 +53,7 @@ private class MiniJsonParser(private val text: String) {
 
     fun parseValue(): JsonNode {
         skipWhitespace()
-        return when (text[pos]) {
+        return when (val c = text[pos]) {
             '{' -> parseObject()
             '[' -> parseArray()
             '"' -> JsonNode.Str(parseStringLiteral())
@@ -58,8 +62,32 @@ private class MiniJsonParser(private val text: String) {
                 pos += 4
                 JsonNode.Null
             }
-            else -> error("unexpected character '${text[pos]}' at offset $pos")
+            't' -> {
+                require(text.startsWith("true", pos))
+                pos += 4
+                JsonNode.Bool(true)
+            }
+            'f' -> {
+                require(text.startsWith("false", pos))
+                pos += 5
+                JsonNode.Bool(false)
+            }
+            '-', in '0'..'9' -> parseNumber()
+            else -> error("unexpected character '$c' at offset $pos")
         }
+    }
+
+    private fun parseNumber(): JsonNode.Num {
+        val start = pos
+        if (text[pos] == '-') pos++
+        while (pos < text.length && text[pos].isDigit()) pos++
+        // Only integers appear in current golden fixtures; a '.'/'e' here
+        // would be a genuine surprise worth failing loudly on rather than
+        // silently truncating.
+        require(pos < text.length && (text[pos] == ',' || text[pos] == '}' || text[pos] == ']' || text[pos].isWhitespace())) {
+            "expected integer (no fraction/exponent support) at offset $start"
+        }
+        return JsonNode.Num(text.substring(start, pos).toLong())
     }
 
     private fun parseObject(): JsonNode.Obj {
@@ -135,7 +163,7 @@ private class MiniJsonParser(private val text: String) {
                         'r' -> sb.append('\r')
                         't' -> sb.append('\t')
                         'b' -> sb.append('\b')
-                        'f' -> sb.append('')
+                        'f' -> sb.append('\u000C')
                         'u' -> {
                             val hex = text.substring(pos + 1, pos + 5)
                             sb.append(hex.toInt(16).toChar())
