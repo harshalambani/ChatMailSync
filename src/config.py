@@ -49,10 +49,10 @@ def _apply_root(root: Path) -> None:
     # Retained only to recognise (and clean up after) a pre-v2.0.0 Google
     # sign-in user; nothing authenticates with it. See is_legacy_oauth_user.
     g["LEGACY_TOKEN_FILE"] = g["AUTH_DIR"] / "token.json"
-    # IMAP backend: reserves the path (routed through _apply_root, like
-    # LEGACY_TOKEN_FILE above) for where IMAP app-password credentials would
-    # live on disk if a future change needs to persist them outside
-    # Android's own encrypted storage. Nothing writes here today.
+    # Reserved legacy path only, routed through _apply_root like
+    # LEGACY_TOKEN_FILE above. Nothing writes to it: IMAP app passwords are
+    # kept exclusively in the Android Keystore-backed credential store,
+    # never on disk under auth/.
     g["IMAP_CREDENTIALS_FILE"] = g["AUTH_DIR"] / "imap_credentials.json"
 
 
