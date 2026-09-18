@@ -1,0 +1,38 @@
+Content-Type: multipart/mixed; boundary="===============NORMALIZED=="
+MIME-Version: 1.0
+Subject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=
+From: Meera Iyer <whatsapp-sync@local>
+To: me
+Message-ID: <golden-fixture-anchor@local>
+Date: Fri, 03 May 2019 10:15:00 +0000
+X-ChatMailSync-Version: 1
+X-ChatMailSync-Chat: test_chat
+X-ChatMailSync-Count: 2
+X-ChatMailSync-Index: chatmailsync-index.json
+
+--===============NORMALIZED==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+WzEwOjE1XSBNZWVyYSBJeWVyOiBoZWxsbyBmcm9tIHRoZSBwYXN0ClsxMDoxNl0gS2F2eWEgTWVu
+b246IGxpbmUgb25lCiAgICAgICAgICAgICAgICAgICAgIGxpbmUgdHdvIGNvbnRpbnVhdGlvbg==
+
+--===============NORMALIZED==
+Content-Type: application/json
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="chatmailsync-index.json"
+
+ewogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt
+ZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y
+QGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi
+MjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs
+CiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi
+dHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm
+OTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4
+NWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6
+IkthdnlhIE1lbm9uIiwiaGFzaCI6IjY4Y2Y4Y2QyNDM4ZTM2YTcwMzYxNDdhMGE5NDM1YzRiZDBi
+NTdlZTdhNDlkZjFiMmIxZmI1N2RhMTljODQxMDEifQogIF0KfQo=
+
+--===============NORMALIZED==--

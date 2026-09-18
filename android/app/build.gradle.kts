@@ -95,12 +95,13 @@ android {
         buildConfig = true
     }
 
-    // Opts out of AGP's Play-specific dependency metadata block (a binary
-    // blob of the resolved dependency graph, embedded so Play Console can
-    // show it). This app isn't distributed through Play, and F-Droid's
-    // reproducible-build scanner flags the block as an unreviewable binary
-    // artifact — dropping it removes that finding on every channel with no
-    // functional effect.
+    // Opts out of AGP's Play-specific dependency metadata block: an
+    // encrypted blob of the resolved dependency graph, embedded in the APK
+    // signing block so only Google can decrypt and read it for Play
+    // Console. This app isn't distributed through Play, and F-Droid asks
+    // apps to drop the block since no one outside Google can inspect it —
+    // dropping it removes that ask on every channel with no functional
+    // effect.
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false

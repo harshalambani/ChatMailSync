@@ -127,4 +127,4 @@ jobs:
 
       - name: Run Kotlin unit tests
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew :app:testDebugUnitTest :core:test --no-daemon --stacktrace

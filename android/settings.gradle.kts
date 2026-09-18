@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ChatMailSyncAndroid"
 include(":app")
+include(":core")
