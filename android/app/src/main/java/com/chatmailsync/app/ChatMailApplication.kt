@@ -11,6 +11,11 @@ import java.io.File
  * shared core (src/config.py) at Android's app-private storage before
  * anything else touches it — config.set_root() must run before any other
  * src.* module resolves a path-derived constant (see config.py's docstring).
+ *
+ * Also hands the running app's version to src/mail_index.py so archived
+ * emails' traceability index can stamp BuildConfig.VERSION_NAME instead of
+ * the desktop-era "development build" placeholder — see
+ * mail_index.set_app_version()'s docstring.
  */
 class ChatMailApplication : Application() {
     override fun onCreate() {
@@ -19,9 +24,11 @@ class ChatMailApplication : Application() {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
-        Python.getInstance()
-            .getModule("src.config")
+        val python = Python.getInstance()
+        python.getModule("src.config")
             .callAttr("set_root", pythonRoot(this).absolutePath)
+        python.getModule("src.mail_index")
+            .callAttr("set_app_version", BuildConfig.VERSION_NAME)
     }
 
     companion object {
