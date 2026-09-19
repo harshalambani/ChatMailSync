@@ -1,0 +1,152 @@
+{
+  "plainFile": {
+    "queries": [
+      {
+        "bytesBase64": "anBlZy1ieXRlcy1wbGFpbi1tb2Rl",
+        "filename": "IMG-20250101-WA0009.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "bXA0LWJ5dGVzLXdpdGgtc3BhY2UtaW4tbmFtZQ==",
+        "filename": "Vacation Video.mp4",
+        "found": true,
+        "mimeType": "video/mp4"
+      },
+      {
+        "bytesBase64": "b3B1cy1ieXRlcy1zcGFjZS1pbi1uYW1l",
+        "filename": "Priya Nair Voice Note.opus",
+        "found": true,
+        "mimeType": "audio/opus"
+      },
+      {
+        "bytesBase64": "cGRmLWJ5dGVzLWNhc2UtdmFyaWFudA==",
+        "filename": "rohan-doc.pdf",
+        "found": true,
+        "mimeType": "application/pdf"
+      },
+      {
+        "bytesBase64": "b3JkaW5hcnktc2libGluZy1maWxlLW5hbWVkLXBhc3N3ZA==",
+        "filename": "../../etc/passwd",
+        "found": true,
+        "mimeType": "application/octet-stream"
+      },
+      {
+        "bytesBase64": null,
+        "filename": "../../../etc/shadow",
+        "found": false,
+        "mimeType": null
+      },
+      {
+        "bytesBase64": null,
+        "filename": "missing_on_disk.png",
+        "found": false,
+        "mimeType": null
+      }
+    ],
+    "siblingNames": [
+      "IMG-20250101-WA0009.jpg",
+      "Vacation Video.mp4",
+      "Priya Nair Voice Note.opus",
+      "ROHAN-DOC.PDF",
+      "passwd"
+    ],
+    "sourceName": "_chat.txt"
+  },
+  "zip": {
+    "archiveName": "WhatsApp Chat with Meera Iyer.zip",
+    "entries": [
+      "IMG-20250314-WA0001.jpg",
+      "Photo.PNG",
+      "originals/IMG-20250314-WA0001.jpg",
+      "Café ☕ снимок.jpg",
+      "00003-PHOTO-2023-06-01-12-34-56.HEIC",
+      "attachment_no_ext",
+      "voice_note.m4a",
+      "passwd.jpg",
+      "Note.pdf",
+      "NOTE.PDF",
+      "sub_dir/"
+    ],
+    "queries": [
+      {
+        "bytesBase64": "anBlZy1ieXRlcy1hbmRyb2lkLXN0eWxl",
+        "filename": "IMG-20250314-WA0001.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "anBlZy1ieXRlcy1hbmRyb2lkLXN0eWxl",
+        "filename": "img-20250314-wa0001.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "cG5nLWJ5dGVzLWNhc2UtdmFyaWFudA==",
+        "filename": "photo.png",
+        "found": true,
+        "mimeType": "image/png"
+      },
+      {
+        "bytesBase64": "anBlZy1ieXRlcy1hbmRyb2lkLXN0eWxl",
+        "filename": "originals/IMG-20250314-WA0001.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "dW5pY29kZS1maWxlbmFtZS1ieXRlcw==",
+        "filename": "Café ☕ снимок.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "dW5pY29kZS1maWxlbmFtZS1ieXRlcw==",
+        "filename": "CAFÉ ☕ СНИМОК.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": "aGVpYy1ieXRlcy1pb3Mtc3R5bGU=",
+        "filename": "00003-PHOTO-2023-06-01-12-34-56.HEIC",
+        "found": true,
+        "mimeType": "image/heic"
+      },
+      {
+        "bytesBase64": "bm8tZXh0ZW5zaW9uLWJ5dGVz",
+        "filename": "attachment_no_ext",
+        "found": true,
+        "mimeType": "application/octet-stream"
+      },
+      {
+        "bytesBase64": "bTRhLWJ5dGVzLXVubWFwcGVkLWV4dGVuc2lvbg==",
+        "filename": "voice_note.m4a",
+        "found": true,
+        "mimeType": "application/octet-stream"
+      },
+      {
+        "bytesBase64": "b3JkaW5hcnktYXR0YWNobWVudC1uYW1lZC1wYXNzd2Q=",
+        "filename": "../../etc/passwd.jpg",
+        "found": true,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "bytesBase64": null,
+        "filename": "../../../etc/shadow",
+        "found": false,
+        "mimeType": null
+      },
+      {
+        "bytesBase64": "bm90ZS1ieXRlcy1maXJzdC1vY2N1cnJlbmNl",
+        "filename": "note.pdf",
+        "found": true,
+        "mimeType": "application/pdf"
+      },
+      {
+        "bytesBase64": null,
+        "filename": "does_not_exist.jpg",
+        "found": false,
+        "mimeType": null
+      }
+    ]
+  }
+}
