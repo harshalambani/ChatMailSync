@@ -246,6 +246,7 @@ fun SettingsScreen(
     onOpenMailAccount: () -> Unit,
     onOpenHelp: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenLicenses: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onOpenBackupRestore: () -> Unit,
     themeMode: String,
@@ -418,6 +419,12 @@ fun SettingsScreen(
                         // to a screen that renders offline, with the hosted
                         // copy offered from there as a secondary.
                         TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
+                        // Third-party notices the distributed APK is required to
+                        // carry (Chaquopy/MIT, the embedded CPython interpreter/
+                        // PSF, androidx and Kotlin/Apache-2.0, python-dateutil and
+                        // six) -- see NOTICE at the repo root, which this screen
+                        // bundles and displays in full.
+                        TextButton(onClick = onOpenLicenses) { Text("Open-source licences") }
                     }
                 }
                 if (index != BASIC_SETTINGS_ROWS.lastIndex) HorizontalDivider()

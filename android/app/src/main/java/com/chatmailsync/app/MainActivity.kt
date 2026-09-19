@@ -251,6 +251,7 @@ internal fun backLabelForRoute(route: String?): String = when {
     route?.startsWith("chat/") == true -> "Chat"
     route == "help" -> "Help"
     route == "privacy" -> "Privacy"
+    route == "licenses" -> "Open-source licences"
     route == "mailAccount" -> "Mail account"
     route == "me" -> "Me"
     // Matches the route composable("backupRestore") navigates to, added
@@ -1820,6 +1821,7 @@ fun ChatMailApp(
                     onOpenMailAccount = { navController.navigate("mailAccount") },
                     onOpenHelp = { navController.navigate("help") },
                     onOpenPrivacy = { navController.navigate("privacy") },
+                    onOpenLicenses = { navController.navigate("licenses") },
                     onOpenAdvanced = { navController.navigate("advancedSettings") },
                     onOpenBackupRestore = { navController.navigate("backupRestore") },
                     themeMode = themeMode,
@@ -2003,6 +2005,17 @@ fun ChatMailApp(
                 // off the stack, the same way the sync log does it.
                 val from = navController.previousBackStackEntry?.destination?.route
                 PrivacyScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
+                )
+            }
+            composable("licenses") {
+                // One way in, from Settings' Help & About section -- same
+                // backLabelForRoute lookup as every other leaf screen, kept
+                // for consistency even though it always resolves to "Settings"
+                // today.
+                val from = navController.previousBackStackEntry?.destination?.route
+                OpenSourceLicensesScreen(
                     onBack = { navController.popBackStack() },
                     backLabel = backLabelForRoute(from),
                 )

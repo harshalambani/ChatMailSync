@@ -4,6 +4,18 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## Unreleased
+
+- Added third-party licence notices: a root `NOTICE` file covering every
+  component that ships inside the APK (Chaquopy/MIT, the embedded CPython
+  3.13 interpreter and standard library/PSF-2.0, python-dateutil/Apache-2.0
+  AND BSD-3-Clause, six/MIT, AndroidX and Jetpack Compose/Apache-2.0, the
+  Kotlin stdlib/Apache-2.0, and kotlinx.coroutines/Apache-2.0), plus a new
+  "Open-source licences" screen (Settings → Help & About) that bundles the
+  same text into the app. A guard test fails the build if a runtime
+  dependency or the Chaquopy pip package is added without a matching NOTICE
+  entry.
+
 ## 2.2.0
 
 Six batches of work since the 2.1.5 / `windows-final` tag:

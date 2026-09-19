@@ -1,0 +1,240 @@
+Chat Mail Sync - Third-Party Notices
+=====================================
+
+Chat Mail Sync itself is licensed under the GNU General Public License,
+version 3 (see LICENSE). The Android application package (APK) also embeds
+the third-party components listed below, none of which are GPL-3.0. Each
+one's own licence obliges its notice to travel with the distributed app;
+this file is that notice.
+
+This list covers every component that ships inside the distributed APK:
+direct `implementation` dependencies declared in android/app/build.gradle.kts,
+their significant transitive families (androidx, Jetpack Compose, the Kotlin
+stdlib, kotlinx.coroutines), the Chaquopy Python runtime, the CPython
+interpreter and standard library it embeds, and the Python packages Chaquopy
+installs (python-dateutil and its own transitive dependency, six).
+
+Deliberately EXCLUDED, because they never reach a distributed APK:
+  - junit:junit (testImplementation - JVM unit tests only, never packaged)
+  - androidx.compose.ui:ui-tooling (debugImplementation - debug builds only,
+    stripped from every release build)
+  - the Android Gradle Plugin, the Kotlin Gradle plugin, and Gradle itself
+    (build-time tooling, not runtime code)
+  - the :core Kotlin/JVM module and its kotlin("test") dependency (a spike,
+    not yet wired into :app - see android/core/build.gradle.kts)
+
+
+1. Chaquopy (Python runtime for Android)
+-----------------------------------------
+Licence:    MIT
+Copyright:  Copyright (c) 2017-2025 Chaquo Ltd and contributors
+Upstream:   https://github.com/chaquo/chaquopy
+Verified:   github.com/chaquo/chaquopy LICENSE.txt
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+
+
+2. CPython 3.13 (the interpreter and standard library Chaquopy embeds)
+------------------------------------------------------------------------
+Licence:    Python Software Foundation License, Version 2 (PSF-2.0)
+Copyright:  Copyright (c) 2001-2025 Python Software Foundation; All Rights Reserved
+Upstream:   https://github.com/python/cpython
+Verified:   github.com/python/cpython LICENSE (section B)
+
+Note: CPython's LICENSE file also carries several superseded historical
+licences (BeOpen 2.0, CNRI 1.6.1, CWI 0.9.0-1.2) that governed only those
+old, no-longer-distributed releases. They do not apply to the 3.13
+interpreter this app embeds, so only the current PSF License Version 2 is
+reproduced here.
+
+    PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
+    --------------------------------------------
+
+    1. This LICENSE AGREEMENT is between the Python Software Foundation
+    ("PSF"), and the Individual or Organization ("Licensee") accessing and
+    otherwise using this software ("Python") in source or binary form and
+    its associated documentation.
+
+    2. Subject to the terms and conditions of this License Agreement, PSF hereby
+    grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,
+    analyze, test, perform and/or display publicly, prepare derivative works,
+    distribute, and otherwise use Python alone or in any derivative version,
+    provided, however, that PSF's License Agreement and PSF's notice of copyright,
+    i.e., "Copyright (c) 2001 Python Software Foundation; All Rights Reserved"
+    are retained in Python alone or in any derivative version prepared by Licensee.
+
+    3. In the event Licensee prepares a derivative work that is based on
+    or incorporates Python or any part thereof, and wants to make
+    the derivative work available to others as provided herein, then
+    Licensee hereby agrees to include in any such work a brief summary of
+    the changes made to Python.
+
+    4. PSF is making Python available to Licensee on an "AS IS"
+    basis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+    IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+    DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+    FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT
+    INFRINGE ANY THIRD PARTY RIGHTS.
+
+    5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
+    FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+    A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,
+    OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+
+    6. This License Agreement will automatically terminate upon a material
+    breach of its terms and conditions.
+
+    7. Nothing in this License Agreement shall be deemed to create any
+    relationship of agency, partnership, or joint venture between PSF and
+    Licensee.  This License Agreement does not grant permission to use PSF
+    trademarks or trade name in a trademark sense to endorse or promote
+    products or services of Licensee, or any third party.
+
+    8. By copying, installing or otherwise using Python, Licensee
+    agrees to be bound by the terms and conditions of this License
+    Agreement.
+
+
+3. python-dateutil 2.9.0.post0 (installed by Chaquopy's pip block)
+----------------------------------------------------------------------
+Licence:    Apache-2.0 AND BSD-3-Clause (the BSD licence applies to all code,
+            including the portions also covered by Apache-2.0 - see the
+            project's own LICENSE file)
+Copyright:  Copyright 2017- Paul Ganssle <paul@ganssle.io> and dateutil
+            contributors (Apache-2.0 grant, contributions since 2017-12-01);
+            Copyright (c) 2003-2011 Gustavo Niemeyer; Copyright (c) 2012-2014
+            Tomi Pievilainen; Copyright (c) 2014-2016 Yaron de Leeuw;
+            Copyright (c) 2015- Paul Ganssle and dateutil contributors
+            (BSD-3-Clause grant, applies to all code)
+Upstream:   https://github.com/dateutil/dateutil
+Verified:   github.com/dateutil/dateutil LICENSE
+
+Apache-2.0 portion: licensed under the Apache License, Version 2.0; see
+https://www.apache.org/licenses/LICENSE-2.0 for the full text.
+
+    The above BSD License applies to all code, even that also covered by
+    Apache 2.0:
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright notice,
+          this list of conditions and the following disclaimer in the documentation
+          and/or other materials provided with the distribution.
+        * Neither the name of the copyright holder nor the names of its
+          contributors may be used to endorse or promote products derived from
+          this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+    CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+    EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+    PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+    PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+    LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+4. six 1.17.0 (transitive dependency of python-dateutil)
+------------------------------------------------------------
+Licence:    MIT
+Copyright:  Copyright (c) 2010-2024 Benjamin Peterson
+Upstream:   https://github.com/benjaminp/six
+Verified:   github.com/benjaminp/six LICENSE
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in
+    the Software without restriction, including without limitation the rights to
+    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+    the Software, and to permit persons to whom the Software is furnished to do so,
+    subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+    FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+    COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+    IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+5. AndroidX / Jetpack Compose
+------------------------------
+Components (all from android/app/build.gradle.kts `implementation`, versioned
+via the androidx.compose:compose-bom:2026.06.01 platform where applicable):
+  - androidx.compose.ui:ui
+  - androidx.compose.ui:ui-graphics
+  - androidx.compose.ui:ui-tooling-preview
+  - androidx.compose.material3:material3
+  - androidx.compose.material:material-icons-core
+  - androidx.activity:activity-compose:1.11.0
+  - androidx.core:core-ktx:1.16.0
+  - androidx.lifecycle:lifecycle-runtime-ktx:2.9.0
+  - androidx.work:work-runtime-ktx:2.10.0
+  - androidx.navigation:navigation-compose:2.9.0
+  - androidx.documentfile:documentfile:1.0.1
+
+Licence:    Apache-2.0
+Copyright:  The Android Open Source Project
+Upstream:   https://github.com/androidx/androidx
+Verified:   github.com/androidx/androidx LICENSE.txt (raw file is the Apache
+            License 2.0 text itself)
+
+Full text: https://www.apache.org/licenses/LICENSE-2.0
+
+Handling of upstream NOTICE content: androidx's own repository ships only the
+Apache-2.0 LICENSE.txt with each artifact; there is no separate upstream
+NOTICE file carrying additional attribution to reproduce. No further notice
+content applies beyond the licence text referenced above.
+
+
+6. Kotlin standard library
+-----------------------------
+Component: kotlin-stdlib (bundled with the Kotlin Android Gradle plugin
+runtime the app compiles and links against)
+Licence:    Apache-2.0
+Copyright:  Copyright 2010-2025 JetBrains s.r.o. and Kotlin Programming
+            Language contributors
+Upstream:   https://github.com/JetBrains/kotlin
+Verified:   github.com/JetBrains/kotlin license/LICENSE.txt
+
+Full text: https://www.apache.org/licenses/LICENSE-2.0
+
+
+7. kotlinx.coroutines
+------------------------
+Component: kotlinx-coroutines-core / kotlinx-coroutines-android (transitive,
+pulled in by androidx.lifecycle:lifecycle-runtime-ktx and
+androidx.work:work-runtime-ktx)
+Licence:    Apache-2.0
+Copyright:  Copyright 2016-2025 JetBrains s.r.o. and contributors
+Upstream:   https://github.com/Kotlin/kotlinx.coroutines
+Verified:   github.com/Kotlin/kotlinx.coroutines LICENSE.txt
+
+Full text: https://www.apache.org/licenses/LICENSE-2.0
+
+
+End of third-party notices.
