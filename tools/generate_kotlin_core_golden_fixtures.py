@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from dateutil import parser as dateutil_parser
 
 from src import mail_index, state
 from src.mail_client import _build_mime_message
+from src.media_extractor import MediaExtractor
 from src.parser import ParsedMessage, extract_chat_info, parse_file
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -599,6 +601,192 @@ def _write_state_db_golden_rows(tmp_dir: Path) -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
+# ---------------------------------------------------------------------------
+# MediaExtractor golden sweep (KT-04, Phase 2 "media_extractor" port)
+#
+# Runs the *real* src.media_extractor.MediaExtractor against a real ZIP
+# fixture and a real plain-file-alongside-.txt fixture built on disk, and
+# records exactly what MediaExtractor.resolve() returns for a sweep of
+# filenames -- attachment-line-shaped names, unicode/odd names, case and
+# extension variants, duplicate basenames, and path-traversal-looking names.
+# MediaExtractorGoldenParityTest.kt (Kotlin) replays the same fixtures and
+# queries and asserts byte-for-byte parity.
+#
+# Two environment-dependent landmines are worked around here, deliberately,
+# so this golden reflects real Android (Chaquopy, Linux CPython) production
+# behaviour rather than an artifact of the Windows machine generating it:
+#
+#   1. Windows-registry MIME pollution: `mimetypes.guess_type()` (the
+#      module-level function `MediaExtractor.resolve()` actually calls)
+#      lazily builds a global singleton that unconditionally merges Windows
+#      Registry MIME associations on first use -- associations that will
+#      never exist on real Android. `mimetypes.guess_type` is patched for
+#      the duration of this sweep to a fresh, registry-free
+#      `mimetypes.MimeTypes(filenames=()).guess_type`, whose own
+#      construction never touches the registry (only the separate
+#      module-level `mimetypes.init()` does that).
+#
+#   2. `pathlib.Path` backslash-splitting: on Windows, `pathlib.Path` splits
+#      on both `/` and `\`; on real Android (POSIX), only on `/`. All
+#      traversal-looking test filenames below therefore use forward slashes
+#      only (real WhatsApp export filenames never contain a backslash
+#      anyway), so `Path(name).name` -- the actual traversal guard both in
+#      Python and in the Kotlin port's `pathBasename` -- agrees on every
+#      platform this generator or the Kotlin test ever runs on.
+# ---------------------------------------------------------------------------
+
+
+def generate_media_extractor_golden() -> None:
+    import mimetypes
+    import shutil
+    import tempfile
+    from unittest import mock
+
+    registry_free_guess_type = mimetypes.MimeTypes(filenames=()).guess_type
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="cms_media_extractor_golden_"))
+    try:
+        with mock.patch("mimetypes.guess_type", side_effect=registry_free_guess_type):
+            payload = {
+                "zip": _build_media_extractor_zip_case(tmp_dir),
+                "plainFile": _build_media_extractor_plain_case(tmp_dir),
+            }
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    out_path = GOLDEN_DIR / "media_extractor_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    total_cases = len(payload["zip"]["queries"]) + len(payload["plainFile"]["queries"])
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {total_cases} query cases)")
+
+
+def _resolve_case(extractor: "MediaExtractor", filename: str) -> dict[str, object]:
+    result = extractor.resolve(filename)
+    if result is None:
+        return {"filename": filename, "found": False, "bytesBase64": None, "mimeType": None}
+    data, mime_type = result
+    return {
+        "filename": filename,
+        "found": True,
+        "bytesBase64": base64.b64encode(data).decode("ascii"),
+        "mimeType": mime_type,
+    }
+
+
+def _build_media_extractor_zip_case(tmp_dir: Path) -> dict[str, object]:
+    zip_path = tmp_dir / "WhatsApp Chat with Meera Iyer.zip"
+
+    entries: list[tuple[str, bytes]] = [
+        # Android attachment-line style: bare basename.
+        ("IMG-20250314-WA0001.jpg", b"jpeg-bytes-android-style"),
+        # Case variant of the extension/basename (queried lowercase below).
+        ("Photo.PNG", b"png-bytes-case-variant"),
+        # Duplicate basename in a virtual sub-directory, added *after* the
+        # top-level entry above -- first occurrence must win (setdefault).
+        ("originals/IMG-20250314-WA0001.jpg", b"jpeg-bytes-DUPLICATE-must-not-win"),
+        # Unicode filename (accented Latin + emoji + Cyrillic).
+        ("Café ☕ снимок.jpg", b"unicode-filename-bytes"),
+        # iOS attachment-line style: numeric-prefixed, uppercase extension.
+        ("00003-PHOTO-2023-06-01-12-34-56.HEIC", b"heic-bytes-ios-style"),
+        # No extension at all -- mimetype must fall back to octet-stream.
+        ("attachment_no_ext", b"no-extension-bytes"),
+        # Extension present but absent from the curated/default MIME table.
+        ("voice_note.m4a", b"m4a-bytes-unmapped-extension"),
+        # An entirely ordinary attachment whose name happens to coincide
+        # with a sensitive-looking path leaf -- used below to prove a
+        # traversal-looking query only ever reaches this sandboxed entry by
+        # basename, never anything outside the archive.
+        ("passwd.jpg", b"ordinary-attachment-named-passwd"),
+        # Two more entries colliding on the same lowercase basename from two
+        # different original spellings -- pins down first-occurrence-wins
+        # independent of the duplicate-via-subdirectory case above.
+        ("Note.pdf", b"note-bytes-first-occurrence"),
+        ("NOTE.PDF", b"note-bytes-must-not-win"),
+        # An explicit stored directory entry (some zip writers emit these).
+        # Path("sub_dir/").name == "" -- must not crash indexing.
+        ("sub_dir/", b""),
+    ]
+
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for name, data in entries:
+            zf.writestr(name, data)
+
+    queries = [
+        "IMG-20250314-WA0001.jpg",
+        "img-20250314-wa0001.jpg",  # case-insensitive basename match
+        "photo.png",  # case-insensitive match of "Photo.PNG"
+        # Queried with the duplicate's own sub-directory path, but the
+        # index resolves by basename only -- must still return the
+        # top-level entry's bytes, not the duplicate's.
+        "originals/IMG-20250314-WA0001.jpg",
+        "Café ☕ снимок.jpg",
+        "CAFÉ ☕ СНИМОК.jpg",  # unicode case-insensitive
+        "00003-PHOTO-2023-06-01-12-34-56.HEIC",
+        "attachment_no_ext",
+        "voice_note.m4a",
+        # Forward-slash-only traversal-looking queries (see module docstring
+        # note 2 above for why never backslash).
+        "../../etc/passwd.jpg",  # basename "passwd.jpg" -- legitimately indexed, resolves
+        "../../../etc/shadow",  # basename "shadow" -- not indexed, must NOT resolve
+        "note.pdf",  # first-occurrence-wins: must return "Note.pdf"'s bytes
+        "does_not_exist.jpg",
+    ]
+
+    with MediaExtractor(zip_path) as extractor:
+        query_results = [_resolve_case(extractor, q) for q in queries]
+
+    return {"archiveName": zip_path.name, "entries": [n for n, _ in entries], "queries": query_results}
+
+
+def _build_media_extractor_plain_case(tmp_dir: Path) -> dict[str, object]:
+    plain_dir = tmp_dir / "plain_export"
+    plain_dir.mkdir()
+    source_path = plain_dir / "_chat.txt"
+    source_path.write_text("plain-file-mode source placeholder\n", encoding="utf-8", newline="\n")
+
+    siblings: list[tuple[str, bytes]] = [
+        ("IMG-20250101-WA0009.jpg", b"jpeg-bytes-plain-mode"),
+        ("Vacation Video.mp4", b"mp4-bytes-with-space-in-name"),
+        ("Priya Nair Voice Note.opus", b"opus-bytes-space-in-name"),
+        # Real on-disk case differs from the query below; exercised via the
+        # fast `.exists()` check and/or the case-insensitive `iterdir()`
+        # fallback depending on the underlying filesystem's own case
+        # sensitivity -- the *observable* result (found, same bytes, same
+        # mimetype) is identical either way, which is what this golden pins.
+        ("ROHAN-DOC.PDF", b"pdf-bytes-case-variant"),
+        # An ordinary sibling file that happens to be named like a
+        # traversal target, proving (together with the query below) that a
+        # traversal-looking name only ever reaches a real sibling file by
+        # basename, never anything outside plain_dir.
+        ("passwd", b"ordinary-sibling-file-named-passwd"),
+    ]
+    for name, data in siblings:
+        (plain_dir / name).write_bytes(data)
+
+    queries = [
+        "IMG-20250101-WA0009.jpg",
+        "Vacation Video.mp4",
+        "Priya Nair Voice Note.opus",
+        "rohan-doc.pdf",  # case-insensitive match of "ROHAN-DOC.PDF"
+        "../../etc/passwd",  # basename "passwd" -- real sibling, resolves
+        "../../../etc/shadow",  # basename "shadow" -- no such sibling, must NOT resolve
+        "missing_on_disk.png",
+    ]
+
+    with MediaExtractor(source_path) as extractor:
+        query_results = [_resolve_case(extractor, q) for q in queries]
+
+    return {
+        "sourceName": source_path.name,
+        "siblingNames": [n for n, _ in siblings],
+        "queries": query_results,
+    }
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -631,6 +819,7 @@ def main() -> None:
     generate_state_hash_golden()
     generate_cutoff_golden()
     generate_state_db_golden()
+    generate_media_extractor_golden()
 
 
 if __name__ == "__main__":
