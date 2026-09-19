@@ -26,3 +26,11 @@
 *.ico  binary
 *.jpg  binary
 *.apk  binary
+*.db   binary
+
+# Byte-exact fixtures compared across languages (e.g. Kotlin vs. Python MIME
+# output) must never have their line endings touched by checkout, or the
+# `* text=auto` rule above silently turns a passing byte-for-byte comparison
+# into a platform-dependent one.
+android/core/src/test/resources/golden/** -text
+*.eml -text

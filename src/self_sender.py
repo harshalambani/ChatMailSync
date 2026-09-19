@@ -3,7 +3,7 @@
 A WhatsApp export does not mark your own messages in any way. It writes your
 profile name in the sender position exactly as it writes everybody else's:
 
-    18/11/25, 16:18 - Harshal Ambani: on my way
+    18/11/25, 16:18 - Rohan Mehta: on my way
 
 For a long time the renderer assumed that name was the literal string "You",
 which is what the fictional demo exports used and what the test fixtures were
