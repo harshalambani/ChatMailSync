@@ -153,6 +153,32 @@ tasks.matching { it.name.contains("PythonSources") }.configureEach {
     dependsOn(syncPythonCore)
 }
 
+// ---------------------------------------------------------------------------
+// Bundles the repo's own top-level NOTICE (third-party licence notices) into
+// the APK as a plain-text asset, so the in-app "Open-source licences" screen
+// (OpenSourceLicensesScreen.kt) reads the exact same text a reviewer or a
+// user sees in the repo, rather than a hand-copied duplicate that could
+// drift from it. Same one-source-of-truth pattern as syncPythonCore above:
+// the destination is regenerated on every build and gitignored, and NOTICE
+// itself remains the single tracked copy.
+// ---------------------------------------------------------------------------
+val copyNoticeAsset by tasks.registering(Copy::class) {
+    from(rootProject.projectDir.parentFile.resolve("NOTICE"))
+    into(layout.projectDirectory.dir("src/main/assets"))
+    rename { "NOTICE.txt" }
+}
+
+tasks.named("preBuild") {
+    dependsOn(copyNoticeAsset)
+}
+
+// Merging tasks pick the asset up at package time; unit-test tasks need it
+// too, since NoticeAssetTest reads the copied file straight off disk rather
+// than through a packaged APK.
+tasks.matching { it.name.contains("Assets") || it.name.contains("UnitTest") }.configureEach {
+    dependsOn(copyNoticeAsset)
+}
+
 chaquopy {
     defaultConfig {
         version = "3.13"

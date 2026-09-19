@@ -64,6 +64,7 @@ _REAL_IDENTIFIER_FILES = {
     "android/app/src/main/java/com/chatmailsync/app/HelpScreen.kt",
     "android/app/src/main/java/com/chatmailsync/app/PrivacyScreen.kt",
     "android/app/src/main/java/com/chatmailsync/app/SettingsScreen.kt",
+    "android/app/src/main/java/com/chatmailsync/app/OpenSourceLicensesScreen.kt",
     "android/app/src/test/java/com/chatmailsync/app/HelpLinkTest.kt",
 }
 

@@ -323,3 +323,10 @@ reason to trust it is that you can read exactly what it does with both. A permis
 licence would allow someone to ship a closed, unverifiable fork under a similar name
 and inherit that trust without earning it. Copyleft means every descendant of this
 code stays as readable as this one.
+
+The APK also embeds several third-party components under their own (non-GPL)
+licences — Chaquopy, the CPython interpreter it bundles, python-dateutil, six,
+AndroidX/Jetpack Compose, the Kotlin stdlib and kotlinx.coroutines. See
+[NOTICE](NOTICE) for the full list and licence texts; the same content is
+bundled into the app itself, reachable from Settings → Help & About →
+Open-source licences.
