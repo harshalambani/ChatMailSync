@@ -659,16 +659,35 @@ class StateRepository(private val openDb: () -> StateDb) {
  * a date the app cannot compare -- the Kotlin twin of `datetime.strptime`
  * raising `ValueError` -- rather than storing something that would silently
  * sort wrong against every message timestamp.
+ *
+ * Deliberately does NOT use `DateTimeFormatter.ofPattern("yyyy-MM-dd")`:
+ * that formatter requires exactly 2 digits for `MM`/`dd` (rejecting
+ * "2024-1-5", which Python's `datetime.strptime(day, "%Y-%m-%d")` accepts
+ * -- `%m`/`%d` match 1-2 digits) and, worse, does not validate the
+ * calendar at all when used with a bare `.parse()` (it happily "parses"
+ * "2024-02-30" and "2023-02-29", which Python's `strptime` rejects with
+ * `ValueError: day is out of range for month`). Both gaps were caught by
+ * `cutoff_golden.json` (see `tools/generate_kotlin_core_golden_fixtures.py`'s
+ * `generate_cutoff_golden`) and are fixed here by hand-matching Python's
+ * exact regex shape (`%Y` = exactly 4 digits, `%m`/`%d` = 1-2 digits each,
+ * no extra characters) and then handing the three parsed ints to
+ * [java.time.LocalDate.of], which *does* validate the calendar the same
+ * way `datetime(...)` does.
  */
+private val CUTOFF_DATE_RE = Regex("""^(\d{4})-(\d{1,2})-(\d{1,2})$""")
+
 fun normaliseCutoff(value: String?): String? {
     if (value == null) return null
     val text = value.trim()
     if (text.isEmpty()) return null
     val day = if (text.length > 10) text.substring(0, 10) else text
+    val match = CUTOFF_DATE_RE.matchEntire(day)
+        ?: throw IllegalArgumentException("time data '$day' does not match format '%Y-%m-%d'")
+    val (yearStr, monthStr, dayStr) = match.destructured
     try {
-        DateTimeFormatter.ofPattern("yyyy-MM-dd").parse(day)
-    } catch (e: java.time.format.DateTimeParseException) {
-        throw IllegalArgumentException("time data '$day' does not match format '%Y-%m-%d'", e)
+        java.time.LocalDate.of(yearStr.toInt(), monthStr.toInt(), dayStr.toInt())
+    } catch (e: java.time.DateTimeException) {
+        throw IllegalArgumentException("day is out of range for month", e)
     }
     return "${day}T00:00:00"
 }

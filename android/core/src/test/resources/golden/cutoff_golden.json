@@ -1,0 +1,159 @@
+{
+  "entries": [
+    {
+      "input": "2024-01-05",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "2024-1-5",
+      "ok": true,
+      "result": "2024-1-5T00:00:00"
+    },
+    {
+      "input": "2024-01-5",
+      "ok": true,
+      "result": "2024-01-5T00:00:00"
+    },
+    {
+      "input": "2024-1-05",
+      "ok": true,
+      "result": "2024-1-05T00:00:00"
+    },
+    {
+      "input": "  2024-01-05",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "2024-01-05  ",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "  2024-01-05  ",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "\t2024-01-05\n",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "2024-01-05T10:30:00",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "2024-01-05T10:30:00.123456",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "input": "2024-01-05 extra junk after day 10",
+      "ok": true,
+      "result": "2024-01-05T00:00:00"
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-13-01",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-02-30",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2023-02-29",
+      "ok": false
+    },
+    {
+      "input": "2024-02-29",
+      "ok": true,
+      "result": "2024-02-29T00:00:00"
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-00-10",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-01-32",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-04-31",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "24-01-05",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "024-01-05",
+      "ok": false
+    },
+    {
+      "input": "0024-01-05",
+      "ok": true,
+      "result": "0024-01-05T00:00:00"
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "10000-01-05",
+      "ok": false
+    },
+    {
+      "input": "",
+      "ok": true,
+      "result": null
+    },
+    {
+      "input": "   ",
+      "ok": true,
+      "result": null
+    },
+    {
+      "input": null,
+      "ok": true,
+      "result": null
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "garbage",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "not-a-date",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024/01/05",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "05-01-2024",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-001-05",
+      "ok": false
+    },
+    {
+      "exceptionClass": "ValueError",
+      "input": "2024-01-005",
+      "ok": false
+    }
+  ]
+}

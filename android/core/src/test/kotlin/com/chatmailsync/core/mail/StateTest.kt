@@ -544,6 +544,58 @@ class StateTest {
         }
     }
 
+    // -----------------------------------------------------------------
+    // Negative tests (held fix (b)) -- the wrong behaviour (silently
+    // accepting or clamping an invalid cutoff instead of rejecting it)
+    // must NOT happen. See NormaliseCutoffGoldenParityTest for the full
+    // Python-parity sweep; these are the hand-written, explicit-intent
+    // twin covering the specific bugs this PR fixed.
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `an unpadded month or day is accepted, not rejected as malformed`() {
+        // Python's strptime("%Y-%m-%d") accepts 1-2 digit month/day; the
+        // previous Kotlin implementation (a bare DateTimeFormatter pattern
+        // parse) demanded exactly 2 digits and rejected these. Python does
+        // NOT zero-pad the output either -- it appends "T00:00:00" to the
+        // original (possibly unpadded) substring verbatim, so Kotlin must
+        // match that, not reformat to a padded date.
+        assertEquals("2024-1-5T00:00:00", normaliseCutoff("2024-1-5"))
+        assertEquals("2024-01-5T00:00:00", normaliseCutoff("2024-01-5"))
+        assertEquals("2024-1-05T00:00:00", normaliseCutoff("2024-1-05"))
+    }
+
+    @Test
+    fun `a calendar-invalid date is rejected, not silently accepted or clamped`() {
+        // The previous Kotlin implementation only checked the pattern shape
+        // via DateTimeFormatter.parse(), which never resolves into a real
+        // LocalDate, so it happily "accepted" 30 February and 29 February
+        // on a non-leap year instead of throwing -- exactly the silent
+        // acceptance this test exists to catch a regression back into.
+        for (bad in listOf("2024-02-30", "2023-02-29", "2024-13-01", "2024-00-10", "2024-04-31")) {
+            try {
+                val result = normaliseCutoff(bad)
+                fail("expected '$bad' to be REJECTED, but it was silently accepted as '$result'")
+            } catch (e: IllegalArgumentException) {
+                // expected
+            }
+        }
+        // A leap-year Feb 29 must still be accepted -- the fix must reject
+        // calendar-invalid dates without becoming over-strict.
+        assertEquals("2024-02-29T00:00:00", normaliseCutoff("2024-02-29"))
+    }
+
+    @Test
+    fun `computeMessageHash for an empty body differs from a non-empty body`() {
+        // Guards against a degenerate implementation that ignores the body
+        // field (or collapses "" and any other value to the same hash).
+        val emptyBody = StateRepository.computeMessageHash("chat1", "2025-03-14T09:41:00", "Alice", "")
+        val nonEmptyBody = StateRepository.computeMessageHash("chat1", "2025-03-14T09:41:00", "Alice", "Hello")
+        assertNotEquals(emptyBody, nonEmptyBody)
+        // And is still deterministic for the same empty input.
+        assertEquals(emptyBody, StateRepository.computeMessageHash("chat1", "2025-03-14T09:41:00", "Alice", ""))
+    }
+
     @Test
     fun `a cutoff can be set on a chat that has never synced`() {
         val repo = newRepo()

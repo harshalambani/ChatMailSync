@@ -151,7 +151,7 @@ def generate_parser_goldens() -> None:
     fixtures_out: dict[str, list[dict[str, object]]] = {}
     for name, text in PARSER_FIXTURES.items():
         fixture_path = GOLDEN_DIR / f"__tmp_parser_{name}.txt"
-        fixture_path.write_text(text, encoding="utf-8")
+        fixture_path.write_text(text, encoding="utf-8", newline="\n")
         try:
             messages = list(parse_file(fixture_path, chat_id="golden_chat"))
         finally:
@@ -185,6 +185,7 @@ def generate_parser_goldens() -> None:
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
@@ -292,6 +293,7 @@ def generate_time_of_day_golden() -> None:
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
 
@@ -320,6 +322,52 @@ HASH_SWEEP_EXTRA: list[dict[str, str]] = [
     # A body containing the hash's own NUL separator character -- proves the
     # separator choice does not make two different messages collide.
     {"chatId": "chat1", "timestampIso": "2025-03-14T09:41:00", "sender": "Alice", "body": "Hello\x00Bob"},
+    # -----------------------------------------------------------------
+    # Widened sweep (held fix (a)): non-BMP/emoji beyond a single code
+    # point, U+FFFD (the character `read_text(..., errors="replace")`
+    # substitutes for bad bytes on the real parse path -- see the PR body
+    # for why an actual lone/unpaired surrogate is NOT included here:
+    # str.encode("utf-8") is strict by default and *raises*
+    # UnicodeEncodeError for one, and the real ingestion path can never
+    # hand compute_message_hash one in the first place, because
+    # parser.py's read_text(..., errors="replace") already turns any
+    # invalid byte sequence into U+FFFD before a ParsedMessage is ever
+    # built. There is therefore no Python behaviour for Kotlin to match
+    # byte-for-byte here.
+    # -----------------------------------------------------------------
+    # A ZWJ family emoji: several surrogate-pair code points joined by
+    # U+200D, exercising multi-codepoint composed emoji, not just one.
+    {"chatId": "chat_zwj", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan Mehta", "body": "family \U0001f468‍\U0001f469‍\U0001f467‍\U0001f466 emoji"},
+    # A flag emoji: a pair of regional-indicator astral code points.
+    {"chatId": "chat_flag", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "flag \U0001f1ee\U0001f1f3 here"},
+    # A non-BMP character outside the emoji ranges (e.g. a Deseret letter).
+    {"chatId": "chat_nonbmp", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan", "body": "deseret \U00010400 letter"},
+    # U+FFFD itself, the real replace-error substitute character.
+    {"chatId": "chat_fffd", "timestampIso": "2025-03-14T09:41:00", "sender": "R. Mehta", "body": "bad byte here: � (was invalid)"},
+    {"chatId": "chat_fffd_sender", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera � Iyer", "body": "sender itself has the replacement char"},
+    # Empty string for each of the four fields individually, and all four
+    # empty together -- compute_message_hash's params are plain required
+    # `str` in Python (no Optional[str] anywhere in its signature; see
+    # state.py), so "empty vs missing" collapses to "empty string" on both
+    # sides -- there is no None to compare against.
+    {"chatId": "", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan Mehta", "body": "empty chatId"},
+    {"chatId": "chat_empty_ts", "timestampIso": "", "sender": "Rohan Mehta", "body": "empty timestampIso"},
+    {"chatId": "chat_empty_sender", "timestampIso": "2025-03-14T09:41:00", "sender": "", "body": "empty sender"},
+    {"chatId": "chat_empty_all", "timestampIso": "", "sender": "", "body": ""},
+    # Timestamps with and without microseconds -- datetime.isoformat()
+    # only emits the fractional part when microsecond != 0, so both shapes
+    # occur as real timestamp_iso strings depending on the ParsedMessage's
+    # source timestamp; the hash function itself just concatenates
+    # whichever string it is handed.
+    {"chatId": "chat_ts_no_micro", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan Mehta", "body": "no microseconds"},
+    {"chatId": "chat_ts_micro", "timestampIso": "2025-03-14T09:41:00.123456", "sender": "Rohan Mehta", "body": "with microseconds"},
+    {"chatId": "chat_ts_micro_short", "timestampIso": "2025-03-14T09:41:00.000001", "sender": "Rohan Mehta", "body": "microseconds near zero"},
+    # CRLF vs LF inside message bodies.
+    {"chatId": "chat_crlf", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "line one\r\nline two\r\nline three"},
+    {"chatId": "chat_lf", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "line one\nline two\nline three"},
+    {"chatId": "chat_mixed_eol", "timestampIso": "2025-03-14T09:41:00", "sender": "Meera Iyer", "body": "line one\r\nline two\nline three\r"},
+    # A very long body (well past any small-buffer edge case).
+    {"chatId": "chat_long", "timestampIso": "2025-03-14T09:41:00", "sender": "Rohan Mehta", "body": ("The quick brown fox jumps over the lazy dog. " * 2000) + "\U0001f600" * 500},
 ]
 
 
@@ -350,7 +398,7 @@ def generate_state_hash_golden() -> None:
     # actually produces.
     for name, text in PARSER_FIXTURES.items():
         fixture_path = GOLDEN_DIR / f"__tmp_hash_{name}.txt"
-        fixture_path.write_text(text, encoding="utf-8")
+        fixture_path.write_text(text, encoding="utf-8", newline="\n")
         try:
             messages = list(parse_file(fixture_path, chat_id=f"golden_{name}"))
         finally:
@@ -366,6 +414,80 @@ def generate_state_hash_golden() -> None:
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
+
+
+# ---------------------------------------------------------------------------
+# state.normalise_cutoff golden sweep (held fix (b))
+#
+# Runs the real Python state.normalise_cutoff over a table of inputs
+# covering padded/unpadded dates, whitespace, invalid calendar dates,
+# two-digit years, empty string, and garbage, and records either the
+# normalised result or that Python raised. normaliseCutoff (State.kt) must
+# match exactly -- including every rejection, not just every acceptance --
+# see NormaliseCutoffGoldenParityTest.kt.
+# ---------------------------------------------------------------------------
+
+CUTOFF_SWEEP: list[str] = [
+    # Padded and unpadded dates.
+    "2024-01-05",
+    "2024-1-5",
+    "2024-01-5",
+    "2024-1-05",
+    # Leading/trailing spaces.
+    "  2024-01-05",
+    "2024-01-05  ",
+    "  2024-01-05  ",
+    "\t2024-01-05\n",
+    # A full ISO timestamp (only the first 10 chars are used).
+    "2024-01-05T10:30:00",
+    "2024-01-05T10:30:00.123456",
+    "2024-01-05 extra junk after day 10",
+    # Invalid calendar dates.
+    "2024-13-01",
+    "2024-02-30",
+    "2023-02-29",  # 2023 is not a leap year
+    "2024-02-29",  # 2024 IS a leap year -- must be accepted
+    "2024-00-10",
+    "2024-01-32",
+    "2024-04-31",  # April has 30 days
+    # Two-digit / non-4-digit years.
+    "24-01-05",
+    "024-01-05",
+    "0024-01-05",
+    "10000-01-05",
+    # Empty / blank / None.
+    "",
+    "   ",
+    None,
+    # Garbage.
+    "garbage",
+    "not-a-date",
+    "2024/01/05",
+    "05-01-2024",
+    # Width beyond 1-2 digits for month/day is rejected by Python's strptime.
+    "2024-001-05",
+    "2024-01-005",
+]
+
+
+def generate_cutoff_golden() -> None:
+    entries: list[dict[str, object]] = []
+    for raw in CUTOFF_SWEEP:
+        try:
+            result = state.normalise_cutoff(raw)
+            entries.append({"input": raw, "ok": True, "result": result})
+        except Exception as exc:  # noqa: BLE001 -- recording whatever it raises, by design
+            entries.append({"input": raw, "ok": False, "exceptionClass": type(exc).__name__})
+
+    payload = {"entries": entries}
+    out_path = GOLDEN_DIR / "cutoff_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(entries)} entries)")
 
@@ -507,6 +629,7 @@ def main() -> None:
     generate_parser_goldens()
     generate_time_of_day_golden()
     generate_state_hash_golden()
+    generate_cutoff_golden()
     generate_state_db_golden()
 
 
