@@ -19,13 +19,13 @@ oversight:
   itself used.
 * ``README.md`` / ``CHANGELOG.md`` are being edited by a different PR.
 * A short list of files that use the surname as part of two *real*, still-live
-  identifiers rather than as sample personal data: the owner's GitHub
-  username in repo URLs (``github.com/harshalambani/...``), and the owner's
-  real domain (``*.ambani.tech``). Renaming those would break real links, not
-  scrub test data. ``docs/RELEASING.md`` also names the actual legal entity
-  registered with the app-store account, which is factual release-process
-  documentation, not sample data. These are listed explicitly below so the
-  exclusion is visible and reviewable, rather than a silent blanket skip.
+  identifiers rather than as sample personal data: the owner's actual GitHub
+  username (as it appears in repo URLs), and the owner's actual domain name.
+  Renaming those would break real links, not scrub test data.
+  ``docs/RELEASING.md`` also names the actual legal entity registered with
+  the app-store account, which is factual release-process documentation, not
+  sample data. These are listed explicitly below so the exclusion is visible
+  and reviewable, rather than a silent blanket skip.
 """
 
 from __future__ import annotations
