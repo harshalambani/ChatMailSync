@@ -546,20 +546,20 @@ def test_a_stored_oauth_label_id_is_not_sent_to_imap_as_a_folder_name():
     transport, conn = _make_transport()
 
     # A handle only Gmail's REST API could have minted.
-    assert transport.owns_label_id("Label_5928374102938", "Bijal Ambani") is False
+    assert transport.owns_label_id("Label_5928374102938", "Meera Iyer") is False
     # What this transport itself hands back is, of course, usable.
-    assert transport.owns_label_id(_full_label_name("Bijal Ambani"), "Bijal Ambani")
+    assert transport.owns_label_id(_full_label_name("Meera Iyer"), "Meera Iyer")
 
     results, label_id, _ = push_chat(
         transport=transport,
-        display_name="Bijal Ambani",
+        display_name="Meera Iyer",
         messages=_sample_chunk(),
         label_id="Label_5928374102938",
         chunk_size="day",
     )
 
     # Re-resolved to a real folder name, and that is what APPEND targeted.
-    assert label_id == _full_label_name("Bijal Ambani")
+    assert label_id == _full_label_name("Meera Iyer")
     appends = [c for c in conn.calls if c[0] == "append"]
     assert appends, "expected the chat to be pushed"
     for call in appends:
@@ -578,7 +578,7 @@ def test_a_transport_with_opaque_label_ids_keeps_reusing_its_stored_id():
         def labels_create(self, body): raise AssertionError("must not be called")
         def messages_insert(self, body, thread_id=None): return {}
 
-    assert _label_id_is_usable(_Opaque(), "Label_5928374102938", "Bijal Ambani")
+    assert _label_id_is_usable(_Opaque(), "Label_5928374102938", "Meera Iyer")
     # ...but an absent ID still forces resolution, as it always did.
-    assert not _label_id_is_usable(_Opaque(), None, "Bijal Ambani")
-    assert not _label_id_is_usable(_Opaque(), "", "Bijal Ambani")
+    assert not _label_id_is_usable(_Opaque(), None, "Meera Iyer")
+    assert not _label_id_is_usable(_Opaque(), "", "Meera Iyer")
