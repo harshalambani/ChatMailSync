@@ -73,8 +73,8 @@ def test_display_name_does_not_reach_a_non_terminal(monkeypatch):
     """The contact's name is the part that must not land in a log."""
     stream = _FakeStream(tty=False)
     monkeypatch.setattr("sys.stderr", stream)
-    _print_progress("Bijal Ambani", 1, 1, 1, 1)
-    assert "Bijal" not in stream.getvalue()
+    _print_progress("Meera Iyer", 1, 1, 1, 1)
+    assert "Meera" not in stream.getvalue()
 
 
 def test_none_stderr_is_not_a_terminal(monkeypatch):
@@ -158,7 +158,7 @@ def test_a_failed_chat_still_counts_toward_the_whole_sync_fraction():
     orig = sm.SyncManager._sync_file
     sm.SyncManager._sync_file = _fail
     try:
-        mgr._sync_file("chatA.txt", "chatA", "Bijal Ambani", stats)
+        mgr._sync_file("chatA.txt", "chatA", "Meera Iyer", stats)
     finally:
         sm.SyncManager._sync_file = orig
 

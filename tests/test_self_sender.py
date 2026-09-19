@@ -26,8 +26,8 @@ def test_one_to_one_leaves_exactly_one_name_over():
     # "WhatsApp Chat with Priya Nair.txt" names the other party, so whichever
     # of the two speakers is not her is necessarily the owner.
     assert self_sender.derive_from_one_to_one(
-        "Priya Nair", ["Priya Nair", "Harshal Ambani", "Priya Nair"]
-    ) == "Harshal Ambani"
+        "Priya Nair", ["Priya Nair", "Rohan Mehta", "Priya Nair"]
+    ) == "Rohan Mehta"
 
 
 def test_group_chat_derives_nothing():
@@ -35,7 +35,7 @@ def test_group_chat_derives_nothing():
     # Four people speak and none of them is identified, which is precisely
     # why a group may only consume a name a one-to-one has already proved.
     assert self_sender.derive_from_one_to_one(
-        "ShyamKunj201", ["Ramesh", "Farah", "Sunil", "Harshal Ambani"]
+        "ShyamKunj201", ["Ramesh", "Farah", "Sunil", "Rohan Mehta"]
     ) is None
 
 
@@ -48,7 +48,7 @@ def test_filename_matching_neither_sender_derives_nothing():
     # A hand-renamed file. Two senders, but the export has not said which of
     # them is the counterparty, so guessing would be a coin toss on identity.
     assert self_sender.derive_from_one_to_one(
-        "holiday chat", ["Priya Nair", "Harshal Ambani"]
+        "holiday chat", ["Priya Nair", "Rohan Mehta"]
     ) is None
 
 
@@ -56,8 +56,8 @@ def test_derivation_ignores_case_and_the_ltr_mark():
     # WhatsApp prepends U+200E to fields in some exports, and the casing of a
     # profile name is not stable between them.
     assert self_sender.derive_from_one_to_one(
-        "Priya Nair", ["‎PRIYA NAIR", "Harshal Ambani"]
-    ) == "Harshal Ambani"
+        "Priya Nair", ["‎PRIYA NAIR", "Rohan Mehta"]
+    ) == "Rohan Mehta"
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +66,11 @@ def test_derivation_ignores_case_and_the_ltr_mark():
 
 def test_override_beats_a_derivation_that_disagrees():
     name, _ = self_sender.resolve(
-        override="Harshal",
+        override="Rohan",
         display_name="Priya Nair",
-        senders=["Priya Nair", "Harshal Ambani"],
+        senders=["Priya Nair", "Rohan Mehta"],
     )
-    assert name == "Harshal"
+    assert name == "Rohan"
 
 
 def test_override_still_lets_the_learned_name_stay_current():
@@ -78,22 +78,22 @@ def test_override_still_lets_the_learned_name_stay_current():
     # still true and is still worth storing -- otherwise clearing the override
     # later would drop the app back to a stale name, or to none at all.
     name, newly_derived = self_sender.resolve(
-        override="Harshal",
+        override="Rohan",
         learned=None,
         display_name="Priya Nair",
-        senders=["Priya Nair", "Harshal Ambani"],
+        senders=["Priya Nair", "Rohan Mehta"],
     )
-    assert name == "Harshal"
-    assert newly_derived == "Harshal Ambani"
+    assert name == "Rohan"
+    assert newly_derived == "Rohan Mehta"
 
 
 def test_group_chat_uses_the_name_a_one_to_one_established():
     name, newly_derived = self_sender.resolve(
-        learned="Harshal Ambani",
+        learned="Rohan Mehta",
         display_name="ShyamKunj201",
-        senders=["Ramesh", "Farah", "Harshal Ambani"],
+        senders=["Ramesh", "Farah", "Rohan Mehta"],
     )
-    assert name == "Harshal Ambani"
+    assert name == "Rohan Mehta"
     assert newly_derived is None
 
 
@@ -103,7 +103,7 @@ def test_nothing_known_falls_back_to_you_rather_than_guessing():
     # somebody else's messages to the user is not.
     name, newly_derived = self_sender.resolve(
         display_name="ShyamKunj201",
-        senders=["Ramesh", "Farah", "Harshal Ambani"],
+        senders=["Ramesh", "Farah", "Rohan Mehta"],
     )
     assert name == self_sender.FALLBACK
     assert newly_derived is None
@@ -115,7 +115,7 @@ def test_the_most_frequent_sender_is_never_taken_as_the_owner():
     # one of them as the user's own, in an archive kept because it is trusted.
     name, _ = self_sender.resolve(
         display_name="Building Society",
-        senders=["Ramesh", "Ramesh", "Ramesh", "Farah", "Harshal Ambani"],
+        senders=["Ramesh", "Ramesh", "Ramesh", "Farah", "Rohan Mehta"],
     )
     assert name == self_sender.FALLBACK
 
@@ -125,19 +125,19 @@ def test_a_newer_one_to_one_corrects_a_stale_learned_name():
     # the new one, so the newer derivation wins rather than being treated as a
     # conflict to be reported.
     name, newly_derived = self_sender.resolve(
-        learned="H. Ambani",
+        learned="R. Mehta",
         display_name="Priya Nair",
-        senders=["Priya Nair", "Harshal Ambani"],
+        senders=["Priya Nair", "Rohan Mehta"],
     )
-    assert name == "Harshal Ambani"
-    assert newly_derived == "Harshal Ambani"
+    assert name == "Rohan Mehta"
+    assert newly_derived == "Rohan Mehta"
 
 
 def test_a_derivation_confirming_the_stored_name_is_not_a_new_fact():
     _, newly_derived = self_sender.resolve(
-        learned="Harshal Ambani",
+        learned="Rohan Mehta",
         display_name="Priya Nair",
-        senders=["Priya Nair", "‎harshal ambani"],
+        senders=["Priya Nair", "‎rohan mehta"],
     )
     assert newly_derived is None
 
@@ -146,11 +146,11 @@ def test_a_derivation_confirming_the_stored_name_is_not_a_new_fact():
 def test_a_blank_override_is_an_absent_override(blank):
     name, _ = self_sender.resolve(
         override=blank,
-        learned="Harshal Ambani",
+        learned="Rohan Mehta",
         display_name="ShyamKunj201",
-        senders=["Ramesh", "Harshal Ambani"],
+        senders=["Ramesh", "Rohan Mehta"],
     )
-    assert name == "Harshal Ambani"
+    assert name == "Rohan Mehta"
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +168,10 @@ def _msg(sender, body):
 
 def test_renderer_puts_the_named_owner_on_the_outgoing_side():
     rendered = render_chunk(
-        [_msg("Harshal Ambani", "on my way"), _msg("Priya Nair", "see you")],
+        [_msg("Rohan Mehta", "on my way"), _msg("Priya Nair", "see you")],
         "Priya Nair",
         extractor=None,
-        self_sender="Harshal Ambani",
+        self_sender="Rohan Mehta",
     )
     owner_side = rendered.html_body.index("flex-end")
     other_side = rendered.html_body.index("flex-start")
@@ -194,7 +194,7 @@ def test_renderer_without_a_name_draws_a_real_export_entirely_incoming():
     # The defect itself, pinned so it cannot come back silently: given a real
     # export and no resolved name, nothing is outgoing.
     rendered = render_chunk(
-        [_msg("Harshal Ambani", "on my way"), _msg("Priya Nair", "see you")],
+        [_msg("Rohan Mehta", "on my way"), _msg("Priya Nair", "see you")],
         "Priya Nair",
         extractor=None,
     )
@@ -217,24 +217,24 @@ def test_an_unknown_owner_says_so_rather_than_showing_an_empty_box():
 
 
 def test_a_learned_name_is_shown_as_learned():
-    described = self_sender.describe(learned="Harshal Ambani")
-    assert described["name"] == "Harshal Ambani"
+    described = self_sender.describe(learned="Rohan Mehta")
+    assert described["name"] == "Rohan Mehta"
     assert described["source"] == "learned"
-    assert "Harshal Ambani" in described["summary"]
+    assert "Rohan Mehta" in described["summary"]
 
 
 def test_an_override_is_shown_as_the_user_s_own_choice():
     # It matters that these two read differently: one is a fact the app worked
     # out and might revise, the other is a decision it will not touch.
-    described = self_sender.describe(override="Harshal", learned="Harshal Ambani")
-    assert described["name"] == "Harshal"
+    described = self_sender.describe(override="Rohan", learned="Rohan Mehta")
+    assert described["name"] == "Rohan"
     assert described["source"] == "override"
-    assert self_sender.describe(learned="Harshal Ambani")["detail"] != described["detail"]
+    assert self_sender.describe(learned="Rohan Mehta")["detail"] != described["detail"]
 
 
 @pytest.mark.parametrize("blank", ["", "   ", None])
 def test_a_blank_override_is_described_as_the_learned_name(blank):
-    described = self_sender.describe(override=blank, learned="Harshal Ambani")
+    described = self_sender.describe(override=blank, learned="Rohan Mehta")
     assert described["source"] == "learned"
 
 
@@ -243,8 +243,8 @@ def test_describe_agrees_with_resolve_on_who_the_owner_is():
     # renderer did another would be worse than saying nothing at all.
     for override, learned in (
         (None, None),
-        (None, "Harshal Ambani"),
-        ("Harshal", "Harshal Ambani"),
+        (None, "Rohan Mehta"),
+        ("Rohan", "Rohan Mehta"),
     ):
         resolved, _ = self_sender.resolve(override=override, learned=learned)
         described = self_sender.describe(override, learned)
