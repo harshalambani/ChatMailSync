@@ -30,6 +30,7 @@ from pathlib import Path
 from dateutil import parser as dateutil_parser
 
 from src import mail_index, state
+from src.html_renderer import render_chunk
 from src.mail_client import _build_mime_message
 from src.media_extractor import MediaExtractor
 from src.parser import ParsedMessage, extract_chat_info, parse_file
@@ -787,6 +788,359 @@ def _build_media_extractor_plain_case(tmp_dir: Path) -> dict[str, object]:
     }
 
 
+# ---------------------------------------------------------------------------
+# HtmlRenderer golden sweep (KT-05, Phase 2 "html_renderer" port)
+#
+# Runs the *real* src.html_renderer.render_chunk against a sweep of chunks
+# covering escaping, unicode/emoji/RTL text, day-pill/time formatting, inline
+# media of every embeddable type, non-image attachments of every icon
+# category, a missing media file, an oversized media file (both with and
+# without a byte cap), sender-colour determinism across a group chat, the
+# outgoing/incoming self-sender split, and the empty/one-message edge cases.
+# HtmlRendererGoldenParityTest.kt (Kotlin) replays the same fixtures and
+# asserts byte-for-byte parity.
+#
+# One value in the real output is genuinely non-deterministic on both sides:
+# the inline-image `cid` (`f"img-{uuid.uuid4().hex[:12]}"` in Python,
+# `UUID.randomUUID()`-derived in Kotlin). Both are always exactly 16
+# characters ("img-" + 12 hex digits), so total_bytes/wire_bytes -- which
+# only depend on that fixed length, never the actual random content -- are
+# recorded directly from the real (pre-normalization) render. The cid text
+# itself is normalized, in order of first appearance in html_body, to
+# `img-NORMALIZEDCID<n>` placeholders before being written to the golden --
+# the same normalize-then-compare approach MimeGoldenParityTest.kt already
+# uses for the random MIME boundary (see `_normalize_boundary` above), and
+# the Kotlin test applies the identical regex/ordering scheme to its own
+# freshly-rendered output before comparing.
+# ---------------------------------------------------------------------------
+
+_CID_RE = re.compile(r"img-[0-9a-f]{12}")
+
+
+def _normalize_cids(html_body: str, cids: list[str]) -> tuple[str, list[str]]:
+    mapping: dict[str, str] = {}
+    counter = 0
+
+    def _sub(m: "re.Match[str]") -> str:
+        nonlocal counter
+        token = m.group(0)
+        if token not in mapping:
+            counter += 1
+            mapping[token] = f"img-NORMALIZEDCID{counter}"
+        return mapping[token]
+
+    normalized_html = _CID_RE.sub(_sub, html_body)
+    normalized_cids = [mapping.get(cid, cid) for cid in cids]
+    return normalized_html, normalized_cids
+
+
+def _hr_msg(sender: str, body: str, ts: datetime, attachment_filename: str | None = None) -> ParsedMessage:
+    return ParsedMessage(
+        chat_id="html_renderer_golden_chat",
+        timestamp=ts,
+        sender=sender,
+        body=body,
+        attachment_filename=attachment_filename,
+    )
+
+
+def _build_html_renderer_case(case: dict[str, object], extractor: "MediaExtractor") -> dict[str, object]:
+    messages = case["messages"]  # type: ignore[assignment]
+    use_extractor = case.get("use_extractor", False)
+    rendered = render_chunk(
+        messages,  # type: ignore[arg-type]
+        case.get("display_name", "Meera Iyer"),  # type: ignore[arg-type]
+        extractor if use_extractor else None,
+        label=case.get("label", ""),  # type: ignore[arg-type]
+        max_media_bytes=case.get("max_media_bytes"),  # type: ignore[arg-type]
+        self_sender=case.get("self_sender"),  # type: ignore[arg-type]
+    )
+
+    normalized_html, normalized_cids = _normalize_cids(
+        rendered.html_body, [p.cid for p in rendered.inline_parts]
+    )
+
+    return {
+        "name": case["name"],
+        "htmlBody": normalized_html,
+        "inlinePartsCids": normalized_cids,
+        "inlinePartsMimeTypes": [p.mime_type for p in rendered.inline_parts],
+        "inlinePartsDataBase64": [
+            base64.b64encode(p.data).decode("ascii") for p in rendered.inline_parts
+        ],
+        "attachmentsFilenames": [a.filename for a in rendered.attachments],
+        "attachmentsMimeTypes": [a.mime_type for a in rendered.attachments],
+        "attachmentsDataBase64": [
+            base64.b64encode(a.data).decode("ascii") for a in rendered.attachments
+        ],
+        "totalBytes": rendered.total_bytes,
+        "wireBytes": rendered.wire_bytes,
+        "omissions": [
+            {"filename": o.filename, "sizeBytes": o.size_bytes, "limitBytes": o.limit_bytes}
+            for o in rendered.omissions
+        ],
+    }
+
+
+def generate_html_renderer_golden() -> None:
+    import mimetypes
+    import shutil
+    import tempfile
+    from unittest import mock
+
+    # Same Windows-registry-pollution workaround as generate_media_extractor_golden
+    # above: MediaExtractor.resolve() (used here via `use_extractor=True` cases)
+    # calls the module-level `mimetypes.guess_type()`, which on this Windows
+    # generation machine lazily merges Windows Registry MIME associations
+    # (e.g. mapping ".opus" to "audio/ogg" instead of the registry-free
+    # "audio/opus") that never exist on real Android (Chaquopy, Linux
+    # CPython). Patched for the duration of this sweep to a fresh,
+    # registry-free `mimetypes.MimeTypes(filenames=()).guess_type` so this
+    # golden reflects real Android production behaviour, matching
+    # MediaExtractor.kt's own hand-curated table (verified against the same
+    # registry-free instance).
+    registry_free_guess_type = mimetypes.MimeTypes(filenames=()).guess_type
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="cms_html_renderer_golden_"))
+    try:
+        _html_renderer_patch = mock.patch(
+            "mimetypes.guess_type", side_effect=registry_free_guess_type
+        )
+        _html_renderer_patch.start()
+        source_path = tmp_dir / "_chat.txt"
+        source_path.write_text(
+            "html renderer golden source placeholder\n", encoding="utf-8", newline="\n"
+        )
+
+        media_files: list[tuple[str, bytes]] = [
+            ("photo.jpg", b"\xff\xd8\xff" + b"jpeg-bytes-for-html-renderer-golden"),
+            ("icon.png", b"\x89PNG\r\n\x1a\n" + b"png-bytes-for-html-renderer-golden"),
+            ("clip.gif", b"GIF89a" + b"gif-bytes-for-html-renderer-golden"),
+            ("sticker.webp", b"RIFF" + b"webp-bytes-for-html-renderer-golden"),
+            ("sketch.bmp", b"BM" + b"bmp-bytes-for-html-renderer-golden"),
+            ("clip.mp4", b"video-bytes-for-html-renderer-golden"),
+            ("voice.opus", b"audio-bytes-for-html-renderer-golden"),
+            ("doc.pdf", b"%PDF-1.4 " + b"pdf-bytes-for-html-renderer-golden"),
+            ("note.txt", b"text-bytes-for-html-renderer-golden"),
+            ("unknown.xyz", b"unmapped-extension-bytes-for-html-renderer-golden"),
+            ("bigdoc.pdf", b"%PDF-1.4 " + b"z" * 1_048_600),
+            ("huge.jpg", b"\xff\xd8\xff" + b"z" * 200_000),
+        ]
+        for name, data in media_files:
+            (tmp_dir / name).write_bytes(data)
+
+        ts = lambda day, hour, minute: datetime(2025, 5, day, hour, minute, 0)  # noqa: E731
+
+        cases: list[dict[str, object]] = [
+            {
+                "name": "empty_chat",
+                "messages": [],
+            },
+            {
+                "name": "one_message_chat",
+                "messages": [_hr_msg("Meera Iyer", "Hello there, just checking in.", ts(3, 9, 41))],
+                "display_name": "Meera Iyer",
+            },
+            {
+                "name": "html_escaping_in_name_and_body",
+                "messages": [
+                    _hr_msg(
+                        'Rohan "R" <Mehta>',
+                        "<b>bold</b> & \"quoted\" 'single' <script>alert(1)</script>",
+                        ts(3, 9, 42),
+                    )
+                ],
+                "display_name": "Rohan Mehta",
+            },
+            {
+                "name": "url_as_plain_text_no_autolink",
+                "messages": [
+                    _hr_msg(
+                        "Priya Nair",
+                        "Check this out: https://example.com/path?x=1&y=2 nice right?",
+                        ts(3, 9, 43),
+                    )
+                ],
+                "display_name": "Priya Nair",
+            },
+            {
+                "name": "unicode_emoji_rtl_text",
+                "messages": [
+                    _hr_msg(
+                        "Kavya Menon",
+                        "मिलते हैं 🎉😊 مرحبا بالعالم शुक्रिया",
+                        ts(3, 9, 44),
+                    )
+                ],
+                "display_name": "Kavya Menon",
+            },
+            {
+                "name": "newlines_and_long_message",
+                "messages": [
+                    _hr_msg(
+                        "Meera Iyer",
+                        "line one\nline two\nline three\n\n"
+                        + ("This is a long message. " * 40).strip(),
+                        ts(3, 9, 45),
+                    )
+                ],
+                "display_name": "Meera Iyer",
+            },
+            {
+                "name": "system_and_deleted_style_messages",
+                "messages": [
+                    _hr_msg(
+                        "Rohan Mehta",
+                        "Messages and calls are end-to-end encrypted. "
+                        "No one outside of this chat, not even WhatsApp, can read or listen to them.",
+                        ts(3, 9, 40),
+                    ),
+                    _hr_msg("Meera Iyer", "This message was deleted", ts(3, 9, 46)),
+                ],
+                "display_name": "Meera Iyer",
+            },
+            {
+                "name": "inline_images_all_embeddable_types",
+                "messages": [
+                    _hr_msg("Meera Iyer", "photo.jpg (file attached)", ts(3, 10, 1), "photo.jpg"),
+                    _hr_msg("Meera Iyer", "icon.png (file attached)", ts(3, 10, 2), "icon.png"),
+                    _hr_msg("Meera Iyer", "clip.gif (file attached)", ts(3, 10, 3), "clip.gif"),
+                    _hr_msg("Meera Iyer", "sticker.webp (file attached)", ts(3, 10, 4), "sticker.webp"),
+                    _hr_msg("Meera Iyer", "sketch.bmp (file attached)", ts(3, 10, 5), "sketch.bmp"),
+                ],
+                "display_name": "Meera Iyer",
+                "use_extractor": True,
+            },
+            {
+                "name": "non_image_attachments_all_icon_categories",
+                "messages": [
+                    _hr_msg("Rohan Mehta", "clip.mp4 (file attached)", ts(3, 11, 1), "clip.mp4"),
+                    _hr_msg("Rohan Mehta", "voice.opus (file attached)", ts(3, 11, 2), "voice.opus"),
+                    _hr_msg("Rohan Mehta", "doc.pdf (file attached)", ts(3, 11, 3), "doc.pdf"),
+                    _hr_msg("Rohan Mehta", "note.txt (file attached)", ts(3, 11, 4), "note.txt"),
+                    _hr_msg("Rohan Mehta", "unknown.xyz (file attached)", ts(3, 11, 5), "unknown.xyz"),
+                    _hr_msg("Rohan Mehta", "bigdoc.pdf (file attached)", ts(3, 11, 6), "bigdoc.pdf"),
+                ],
+                "display_name": "Rohan Mehta",
+                "use_extractor": True,
+            },
+            {
+                "name": "missing_media_file",
+                "messages": [
+                    _hr_msg(
+                        "Priya Nair", "ghost.jpg (file attached)", ts(3, 12, 0), "ghost.jpg"
+                    )
+                ],
+                "display_name": "Priya Nair",
+                "use_extractor": True,
+            },
+            {
+                "name": "oversized_media_omitted_with_cap",
+                "messages": [
+                    _hr_msg("Kavya Menon", "huge.jpg (file attached)", ts(3, 12, 30), "huge.jpg")
+                ],
+                "display_name": "Kavya Menon",
+                "use_extractor": True,
+                "max_media_bytes": 100_000,
+            },
+            {
+                "name": "large_media_not_omitted_without_cap",
+                "messages": [
+                    _hr_msg("Kavya Menon", "huge.jpg (file attached)", ts(3, 12, 45), "huge.jpg")
+                ],
+                "display_name": "Kavya Menon",
+                "use_extractor": True,
+            },
+            {
+                "name": "group_chat_sender_colors",
+                "messages": [
+                    _hr_msg("Meera Iyer", "hi everyone", ts(3, 13, 1)),
+                    _hr_msg("Rohan Mehta", "hey!", ts(3, 13, 2)),
+                    _hr_msg("Priya Nair", "hello all", ts(3, 13, 3)),
+                    _hr_msg("Kavya Menon", "good morning", ts(3, 13, 4)),
+                ],
+                "display_name": "Group Chat",
+            },
+            {
+                "name": "outgoing_vs_incoming_with_self_sender",
+                "messages": [
+                    _hr_msg("Meera Iyer", "outgoing message text", ts(3, 14, 1)),
+                    _hr_msg("Rohan Mehta", "incoming message text", ts(3, 14, 2)),
+                ],
+                "display_name": "Rohan Mehta",
+                "self_sender": "Meera Iyer",
+            },
+            {
+                "name": "outgoing_default_you_fallback",
+                "messages": [
+                    _hr_msg("You", "outgoing via literal You fallback", ts(3, 14, 30)),
+                    _hr_msg("Priya Nair", "incoming reply", ts(3, 14, 31)),
+                ],
+                "display_name": "Priya Nair",
+            },
+            {
+                "name": "date_pill_with_label_suffix",
+                "messages": [_hr_msg("Meera Iyer", "part two of three", ts(3, 15, 0))],
+                "display_name": "Meera Iyer",
+                "label": "Part 2/3",
+            },
+            {
+                "name": "attachment_marker_only_produces_no_body_div",
+                "messages": [
+                    _hr_msg(
+                        "Meera Iyer", "(file attached)", ts(3, 15, 30), "photo.jpg"
+                    )
+                ],
+                "display_name": "Meera Iyer",
+                "use_extractor": True,
+            },
+            {
+                "name": "attachment_with_extra_text_keeps_body_div",
+                "messages": [
+                    _hr_msg(
+                        "Meera Iyer", "photo.jpg (file attached)", ts(3, 15, 35), "photo.jpg"
+                    )
+                ],
+                "display_name": "Meera Iyer",
+                "use_extractor": True,
+            },
+            {
+                "name": "ios_attachment_marker_only_produces_no_body_div",
+                "messages": [
+                    _hr_msg(
+                        "Kavya Menon",
+                        "<attached: icon.png>",
+                        ts(3, 15, 45),
+                        "icon.png",
+                    )
+                ],
+                "display_name": "Kavya Menon",
+                "use_extractor": True,
+            },
+            {
+                "name": "day_pill_leading_zero_stripped_various_days",
+                "messages": [
+                    _hr_msg("Meera Iyer", "first of the month", ts(1, 8, 5)),
+                ],
+                "display_name": "Meera Iyer",
+            },
+        ]
+
+        with MediaExtractor(source_path) as extractor:
+            payload = {"cases": [_build_html_renderer_case(c, extractor) for c in cases]}
+    finally:
+        _html_renderer_patch.stop()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    out_path = GOLDEN_DIR / "html_renderer_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(payload['cases'])} cases)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -820,6 +1174,7 @@ def main() -> None:
     generate_cutoff_golden()
     generate_state_db_golden()
     generate_media_extractor_golden()
+    generate_html_renderer_golden()
 
 
 if __name__ == "__main__":
