@@ -24,7 +24,7 @@ import base64
 import json
 import re
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from dateutil import parser as dateutil_parser
@@ -1141,6 +1141,226 @@ def generate_html_renderer_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(payload['cases'])} cases)")
 
 
+def _mi_msg(sender: str, body: str, ts: datetime, chat_id: str = FIXTURE_CHAT_ID) -> ParsedMessage:
+    return ParsedMessage(chat_id=chat_id, timestamp=ts, sender=sender, body=body)
+
+
+def _build_mail_index_case(
+    name: str,
+    display_name: str,
+    chunk: "list[ParsedMessage]",
+    chunk_size,
+    message_id: str,
+    app_version,
+) -> dict[str, object]:
+    """Build one golden case dict for a single build_index/index_bytes call.
+
+    app_version is threaded through mail_index.set_app_version() for the
+    duration of this one build only, then reset to None (never-called),
+    matching tests/test_mail_index.py's autouse _reset_app_version fixture --
+    one case's app_version can never leak into the next.
+    """
+    mail_index.set_app_version(app_version)
+    try:
+        index = mail_index.build_index(display_name, chunk, chunk_size, message_id)
+        index_json = mail_index.index_bytes(index).decode("utf-8")
+        header_chat = mail_index._header_safe(chunk[0].chat_id)
+    finally:
+        mail_index.set_app_version(None)
+    return {
+        "name": name,
+        "displayName": display_name,
+        "chatId": chunk[0].chat_id,
+        "messageId": message_id,
+        "chunkSize": chunk_size,
+        "appVersionInput": app_version,
+        "messages": [
+            {"sender": m.sender, "body": m.body, "ts": m.timestamp_iso} for m in chunk
+        ],
+        "indexJson": index_json,
+        "headerChat": header_chat,
+    }
+
+
+def generate_mail_index_golden() -> None:
+    """Golden fixtures for MailIndex.kt's buildIndex/indexBytes/headerSafe,
+    mirroring tests/test_mail_index.py's coverage: message ordering, every
+    app_version stamping path (explicit/empty-string/never-set), every
+    chunk_size shape (day/hour/week/int), the hand-assembled JSON surviving
+    the same four hostile-content strings the Python suite parametrizes
+    over, the single-message no-trailing-comma edge case, a chat_id
+    header-injection attempt, a long-sender-name stress case, and a
+    250-message sweep -- plus a separate group of estimate_index_bytes()
+    upper-bound cases at the same counts (1, 10, 250) the Python suite
+    parametrizes test_estimate_is_an_upper_bound_on_the_real_part over.
+
+    mail_index does not touch mimetypes, so the registry-free-mimetypes
+    workaround used by generate_media_extractor_golden/
+    generate_html_renderer_golden does not apply here.
+    """
+    cases: list[dict[str, object]] = []
+
+    two_msg_chunk = [
+        _mi_msg("Priya Nair", "first message here", datetime(2020, 1, 2, 9, 0, 0)),
+        _mi_msg("Rohan Mehta", "second message, right after", datetime(2020, 1, 2, 9, 1, 0)),
+    ]
+    cases.append(
+        _build_mail_index_case(
+            "two_messages_default_day_chunk", "Priya Nair", two_msg_chunk, "day",
+            "<mi-golden-1@local>", None,
+        )
+    )
+
+    def _one() -> list[ParsedMessage]:
+        return [_mi_msg("Meera Iyer", "solo message", datetime(2021, 6, 15, 14, 30, 0))]
+
+    cases.append(
+        _build_mail_index_case(
+            "single_message_no_trailing_comma", "Meera Iyer", _one(), "day",
+            "<mi-golden-2@local>", None,
+        )
+    )
+    cases.append(
+        _build_mail_index_case(
+            "app_version_explicit_stamped", "Meera Iyer", _one(), "day",
+            "<mi-golden-3@local>", "2.2.0",
+        )
+    )
+    cases.append(
+        _build_mail_index_case(
+            "app_version_empty_string_falls_back_to_unknown", "Meera Iyer", _one(), "day",
+            "<mi-golden-4@local>", "",
+        )
+    )
+    cases.append(
+        _build_mail_index_case(
+            "app_version_never_called_falls_back_to_unknown", "Meera Iyer", _one(), "day",
+            "<mi-golden-5@local>", None,
+        )
+    )
+
+    hour_week_chunk = [
+        _mi_msg("Kavya Menon", "hour chunk message one", datetime(2022, 2, 2, 10, 0, 0)),
+        _mi_msg("Kavya Menon", "hour chunk message two", datetime(2022, 2, 2, 10, 30, 0)),
+    ]
+    cases.append(
+        _build_mail_index_case(
+            "chunk_size_hour", "Kavya Menon", hour_week_chunk, "hour",
+            "<mi-golden-6@local>", None,
+        )
+    )
+    cases.append(
+        _build_mail_index_case(
+            "chunk_size_week", "Kavya Menon", hour_week_chunk, "week",
+            "<mi-golden-7@local>", None,
+        )
+    )
+    cases.append(
+        _build_mail_index_case(
+            "chunk_size_count_int_50", "Kavya Menon", hour_week_chunk, 50,
+            "<mi-golden-8@local>", None,
+        )
+    )
+
+    hostile_strings = [
+        'quote " and backslash \\',
+        "newline\nin body",
+        "unicode ✅ 你好 emoji 🎉",
+        "comma, brace } bracket ]",
+    ]
+    hostile_names = [
+        "hostile_quote_and_backslash",
+        "hostile_newline_in_body",
+        "hostile_unicode_and_emoji",
+        "hostile_comma_brace_bracket",
+    ]
+    for name, hostile in zip(hostile_names, hostile_strings):
+        hostile_chunk = [
+            ParsedMessage(
+                chat_id=FIXTURE_CHAT_ID,
+                timestamp=datetime(2025, 3, 14, 9, 41, 0),
+                sender=hostile,
+                body=hostile,
+            )
+        ]
+        cases.append(
+            _build_mail_index_case(name, hostile, hostile_chunk, "day", "<mi-golden-hostile@local>", None)
+        )
+
+    injected_chat_id = "evil\r\nX-Injected: yes"
+    injection_chunk = [
+        _mi_msg(
+            "Kavya Menon", "normal body text", datetime(2022, 3, 3, 3, 3, 0),
+            chat_id=injected_chat_id,
+        )
+    ]
+    cases.append(
+        _build_mail_index_case(
+            "chat_id_header_injection_attempt", "Kavya Menon", injection_chunk, "day",
+            "<mi-golden-9@local>", None,
+        )
+    )
+
+    long_sender = "A" * 200
+    long_sender_chunk = [_mi_msg(long_sender, "hi", datetime(2023, 4, 4, 4, 4, 0))]
+    cases.append(
+        _build_mail_index_case(
+            "long_sender_name_stress", long_sender, long_sender_chunk, "day",
+            "<mi-golden-10@local>", None,
+        )
+    )
+
+    many_chunk = [
+        _mi_msg(
+            "Meera Iyer", f"message number {i}",
+            datetime(2020, 1, 1, 0, 0, 0) + timedelta(seconds=i),
+        )
+        for i in range(250)
+    ]
+    cases.append(
+        _build_mail_index_case(
+            "many_messages_two_fifty", "Meera Iyer", many_chunk, "day",
+            "<mi-golden-11@local>", None,
+        )
+    )
+
+    estimate_cases: list[dict[str, object]] = []
+    for count in (1, 10, 250):
+        estimate_chunk = [
+            _mi_msg(
+                "Meera Iyer", f"message number {i}",
+                datetime(2020, 1, 1, 0, 0, 0) + timedelta(seconds=i),
+            )
+            for i in range(count)
+        ]
+        mail_index.set_app_version(None)
+        part = mail_index.build_index_part("Meera Iyer", estimate_chunk, "day", FIXTURE_MESSAGE_ID)
+        part_bytes_len = len(part.as_bytes())
+        index_bytes_len = len(
+            mail_index.index_bytes(
+                mail_index.build_index("Meera Iyer", estimate_chunk, "day", FIXTURE_MESSAGE_ID)
+            )
+        )
+        estimate = mail_index.estimate_index_bytes(count)
+        estimate_cases.append(
+            {
+                "messageCount": count,
+                "indexBytesLen": index_bytes_len,
+                "partBytesLen": part_bytes_len,
+                "estimate": estimate,
+            }
+        )
+
+    payload = {"cases": cases, "estimateCases": estimate_cases}
+    out_path = GOLDEN_DIR / "mail_index_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases, {len(estimate_cases)} estimate cases)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1175,6 +1395,7 @@ def main() -> None:
     generate_state_db_golden()
     generate_media_extractor_golden()
     generate_html_renderer_golden()
+    generate_mail_index_golden()
 
 
 if __name__ == "__main__":
