@@ -45,7 +45,16 @@ data class MailIndex(
     val messages: List<IndexMessageEntry>,
 )
 
-/** Mirrors `build_index`. [chunk] must be non-empty (same precondition as the Python original). */
+/**
+ * Mirrors `build_index`. [chunk] must be non-empty (same precondition as the
+ * Python original).
+ *
+ * [appVersion] mirrors what `app_version()` returns at build time in Python:
+ * a blank string resolves to [UNKNOWN_VERSION], exactly like
+ * `set_app_version`'s `version if version else UNKNOWN_VERSION` — Kotlin has
+ * no separate set/get step (no mutable global), so that same fallback is
+ * applied here, at the one call site that stands in for it.
+ */
 fun buildIndex(
     displayName: String,
     chunk: List<ParsedMessage>,
@@ -54,6 +63,7 @@ fun buildIndex(
     appVersion: String = UNKNOWN_VERSION,
 ): MailIndex {
     require(chunk.isNotEmpty()) { "chunk must not be empty" }
+    val resolvedAppVersion = appVersion.ifEmpty { UNKNOWN_VERSION }
     val messages = chunk.mapIndexed { idx, msg ->
         IndexMessageEntry(
             n = idx + 1,
@@ -71,7 +81,7 @@ fun buildIndex(
         count = chunk.size,
         firstTs = chunk[0].timestampIso,
         lastTs = chunk.last().timestampIso,
-        appVersion = appVersion,
+        appVersion = resolvedAppVersion,
         messages = messages,
     )
 }
