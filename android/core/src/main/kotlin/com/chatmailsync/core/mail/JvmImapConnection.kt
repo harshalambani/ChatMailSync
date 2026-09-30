@@ -353,16 +353,19 @@ class JvmImapConnection private constructor(
 internal class ImapLineReader(private val input: BufferedInputStream) {
     fun readLine(): String {
         val buf = java.io.ByteArrayOutputStream()
+        // Every byte read on this line counts toward the cap, CR included (a CR is never written to buf).
+        var seen = 0
         try {
             while (true) {
                 val b = input.read()
                 if (b == -1) {
-                    if (buf.size() == 0) throw ImapAbortError("server closed the connection")
+                    if (seen == 0) throw ImapAbortError("server closed the connection")
                     break
                 }
                 if (b == '\n'.code) break
                 // SEC-03: imaplib's _MAXLINE parity; a line with no end must not eat the heap.
-                if (buf.size() >= MAX_LINE_BYTES) throw ImapAbortError("server line longer than $MAX_LINE_BYTES bytes")
+                if (seen >= MAX_LINE_BYTES) throw ImapAbortError("server line longer than $MAX_LINE_BYTES bytes")
+                seen++
                 if (b == '\r'.code) continue
                 buf.write(b)
             }

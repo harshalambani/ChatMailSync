@@ -30,6 +30,23 @@ class JvmImapConnectionLimitsTest {
         }
     }
 
+    // NEGATIVE (SEC-03 fixup): a CR is never stored, but it is still a byte read on the line, so an
+    // endless run of CR with no LF must hit the cap instead of keeping the reader busy forever.
+    @Test(timeout = 30_000)
+    fun twoMillionCarriageReturnsWithNoLineFeedIsAnAbort() {
+        ScriptedImapServer { c ->
+            c.serve { conn, _, _ -> conn.sendRaw(2_000_000, fill = '\r') }
+        }.use { server ->
+            val conn = connect(server)
+            try {
+                conn.list("\"\"", "*")
+                fail("expected an abort")
+            } catch (e: ImapAbortError) {
+                assertTrue(e.message, e.message!!.contains("longer than"))
+            }
+        }
+    }
+
     // NEGATIVE: the same over-long line inside the greeting ends the handshake as a 503.
     @Test(timeout = 30_000)
     fun anOverlongGreetingIsA503() {
