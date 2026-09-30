@@ -30,7 +30,14 @@ import java.time.format.DateTimeFormatter
  * open the one on-device database, the same way every `state.py` function
  * defaults to `config.STATE_DB_PATH`.
  */
-class StateRepository(private val openDb: () -> StateDb) {
+class StateRepository(
+    /** The timestamp source for every stamp the repository writes. Real time by default;
+     * the fixture generator passes a frozen one so the REAL write methods can produce a
+     * deterministic file (ST-04) instead of raw INSERTs that bypass them. It comes first
+     * so that `openDb` stays the trailing lambda: `StateRepository { openIt() }`. */
+    private val clock: () -> String = { now() },
+    private val openDb: () -> StateDb,
+) {
 
     // -----------------------------------------------------------------
     // Schema DDL -- verbatim copy of state.py's `_DDL` (SQL text and table/
@@ -286,7 +293,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         gmailLabelId: String? = null,
         anchorMessageId: String? = null,
     ) {
-        val now = now()
+        val now = clock()
         withDb { db ->
             db.exec(
                 """
@@ -320,7 +327,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     updated_at        = ?
                 WHERE chat_id = ?
                 """.trimIndent(),
-                listOf(gmailThreadId, gmailLabelId, anchorMessageId, now(), chatId),
+                listOf(gmailThreadId, gmailLabelId, anchorMessageId, clock(), chatId),
             )
         }
     }
@@ -342,7 +349,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         withDb { db ->
             db.exec(
                 "INSERT INTO sync_runs (chat_id, status, trigger, started_at) VALUES (?, 'pending', ?, ?)",
-                listOf(chatId, trigger, now()),
+                listOf(chatId, trigger, clock()),
             )
             db.lastInsertRowId()
         }
@@ -370,7 +377,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     completed_at     = ?
                 WHERE run_id = ?
                 """.trimIndent(),
-                listOf(lastSyncedTs, lastSyncedHash, messagesParsed, messagesSynced, messagesSkipped, messagesCutoff, now(), runId),
+                listOf(lastSyncedTs, lastSyncedHash, messagesParsed, messagesSynced, messagesSkipped, messagesCutoff, clock(), runId),
             )
         }
     }
@@ -379,7 +386,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         withDb { db ->
             db.exec(
                 "UPDATE sync_runs SET status = 'failed', error_message = ?, completed_at = ? WHERE run_id = ?",
-                listOf(errorMessage, now(), runId),
+                listOf(errorMessage, clock(), runId),
             )
         }
     }
@@ -539,7 +546,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     updated_at        = ?
                 WHERE chat_id = ?
                 """.trimIndent(),
-                listOf(now(), chatId),
+                listOf(clock(), chatId),
             )
         }
     }
@@ -561,7 +568,7 @@ class StateRepository(private val openDb: () -> StateDb) {
             db.exec(
                 "INSERT INTO chat_cutoffs (chat_id, cutoff_ts, set_at) VALUES (?, ?, ?) " +
                     "ON CONFLICT(chat_id) DO UPDATE SET cutoff_ts = excluded.cutoff_ts, set_at = excluded.set_at",
-                listOf(chatId, normalised, now()),
+                listOf(chatId, normalised, clock()),
             )
         }
     }
@@ -582,7 +589,7 @@ class StateRepository(private val openDb: () -> StateDb) {
 
     fun recordChatSenders(chatId: String, counts: Map<String, Int>, seenTs: String? = null) {
         if (counts.isEmpty()) return
-        val ts = seenTs ?: now()
+        val ts = seenTs ?: clock()
         withDb { db ->
             for ((sender, countRaw) in counts) {
                 val count = countRaw
