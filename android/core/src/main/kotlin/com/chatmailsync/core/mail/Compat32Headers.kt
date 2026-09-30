@@ -17,6 +17,12 @@ package com.chatmailsync.core.mail
  *
  * Use [fold] for every top-level header, so the output does not depend on
  * which header a long value lands in.
+ *
+ * Header injection: Python's folder raises `HeaderParseError` when a value
+ * carries a line break followed by something that looks like a header name.
+ * This port cannot raise mid-sync, so [fold] first replaces every line
+ * break and control character with a space ([lineSafe]). Nothing passed to
+ * [fold] can therefore start a new header line.
  */
 internal object Compat32Headers {
     /** `Policy.max_line_length` for compat32. */
@@ -26,12 +32,42 @@ internal object Compat32Headers {
     private const val CONTINUATION_WS = " "
 
     /**
+     * True for the characters Python's `str.splitlines()` treats as a line
+     * boundary, plus every other C0/C1 control except TAB (folding white
+     * space), plus DEL. NUL is in here on purpose.
+     */
+    private fun isLineBreakOrControl(c: Char): Boolean =
+        (c.code < 0x20 && c != '\t') || c.code == 0x7F || c.code == 0x85 ||
+            c.code == 0x2028 || c.code == 0x2029
+
+    /**
+     * Replaces each run of line-break and control characters in [value] with a
+     * single space. A normal value (letters, digits, punctuation, spaces, tabs,
+     * any non-ASCII text) is returned unchanged, including repeated spaces.
+     */
+    fun lineSafe(value: String): String {
+        if (value.none { isLineBreakOrControl(it) }) return value
+        val sb = StringBuilder(value.length)
+        var inRun = false
+        for (c in value) {
+            if (isLineBreakOrControl(c)) {
+                if (!inRun) sb.append(' ')
+                inRun = true
+            } else {
+                sb.append(c)
+                inRun = false
+            }
+        }
+        return sb.toString()
+    }
+
+    /**
      * Returns the header as it is written to the message, WITHOUT the final
      * line break: `Name: value`, possibly several lines joined by `\n`, each
      * continuation line starting with one space.
      */
     fun fold(name: String, value: String): String {
-        val clean = value
+        val clean = lineSafe(value)
         val formatter = ValueFormatter(name.length + 2, MAX_LINE_LENGTH)
         if (clean.all { it.code < 128 }) {
             formatter.feedAscii("", clean)

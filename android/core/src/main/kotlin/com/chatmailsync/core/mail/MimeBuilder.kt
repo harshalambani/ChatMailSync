@@ -101,7 +101,9 @@ object MimeBuilder {
     private val ADDR_ESCAPES = Regex("[\\\\\"]")
 
     /** Mirrors `email.utils.formataddr((name, address))` for the ASCII-name case this app's names take. */
-    fun formatAddr(name: String, address: String): String {
+    fun formatAddr(rawName: String, address: String): String {
+        // SEC-01: a CR, LF or NUL in a chat name must not reach the header.
+        val name = Compat32Headers.lineSafe(rawName)
         if (name.isEmpty()) return address
         if (!name.all { it.code < 128 }) {
             // Non-ASCII display name: Python charset-encodes the name only
