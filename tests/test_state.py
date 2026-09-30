@@ -319,41 +319,49 @@ def test_the_sweep_runs_once_not_on_every_start(db_path):
 # The cutoff date
 # ---------------------------------------------------------------------------
 
+# This is the schema that REALLY shipped first (git show e72d02a:src/state.py, its _DDL):
+# chats carries anchor_message_id and a NOT NULL source_filename, sync_runs has no
+# `trigger` column, message_hashes has no created_at and foreign keys on both. An earlier
+# hand-written layout here had drifted from it (ST-03), so the migration was being tested
+# against a file no phone ever held.
 _V1_DDL = """
 PRAGMA journal_mode = WAL;
 
 CREATE TABLE chats (
-    chat_id          TEXT PRIMARY KEY,
-    display_name     TEXT NOT NULL,
-    source_filename  TEXT,
-    gmail_thread_id  TEXT,
-    gmail_label_id   TEXT,
-    created_at       TEXT NOT NULL,
-    updated_at       TEXT NOT NULL
+    chat_id           TEXT PRIMARY KEY,
+    display_name      TEXT NOT NULL,
+    gmail_thread_id   TEXT,
+    gmail_label_id    TEXT,
+    anchor_message_id TEXT,
+    source_filename   TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
 );
 
 CREATE TABLE sync_runs (
     run_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id          TEXT NOT NULL REFERENCES chats(chat_id),
-    status           TEXT NOT NULL CHECK(status IN ('pending','complete','failed')),
-    trigger          TEXT NOT NULL DEFAULT 'manual',
+    chat_id          TEXT    NOT NULL REFERENCES chats(chat_id),
+    status           TEXT    NOT NULL CHECK(status IN ('pending', 'complete', 'failed')),
     last_synced_ts   TEXT,
     last_synced_hash TEXT,
     messages_parsed  INTEGER NOT NULL DEFAULT 0,
     messages_synced  INTEGER NOT NULL DEFAULT 0,
     messages_skipped INTEGER NOT NULL DEFAULT 0,
     error_message    TEXT,
-    started_at       TEXT NOT NULL,
+    started_at       TEXT    NOT NULL,
     completed_at     TEXT
 );
 
 CREATE TABLE message_hashes (
-    hash        TEXT PRIMARY KEY,
-    chat_id     TEXT NOT NULL,
-    message_ts  TEXT NOT NULL,
-    run_id      INTEGER NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    hash       TEXT    PRIMARY KEY,
+    chat_id    TEXT    NOT NULL REFERENCES chats(chat_id),
+    message_ts TEXT    NOT NULL,
+    run_id     INTEGER NOT NULL REFERENCES sync_runs(run_id)
 );
+
+CREATE INDEX idx_message_hashes_chat  ON message_hashes(chat_id);
+CREATE INDEX idx_sync_runs_chat       ON sync_runs(chat_id);
+CREATE INDEX idx_sync_runs_status     ON sync_runs(status);
 """
 
 
@@ -375,9 +383,9 @@ def _build_a_v1_database(path):
         "VALUES ('chat1', 'Chat One', 'chat1.txt', '2025-03-01T00:00:00', '2025-03-01T00:00:00')"
     )
     cur = conn.execute(
-        "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, "
+        "INSERT INTO sync_runs (chat_id, status, last_synced_ts, last_synced_hash, "
         "messages_parsed, messages_synced, messages_skipped, started_at, completed_at) "
-        "VALUES ('chat1', 'complete', 'manual', '2025-03-14T09:41:00', 'deadbeef', "
+        "VALUES ('chat1', 'complete', '2025-03-14T09:41:00', 'deadbeef', "
         "3, 3, 0, '2025-03-14T09:40:00', '2025-03-14T09:42:00')"
     )
     run_id = int(cur.lastrowid)
@@ -408,6 +416,9 @@ def test_a_version_1_database_gains_the_cutoff_table_and_column(tmp_path):
     # The column exists and the pre-existing row reads back as zero rather
     # than NULL: nothing was ever filtered by a cutoff before it existed.
     assert run["messages_cutoff"] == 0
+    # The `trigger` column did not exist in the first schema either; the old row
+    # reads back as a manual run, not NULL.
+    assert run["trigger"] == "manual"
 
     # And the new table is there and usable.
     state.set_chat_cutoff("chat1", "2026-01-01", db_path=db_path)

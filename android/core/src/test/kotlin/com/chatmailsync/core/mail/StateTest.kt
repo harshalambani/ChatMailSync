@@ -382,41 +382,47 @@ class StateTest {
     // v1 -> current migration
     // -----------------------------------------------------------------
 
+    // The schema that REALLY shipped first (`git show e72d02a:src/state.py`, its _DDL), not a
+    // hand-written approximation (ST-03): chats has anchor_message_id and a NOT NULL
+    // source_filename, sync_runs has no `trigger`, message_hashes has no created_at.
     private val v1Ddl = """
         PRAGMA journal_mode = WAL;
 
         CREATE TABLE chats (
-            chat_id          TEXT PRIMARY KEY,
-            display_name     TEXT NOT NULL,
-            source_filename  TEXT,
-            gmail_thread_id  TEXT,
-            gmail_label_id   TEXT,
-            created_at       TEXT NOT NULL,
-            updated_at       TEXT NOT NULL
+            chat_id           TEXT PRIMARY KEY,
+            display_name      TEXT NOT NULL,
+            gmail_thread_id   TEXT,
+            gmail_label_id    TEXT,
+            anchor_message_id TEXT,
+            source_filename   TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
         );
 
         CREATE TABLE sync_runs (
             run_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id          TEXT NOT NULL REFERENCES chats(chat_id),
-            status           TEXT NOT NULL CHECK(status IN ('pending','complete','failed')),
-            trigger          TEXT NOT NULL DEFAULT 'manual',
+            chat_id          TEXT    NOT NULL REFERENCES chats(chat_id),
+            status           TEXT    NOT NULL CHECK(status IN ('pending', 'complete', 'failed')),
             last_synced_ts   TEXT,
             last_synced_hash TEXT,
             messages_parsed  INTEGER NOT NULL DEFAULT 0,
             messages_synced  INTEGER NOT NULL DEFAULT 0,
             messages_skipped INTEGER NOT NULL DEFAULT 0,
             error_message    TEXT,
-            started_at       TEXT NOT NULL,
+            started_at       TEXT    NOT NULL,
             completed_at     TEXT
         );
 
         CREATE TABLE message_hashes (
-            hash        TEXT PRIMARY KEY,
-            chat_id     TEXT NOT NULL,
-            message_ts  TEXT NOT NULL,
-            run_id      INTEGER NOT NULL,
-            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            hash       TEXT    PRIMARY KEY,
+            chat_id    TEXT    NOT NULL REFERENCES chats(chat_id),
+            message_ts TEXT    NOT NULL,
+            run_id     INTEGER NOT NULL REFERENCES sync_runs(run_id)
         );
+
+        CREATE INDEX idx_message_hashes_chat  ON message_hashes(chat_id);
+        CREATE INDEX idx_sync_runs_chat       ON sync_runs(chat_id);
+        CREATE INDEX idx_sync_runs_status     ON sync_runs(status);
     """.trimIndent()
 
     /** Builds a database shaped the way version 1 shipped it -- written out
@@ -436,9 +442,9 @@ class StateTest {
                 )
             }
             val stmt = conn.prepareStatement(
-                "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, " +
+                "INSERT INTO sync_runs (chat_id, status, last_synced_ts, last_synced_hash, " +
                     "messages_parsed, messages_synced, messages_skipped, started_at, completed_at) " +
-                    "VALUES ('chat1', 'complete', 'manual', '2025-03-14T09:41:00', 'deadbeef', " +
+                    "VALUES ('chat1', 'complete', '2025-03-14T09:41:00', 'deadbeef', " +
                     "3, 3, 0, '2025-03-14T09:40:00', '2025-03-14T09:42:00')",
                 java.sql.Statement.RETURN_GENERATED_KEYS,
             )
@@ -462,6 +468,8 @@ class StateTest {
         assertEquals("2025-03-14T09:41:00", run.lastSyncedTs)
         assertEquals(3, run.messagesParsed)
         assertEquals(0, run.messagesCutoff)
+        // NEGATIVE: the first schema had no `trigger`; the old row must read "manual", not null.
+        assertEquals("manual", run.trigger)
 
         repo.setChatCutoff("chat1", "2026-01-01")
         assertEquals("2026-01-01T00:00:00", repo.getChatCutoff("chat1"))
