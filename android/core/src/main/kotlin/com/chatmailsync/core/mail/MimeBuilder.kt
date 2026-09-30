@@ -21,11 +21,10 @@ import kotlin.random.Random
  * `email.mime` package + `Generator` produce for this specific shape of
  * message (a two-part multipart/mixed: one text/plain part, one
  * application/json part, both base64), rather than depending on a MIME
- * library. Known, deliberate gaps vs. the general email package (none of
- * which this app's own fixed message shape ever exercises): no RFC 2822
- * header line-folding for values over ~78 chars, and RFC 2047 encoding is
- * implemented only for the single-string-append case every header here
- * uses (see Rfc2047.kt) -- not the general multi-chunk case.
+ * library. Every top-level header is written by [Compat32Headers.fold], the
+ * port of Python's compat32 header folding and RFC 2047 encoding, so long or
+ * non-ASCII names produce the same bytes as Python (goldens in
+ * `mime_cases_golden.json`).
  */
 object MimeBuilder {
 
@@ -106,11 +105,9 @@ object MimeBuilder {
         if (name.isEmpty()) return address
         if (!name.all { it.code < 128 }) {
             // Non-ASCII display name: Python charset-encodes the name only
-            // (email.charset.Charset.header_encode), not the whole "name
-            // <addr>" string. Approximated here with the same RFC 2047
-            // machinery used for headers -- see Rfc2047.kt.
-            val encodedName = Rfc2047.encodeHeaderValue(name)
-            return "$encodedName <$address>"
+            // (Charset('utf-8').header_encode), as ONE encoded word, not the
+            // whole "name <addr>" string.
+            return "${Rfc2047.encodeWord(name)} <$address>"
         }
         val quotes = if (ADDR_SPECIALS.containsMatchIn(name)) "\"" else ""
         val escaped = ADDR_ESCAPES.replace(name) { "\\" + it.value }
@@ -140,7 +137,7 @@ object MimeBuilder {
         val headers = LinkedHashMap<String, String>()
         headers["Content-Type"] = "multipart/mixed; boundary=\"$boundary\""
         headers["MIME-Version"] = "1.0"
-        headers["Subject"] = Rfc2047.encodeHeaderValue(chunkSubject(displayName, chunk, chunkSize))
+        headers["Subject"] = chunkSubject(displayName, chunk, chunkSize)
         headers["From"] = formatSender(displayName)
         headers["To"] = "me"
         headers["Message-ID"] = messageId
@@ -156,7 +153,7 @@ object MimeBuilder {
 
         val sb = StringBuilder()
         for ((name, value) in headers) {
-            sb.append(name).append(": ").append(value).append('\n')
+            sb.append(Compat32Headers.fold(name, value)).append('\n')
         }
         sb.append('\n')
 

@@ -1361,6 +1361,129 @@ def generate_mail_index_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases, {len(estimate_cases)} estimate cases)")
 
 
+# ---------------------------------------------------------------------------
+# MIME message goldens (PAR-05 / PAR-07): header folding and RFC 2047 encoding
+#
+# Each case is one full message built by the REAL Python
+# `_build_mime_message` (Python 3.13 email package, compat32 policy) and the
+# exact bytes are recorded, boundary-normalized. The expected bytes are never
+# written by hand. MimeCasesGoldenParityTest.kt rebuilds every case with
+# MimeBuilder and compares.
+#
+# Names are made up (Meera Iyer, Rohan Mehta) or synthetic. The Devanagari and
+# emoji strings are invented group names. The sweeps walk every name length
+# across the 75-character encoded-word limit and the 78-character fold limit,
+# so an off-by-one in either shows up as a failing case.
+# ---------------------------------------------------------------------------
+
+_MIME_CASE_TS = datetime(2019, 5, 3, 10, 15, 0)
+
+_LONG_ASCII_BASE = "Meera Iyer and Rohan Mehta Weekend Trip Planning Committee Group 2026 Extra"
+_HINDI_BASE = (
+    "मीरा अय्यर "
+    "और रोहन मेहता "
+    "का परिवार समूह"
+)
+_EMOJI_BASE = "Rohan Mehta 🎉🎂🥳 Birthday Crew 🎈🎊🎁"
+_ACCENT_BASE = "Café Crème Société of Meera Iyer and Röhan Mehta"
+
+
+def _mime_msgs(chat_id: str = FIXTURE_CHAT_ID, body: str = "hello from the past") -> "list[ParsedMessage]":
+    return [
+        ParsedMessage(chat_id=chat_id, timestamp=_MIME_CASE_TS, sender="Meera Iyer", body=body),
+        ParsedMessage(
+            chat_id=chat_id,
+            timestamp=_MIME_CASE_TS + timedelta(minutes=1),
+            sender="Rohan Mehta",
+            body="line one\nline two continuation",
+        ),
+    ]
+
+
+def _mime_case(
+    name: str,
+    display_name: str,
+    messages: "list[ParsedMessage] | None" = None,
+    chunk_size="day",
+    message_id: str = FIXTURE_MESSAGE_ID,
+    in_reply_to: "str | None" = None,
+    references: "str | None" = None,
+) -> dict[str, object]:
+    chunk = messages if messages is not None else _mime_msgs()
+    result = _build_mime_message(
+        display_name=display_name,
+        chunk=chunk,
+        chunk_size=chunk_size,
+        label_id=f"WhatsApp/{display_name}",
+        message_id=message_id,
+        in_reply_to=in_reply_to,
+        references=references,
+    )
+    raw_bytes = base64.urlsafe_b64decode(result["raw"])
+    eml = _normalize_boundary(raw_bytes).decode("ascii")
+    return {
+        "name": name,
+        "displayName": display_name,
+        "chatId": chunk[0].chat_id,
+        "messageId": message_id,
+        "chunkSize": chunk_size,
+        "inReplyTo": in_reply_to,
+        "references": references,
+        "messages": [
+            {"sender": m.sender, "body": m.body, "ts": m.timestamp_iso} for m in chunk
+        ],
+        "eml": eml,
+    }
+
+
+def _mime_cases() -> "list[dict[str, object]]":
+    cases: list[dict[str, object]] = []
+
+    # Named cases: the three names the PAR-05 review measured, plus the quoting
+    # and encoding-choice edges.
+    cases.append(_mime_case("long_ascii_name_64", _LONG_ASCII_BASE[:64]))
+    cases.append(_mime_case("hindi_group_name", _HINDI_BASE))
+    cases.append(_mime_case("emoji_name", _EMOJI_BASE))
+    cases.append(_mime_case("accent_name_long", _ACCENT_BASE))
+    cases.append(_mime_case("quoted_ascii_name", 'Meera "Mee" Iyer, Jr. (Family)'))
+    cases.append(_mime_case("backslash_name", "Rohan \\ Mehta"))
+    cases.append(
+        _mime_case(
+            "long_reply_headers",
+            "Meera Iyer",
+            in_reply_to="<" + "a" * 60 + "@local>",
+            references="<" + "b" * 50 + "@local> <" + "c" * 50 + "@local> <" + "d" * 50 + "@local>",
+        )
+    )
+
+    # Sweeps across the two limits. Subject is always encoded (the em dash),
+    # From is ASCII and folded, or one encoded word for the non-ASCII names.
+    for n in range(55, 101):
+        cases.append(_mime_case(f"sweep_ascii_{n}", _LONG_ASCII_BASE[:n].rstrip() or "x"))
+    for n in range(1, 41):
+        cases.append(_mime_case(f"sweep_hindi_{n}", _HINDI_BASE[:n].rstrip()))
+    for n in range(1, 31):
+        cases.append(_mime_case(f"sweep_emoji_{n}", _EMOJI_BASE[:n].rstrip()))
+    for n in range(1, 41):
+        cases.append(_mime_case(f"sweep_accent_{n}", _ACCENT_BASE[:n].rstrip()))
+
+    return cases
+
+
+def generate_mime_cases_golden() -> None:
+    cases = _mime_cases()
+    names = [c["name"] for c in cases]
+    assert len(names) == len(set(names)), "duplicate MIME golden case name"
+    payload = {"cases": cases}
+    out_path = GOLDEN_DIR / "mime_cases_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1396,6 +1519,7 @@ def main() -> None:
     generate_media_extractor_golden()
     generate_html_renderer_golden()
     generate_mail_index_golden()
+    generate_mime_cases_golden()
 
 
 if __name__ == "__main__":
