@@ -65,8 +65,10 @@ class JvmImapConnection private constructor(
         val tag = nextTag()
         writeLine("$tag $commandLine")
         val data = mutableListOf<String?>()
+        var lines = 0
         while (true) {
             val line = readLine()
+            if (++lines > MAX_UNTAGGED_LINES) throw tooManyLines()
             if (line.startsWith("+")) {
                 if (literal != null) {
                     try {
@@ -262,8 +264,10 @@ class JvmImapConnection private constructor(
             if (capabilities.isEmpty()) {
                 val tag = nextTag()
                 writeLine("$tag CAPABILITY")
+                var lines = 0
                 while (true) {
                     val line = reader.readLine()
+                    if (++lines > MAX_UNTAGGED_LINES) throw tooManyLines()
                     if (line.startsWith("*")) {
                         capabilities.addAll(line.removePrefix("*").trim().removePrefix("CAPABILITY").trim().split(" "))
                     } else if (line.startsWith("$tag ")) {
@@ -278,8 +282,10 @@ class JvmImapConnection private constructor(
 
             val loginTag = nextTag()
             writeLine("$loginTag LOGIN ${ImapUtf7.quoteMailbox(email)} ${ImapUtf7.quoteMailbox(password)}")
+            var loginLines = 0
             while (true) {
                 val line = reader.readLine()
+                if (++loginLines > MAX_UNTAGGED_LINES) throw tooManyLines()
                 if (line.startsWith("$loginTag ")) {
                     val rest = line.removePrefix("$loginTag ")
                     val status = rest.substringBefore(' ')
@@ -316,6 +322,7 @@ class JvmImapConnection private constructor(
 internal class ImapLineReader(private val input: BufferedInputStream) {
     fun readLine(): String {
         val sb = StringBuilder()
+        var bytes = 0
         try {
             while (true) {
                 val b = input.read()
@@ -324,6 +331,9 @@ internal class ImapLineReader(private val input: BufferedInputStream) {
                     break
                 }
                 if (b == '\n'.code) break
+                bytes++
+                // SEC-03: imaplib's _MAXLINE parity; a line with no end must not eat the heap.
+                if (bytes > MAX_LINE_BYTES) throw ImapAbortError("server line longer than $MAX_LINE_BYTES bytes")
                 if (b == '\r'.code) continue
                 sb.append(b.toChar())
             }
@@ -335,3 +345,12 @@ internal class ImapLineReader(private val input: BufferedInputStream) {
         return sb.toString()
     }
 }
+
+/** Longest single response line accepted, in bytes (imaplib `_MAXLINE` parity). */
+internal const val MAX_LINE_BYTES = 1_000_000
+
+/** Most untagged response lines accepted for one command (or one handshake step). */
+internal const val MAX_UNTAGGED_LINES = 100_000
+
+internal fun tooManyLines(): ImapAbortError =
+    ImapAbortError("server sent more than $MAX_UNTAGGED_LINES response lines for one command")

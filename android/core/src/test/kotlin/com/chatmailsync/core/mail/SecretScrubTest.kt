@@ -17,7 +17,7 @@ class SecretScrubTest {
         assertFalse(text, text.contains(password))
         assertFalse(text, text.contains(quoted))
         assertFalse(text, text.contains(quoted.trim('"')))
-        assertFalse(text, text.contains("w\\rd-FAKE"))
+        assertFalse(text, text.contains("w\\\\rd-FAKE"))
         assertFalse(text, text.contains("ss\\\"w"))
     }
 
