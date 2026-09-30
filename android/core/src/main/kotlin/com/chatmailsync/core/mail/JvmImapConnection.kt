@@ -39,6 +39,8 @@ class JvmImapConnection private constructor(
     override val capabilities: List<String>,
 ) : ImapConnection {
 
+    private val reader = ImapLineReader(input)
+
     private var tagCounter = 0
 
     private fun nextTag(): String {
@@ -56,26 +58,7 @@ class JvmImapConnection private constructor(
         }
     }
 
-    private fun readLine(): String {
-        val sb = StringBuilder()
-        try {
-            while (true) {
-                val b = input.read()
-                if (b == -1) {
-                    if (sb.isEmpty()) throw ImapAbortError("server closed the connection")
-                    break
-                }
-                if (b == '\n'.code) break
-                if (b == '\r'.code) continue
-                sb.append(b.toChar())
-            }
-        } catch (exc: SocketTimeoutException) {
-            throw exc
-        } catch (exc: IOException) {
-            throw ImapAbortError("connection dropped while reading: ${exc.message}")
-        }
-        return sb.toString()
-    }
+    private fun readLine(): String = reader.readLine()
 
     /** Runs one tagged command, collecting untagged response lines, and returns the final status. */
     private fun runCommand(commandLine: String, literal: ByteArray? = null): ImapResult {
@@ -218,25 +201,52 @@ class JvmImapConnection private constructor(
                 )
             }
 
+            // PAR-03 / SEC-04: everything from the greeting to the end of LOGIN
+            // is wrapped, like the TLS block above it. A dropped connection, a
+            // timeout or a refusing server ends as a MailTransportError (503),
+            // never a raw IOException, and the socket is closed on any failure.
+            try {
+                return handshake(socket, host, port, email, password)
+            } catch (exc: MailTransportError) {
+                closeQuietly(socket)
+                throw exc
+            } catch (exc: Exception) {
+                closeQuietly(socket)
+                throw MailTransportError(
+                    "Could not talk to $host:$port: ${stripSecret(exc.message ?: exc.toString(), password)}",
+                    503,
+                )
+            }
+        }
+
+        private fun closeQuietly(socket: Socket) {
+            try {
+                socket.close()
+            } catch (_: Exception) {
+                // best effort
+            }
+        }
+
+        private val CAPABILITY_IN_BRACKETS = Regex("\\[CAPABILITY ([^]]+)]")
+
+        private fun handshake(socket: Socket, host: String, port: Int, email: String, password: String): JvmImapConnection {
             val input = BufferedInputStream(socket.getInputStream())
             val output = socket.getOutputStream()
+            val reader = ImapLineReader(input)
 
-            fun readLine(): String {
-                val sb = StringBuilder()
-                while (true) {
-                    val b = input.read()
-                    if (b == -1) break
-                    if (b == '\n'.code) break
-                    if (b == '\r'.code) continue
-                    sb.append(b.toChar())
-                }
-                return sb.toString()
+            val greeting = reader.readLine()
+            val greetingWord = greeting.removePrefix("*").trim().substringBefore(' ').uppercase(Locale.ROOT)
+            if (!greeting.startsWith("*") || greetingWord !in setOf("OK", "PREAUTH", "BYE")) {
+                throw MailTransportError("Unexpected greeting from $host:$port (not an IMAP server?)", 503)
             }
-
-            val greeting = readLine()
+            if (greetingWord == "BYE") {
+                throw MailTransportError(
+                    "$host:$port refused the connection: ${stripSecret(greeting.removePrefix("*").trim(), password)}",
+                    503,
+                )
+            }
             val capabilities = mutableListOf<String>()
-            val capMatch = Regex("\\[CAPABILITY ([^]]+)]").find(greeting)
-            if (capMatch != null) capabilities.addAll(capMatch.groupValues[1].split(" "))
+            CAPABILITY_IN_BRACKETS.find(greeting)?.let { capabilities.addAll(it.groupValues[1].split(" ")) }
 
             var tagCounter = 0
             fun nextTag(): String {
@@ -253,7 +263,7 @@ class JvmImapConnection private constructor(
                 val tag = nextTag()
                 writeLine("$tag CAPABILITY")
                 while (true) {
-                    val line = readLine()
+                    val line = reader.readLine()
                     if (line.startsWith("*")) {
                         capabilities.addAll(line.removePrefix("*").trim().removePrefix("CAPABILITY").trim().split(" "))
                     } else if (line.startsWith("$tag ")) {
@@ -262,16 +272,20 @@ class JvmImapConnection private constructor(
                 }
             }
 
+            // A PREAUTH greeting means the session is already authenticated;
+            // sending LOGIN would only earn a BAD.
+            if (greetingWord == "PREAUTH") return JvmImapConnection(socket, input, output, capabilities)
+
             val loginTag = nextTag()
             writeLine("$loginTag LOGIN ${ImapUtf7.quoteMailbox(email)} ${ImapUtf7.quoteMailbox(password)}")
             while (true) {
-                val line = readLine()
+                val line = reader.readLine()
                 if (line.startsWith("$loginTag ")) {
                     val rest = line.removePrefix("$loginTag ")
                     val status = rest.substringBefore(' ')
                     if (status != "OK") {
                         throw MailTransportError(
-                            "IMAP login failed for $email @ $host:$port — " +
+                            "IMAP login failed for $email @ $host:$port \u2014 " +
                                 "${loginFailureHint(host, email)} Server said: " +
                                 stripSecret(rest, password),
                             401,
@@ -280,15 +294,44 @@ class JvmImapConnection private constructor(
                     break
                 }
                 if (line.startsWith("*")) {
-                    val capMatch2 = Regex("\\[CAPABILITY ([^]]+)]").find(line)
-                    if (capMatch2 != null) {
+                    CAPABILITY_IN_BRACKETS.find(line)?.let {
                         capabilities.clear()
-                        capabilities.addAll(capMatch2.groupValues[1].split(" "))
+                        capabilities.addAll(it.groupValues[1].split(" "))
                     }
                 }
             }
 
             return JvmImapConnection(socket, input, output, capabilities)
         }
+    }
+}
+
+/**
+ * One CRLF-terminated line at a time from an IMAP socket. The single reader
+ * shared by the greeting/CAPABILITY/LOGIN exchange and by every command, so
+ * end-of-stream and (SEC-03) over-long lines are handled in one place:
+ * EOF is an [ImapAbortError], never an endless run of empty lines.
+ * A read timeout still surfaces as [SocketTimeoutException].
+ */
+internal class ImapLineReader(private val input: BufferedInputStream) {
+    fun readLine(): String {
+        val sb = StringBuilder()
+        try {
+            while (true) {
+                val b = input.read()
+                if (b == -1) {
+                    if (sb.isEmpty()) throw ImapAbortError("server closed the connection")
+                    break
+                }
+                if (b == '\n'.code) break
+                if (b == '\r'.code) continue
+                sb.append(b.toChar())
+            }
+        } catch (exc: SocketTimeoutException) {
+            throw exc
+        } catch (exc: IOException) {
+            throw ImapAbortError("connection dropped while reading: ${exc.message}")
+        }
+        return sb.toString()
     }
 }
