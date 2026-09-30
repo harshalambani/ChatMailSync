@@ -444,6 +444,31 @@ def get_last_successful_run(chat_id: str, db_path: Optional[Path] = None) -> Opt
         ).fetchone()
 
 
+def get_last_synced_ts(chat_id: str, db_path: Optional[Path] = None) -> Optional[str]:
+    """Return the newest message time this chat has ever synced, or None.
+
+    The time-based duplicate rule compares incoming messages against this. It
+    used to read only the LATEST completed run, so one completed run that
+    synced nothing (an interrupted run resumed with nothing left to push) left
+    an empty time and the next sync lost its baseline. This looks past such
+    runs to the latest completed run that actually carries a time, which also
+    repairs a database already in that state. A later empty, failed or pending
+    run can never blank or move it. Twin of Kotlin `getLastSyncedTs`.
+    """
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT last_synced_ts FROM sync_runs
+            WHERE chat_id = ? AND status = 'complete'
+              AND last_synced_ts IS NOT NULL AND last_synced_ts != ''
+            ORDER BY run_id DESC
+            LIMIT 1
+            """,
+            (chat_id,),
+        ).fetchone()
+    return row["last_synced_ts"] if row else None
+
+
 def get_pending_runs(db_path: Optional[Path] = None) -> list[sqlite3.Row]:
     """Return all sync runs that were interrupted before completion."""
     with _connect(db_path) as conn:

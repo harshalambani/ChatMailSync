@@ -43,7 +43,7 @@ from src.state import (
     get_chat,
     get_chat_cutoff,
     get_hashes_for_run,
-    get_last_successful_run,
+    get_last_synced_ts,
     get_pending_runs,
     hash_exists,
     init_db,
@@ -273,8 +273,9 @@ class SyncManager:
             upsert_chat(chat_id, display_name, filepath.name, db_path=self.db_path)
 
         # Determine dedup baseline from the last successful run.
-        last_run = get_last_successful_run(chat_id, self.db_path)
-        last_ts: Optional[str] = last_run["last_synced_ts"] if last_run else None
+        # BUG-04: the latest NON-EMPTY time across completed runs, not merely the
+        # latest completed run's (which an empty resume leaves blank).
+        last_ts: Optional[str] = get_last_synced_ts(chat_id, self.db_path)
 
         # Open a pending sync run (skipped in dry-run; no state written).
         run_id: Optional[int] = None
@@ -657,7 +658,10 @@ class SyncManager:
         if not remaining:
             complete_sync_run(
                 run_id,
-                run.get("last_synced_ts"),
+                # BUG-04 write side: this run may have pushed nothing of its own
+                # (its own time is empty), so carry the chat's previous time
+                # forward instead of closing the run with a blank one.
+                run.get("last_synced_ts") or get_last_synced_ts(chat_id, self.db_path),
                 run.get("last_synced_hash"),
                 len(all_messages),
                 prior_synced,
@@ -888,8 +892,7 @@ class ProgressSyncManager(SyncManager):
                 chat_id, display_name.lower()
             ):
                 continue
-            last_run = get_last_successful_run(chat_id, self.db_path)
-            last_ts = last_run["last_synced_ts"] if last_run else None
+            last_ts = get_last_synced_ts(chat_id, self.db_path)
             try:
                 all_messages, new_messages, n_skipped, n_cutoff = (
                     super()._parse_and_filter(filepath, chat_id, last_ts)

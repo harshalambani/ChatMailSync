@@ -399,6 +399,27 @@ class StateRepository(
             ).firstOrNull()?.let(::rowToSyncRun)
         }
 
+    /**
+     * Twin of `state.py:get_last_synced_ts` (BUG-04): the latest NON-EMPTY `last_synced_ts`
+     * across a chat's completed runs, or null. The duplicate rule used to read only the
+     * latest completed run, so a completed run that synced nothing blanked the baseline;
+     * this looks past it (repairing databases already in that state) and a later empty,
+     * failed or pending run can never blank or move it.
+     */
+    fun getLastSyncedTs(chatId: String): String? =
+        withDb { db ->
+            db.query(
+                """
+                SELECT last_synced_ts FROM sync_runs
+                WHERE chat_id = ? AND status = 'complete'
+                  AND last_synced_ts IS NOT NULL AND last_synced_ts != ''
+                ORDER BY run_id DESC
+                LIMIT 1
+                """.trimIndent(),
+                listOf(chatId),
+            ).firstOrNull()?.get("last_synced_ts") as String?
+        }
+
     fun getPendingRuns(): List<SyncRun> =
         withDb { db -> db.query("SELECT * FROM sync_runs WHERE status = 'pending' ORDER BY run_id").map(::rowToSyncRun) }
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src import state
@@ -654,3 +656,55 @@ def test_deleting_a_chat_takes_its_senders_with_it(db_path):
     state.delete_chat("chat1", db_path)
 
     assert state.list_chat_senders("chat1", db_path) == []
+
+
+# ---------------------------------------------------------------------------
+# BUG-04: the latest non-empty synced time across completed runs
+# ---------------------------------------------------------------------------
+# The SAME scenarios database is read by the Kotlin twin (StateLastSyncedTsTest),
+# so the two implementations are proven to agree on one file.
+
+_SCENARIOS_DB = Path(__file__).parent / "fixtures" / "state_last_synced_ts_scenarios.db"
+
+
+@pytest.fixture
+def scenarios_db(tmp_path):
+    import shutil
+
+    dest = tmp_path / "scenarios.db"
+    shutil.copyfile(_SCENARIOS_DB, dest)
+    return dest
+
+
+def test_the_latest_completed_run_with_a_time_wins(scenarios_db):
+    assert state.get_last_synced_ts("c_normal", scenarios_db) == "2025-03-12T10:00:00"
+
+
+def test_completed_runs_that_synced_nothing_do_not_blank_the_time(scenarios_db):
+    # The gap case: a time, then a completed run with "" and another with NULL.
+    # The old rule read the latest completed run and got nothing.
+    assert state.get_last_successful_run("c_gap", scenarios_db)["last_synced_ts"] is None
+    assert state.get_last_synced_ts("c_gap", scenarios_db) == "2025-03-10T10:00:00"
+
+
+def test_a_later_failed_or_pending_run_never_blanks_or_moves_the_time(scenarios_db):
+    assert state.get_last_synced_ts("c_later_failed", scenarios_db) == "2025-03-10T10:00:00"
+
+
+def test_no_completed_history_returns_none_not_a_crash(scenarios_db):
+    assert state.get_last_synced_ts("c_no_history", scenarios_db) is None  # failed + pending only
+    assert state.get_last_synced_ts("c_blank_only", scenarios_db) is None  # completed, never a time
+    assert state.get_last_synced_ts("no_such_chat", scenarios_db) is None
+
+
+def test_existing_2_2_0_state_data_reads_unchanged(tmp_path):
+    # The Kotlin-written 2.2.0-shaped fixture: the new query agrees with the old
+    # one wherever the old one had an answer, and the failed-only chat has none.
+    import shutil
+
+    fixture = Path(__file__).parent / "fixtures" / "state_fixture_kotlin_written.db"
+    dest = tmp_path / "k.db"
+    shutil.copyfile(fixture, dest)
+    old = state.get_last_successful_run("chat_priya", dest)["last_synced_ts"]
+    assert state.get_last_synced_ts("chat_priya", dest) == old == "2025-03-14T09:41:30"
+    assert state.get_last_synced_ts("chat_rohan", dest) is None
