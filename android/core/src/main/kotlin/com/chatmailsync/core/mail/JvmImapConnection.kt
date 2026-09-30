@@ -9,9 +9,6 @@ import java.net.SocketTimeoutException
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLParameters
-import javax.net.ssl.SSLSocket
 
 /**
  * Production [ImapConnection]: a small hand-written IMAP4 client over
@@ -27,10 +24,9 @@ import javax.net.ssl.SSLSocket
  * certificate chain, so skipping this would silently accept a valid cert for
  * the wrong host.
  *
- * Exercised only by [LiveImapHarness] (a human, by hand, against a real
- * mailbox) and never by the JUnit suite, which talks to a fake
- * [ImapConnection] instead -- see the PR body for why no live-network test
- * runs in CI.
+ * Exercised by [LiveImapHarness] (a human, by hand, against a real mailbox)
+ * and by the JUnit suite over a scripted loopback server (see
+ * [connectVia]); the suite never touches a real network.
  */
 class JvmImapConnection private constructor(
     private val socket: Socket,
@@ -146,23 +142,18 @@ class JvmImapConnection private constructor(
     }
 
     companion object {
-        /** Production opener: TCP connect, then a verified TLS handshake. */
+        /** Production opener: TCP connect, then a verified TLS handshake (certificate chain and host name). */
         internal val TLS_SOCKET_OPENER = SocketOpener { host, port, timeoutMillis ->
-            val context = SSLContext.getInstance("TLSv1.2")
-            context.init(null, null, null)
-            val factory = context.socketFactory
             val plain = Socket()
-            plain.connect(InetSocketAddress(host, port), timeoutMillis)
-            plain.soTimeout = timeoutMillis
-            val tls = factory.createSocket(plain, host, port, true) as SSLSocket
-            val params = SSLParameters()
-            params.endpointIdentificationAlgorithm = "HTTPS"
-            tls.sslParameters = params
-            tls.enabledProtocols = tls.supportedProtocols.filter {
-                it == "TLSv1.2" || it == "TLSv1.3"
-            }.toTypedArray()
-            tls.startHandshake()
-            tls
+            try {
+                plain.connect(InetSocketAddress(host, port), timeoutMillis)
+                plain.soTimeout = timeoutMillis
+            } catch (exc: Exception) {
+                plain.close()
+                throw exc
+            }
+            // SEC-05: handshake and host-name check in one shared place.
+            TlsHostCheck.handshake(plain, host, port)
         }
 
         private val CRLF = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte())
