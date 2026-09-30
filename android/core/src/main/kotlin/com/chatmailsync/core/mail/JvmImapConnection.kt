@@ -43,7 +43,7 @@ class JvmImapConnection private constructor(
 
     private fun nextTag(): String {
         tagCounter += 1
-        return "A%04d".format(tagCounter)
+        return String.format(Locale.ROOT, "A%04d", tagCounter)
     }
 
     private fun writeLine(line: String) {
@@ -146,7 +146,31 @@ class JvmImapConnection private constructor(
         }
     }
 
+    /** Creates the connected socket the IMAP conversation runs over. The only thing tests may replace. */
+    internal fun interface SocketOpener {
+        fun open(host: String, port: Int, timeoutMillis: Int): Socket
+    }
+
     companion object {
+        /** Production opener: TCP connect, then a verified TLS handshake. */
+        internal val TLS_SOCKET_OPENER = SocketOpener { host, port, timeoutMillis ->
+            val context = SSLContext.getInstance("TLSv1.2")
+            context.init(null, null, null)
+            val factory = context.socketFactory
+            val plain = Socket()
+            plain.connect(InetSocketAddress(host, port), timeoutMillis)
+            plain.soTimeout = timeoutMillis
+            val tls = factory.createSocket(plain, host, port, true) as SSLSocket
+            val params = SSLParameters()
+            params.endpointIdentificationAlgorithm = "HTTPS"
+            tls.sslParameters = params
+            tls.enabledProtocols = tls.supportedProtocols.filter {
+                it == "TLSv1.2" || it == "TLSv1.3"
+            }.toTypedArray()
+            tls.startHandshake()
+            tls
+        }
+
         private val CRLF = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte())
         private val INTERNALDATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss Z", Locale.ENGLISH)
@@ -158,23 +182,26 @@ class JvmImapConnection private constructor(
          * a login failure, with [loginFailureHint] folded into the message)
          * rather than a raw exception, exactly like the Python original.
          */
-        fun connect(host: String, port: Int, email: String, password: String, timeoutSeconds: Long): JvmImapConnection {
-            val socket: SSLSocket
+        fun connect(host: String, port: Int, email: String, password: String, timeoutSeconds: Long): JvmImapConnection =
+            connectVia(TLS_SOCKET_OPENER, host, port, email, password, timeoutSeconds)
+
+        /**
+         * Test seam (see the Phase A brief): [opener] may only replace socket
+         * creation. Everything after the socket exists -- greeting,
+         * CAPABILITY, LOGIN, every read, parse, tag and status line -- is the
+         * same production code. Production always passes [TLS_SOCKET_OPENER].
+         */
+        internal fun connectVia(
+            opener: SocketOpener,
+            host: String,
+            port: Int,
+            email: String,
+            password: String,
+            timeoutSeconds: Long,
+        ): JvmImapConnection {
+            val socket: Socket
             try {
-                val context = SSLContext.getInstance("TLSv1.2")
-                context.init(null, null, null)
-                val factory = context.socketFactory
-                val plain = Socket()
-                plain.connect(InetSocketAddress(host, port), (timeoutSeconds * 1000).toInt())
-                plain.soTimeout = (timeoutSeconds * 1000).toInt()
-                socket = factory.createSocket(plain, host, port, true) as SSLSocket
-                val params = SSLParameters()
-                params.endpointIdentificationAlgorithm = "HTTPS"
-                socket.sslParameters = params
-                socket.enabledProtocols = socket.supportedProtocols.filter {
-                    it == "TLSv1.2" || it == "TLSv1.3"
-                }.toTypedArray()
-                socket.startHandshake()
+                socket = opener.open(host, port, (timeoutSeconds * 1000).toInt())
             } catch (exc: Exception) {
                 throw MailTransportError(
                     "Could not connect to $host:$port: ${stripSecret(exc.message ?: exc.toString(), password)}",
@@ -205,7 +232,7 @@ class JvmImapConnection private constructor(
             var tagCounter = 0
             fun nextTag(): String {
                 tagCounter += 1
-                return "L%04d".format(tagCounter)
+                return String.format(Locale.ROOT, "L%04d", tagCounter)
             }
             fun writeLine(line: String) {
                 output.write(line.toByteArray(Charsets.UTF_8))

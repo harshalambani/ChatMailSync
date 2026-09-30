@@ -96,8 +96,8 @@ class MediaExtractor(private val sourcePath: File) : AutoCloseable {
                 zf.close()
                 throw IllegalArgumentException(
                     "ZIP archive '${sourcePath.name}' would decompress to " +
-                        "${"%,d".format(totalUncompressed)} bytes, which exceeds the " +
-                        "${"%,d".format(MAX_ZIP_DECOMPRESSED_BYTES)}-byte safety limit.",
+                        "${String.format(Locale.ROOT, "%,d", totalUncompressed)} bytes, which exceeds the " +
+                        "${String.format(Locale.ROOT, "%,d", MAX_ZIP_DECOMPRESSED_BYTES)}-byte safety limit.",
                 )
             }
             for (entry in entries) {

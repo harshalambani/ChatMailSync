@@ -3,6 +3,7 @@ package com.chatmailsync.core.mail
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
 import java.util.Base64
+import java.util.Locale
 import java.util.UUID
 import kotlin.random.Random
 
@@ -75,7 +76,7 @@ object MimeBuilder {
             ChunkSize.Week -> {
                 val isoYear = firstTs.get(IsoFields.WEEK_BASED_YEAR)
                 val isoWeek = firstTs.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
-                "Week ${"%02d".format(isoWeek)}, $isoYear"
+                "Week ${String.format(Locale.ROOT, "%02d", isoWeek)}, $isoYear"
             }
             is ChunkSize.Count -> firstTs.format(DATE_YMD) + " (+${chunk.size} msgs)"
             ChunkSize.Day -> firstTs.format(DATE_YMD)
