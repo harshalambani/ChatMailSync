@@ -155,9 +155,13 @@ class ImapTransport(
         if (result.status != "OK") throw mapResponse(result.status, result.data, "LIST")
 
         val labels = mutableListOf<Label>()
-        for (raw in result.data) {
+        for ((index, raw) in result.data.withIndex()) {
             if (raw == null) continue
-            val parsed = parseListResponse(ImapListRaw.Line(raw)) ?: continue
+            // PAR-04: a mailbox name sent as a literal arrives as head + literal.
+            val literal = result.literals[index]
+            val parsed = parseListResponse(
+                if (literal != null) ImapListRaw.Literal(raw, literal) else ImapListRaw.Line(raw),
+            ) ?: continue
             if (parsed.delimiter != null) delimiter = parsed.delimiter
             val canonical = mailboxFromWire(parsed.name)
             labels.add(Label(canonical, canonical))

@@ -140,7 +140,7 @@ class JvmImapConnectionStatusTest {
     private data class Step(val op: String, val status: String, val text: String, val untagged: List<String> = emptyList())
 
     private val script = listOf(
-        Step("LIST", "OK", "LIST completed", untagged = listOf("LIST (\\HasNoChildren) \"/\" \"INBOX\"")),
+        Step("LIST", "OK", "LIST completed", untagged = listOf("(\\HasNoChildren) \"/\" \"INBOX\"")),
         Step("LIST", "NO", "[UNAVAILABLE] try later"),
         Step("CREATE", "OK", "Completed"),
         Step("CREATE", "NO", "[ALREADYEXISTS] Mailbox exists"),
@@ -181,7 +181,8 @@ class JvmImapConnectionStatusTest {
                     conn.readExactly(size)
                     conn.readLine()
                 }
-                step.untagged.forEach { conn.send("* $it") }
+                // imaplib hands back LIST data without the "LIST " keyword the wire carries.
+                step.untagged.forEach { conn.send(if (step.op == "LIST") "* LIST $it" else "* $it") }
                 conn.send("$tag ${step.status} ${step.text}")
             }
         }

@@ -3,7 +3,12 @@ package com.chatmailsync.core.mail
 import java.time.OffsetDateTime
 
 /** One untagged/tagged IMAP response: `status` is "OK", "NO", or "BAD"; `data` is the response's data lines. */
-data class ImapResult(val status: String, val data: List<String?>)
+data class ImapResult(
+    val status: String,
+    val data: List<String?>,
+    /** Literal payloads (RFC 3501 4.3) by index into [data]; `data[i]` is then the line head ending in `{n}`. Empty unless a server sent one. */
+    val literals: Map<Int, String> = emptyMap(),
+)
 
 /**
  * The slice of `imaplib.IMAP4`'s surface `ImapTransport` actually calls

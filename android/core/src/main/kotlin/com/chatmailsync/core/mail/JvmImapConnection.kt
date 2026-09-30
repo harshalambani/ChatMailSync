@@ -57,10 +57,16 @@ class JvmImapConnection private constructor(
     private fun readLine(): String = reader.readLine()
 
     /** Runs one tagged command, collecting untagged response lines, and returns the final status. */
-    private fun runCommand(commandLine: String, literal: ByteArray? = null): ImapResult {
+    private fun runCommand(
+        commandLine: String,
+        literal: ByteArray? = null,
+        untaggedKeyword: String? = null,
+    ): ImapResult {
         val tag = nextTag()
         writeLine("$tag $commandLine")
         val data = mutableListOf<String?>()
+        val literals = mutableMapOf<Int, String>()
+        var literalBytes = 0L
         var lines = 0
         while (true) {
             val line = readLine()
@@ -92,12 +98,41 @@ class JvmImapConnection private constructor(
                 if (status == "BAD") throw ImapCommandError(text.ifEmpty { rest })
                 if (status == "NO") {
                     data.add(text.ifEmpty { rest })
-                    return ImapResult(status, data)
+                    return ImapResult(status, data, literals)
                 }
-                return ImapResult(status, data)
+                return ImapResult(status, data, literals)
             }
             if (line.startsWith("*")) {
-                data.add(line.removePrefix("*").trim())
+                var head = line.removePrefix("*").trim()
+                // imaplib hands back the data WITHOUT the response keyword
+                // ("(\HasNoChildren) ..." for a "* LIST ..." line), which is
+                // the shape parseListResponse expects.
+                if (untaggedKeyword != null && head.startsWith("$untaggedKeyword ", ignoreCase = true)) {
+                    head = head.substring(untaggedKeyword.length + 1).trimStart()
+                }
+                val literalSize = LITERAL_TAIL.find(head)?.groupValues?.get(1)
+                if (literalSize == null) {
+                    data.add(head)
+                    continue
+                }
+                // PAR-04: the rest of this response is an IMAP literal (RFC 3501
+                // 4.3), e.g. a mailbox name with unusual characters. Read it
+                // through the same reader, so the SEC-03 caps apply to it too.
+                val size = literalSize.toIntOrNull()
+                if (size == null || size > MAX_LINE_BYTES) {
+                    throw ImapAbortError("server literal longer than $MAX_LINE_BYTES bytes")
+                }
+                literalBytes += size
+                if (literalBytes > MAX_LITERAL_BYTES_PER_COMMAND) {
+                    throw ImapAbortError("server sent more than $MAX_LITERAL_BYTES_PER_COMMAND literal bytes for one command")
+                }
+                val literalText = String(reader.readLiteral(size), Charsets.UTF_8)
+                literals[data.size] = literalText
+                data.add(head)
+                // What follows the literal on the same response line (usually nothing).
+                val tail = readLine()
+                if (++lines > MAX_UNTAGGED_LINES) throw tooManyLines()
+                if (tail.isNotBlank()) data.add(tail.trim())
                 continue
             }
             // Anything else (blank line, garbage) is ignored rather than
@@ -105,7 +140,7 @@ class JvmImapConnection private constructor(
         }
     }
 
-    override fun list(reference: String, pattern: String): ImapResult = runCommand("LIST $reference $pattern")
+    override fun list(reference: String, pattern: String): ImapResult = runCommand("LIST $reference $pattern", untaggedKeyword = "LIST")
 
     override fun create(mailboxWireArg: String): ImapResult = runCommand("CREATE $mailboxWireArg")
 
@@ -156,6 +191,7 @@ class JvmImapConnection private constructor(
             TlsHostCheck.handshake(plain, host, port)
         }
 
+        private val LITERAL_TAIL = Regex("""\{(\d+)\}$""")
         private val CRLF = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte())
         private val INTERNALDATE_FORMAT: DateTimeFormatter =
             DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss Z", Locale.ENGLISH)
@@ -316,33 +352,62 @@ class JvmImapConnection private constructor(
  */
 internal class ImapLineReader(private val input: BufferedInputStream) {
     fun readLine(): String {
-        val sb = StringBuilder()
-        var bytes = 0
+        val buf = java.io.ByteArrayOutputStream()
         try {
             while (true) {
                 val b = input.read()
                 if (b == -1) {
-                    if (sb.isEmpty()) throw ImapAbortError("server closed the connection")
+                    if (buf.size() == 0) throw ImapAbortError("server closed the connection")
                     break
                 }
                 if (b == '\n'.code) break
-                bytes++
                 // SEC-03: imaplib's _MAXLINE parity; a line with no end must not eat the heap.
-                if (bytes > MAX_LINE_BYTES) throw ImapAbortError("server line longer than $MAX_LINE_BYTES bytes")
+                if (buf.size() >= MAX_LINE_BYTES) throw ImapAbortError("server line longer than $MAX_LINE_BYTES bytes")
                 if (b == '\r'.code) continue
-                sb.append(b.toChar())
+                buf.write(b)
             }
         } catch (exc: SocketTimeoutException) {
             throw exc
         } catch (exc: IOException) {
             throw ImapAbortError("connection dropped while reading: ${exc.message}")
         }
-        return sb.toString()
+        // PAR-04: the bytes are UTF-8 (Python decodes utf-8 with errors="replace"), not one char per byte.
+        return String(buf.toByteArray(), Charsets.UTF_8)
+    }
+
+    /**
+     * Reads exactly [size] bytes of an IMAP literal. The caller has already
+     * checked [size] against [MAX_LINE_BYTES]; the bytes are read in chunks
+     * and kept only as they really arrive, so a server that lies about the
+     * length cannot make this allocate more than it actually sends. EOF inside
+     * the literal is an [ImapAbortError].
+     */
+    fun readLiteral(size: Int): ByteArray {
+        require(size in 0..MAX_LINE_BYTES) { "literal size out of range: $size" }
+        val out = java.io.ByteArrayOutputStream(minOf(size, 8192))
+        val chunk = ByteArray(minOf(maxOf(size, 1), 8192))
+        var left = size
+        try {
+            while (left > 0) {
+                val n = input.read(chunk, 0, minOf(left, chunk.size))
+                if (n == -1) throw ImapAbortError("server closed the connection inside a literal ($left of $size bytes missing)")
+                out.write(chunk, 0, n)
+                left -= n
+            }
+        } catch (exc: SocketTimeoutException) {
+            throw exc
+        } catch (exc: IOException) {
+            throw ImapAbortError("connection dropped inside a literal: ${exc.message}")
+        }
+        return out.toByteArray()
     }
 }
 
 /** Longest single response line accepted, in bytes (imaplib `_MAXLINE` parity). */
 internal const val MAX_LINE_BYTES = 1_000_000
+
+/** Most literal bytes accepted across one command's responses (each literal is also capped at [MAX_LINE_BYTES]). */
+internal const val MAX_LITERAL_BYTES_PER_COMMAND = 16_000_000L
 
 /** Most untagged response lines accepted for one command (or one handshake step). */
 internal const val MAX_UNTAGGED_LINES = 100_000

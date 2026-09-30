@@ -82,6 +82,12 @@ class ScriptedImapServer(
             output.flush()
         }
 
+        /** Sends exactly these bytes, then flushes (no line break added). */
+        fun sendBytes(bytes: ByteArray) {
+            output.write(bytes)
+            output.flush()
+        }
+
         /** Sends [size] bytes of [fill] with NO line break, then flushes. */
         fun sendRaw(size: Int, fill: Char = 'x') {
             val chunk = ByteArray(8192) { fill.code.toByte() }
