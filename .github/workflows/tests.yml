@@ -81,6 +81,18 @@ jobs:
       - name: Run tests
         run: python -m pytest tests -q -rs --strict-markers
 
+      # The Kotlin :core tests compare against golden files produced by the
+      # real Python code. Nothing checked that the files were still what that
+      # code produces, so a Python change could leave them quietly stale.
+      # This regenerates every golden into a temp dir and fails on any
+      # difference (SQLite files by content, everything else byte for byte).
+      - name: Golden fixtures are current
+        env:
+          PYTHONPATH: .
+        run: |
+          python tools/generate_kotlin_core_golden_fixtures.py --out "$RUNNER_TEMP/golden"
+          python tools/check_golden_fixtures.py "$RUNNER_TEMP/golden" android/core/src/test/resources/golden
+
   # The Kotlin unit test suite (android/app/src/test/...). It exists as a
   # separate job rather than a step above because it needs the whole Android
   # toolchain -- JDK, SDK platform, and a host Python for Chaquopy -- and
