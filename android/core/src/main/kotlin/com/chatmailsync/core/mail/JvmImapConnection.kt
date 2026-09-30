@@ -103,7 +103,16 @@ class JvmImapConnection private constructor(
                 if (status != "OK" && status != "NO" && status != "BAD") {
                     throw ImapCommandError("unexpected tagged response: $line")
                 }
-                if (status != "OK") throw ImapCommandError(text.ifEmpty { rest })
+                // Like imaplib: BAD is the only status that raises. A NO is
+                // returned as data -- the untagged lines plus the tagged text
+                // (where servers put e.g. "[ALREADYEXISTS] Mailbox exists") --
+                // so ImapTransport can act on it (labelsCreate treats
+                // already-exists as success; a real NO still fails there).
+                if (status == "BAD") throw ImapCommandError(text.ifEmpty { rest })
+                if (status == "NO") {
+                    data.add(text.ifEmpty { rest })
+                    return ImapResult(status, data)
+                }
                 return ImapResult(status, data)
             }
             if (line.startsWith("*")) {
