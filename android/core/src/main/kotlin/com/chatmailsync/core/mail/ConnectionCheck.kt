@@ -5,9 +5,9 @@ import java.net.Socket
 import java.net.UnknownHostException
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLParameters
-import javax.net.ssl.SSLSocket
 
 /**
  * Kotlin port of `check_connection` and its helpers (`src/mail_client.py`
@@ -89,21 +89,21 @@ private fun probeTcp(host: String, port: Int): Socket {
     return socket
 }
 
-/** Owns [socket]'s lifetime from here on: always closes it, success or failure. */
-private fun probeTls(socket: Socket, host: String) {
+/**
+ * Owns [socket]'s lifetime from here on: always closes it, success or failure.
+ * Uses the same handshake and host-name check as the real connection (SEC-05).
+ * [context], [endpointAlgorithm] and [verifier] exist for tests.
+ */
+internal fun probeTls(
+    socket: Socket,
+    host: String,
+    context: SSLContext = TlsHostCheck.defaultContext(),
+    endpointAlgorithm: String? = "HTTPS",
+    verifier: HostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier(),
+) {
     try {
-        val context = SSLContext.getInstance("TLSv1.2")
-        context.init(null, null, null)
-        val wrapped = context.socketFactory.createSocket(socket, host, socket.port, true) as SSLSocket
-        val params = SSLParameters()
-        params.endpointIdentificationAlgorithm = "HTTPS"
-        wrapped.sslParameters = params
-        wrapped.enabledProtocols = wrapped.supportedProtocols.filter { it == "TLSv1.2" || it == "TLSv1.3" }.toTypedArray()
-        try {
-            wrapped.startHandshake()
-        } finally {
-            wrapped.close()
-        }
+        val wrapped = TlsHostCheck.handshake(socket, host, socket.port, context, endpointAlgorithm, verifier)
+        wrapped.close()
     } catch (exc: Exception) {
         try {
             socket.close()

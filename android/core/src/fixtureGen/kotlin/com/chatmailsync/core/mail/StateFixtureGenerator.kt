@@ -22,10 +22,9 @@ import java.sql.DriverManager
  * `generate_state_db_golden()` needed on the Python side, where the
  * equivalent non-determinism was `state._now()`).
  *
- * Writes rows directly through [StateDb.exec] rather than through
- * [StateRepository]'s own write methods (`upsertChat`, `startSyncRun`, ...)
- * because those call [StateRepository.now], which stamps real wall-clock
- * time -- exactly the non-determinism this generator exists to avoid.
+ * Writes every row through [StateRepository]'s own write methods (`upsertChat`,
+ * `startSyncRun`, ...) with an injected frozen clock (ST-04), so the file is both
+ * deterministic and a proof of the real Kotlin write path.
  */
 fun main(args: Array<String>) {
     require(args.size == 1) { "usage: StateFixtureGenerator <output-db-path>" }
@@ -46,94 +45,49 @@ fun main(args: Array<String>) {
     // exact same schema (and, incidentally, exercises the exact code path
     // an eventual Phase 4 Android caller would use to first open a fresh
     // database) without needing DDL to be public.
-    StateRepository { SqliteJdbcStateDb(outFile.path) }.initDb()
+    // ST-04: every row goes through the REAL repository write methods, with a frozen
+    // clock, so the file is deterministic AND proves the Kotlin write path (binding,
+    // upserts, run lifecycle) produces a database Python reads -- raw INSERTs here
+    // would only have proved the schema.
+    val repo = StateRepository(clock = { frozenNow }) { SqliteJdbcStateDb(outFile.path) }
+    repo.initDb()
 
-    val db: StateDb = SqliteJdbcStateDb(outFile.path)
-    try {
-        db.beginTransaction()
+    repo.upsertChat(
+        "chat_priya", "Priya Nair", "Priya Nair.txt",
+        gmailThreadId = "thread-kotlin-1",
+        gmailLabelId = "WhatsApp/Priya Nair",
+        anchorMessageId = "<kotlin-golden-anchor@local>",
+    )
+    repo.upsertChat("chat_rohan", "Rohan Mehta", "Rohan Mehta.txt")
 
-        db.exec(
-            """
-            INSERT INTO chats (chat_id, display_name, gmail_thread_id, gmail_label_id,
-                               anchor_message_id, source_filename, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            listOf(
-                "chat_priya", "Priya Nair", "thread-kotlin-1", "WhatsApp/Priya Nair",
-                "<kotlin-golden-anchor@local>", "Priya Nair.txt", frozenNow, frozenNow,
-            ),
-        )
-        db.exec(
-            """
-            INSERT INTO chats (chat_id, display_name, gmail_thread_id, gmail_label_id,
-                               anchor_message_id, source_filename, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            listOf("chat_rohan", "Rohan Mehta", null, null, null, "Rohan Mehta.txt", frozenNow, frozenNow),
-        )
+    val h1 = StateRepository.computeMessageHash(
+        "chat_priya", "2025-03-14T09:41:00", "Priya Nair", "hello from the kotlin-written fixture",
+    )
+    val h2 = StateRepository.computeMessageHash(
+        "chat_priya", "2025-03-14T09:41:30", "Meera Iyer", "line one\nline two",
+    )
 
-        val h1 = StateRepository.computeMessageHash(
-            "chat_priya", "2025-03-14T09:41:00", "Priya Nair", "hello from the kotlin-written fixture",
-        )
-        val h2 = StateRepository.computeMessageHash(
-            "chat_priya", "2025-03-14T09:41:30", "Meera Iyer", "line one\nline two",
-        )
+    val run1 = repo.startSyncRun("chat_priya")
+    repo.insertMessageHashes(
+        listOf(
+            StateRepository.HashEntry(h1, "chat_priya", "2025-03-14T09:41:00", run1),
+            StateRepository.HashEntry(h2, "chat_priya", "2025-03-14T09:41:30", run1),
+        ),
+    )
+    repo.completeSyncRun(run1, "2025-03-14T09:41:30", h2, messagesParsed = 2, messagesSynced = 2, messagesSkipped = 0)
 
-        db.exec(
-            """
-            INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash,
-                                   messages_parsed, messages_synced, messages_skipped,
-                                   messages_cutoff, started_at, completed_at)
-            VALUES (?, 'complete', 'manual', ?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            listOf("chat_priya", "2025-03-14T09:41:30", h2, 2, 2, 0, 0, frozenNow, frozenNow),
-        )
-        val run1 = db.lastInsertRowId()
-        db.exec(
-            "INSERT INTO message_hashes (hash, chat_id, message_ts, run_id) VALUES (?, ?, ?, ?)",
-            listOf(h1, "chat_priya", "2025-03-14T09:41:00", run1),
-        )
-        db.exec(
-            "INSERT INTO message_hashes (hash, chat_id, message_ts, run_id) VALUES (?, ?, ?, ?)",
-            listOf(h2, "chat_priya", "2025-03-14T09:41:30", run1),
-        )
+    val run2 = repo.startSyncRun("chat_rohan", trigger = "watched_folder")
+    repo.failSyncRun(run2, "kotlin-written fixture: simulated network error")
 
-        db.exec(
-            """
-            INSERT INTO sync_runs (chat_id, status, trigger, error_message, started_at, completed_at)
-            VALUES (?, 'failed', 'watched_folder', ?, ?, ?)
-            """.trimIndent(),
-            listOf("chat_rohan", "kotlin-written fixture: simulated network error", frozenNow, frozenNow),
-        )
+    repo.setChatCutoff("chat_priya", "2025-01-01")
 
-        db.exec(
-            "INSERT INTO chat_cutoffs (chat_id, cutoff_ts, set_at) VALUES (?, ?, ?)",
-            listOf("chat_priya", "2025-01-01T00:00:00", frozenNow),
-        )
+    repo.recordChatSenders(
+        "chat_priya",
+        linkedMapOf("Priya Nair" to 1, "Meera Iyer" to 1, "Rohan Mehta" to 0),
+        seenTs = "2025-03-14T09:41:30",
+    )
 
-        db.exec(
-            "INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count) VALUES (?, ?, ?, ?, ?)",
-            listOf("chat_priya", "Priya Nair", "2025-03-14T09:41:30", "2025-03-14T09:41:30", 1),
-        )
-        db.exec(
-            "INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count) VALUES (?, ?, ?, ?, ?)",
-            listOf("chat_priya", "Meera Iyer", "2025-03-14T09:41:30", "2025-03-14T09:41:30", 1),
-        )
-        db.exec(
-            "INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count) VALUES (?, ?, ?, ?, ?)",
-            listOf("chat_priya", "Rohan Mehta", "2025-03-14T09:41:30", "2025-03-14T09:41:30", 0),
-        )
-
-        db.exec(
-            "INSERT INTO app_state (key, value) VALUES (?, ?)",
-            listOf(StateRepository.SELF_SENDER_LEARNED, "Priya Nair"),
-        )
-
-        db.setUserVersion(StateRepository.SCHEMA_VERSION)
-        db.commit()
-    } finally {
-        db.close()
-    }
+    repo.setAppState(StateRepository.SELF_SENDER_LEARNED, "Priya Nair")
 
     // Checkpoint WAL into the main file and drop the -wal/-shm sidecars, the
     // same as generate_state_db_golden() does on the Python side -- so

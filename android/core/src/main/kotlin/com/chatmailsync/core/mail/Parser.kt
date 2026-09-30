@@ -341,8 +341,8 @@ fun readChatText(filepath: File): String {
             if (totalUncompressed > MAX_ZIP_DECOMPRESSED_BYTES) {
                 throw ChatTextReadException(
                     "ZIP archive '${filepath.name}' would decompress to " +
-                        "${"%,d".format(totalUncompressed)} bytes, which exceeds the " +
-                        "${"%,d".format(MAX_ZIP_DECOMPRESSED_BYTES)}-byte safety limit.",
+                        "${String.format(Locale.ROOT, "%,d", totalUncompressed)} bytes, which exceeds the " +
+                        "${String.format(Locale.ROOT, "%,d", MAX_ZIP_DECOMPRESSED_BYTES)}-byte safety limit.",
                 )
             }
             // Prefer '_chat.txt'; fall back to the first .txt entry found.

@@ -55,6 +55,10 @@ fun main() {
     console.printf("Yahoo only -- never Gmail (see the project's standing test-account rule).%n%n")
 
     val host = console.readLine("IMAP host [imap.mail.yahoo.com]: ")?.trim().orEmpty().ifEmpty { "imap.mail.yahoo.com" }
+    if (host.all { it.isDigit() }) {
+        console.printf("Expected a host name here (for example imap.mail.yahoo.com), but got a number. The port is asked next.%n")
+        return
+    }
     if (host != "imap.mail.yahoo.com") {
         console.printf("Refusing: this harness only talks to imap.mail.yahoo.com (never Gmail). Got: %s%n", host)
         return

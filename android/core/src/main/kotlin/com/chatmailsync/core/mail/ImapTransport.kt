@@ -65,7 +65,8 @@ class ImapTransport(
      */
     val maxMessageBytes: Long
         get() {
-            appendLimit()?.let { return it }
+            // `if advertised:` -- a zero limit is falsy in Python and falls through (PAR-06).
+            appendLimit()?.takeIf { it > 0 }?.let { return it }
             val h = host.lowercase()
             for ((key, preset) in IMAP_PROVIDERS) {
                 if (preset.host != null && preset.host.lowercase() == h) {
@@ -81,7 +82,8 @@ class ImapTransport(
         for (cap in c.capabilities) {
             if (!cap.uppercase().startsWith("APPENDLIMIT")) continue
             val value = cap.substringAfter("=", "").trim()
-            if (value.isNotEmpty() && value.all { it.isDigit() }) return value.toLong()
+            // Python's int() has no upper bound; a value beyond Long clamps instead of overflowing (PAR-06).
+            if (value.isNotEmpty() && value.all { it.isDigit() }) return value.toLongOrNull() ?: Long.MAX_VALUE
         }
         return null
     }
@@ -122,7 +124,10 @@ class ImapTransport(
         return name.replace(d, "/")
     }
 
-    private fun mailboxToWire(name: String): String = ImapUtf7.quoteMailbox(ImapUtf7.encode(toWire(name)))
+    private fun mailboxToWire(name: String): String {
+        ImapUtf7.requireNoControl(name) // SEC-02: before encoding, which would otherwise hide a control character
+        return ImapUtf7.quoteMailbox(ImapUtf7.encode(toWire(name)))
+    }
     private fun mailboxFromWire(wireName: String): String = fromWire(ImapUtf7.decode(wireName))
 
     private fun mapException(exc: Throwable, context: String): MailTransportError {
@@ -137,7 +142,7 @@ class ImapTransport(
     }
 
     private fun mapResponse(status: String, data: List<String?>, context: String): MailTransportError {
-        val text = joinImapResponse(data)
+        val text = stripSecret(joinImapResponse(data), password)
         return transportError("$context failed ($status): $text", statusForImapText(text))
     }
 
@@ -152,9 +157,13 @@ class ImapTransport(
         if (result.status != "OK") throw mapResponse(result.status, result.data, "LIST")
 
         val labels = mutableListOf<Label>()
-        for (raw in result.data) {
+        for ((index, raw) in result.data.withIndex()) {
             if (raw == null) continue
-            val parsed = parseListResponse(ImapListRaw.Line(raw)) ?: continue
+            // PAR-04: a mailbox name sent as a literal arrives as head + literal.
+            val literal = result.literals[index]
+            val parsed = parseListResponse(
+                if (literal != null) ImapListRaw.Literal(raw, literal) else ImapListRaw.Line(raw),
+            ) ?: continue
             if (parsed.delimiter != null) delimiter = parsed.delimiter
             val canonical = mailboxFromWire(parsed.name)
             labels.add(Label(canonical, canonical))
@@ -193,7 +202,7 @@ class ImapTransport(
 
         val headers = MessageHeaders.parse(crlfBytes)
         val internalDate = internaldateFromHeaders(headers)
-        val messageId = headers["Message-ID"] ?: MimeBuilder.newMessageId()
+        val messageId = headers["Message-ID"]?.takeIf { it.isNotEmpty() } ?: MimeBuilder.newMessageId()
 
         val flags = if (setSeen) "(\\Seen)" else null
 
@@ -205,7 +214,7 @@ class ImapTransport(
         if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
 
         val uid = extractAppendUid(result.data)
-        return InsertResult(id = uid ?: messageId, threadId = threadId ?: messageId)
+        return InsertResult(id = uid ?: messageId, threadId = threadId?.takeIf { it.isNotEmpty() } ?: messageId)
     }
 }
 

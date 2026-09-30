@@ -788,3 +788,54 @@ def test_a_resync_with_nothing_new_still_records_sender_names(tmp_root, db_path)
     rows = list_chat_senders(chat_id, db_path)
     assert {r["sender"] for r in rows} == {"Arjun Mehta", "Kavya Rao"}
     assert all(r["msg_count"] == 0 for r in rows)
+
+
+def test_a_resume_with_nothing_left_keeps_the_previous_synced_time(tmp_root, db_path):
+    """BUG-04 write side. An interrupted run whose messages all landed is closed by
+    recovery with nothing left to push. It has no time of its own; it used to be
+    closed with a BLANK one, which wiped the baseline the duplicate rule reads.
+    """
+    from src.state import get_last_synced_ts, get_last_successful_run, list_chats, start_sync_run
+
+    inbox = tmp_root / "inbox"
+    _write_chat_file(inbox)
+    assert _make_manager(tmp_root, db_path, FakeTransport()).run().messages_synced == 5
+    chat_id = list_chats(db_path)[0]["chat_id"]
+    before = get_last_synced_ts(chat_id, db_path)
+    assert before == "2025-03-24T09:00:00"
+
+    # An interrupted run for the same chat, then the export is still in the inbox.
+    pending_id = start_sync_run(chat_id, trigger="test", db_path=db_path)
+    _write_chat_file(inbox)
+    transport = FakeTransport()
+    stats = _make_manager(tmp_root, db_path, transport).run()
+
+    assert stats.chats_recovered == 1
+    assert transport.insert_calls == 0  # nothing is re-sent
+    from src.state import get_run
+
+    closed = get_run(pending_id, db_path)
+    assert closed["status"] == "complete"
+    assert closed["last_synced_ts"] == before  # carried forward, NOT blank
+    assert get_last_synced_ts(chat_id, db_path) == before
+    assert get_last_successful_run(chat_id, db_path)["last_synced_ts"] == before
+
+
+def test_a_chat_already_in_the_gap_is_repaired_on_the_read_side(tmp_root, db_path):
+    """Phones already holding a completed-but-blank run: the next sync must still use
+    the older time as its baseline and re-send nothing."""
+    from src.state import complete_sync_run, get_last_synced_ts, list_chats, start_sync_run
+
+    inbox = tmp_root / "inbox"
+    _write_chat_file(inbox)
+    assert _make_manager(tmp_root, db_path, FakeTransport()).run().messages_synced == 5
+    chat_id = list_chats(db_path)[0]["chat_id"]
+    blank = start_sync_run(chat_id, trigger="test", db_path=db_path)
+    complete_sync_run(blank, None, None, 0, 0, 0, db_path=db_path)  # the 2.2.0 gap
+    assert get_last_synced_ts(chat_id, db_path) == "2025-03-24T09:00:00"
+
+    _write_chat_file(inbox)
+    transport = FakeTransport()
+    stats = _make_manager(tmp_root, db_path, transport).run()
+    assert stats.messages_synced == 0
+    assert transport.insert_calls == 0

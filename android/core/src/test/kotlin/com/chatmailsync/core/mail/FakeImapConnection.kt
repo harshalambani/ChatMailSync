@@ -36,9 +36,17 @@ class FakeImapConnection(override val capabilities: List<String> = emptyList()) 
     /** Set to make the *next* call to that method throw instead of returning its canned response. Key: "list"/"create"/"subscribe"/"append". */
     val raiseOn = mutableMapOf<String, Throwable>()
 
-    private fun <T> respond(name: String, response: T): T {
+    /**
+     * Behaves like the real [JvmImapConnection] (and imaplib): OK and NO come
+     * back as data, only BAD throws [ImapCommandError]. A double that returned
+     * BAD as data, or threw on NO, would let tests pass over behaviour the real
+     * class does not have (BUG-03). JvmImapConnectionContractTest runs one
+     * script against this class and the real one so they cannot drift.
+     */
+    private fun respond(name: String, response: ImapResult): ImapResult {
         val exc = raiseOn.remove(name)
         if (exc != null) throw exc
+        if (response.status == "BAD") throw ImapCommandError(joinImapResponse(response.data))
         return response
     }
 

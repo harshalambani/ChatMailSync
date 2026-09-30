@@ -73,6 +73,43 @@ class SourceHygieneTest {
         assertTrue(clean.none { isGuardedInvisibleOrControlChar(it) })
     }
 
+    // PAR-01 guard: a bare `"%d".format(n)` or `String.format("%d", n)` uses
+    // the PHONE's language for digits (Marathi, Nepali, Bengali, Arabic and
+    // Persian print native-script digits), which corrupts IMAP tags and
+    // subjects. Every %d-family format in :core main must name a locale.
+    @Test
+    fun noDecimalFormatInMainLacksAnExplicitLocale() {
+        val mainDir = File(resolveCoreSrcDir(), "main")
+        val violations = mutableListOf<String>()
+        mainDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .sortedBy { it.path }
+            .forEach { file ->
+                file.readLines(Charsets.UTF_8).forEachIndexed { idx, line ->
+                    if (formatWithoutLocale(line)) {
+                        violations.add("${file.relativeTo(mainDir).path}:${idx + 1}: ${line.trim()}")
+                    }
+                }
+            }
+        if (violations.isNotEmpty()) {
+            fail(
+                "Found ${violations.size} %d-style format call(s) with no explicit Locale " +
+                    "(use String.format(Locale.ROOT, ...) or padStart):\n" + violations.joinToString("\n"),
+            )
+        }
+    }
+
+    // NEGATIVE: the detector really flags the two shapes, and leaves a Locale.ROOT call alone.
+    @Test
+    fun formatDetectorFlagsUnlocalisedDecimalFormatsOnly() {
+        assertTrue(formatWithoutLocale("return \"A%04d\".format(n)"))
+        assertTrue(formatWithoutLocale("val s = String.format(\"%02d\", n)"))
+        assertTrue(formatWithoutLocale("x = \"" + "\$" + "{\"%,d\".format(n)} bytes\""))
+        assertTrue(!formatWithoutLocale("val s = String.format(Locale.ROOT, \"%02d\", n)"))
+        assertTrue(!formatWithoutLocale("val s = String.format(Locale.ROOT, \"%,d\", n)"))
+        assertTrue(!formatWithoutLocale("val hex = \"%02x\".format(b)"))
+    }
+
     /**
      * Finds `:core`'s `src` directory robustly, without hardcoding an
      * absolute path. Gradle's `Test` task defaults `workingDir` to the
@@ -128,3 +165,10 @@ private fun isGuardedInvisibleOrControlChar(ch: Char): Boolean {
         code == 0x00A0 ||
         code in 0x2060..0x2064
 }
+
+private val UNLOCALISED_STRING_FORMAT = Regex("\"[^\"\\n]*%[-#+ 0,(]*\\d*d[^\"\\n]*\"\\.format\\(")
+private val UNLOCALISED_STATIC_FORMAT = Regex("String\\.format\\(\\s*\"[^\"\\n]*%[-#+ 0,(]*\\d*d")
+
+/** True when [line] formats with a %d-style conversion and no explicit Locale. */
+private fun formatWithoutLocale(line: String): Boolean =
+    UNLOCALISED_STRING_FORMAT.containsMatchIn(line) || UNLOCALISED_STATIC_FORMAT.containsMatchIn(line)

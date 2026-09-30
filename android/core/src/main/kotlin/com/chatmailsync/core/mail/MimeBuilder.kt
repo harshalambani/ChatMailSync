@@ -3,6 +3,7 @@ package com.chatmailsync.core.mail
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
 import java.util.Base64
+import java.util.Locale
 import java.util.UUID
 import kotlin.random.Random
 
@@ -20,11 +21,10 @@ import kotlin.random.Random
  * `email.mime` package + `Generator` produce for this specific shape of
  * message (a two-part multipart/mixed: one text/plain part, one
  * application/json part, both base64), rather than depending on a MIME
- * library. Known, deliberate gaps vs. the general email package (none of
- * which this app's own fixed message shape ever exercises): no RFC 2822
- * header line-folding for values over ~78 chars, and RFC 2047 encoding is
- * implemented only for the single-string-append case every header here
- * uses (see Rfc2047.kt) -- not the general multi-chunk case.
+ * library. Every top-level header is written by [Compat32Headers.fold], the
+ * port of Python's compat32 header folding and RFC 2047 encoding, so long or
+ * non-ASCII names produce the same bytes as Python (goldens in
+ * `mime_cases_golden.json`).
  */
 object MimeBuilder {
 
@@ -64,7 +64,7 @@ object MimeBuilder {
 
     private fun splitLines(s: String): List<String> {
         if (s.isEmpty()) return emptyList()
-        return s.split(Regex("\r\n|\r|\n"))
+        return pythonSplitlines(s)
     }
 
     /** Mirrors `_chunk_subject`. */
@@ -75,7 +75,7 @@ object MimeBuilder {
             ChunkSize.Week -> {
                 val isoYear = firstTs.get(IsoFields.WEEK_BASED_YEAR)
                 val isoWeek = firstTs.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
-                "Week ${"%02d".format(isoWeek)}, $isoYear"
+                "Week ${String.format(Locale.ROOT, "%02d", isoWeek)}, $isoYear"
             }
             is ChunkSize.Count -> firstTs.format(DATE_YMD) + " (+${chunk.size} msgs)"
             ChunkSize.Day -> firstTs.format(DATE_YMD)
@@ -84,8 +84,8 @@ object MimeBuilder {
         return if (suffix.isNotEmpty()) "$base  ($suffix)" else base
     }
 
-    private val PHONE_STRIP = Regex("[\\s\\-()]")
-    private val PHONE_MATCH = Regex("^\\+?\\d{7,15}$")
+    private val PHONE_STRIP = Regex("(?U)[\\s\\x1c-\\x1f\\-()]")
+    private val PHONE_MATCH = Regex("(?U)^\\+?\\d{7,15}$")
 
     /** Mirrors `_format_sender`. */
     fun formatSender(displayName: String): String {
@@ -101,15 +101,15 @@ object MimeBuilder {
     private val ADDR_ESCAPES = Regex("[\\\\\"]")
 
     /** Mirrors `email.utils.formataddr((name, address))` for the ASCII-name case this app's names take. */
-    fun formatAddr(name: String, address: String): String {
+    fun formatAddr(rawName: String, address: String): String {
+        // SEC-01: a CR, LF or NUL in a chat name must not reach the header.
+        val name = Compat32Headers.lineSafe(rawName)
         if (name.isEmpty()) return address
         if (!name.all { it.code < 128 }) {
             // Non-ASCII display name: Python charset-encodes the name only
-            // (email.charset.Charset.header_encode), not the whole "name
-            // <addr>" string. Approximated here with the same RFC 2047
-            // machinery used for headers -- see Rfc2047.kt.
-            val encodedName = Rfc2047.encodeHeaderValue(name)
-            return "$encodedName <$address>"
+            // (Charset('utf-8').header_encode), as ONE encoded word, not the
+            // whole "name <addr>" string.
+            return "${Rfc2047.encodeWord(name)} <$address>"
         }
         val quotes = if (ADDR_SPECIALS.containsMatchIn(name)) "\"" else ""
         val escaped = ADDR_ESCAPES.replace(name) { "\\" + it.value }
@@ -139,7 +139,7 @@ object MimeBuilder {
         val headers = LinkedHashMap<String, String>()
         headers["Content-Type"] = "multipart/mixed; boundary=\"$boundary\""
         headers["MIME-Version"] = "1.0"
-        headers["Subject"] = Rfc2047.encodeHeaderValue(chunkSubject(displayName, chunk, chunkSize))
+        headers["Subject"] = chunkSubject(displayName, chunk, chunkSize)
         headers["From"] = formatSender(displayName)
         headers["To"] = "me"
         headers["Message-ID"] = messageId
@@ -150,12 +150,12 @@ object MimeBuilder {
         headers[HEADER_INDEX] = INDEX_FILENAME
         if (!inReplyTo.isNullOrEmpty()) {
             headers["In-Reply-To"] = inReplyTo
-            headers["References"] = references ?: inReplyTo
+            headers["References"] = references?.takeIf { it.isNotEmpty() } ?: inReplyTo
         }
 
         val sb = StringBuilder()
         for ((name, value) in headers) {
-            sb.append(name).append(": ").append(value).append('\n')
+            sb.append(Compat32Headers.fold(name, value)).append('\n')
         }
         sb.append('\n')
 

@@ -30,7 +30,14 @@ import java.time.format.DateTimeFormatter
  * open the one on-device database, the same way every `state.py` function
  * defaults to `config.STATE_DB_PATH`.
  */
-class StateRepository(private val openDb: () -> StateDb) {
+class StateRepository(
+    /** The timestamp source for every stamp the repository writes. Real time by default;
+     * the fixture generator passes a frozen one so the REAL write methods can produce a
+     * deterministic file (ST-04) instead of raw INSERTs that bypass them. It comes first
+     * so that `openDb` stays the trailing lambda: `StateRepository { openIt() }`. */
+    private val clock: () -> String = { now() },
+    private val openDb: () -> StateDb,
+) {
 
     // -----------------------------------------------------------------
     // Schema DDL -- verbatim copy of state.py's `_DDL` (SQL text and table/
@@ -39,10 +46,12 @@ class StateRepository(private val openDb: () -> StateDb) {
     // -----------------------------------------------------------------
 
     companion object {
+        // ST-02: state.py's _DDL also opens with `PRAGMA journal_mode = WAL` and
+        // `PRAGMA foreign_keys = ON`. SQLite refuses the first inside a transaction and
+        // silently ignores the second there, and [withDb] always runs inside one, so they
+        // never took effect here. They are now [StateDb.configure], run outside any
+        // transaction (WAL on; foreign keys stay OFF by parity -- see [StateDb.configure]).
         internal val DDL: String = """
-            PRAGMA journal_mode = WAL;
-            PRAGMA foreign_keys = ON;
-
             CREATE TABLE IF NOT EXISTS chats (
                 chat_id           TEXT PRIMARY KEY,
                 display_name      TEXT NOT NULL,
@@ -118,6 +127,9 @@ class StateRepository(private val openDb: () -> StateDb) {
         /** Twin of `state.py:_SCHEMA_VERSION`. */
         const val SCHEMA_VERSION: Int = 2
 
+        /** Most bound values one statement may carry (SQLITE_MAX_VARIABLE_NUMBER before 3.32). */
+        internal const val MAX_BOUND_VALUES: Int = 999
+
         const val SELF_SENDER_OVERRIDE: String = "self_sender_override"
         const val SELF_SENDER_LEARNED: String = "self_sender_learned"
         const val SELF_SENDER_LEARNED_PENDING: String = "self_sender_learned_pending"
@@ -142,18 +154,39 @@ class StateRepository(private val openDb: () -> StateDb) {
     // Connection helper -- twin of state.py's `_connect` context manager.
     // -----------------------------------------------------------------
 
-    private fun <T> withDb(block: (StateDb) -> T): T {
+    /**
+     * Opens a connection, runs [block] in one transaction, commits, closes.
+     * [configure] runs [StateDb.configure] first, outside any transaction (only [initDb]
+     * needs it: WAL is stored in the file and persists). A failing rollback or close never
+     * replaces the error that caused it; it is attached to it as a suppressed exception.
+     */
+    private fun <T> withDb(configure: Boolean = false, block: (StateDb) -> T): T {
         val db = openDb()
-        return try {
+        var began = false
+        var failure: Throwable? = null
+        try {
+            if (configure) db.configure()
             db.beginTransaction()
+            began = true
             val result = block(db)
             db.commit()
-            result
+            return result
         } catch (t: Throwable) {
-            db.rollback()
+            failure = t
+            if (began) {
+                try {
+                    db.rollback()
+                } catch (r: Throwable) {
+                    t.addSuppressed(r)
+                }
+            }
             throw t
         } finally {
-            db.close()
+            try {
+                db.close()
+            } catch (c: Throwable) {
+                failure?.addSuppressed(c) ?: throw c
+            }
         }
     }
 
@@ -162,7 +195,7 @@ class StateRepository(private val openDb: () -> StateDb) {
     // -----------------------------------------------------------------
 
     fun initDb() {
-        withDb { db ->
+        withDb(configure = true) { db ->
             db.execScript(DDL)
             // Migration for DBs created before the `trigger` column existed.
             try {
@@ -235,9 +268,12 @@ class StateRepository(private val openDb: () -> StateDb) {
             db.exec("UPDATE message_hashes SET run_id = ? WHERE run_id = ?", listOf(original, copy))
         }
         if (doomed.isNotEmpty()) {
-            val ids = doomed.map { it.first }
-            val placeholders = ids.joinToString(", ") { "?" }
-            db.exec("DELETE FROM sync_runs WHERE run_id IN ($placeholders)", ids)
+            // ST-01: SQLite before 3.32 (Android 11 and older) refuses more than 999 bound
+            // values in one statement, so the DELETE goes in batches.
+            for (batch in doomed.map { it.first }.chunked(MAX_BOUND_VALUES)) {
+                val placeholders = batch.joinToString(", ") { "?" }
+                db.exec("DELETE FROM sync_runs WHERE run_id IN ($placeholders)", batch)
+            }
         }
         return doomed.size
     }
@@ -257,7 +293,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         gmailLabelId: String? = null,
         anchorMessageId: String? = null,
     ) {
-        val now = now()
+        val now = clock()
         withDb { db ->
             db.exec(
                 """
@@ -291,7 +327,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     updated_at        = ?
                 WHERE chat_id = ?
                 """.trimIndent(),
-                listOf(gmailThreadId, gmailLabelId, anchorMessageId, now(), chatId),
+                listOf(gmailThreadId, gmailLabelId, anchorMessageId, clock(), chatId),
             )
         }
     }
@@ -313,7 +349,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         withDb { db ->
             db.exec(
                 "INSERT INTO sync_runs (chat_id, status, trigger, started_at) VALUES (?, 'pending', ?, ?)",
-                listOf(chatId, trigger, now()),
+                listOf(chatId, trigger, clock()),
             )
             db.lastInsertRowId()
         }
@@ -341,7 +377,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     completed_at     = ?
                 WHERE run_id = ?
                 """.trimIndent(),
-                listOf(lastSyncedTs, lastSyncedHash, messagesParsed, messagesSynced, messagesSkipped, messagesCutoff, now(), runId),
+                listOf(lastSyncedTs, lastSyncedHash, messagesParsed, messagesSynced, messagesSkipped, messagesCutoff, clock(), runId),
             )
         }
     }
@@ -350,7 +386,7 @@ class StateRepository(private val openDb: () -> StateDb) {
         withDb { db ->
             db.exec(
                 "UPDATE sync_runs SET status = 'failed', error_message = ?, completed_at = ? WHERE run_id = ?",
-                listOf(errorMessage, now(), runId),
+                listOf(errorMessage, clock(), runId),
             )
         }
     }
@@ -361,6 +397,27 @@ class StateRepository(private val openDb: () -> StateDb) {
                 "SELECT * FROM sync_runs WHERE chat_id = ? AND status = 'complete' ORDER BY run_id DESC LIMIT 1",
                 listOf(chatId),
             ).firstOrNull()?.let(::rowToSyncRun)
+        }
+
+    /**
+     * Twin of `state.py:get_last_synced_ts` (BUG-04): the latest NON-EMPTY `last_synced_ts`
+     * across a chat's completed runs, or null. The duplicate rule used to read only the
+     * latest completed run, so a completed run that synced nothing blanked the baseline;
+     * this looks past it (repairing databases already in that state) and a later empty,
+     * failed or pending run can never blank or move it.
+     */
+    fun getLastSyncedTs(chatId: String): String? =
+        withDb { db ->
+            db.query(
+                """
+                SELECT last_synced_ts FROM sync_runs
+                WHERE chat_id = ? AND status = 'complete'
+                  AND last_synced_ts IS NOT NULL AND last_synced_ts != ''
+                ORDER BY run_id DESC
+                LIMIT 1
+                """.trimIndent(),
+                listOf(chatId),
+            ).firstOrNull()?.get("last_synced_ts") as String?
         }
 
     fun getPendingRuns(): List<SyncRun> =
@@ -510,7 +567,7 @@ class StateRepository(private val openDb: () -> StateDb) {
                     updated_at        = ?
                 WHERE chat_id = ?
                 """.trimIndent(),
-                listOf(now(), chatId),
+                listOf(clock(), chatId),
             )
         }
     }
@@ -532,7 +589,7 @@ class StateRepository(private val openDb: () -> StateDb) {
             db.exec(
                 "INSERT INTO chat_cutoffs (chat_id, cutoff_ts, set_at) VALUES (?, ?, ?) " +
                     "ON CONFLICT(chat_id) DO UPDATE SET cutoff_ts = excluded.cutoff_ts, set_at = excluded.set_at",
-                listOf(chatId, normalised, now()),
+                listOf(chatId, normalised, clock()),
             )
         }
     }
@@ -553,7 +610,7 @@ class StateRepository(private val openDb: () -> StateDb) {
 
     fun recordChatSenders(chatId: String, counts: Map<String, Int>, seenTs: String? = null) {
         if (counts.isEmpty()) return
-        val ts = seenTs ?: now()
+        val ts = seenTs ?: clock()
         withDb { db ->
             for ((sender, countRaw) in counts) {
                 val count = countRaw
