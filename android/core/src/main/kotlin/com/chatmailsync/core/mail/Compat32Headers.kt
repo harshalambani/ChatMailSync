@@ -44,6 +44,12 @@ internal object Compat32Headers {
      * Replaces each run of line-break and control characters in [value] with a
      * single space. A normal value (letters, digits, punctuation, spaces, tabs,
      * any non-ASCII text) is returned unchanged, including repeated spaces.
+     *
+     * KNOWN DEVIATION (accepted, PAR Phase B ruling C2): a run of control
+     * characters becomes ONE space here, whereas Python's `splitlines` path
+     * encodes each piece as its own header word, so the Subject bytes differ
+     * for `\x1c`-style characters. Both are safe (no header injection); only
+     * the exact bytes differ.
      */
     fun lineSafe(value: String): String {
         if (value.none { isLineBreakOrControl(it) }) return value
