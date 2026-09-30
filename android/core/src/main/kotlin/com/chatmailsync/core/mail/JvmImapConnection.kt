@@ -193,6 +193,10 @@ class JvmImapConnection private constructor(
             password: String,
             timeoutSeconds: Long,
         ): JvmImapConnection {
+            // SEC-02: refuse a bad credential before any socket exists, so nothing can be sent.
+            ImapUtf7.requireLoginSafe(email, "email address")
+            ImapUtf7.requireLoginSafe(password, "app password")
+
             val socket: Socket
             try {
                 socket = opener.open(host, port, (timeoutSeconds * 1000).toInt())

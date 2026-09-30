@@ -86,11 +86,56 @@ object ImapUtf7 {
         return out.toString()
     }
 
-    /** Quote a wire mailbox name per RFC 3501 4.3 quoted-string. */
+    /**
+     * Quote a wire mailbox name per RFC 3501 4.3 quoted-string.
+     *
+     * SEC-02: a quoted-string cannot carry CR, LF or NUL, and a stray one
+     * would let the value end the command and start another. Any control
+     * character (below 0x20, or 0x7F) is refused BEFORE a byte is written.
+     * The error text is fixed and never contains the value.
+     */
     fun quoteMailbox(wireName: String): String {
+        requireNoControl(wireName)
         val escaped = wireName.replace("\\", "\\\\").replace("\"", "\\\"")
         return "\"$escaped\""
     }
+
+    /**
+     * Validates an email or password for the LOGIN line (SEC-02), without
+     * ever putting the value in an error: no control characters, and ASCII
+     * only (IMAP LOGIN takes an ASCII quoted-string; literals are not
+     * supported here, matching the Python client, which stops with an
+     * encoding error). [what] is "email address" or "app password".
+     */
+    fun requireLoginSafe(value: String, what: String) {
+        if (value.any { isControl(it) }) {
+            throw MailTransportError(
+                "Refused: the $what contains a line break or control character, so nothing was sent.",
+                400,
+            )
+        }
+        if (value.any { it.code > 0x7E }) {
+            throw MailTransportError(
+                "Refused: the $what contains a character outside plain ASCII, which IMAP sign-in " +
+                    "cannot carry. Check it for accented or special characters; nothing was sent.",
+                400,
+            )
+        }
+    }
+
+    /**
+     * Refuses a folder name with any control character. [encode] would turn
+     * such a character into harmless modified-UTF-7, but a folder called
+     * "a<LF>b" is never legitimate, so it is stopped at the source, before
+     * encoding. The error never contains the name.
+     */
+    fun requireNoControl(name: String) {
+        if (name.any { isControl(it) }) {
+            throw MailTransportError("Refused: a folder name contains a control character, so nothing was sent.", 400)
+        }
+    }
+
+    private fun isControl(c: Char): Boolean = c.code < 0x20 || c.code == 0x7F
 
     private fun base64ModifiedNoPad(bytes: ByteArray): String {
         val sb = StringBuilder()

@@ -122,7 +122,10 @@ class ImapTransport(
         return name.replace(d, "/")
     }
 
-    private fun mailboxToWire(name: String): String = ImapUtf7.quoteMailbox(ImapUtf7.encode(toWire(name)))
+    private fun mailboxToWire(name: String): String {
+        ImapUtf7.requireNoControl(name) // SEC-02: before encoding, which would otherwise hide a control character
+        return ImapUtf7.quoteMailbox(ImapUtf7.encode(toWire(name)))
+    }
     private fun mailboxFromWire(wireName: String): String = fromWire(ImapUtf7.decode(wireName))
 
     private fun mapException(exc: Throwable, context: String): MailTransportError {
