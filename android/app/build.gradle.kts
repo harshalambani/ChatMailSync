@@ -31,7 +31,9 @@ android {
 
     defaultConfig {
         applicationId = "com.chatmailsync.app"
-        minSdk = 24
+        // 30, not 24 (ST-01, D33): the :core state SQL uses INSERT ... ON CONFLICT, which needs
+        // SQLite 3.24; Android 11 is the first to ship that (3.28). Android 7-10 are dropped.
+        minSdk = 30
         targetSdk = 36
         // Historically moved in step with the now-retired Windows app's own
         // version file, and every release published an APK alongside the

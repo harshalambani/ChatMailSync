@@ -118,6 +118,9 @@ class StateRepository(private val openDb: () -> StateDb) {
         /** Twin of `state.py:_SCHEMA_VERSION`. */
         const val SCHEMA_VERSION: Int = 2
 
+        /** Most bound values one statement may carry (SQLITE_MAX_VARIABLE_NUMBER before 3.32). */
+        internal const val MAX_BOUND_VALUES: Int = 999
+
         const val SELF_SENDER_OVERRIDE: String = "self_sender_override"
         const val SELF_SENDER_LEARNED: String = "self_sender_learned"
         const val SELF_SENDER_LEARNED_PENDING: String = "self_sender_learned_pending"
@@ -235,9 +238,12 @@ class StateRepository(private val openDb: () -> StateDb) {
             db.exec("UPDATE message_hashes SET run_id = ? WHERE run_id = ?", listOf(original, copy))
         }
         if (doomed.isNotEmpty()) {
-            val ids = doomed.map { it.first }
-            val placeholders = ids.joinToString(", ") { "?" }
-            db.exec("DELETE FROM sync_runs WHERE run_id IN ($placeholders)", ids)
+            // ST-01: SQLite before 3.32 (Android 11 and older) refuses more than 999 bound
+            // values in one statement, so the DELETE goes in batches.
+            for (batch in doomed.map { it.first }.chunked(MAX_BOUND_VALUES)) {
+                val placeholders = batch.joinToString(", ") { "?" }
+                db.exec("DELETE FROM sync_runs WHERE run_id IN ($placeholders)", batch)
+            }
         }
         return doomed.size
     }
