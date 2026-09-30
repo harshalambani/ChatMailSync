@@ -65,7 +65,8 @@ class ImapTransport(
      */
     val maxMessageBytes: Long
         get() {
-            appendLimit()?.let { return it }
+            // `if advertised:` -- a zero limit is falsy in Python and falls through (PAR-06).
+            appendLimit()?.takeIf { it > 0 }?.let { return it }
             val h = host.lowercase()
             for ((key, preset) in IMAP_PROVIDERS) {
                 if (preset.host != null && preset.host.lowercase() == h) {
@@ -81,7 +82,8 @@ class ImapTransport(
         for (cap in c.capabilities) {
             if (!cap.uppercase().startsWith("APPENDLIMIT")) continue
             val value = cap.substringAfter("=", "").trim()
-            if (value.isNotEmpty() && value.all { it.isDigit() }) return value.toLong()
+            // Python's int() has no upper bound; a value beyond Long clamps instead of overflowing (PAR-06).
+            if (value.isNotEmpty() && value.all { it.isDigit() }) return value.toLongOrNull() ?: Long.MAX_VALUE
         }
         return null
     }
@@ -200,7 +202,7 @@ class ImapTransport(
 
         val headers = MessageHeaders.parse(crlfBytes)
         val internalDate = internaldateFromHeaders(headers)
-        val messageId = headers["Message-ID"] ?: MimeBuilder.newMessageId()
+        val messageId = headers["Message-ID"]?.takeIf { it.isNotEmpty() } ?: MimeBuilder.newMessageId()
 
         val flags = if (setSeen) "(\\Seen)" else null
 
@@ -212,7 +214,7 @@ class ImapTransport(
         if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
 
         val uid = extractAppendUid(result.data)
-        return InsertResult(id = uid ?: messageId, threadId = threadId ?: messageId)
+        return InsertResult(id = uid ?: messageId, threadId = threadId?.takeIf { it.isNotEmpty() } ?: messageId)
     }
 }
 

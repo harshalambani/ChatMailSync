@@ -215,7 +215,9 @@ class MimeCasesGoldenParityTest {
             }
             val from = logicalHeader(eml, "From")
             if (from.joinToString("\n").contains("=?utf-8?")) {
-                assertEquals("${case.name}: From name changed by encoding", case.displayName, decodeWords(from))
+                // A phone-number name is rewritten to "+digits" by design (Python's _format_sender).
+                val expectedName = if (case.name.startsWith("phone_")) "+" + case.displayName.filter { it.isDigit() } else case.displayName
+                assertEquals("${case.name}: From name changed by encoding", expectedName, decodeWords(from))
             }
         }
     }

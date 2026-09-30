@@ -64,7 +64,7 @@ object MimeBuilder {
 
     private fun splitLines(s: String): List<String> {
         if (s.isEmpty()) return emptyList()
-        return s.split(Regex("\r\n|\r|\n"))
+        return pythonSplitlines(s)
     }
 
     /** Mirrors `_chunk_subject`. */
@@ -84,8 +84,8 @@ object MimeBuilder {
         return if (suffix.isNotEmpty()) "$base  ($suffix)" else base
     }
 
-    private val PHONE_STRIP = Regex("[\\s\\-()]")
-    private val PHONE_MATCH = Regex("^\\+?\\d{7,15}$")
+    private val PHONE_STRIP = Regex("(?U)[\\s\\x1c-\\x1f\\-()]")
+    private val PHONE_MATCH = Regex("(?U)^\\+?\\d{7,15}$")
 
     /** Mirrors `_format_sender`. */
     fun formatSender(displayName: String): String {
@@ -150,7 +150,7 @@ object MimeBuilder {
         headers[HEADER_INDEX] = INDEX_FILENAME
         if (!inReplyTo.isNullOrEmpty()) {
             headers["In-Reply-To"] = inReplyTo
-            headers["References"] = references ?: inReplyTo
+            headers["References"] = references?.takeIf { it.isNotEmpty() } ?: inReplyTo
         }
 
         val sb = StringBuilder()

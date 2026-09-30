@@ -1467,7 +1467,141 @@ def _mime_cases() -> "list[dict[str, object]]":
     for n in range(1, 41):
         cases.append(_mime_case(f"sweep_accent_{n}", _ACCENT_BASE[:n].rstrip()))
 
+    # PAR-07: phone-number names (PAR-06 item 5), a Week chunk, and bodies
+    # ending in a newline (PAR-06 item 4). Expected bytes come from Python.
+    cases.append(_mime_case("phone_spaced", "+91 98765 43210"))
+    cases.append(_mime_case("phone_bare_digits", "919876543210"))
+    cases.append(_mime_case("phone_punctuated", "(+91) 98765-43210"))
+    cases.append(_mime_case("phone_six_digits_is_a_name", "123456"))
+    cases.append(_mime_case("phone_sixteen_digits_is_a_name", "1234567890123456"))
+    cases.append(_mime_case("phone_nbsp", "+91\u00a098765\u00a043210"))
+    cases.append(_mime_case("phone_ideographic_space", "+91\u300098765\u300043210"))
+    cases.append(_mime_case("phone_arabic_indic_digits", "\u0669\u0661\u0669\u0668\u0667\u0666\u0665\u0664\u0663\u0662\u0661\u0660"))
+    cases.append(_mime_case("phone_devanagari_digits", "\u096f\u0967 \u096f\u096e\u096d\u096c\u096b\u096a\u0969\u0968\u0967\u0966"))
+    cases.append(_mime_case("week_chunk", "Meera Iyer", chunk_size="week"))
+    cases.append(_mime_case("count_chunk", "Meera Iyer", chunk_size=2))
+    cases.append(_mime_case("hour_chunk", "Meera Iyer", chunk_size="hour"))
+    for name, body in [
+        ("body_ends_lf", "hello\n"),
+        ("body_ends_blank_line", "hello\n\n"),
+        ("body_ends_crlf", "hello\r\n"),
+        ("body_ends_cr", "hello\r"),
+        ("body_only_newline", "\n"),
+        ("body_empty", ""),
+        ("body_leading_blank", "\nhello"),
+        ("body_middle_blank", "a\n\nb"),
+        ("body_ends_ls", "hello\u2028"),
+        ("body_ends_vt_ff", "a\x0bb\x0c"),
+        ("body_ends_nel", "a\x85"),
+    ]:
+        cases.append(_mime_case(name, "Meera Iyer", messages=_mime_msgs(body=body)))
+
     return cases
+
+
+# ---------------------------------------------------------------------------
+# PAR-06 edge cases: UTF-7 decode of malformed input, APPENDLIMIT, empty ids
+# ---------------------------------------------------------------------------
+
+
+def _utf7_inputs() -> "list[str]":
+    import random
+
+    fixed = [
+        "", "&", "&-", "&&-", "&AGE", "&AGE-", "&AG-", "&A-", "&AGEA-", "&AGEAA-", "&!!-", "&AGE&AGE-",
+        "a&b&c-", "&AGE=-", "&AGE==-", "&A=-", "&AGEA=-", "&,,,-", "&+/A-", "&AGE/-", "&==-", "&=AGE-",
+        "&2D3eAA-", "&2D0-", "&3gA-", "&AGFh-", "&AA-", "&AGE-x&", "x&AGE", "x&AGE-y", "INBOX&AGE",
+        "&ZeVnLIqe-", "WhatsApp/&ZeVnLIqe-", "Caf&AOk-", "&AOk", "&AOk=", "&AO", "&AOkA", "&A Gk-",
+        "&AGE-&", "&AGE-&-", "&2D3eA-", "&2D3eAAA-", "&AGEAYQ-", "&AGEAYQA-", "&AGEAYQ==-",
+    ]
+    rng = random.Random(20260930)
+    alphabet = "&-AGEk,+/=! 0"
+    fuzz = ["".join(rng.choice(alphabet) for _ in range(rng.randint(0, 11))) for _ in range(500)]
+    seen: "list[str]" = []
+    for item in fixed + fuzz:
+        if item not in seen:
+            seen.append(item)
+    return seen
+
+
+class _FakeImapConn:
+    def __init__(self, capabilities):
+        self.capabilities = tuple(capabilities)
+
+    def append(self, folder, flags, internaldate, raw):
+        return "OK", [b"Append completed"]
+
+
+def _transport(host: str, capabilities):
+    from src.mail_client import ImapTransport
+
+    conn = _FakeImapConn(capabilities)
+    t = ImapTransport(host, 993, "meera.iyer@example.com", "pw-FAKE", connection_factory=lambda: conn)
+    t._get_conn()
+    return t
+
+
+def generate_par06_edge_golden() -> None:
+    from src.mail_client import _decode_imap_utf7
+
+    utf7 = [{"input": t, "output": _decode_imap_utf7(t)} for t in _utf7_inputs()]
+
+    caps_cases = []
+    for host, caps in [
+        ("imap.example.com", []),
+        ("imap.example.com", ["IMAP4REV1", "APPENDLIMIT=35651584"]),
+        ("imap.example.com", ["APPENDLIMIT=0"]),
+        ("imap.example.com", ["APPENDLIMIT"]),
+        ("imap.example.com", ["APPENDLIMIT="]),
+        ("imap.example.com", ["APPENDLIMIT=abc"]),
+        ("imap.example.com", ["APPENDLIMIT=-5"]),
+        ("imap.example.com", ["appendlimit=1000"]),
+        ("imap.example.com", ["APPENDLIMIT=0", "APPENDLIMIT=2000"]),
+        ("imap.example.com", ["APPENDLIMIT=99999999999999999999"]),
+        ("imap.example.com", ["APPENDLIMIT=9223372036854775807"]),
+        ("imap.example.com", ["APPENDLIMIT=9223372036854775808"]),
+        ("imap.gmail.com", []),
+        ("imap.gmail.com", ["APPENDLIMIT=0"]),
+        ("imap.gmail.com", ["APPENDLIMIT=1234"]),
+        ("imap.mail.yahoo.com", ["APPENDLIMIT=0"]),
+    ]:
+        value = _transport(host, caps).max_message_bytes
+        caps_cases.append({"host": host, "capabilities": caps, "maxMessageBytes": str(value)})
+
+    insert_cases = []
+    for msg_id, thread_id in [
+        ("<m1@local>", None), ("<m1@local>", ""), ("<m1@local>", "t1"),
+        ("", None), ("", ""), ("", "t1"), (None, None), (None, "t1"),
+    ]:
+        header = "" if msg_id is None else f"Message-ID: {msg_id}\n"
+        raw = (
+            "From: a@b.c\nDate: Thu, 01 Jan 2026 10:00:00 +0000\n" + header + "Subject: x\n\nbody\n"
+        ).encode("ascii")
+        t = _transport("imap.example.com", [])
+        out = t.messages_insert(
+            {"raw": base64.urlsafe_b64encode(raw).decode("ascii"), "labelIds": ["WhatsApp/x"]},
+            thread_id,
+        )
+
+        def shape(v: str) -> str:
+            return v if v == msg_id or v == thread_id else "GENERATED"
+
+        insert_cases.append({
+            "messageId": msg_id,
+            "threadId": thread_id,
+            "expectedId": shape(out["id"]),
+            "expectedThreadId": shape(out["threadId"]),
+            "generatedLooksLikeMessageId": out["id"].startswith("<") and out["id"].endswith(">"),
+        })
+
+    payload = {"utf7": utf7, "appendLimit": caps_cases, "insert": insert_cases}
+    out_path = GOLDEN_DIR / "par06_edge_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
 def generate_mime_cases_golden() -> None:
@@ -1520,7 +1654,20 @@ def main() -> None:
     generate_html_renderer_golden()
     generate_mail_index_golden()
     generate_mime_cases_golden()
+    generate_par06_edge_golden()
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Regenerate the Kotlin core golden fixtures.")
+    parser.add_argument(
+        "--out",
+        metavar="DIR",
+        help="write every golden into DIR instead of the checked-in golden directory "
+        "(CI regenerates into a temp dir and diffs against the committed files)",
+    )
+    args = parser.parse_args()
+    if args.out:
+        GOLDEN_DIR = Path(args.out).resolve()
     main()

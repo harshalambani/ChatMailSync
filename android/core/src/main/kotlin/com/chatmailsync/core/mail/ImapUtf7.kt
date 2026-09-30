@@ -13,6 +13,7 @@ package com.chatmailsync.core.mail
  * pair -- the resulting bytes are identical either way.
  */
 object ImapUtf7 {
+    private const val STD_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     private const val B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+,"
 
     fun encode(text: String): String {
@@ -66,22 +67,19 @@ object ImapUtf7 {
                 i += 2
                 continue
             }
-            val end = text.indexOf('-', i + 1)
-            if (end == -1) {
-                // Malformed: no terminating '-'. Keep verbatim, like Python.
-                out.append(text.substring(i))
-                i = n
-                continue
-            }
-            val chunk = text.substring(i + 1, end)
-            val decoded = base64ModifiedDecode(chunk)
+            // Python scans to the terminating '-' or to the end of the text, and in
+            // both cases tries to decode what it found (PAR-06): an unterminated
+            // "&AGE" decodes; it is not kept verbatim.
+            val found = text.indexOf('-', i + 1)
+            val end = if (found == -1) n else found
+            val decoded = base64ModifiedDecode(text.substring(i + 1, end))
             if (decoded == null) {
-                // Malformed base64: keep the original sequence verbatim.
-                out.append(text, i, end + 1)
+                // Malformed: keep the original sequence verbatim, like Python.
+                out.append(text, i, minOf(end + 1, n))
             } else {
-                out.append(String(decoded, Charsets.UTF_16BE))
+                out.append(decoded)
             }
-            i = end + 1
+            i = if (end < n) end + 1 else end
         }
         return out.toString()
     }
@@ -159,26 +157,49 @@ object ImapUtf7 {
         return sb.toString()
     }
 
-    private fun base64ModifiedDecode(chunk: String): ByteArray? {
-        if (chunk.isEmpty()) return ByteArray(0)
-        val values = IntArray(chunk.length)
-        for (idx in chunk.indices) {
-            val v = B64_ALPHABET.indexOf(chunk[idx])
-            if (v == -1) return null
-            values[idx] = v
-        }
+    /**
+     * Python's `base64.b64decode(chunk.replace(",", "/") + "=" * (-len % 4))`
+     * followed by `.decode("utf-16-be")`, or null where either step raises
+     * (PAR-06). Non-alphabet characters are silently dropped (b64decode's
+     * non-strict mode), the padding is computed from the ORIGINAL length, and
+     * a data-character count of 1 mod 4, or leftover data without enough
+     * padding, is an error. The UTF-16 step is strict: an odd byte count or
+     * a lone surrogate is an error, never a replacement character.
+     */
+    private fun base64ModifiedDecode(chunk: String): String? {
+        val text = chunk.replace(',', '/')
+        val padded = text + "=".repeat((4 - text.length % 4) % 4)
         val out = java.io.ByteArrayOutputStream()
-        var bitsBuf = 0
-        var bitsCount = 0
-        for (v in values) {
-            bitsBuf = (bitsBuf shl 6) or v
-            bitsCount += 6
-            if (bitsCount >= 8) {
-                bitsCount -= 8
-                val byte = (bitsBuf shr bitsCount) and 0xFF
-                out.write(byte)
+        var quadPos = 0
+        var left = 0
+        var pads = 0
+        for (ch in padded) {
+            if (ch == '=') {
+                // CPython 3.13 (non-strict): padding never ends the input, it only counts
+                // toward completing the final quad; data after it carries on.
+                if (quadPos >= 2) pads++
+                continue
+            }
+            val v = STD_B64.indexOf(ch)
+            if (v == -1) continue
+            pads = 0
+            when (quadPos) {
+                0 -> { quadPos = 1; left = v }
+                1 -> { quadPos = 2; out.write((left shl 2) or (v shr 4)); left = v and 0xF }
+                2 -> { quadPos = 3; out.write((left shl 4) or (v shr 2)); left = v and 0x3 }
+                else -> { quadPos = 0; out.write((left shl 6) or v); left = 0 }
             }
         }
-        return out.toByteArray()
+        // One data character left over, or a partial quad without enough '=' to finish it, is an error.
+        if (quadPos == 1 || (quadPos != 0 && quadPos + pads < 4)) return null
+        return try {
+            Charsets.UTF_16BE.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                .decode(java.nio.ByteBuffer.wrap(out.toByteArray()))
+                .toString()
+        } catch (_: java.nio.charset.CharacterCodingException) {
+            null
+        }
     }
 }

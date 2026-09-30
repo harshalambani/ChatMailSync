@@ -50,8 +50,11 @@ class ImapUtf7Test {
     // fail safe (kept verbatim), never throw -- no terminating '-'.
     @Test
     fun decodeMalformedNoTerminatorKeptVerbatim() {
-        val malformed = "WhatsApp/&2D3eAA"
+        // "&2D0" is a lone high surrogate: undecodable, so kept verbatim.
+        val malformed = "WhatsApp/&2D0"
         assertEquals(malformed, ImapUtf7.decode(malformed))
+        // PAR-06: a well-formed sequence with no terminating '-' IS decoded, as Python does.
+        assertEquals("WhatsApp/" + String(Character.toChars(0x1F600)), ImapUtf7.decode("WhatsApp/&2D3eAA"))
     }
 
     // Mandatory negative test from the brief: bad/malformed UTF-7 input must
@@ -59,7 +62,9 @@ class ImapUtf7Test {
     // characters inside a shifted block.
     @Test
     fun decodeMalformedBadBase64KeptVerbatim() {
-        val malformed = "WhatsApp/&not valid base64!-/Alice"
+        // One data character is never valid base64. (Python drops non-alphabet characters
+        // rather than failing, so the earlier "not valid base64!" text decoded to garbage there too.)
+        val malformed = "WhatsApp/&a-/Alice"
         assertEquals(malformed, ImapUtf7.decode(malformed))
     }
 
@@ -69,8 +74,9 @@ class ImapUtf7Test {
     }
 
     @Test
-    fun decodeBareAmpersandAtEndOfStringKeptVerbatim() {
-        assertEquals("abc&", ImapUtf7.decode("abc&"))
+    fun decodeBareAmpersandAtEndOfStringIsDroppedLikePython() {
+        // Python: an empty shift sequence decodes to "" (PAR-06), so the lone '&' vanishes.
+        assertEquals("abc", ImapUtf7.decode("abc&"))
     }
 
     @Test

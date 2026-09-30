@@ -1,0 +1,2042 @@
+{
+ "appendLimit": [
+  {
+   "capabilities": [],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "IMAP4REV1",
+    "APPENDLIMIT=35651584"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "35651584"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=0"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT="
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=abc"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=-5"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "appendlimit=1000"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "1000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=0",
+    "APPENDLIMIT=2000"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=99999999999999999999"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "99999999999999999999"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=9223372036854775807"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "9223372036854775807"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=9223372036854775808"
+   ],
+   "host": "imap.example.com",
+   "maxMessageBytes": "9223372036854775808"
+  },
+  {
+   "capabilities": [],
+   "host": "imap.gmail.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=0"
+   ],
+   "host": "imap.gmail.com",
+   "maxMessageBytes": "25000000"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=1234"
+   ],
+   "host": "imap.gmail.com",
+   "maxMessageBytes": "1234"
+  },
+  {
+   "capabilities": [
+    "APPENDLIMIT=0"
+   ],
+   "host": "imap.mail.yahoo.com",
+   "maxMessageBytes": "25000000"
+  }
+ ],
+ "insert": [
+  {
+   "expectedId": "<m1@local>",
+   "expectedThreadId": "<m1@local>",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "<m1@local>",
+   "threadId": null
+  },
+  {
+   "expectedId": "<m1@local>",
+   "expectedThreadId": "<m1@local>",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "<m1@local>",
+   "threadId": ""
+  },
+  {
+   "expectedId": "<m1@local>",
+   "expectedThreadId": "t1",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "<m1@local>",
+   "threadId": "t1"
+  },
+  {
+   "expectedId": "GENERATED",
+   "expectedThreadId": "GENERATED",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "",
+   "threadId": null
+  },
+  {
+   "expectedId": "GENERATED",
+   "expectedThreadId": "GENERATED",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "",
+   "threadId": ""
+  },
+  {
+   "expectedId": "GENERATED",
+   "expectedThreadId": "t1",
+   "generatedLooksLikeMessageId": true,
+   "messageId": "",
+   "threadId": "t1"
+  },
+  {
+   "expectedId": "GENERATED",
+   "expectedThreadId": "GENERATED",
+   "generatedLooksLikeMessageId": true,
+   "messageId": null,
+   "threadId": null
+  },
+  {
+   "expectedId": "GENERATED",
+   "expectedThreadId": "t1",
+   "generatedLooksLikeMessageId": true,
+   "messageId": null,
+   "threadId": "t1"
+  }
+ ],
+ "utf7": [
+  {
+   "input": "",
+   "output": ""
+  },
+  {
+   "input": "&",
+   "output": ""
+  },
+  {
+   "input": "&-",
+   "output": "&"
+  },
+  {
+   "input": "&&-",
+   "output": ""
+  },
+  {
+   "input": "&AGE",
+   "output": "a"
+  },
+  {
+   "input": "&AGE-",
+   "output": "a"
+  },
+  {
+   "input": "&AG-",
+   "output": "&AG-"
+  },
+  {
+   "input": "&A-",
+   "output": "&A-"
+  },
+  {
+   "input": "&AGEA-",
+   "output": "&AGEA-"
+  },
+  {
+   "input": "&AGEAA-",
+   "output": "&AGEAA-"
+  },
+  {
+   "input": "&!!-",
+   "output": ""
+  },
+  {
+   "input": "&AGE&AGE-",
+   "output": "&AGE&AGE-"
+  },
+  {
+   "input": "a&b&c-",
+   "output": "a&b&c-"
+  },
+  {
+   "input": "&AGE=-",
+   "output": "a"
+  },
+  {
+   "input": "&AGE==-",
+   "output": "a"
+  },
+  {
+   "input": "&A=-",
+   "output": "&A=-"
+  },
+  {
+   "input": "&AGEA=-",
+   "output": "&AGEA=-"
+  },
+  {
+   "input": "&,,,-",
+   "output": "￿"
+  },
+  {
+   "input": "&+/A-",
+   "output": "ﯰ"
+  },
+  {
+   "input": "&AGE/-",
+   "output": "&AGE/-"
+  },
+  {
+   "input": "&==-",
+   "output": ""
+  },
+  {
+   "input": "&=AGE-",
+   "output": "&=AGE-"
+  },
+  {
+   "input": "&2D3eAA-",
+   "output": "😀"
+  },
+  {
+   "input": "&2D0-",
+   "output": "&2D0-"
+  },
+  {
+   "input": "&3gA-",
+   "output": "&3gA-"
+  },
+  {
+   "input": "&AGFh-",
+   "output": "&AGFh-"
+  },
+  {
+   "input": "&AA-",
+   "output": "&AA-"
+  },
+  {
+   "input": "&AGE-x&",
+   "output": "ax"
+  },
+  {
+   "input": "x&AGE",
+   "output": "xa"
+  },
+  {
+   "input": "x&AGE-y",
+   "output": "xay"
+  },
+  {
+   "input": "INBOX&AGE",
+   "output": "INBOXa"
+  },
+  {
+   "input": "&ZeVnLIqe-",
+   "output": "日本語"
+  },
+  {
+   "input": "WhatsApp/&ZeVnLIqe-",
+   "output": "WhatsApp/日本語"
+  },
+  {
+   "input": "Caf&AOk-",
+   "output": "Café"
+  },
+  {
+   "input": "&AOk",
+   "output": "é"
+  },
+  {
+   "input": "&AOk=",
+   "output": "é"
+  },
+  {
+   "input": "&AO",
+   "output": "&AO"
+  },
+  {
+   "input": "&AOkA",
+   "output": "&AOkA"
+  },
+  {
+   "input": "&A Gk-",
+   "output": "&A Gk-"
+  },
+  {
+   "input": "&AGE-&",
+   "output": "a"
+  },
+  {
+   "input": "&AGE-&-",
+   "output": "a&"
+  },
+  {
+   "input": "&2D3eA-",
+   "output": "&2D3eA-"
+  },
+  {
+   "input": "&2D3eAAA-",
+   "output": "&2D3eAAA-"
+  },
+  {
+   "input": "&AGEAYQ-",
+   "output": "aa"
+  },
+  {
+   "input": "&AGEAYQA-",
+   "output": "&AGEAYQA-"
+  },
+  {
+   "input": "&AGEAYQ==-",
+   "output": "aa"
+  },
+  {
+   "input": ",! G!E!",
+   "output": ",! G!E!"
+  },
+  {
+   "input": "  !,&&= ",
+   "output": "  !,"
+  },
+  {
+   "input": "+0=,",
+   "output": "+0=,"
+  },
+  {
+   "input": "-A=/k-,",
+   "output": "-A=/k-,"
+  },
+  {
+   "input": "k0-0,&G&/E",
+   "output": "k0-0,&G&/E"
+  },
+  {
+   "input": "/0/-G 0",
+   "output": "/0/-G 0"
+  },
+  {
+   "input": "/ AE0k0/,",
+   "output": "/ AE0k0/,"
+  },
+  {
+   "input": "EA A&,&+",
+   "output": "EA A&,&+"
+  },
+  {
+   "input": "!=/EE &/k ",
+   "output": "!=/EE &/k "
+  },
+  {
+   "input": "k!E",
+   "output": "k!E"
+  },
+  {
+   "input": "A-Ak=",
+   "output": "A-Ak="
+  },
+  {
+   "input": ",+Ek",
+   "output": ",+Ek"
+  },
+  {
+   "input": "!&/EE  ",
+   "output": "!ﱁ"
+  },
+  {
+   "input": "AE0,",
+   "output": "AE0,"
+  },
+  {
+   "input": " &&0E-",
+   "output": " &&0E-"
+  },
+  {
+   "input": "kk&& G/&!",
+   "output": "kk&& G/&!"
+  },
+  {
+   "input": ",",
+   "output": ","
+  },
+  {
+   "input": ",=,AEk",
+   "output": ",=,AEk"
+  },
+  {
+   "input": "  = &0=!k ",
+   "output": "  = &0=!k "
+  },
+  {
+   "input": "k0&!-",
+   "output": "k0"
+  },
+  {
+   "input": "-0+=",
+   "output": "-0+="
+  },
+  {
+   "input": "Ak/=/G,0",
+   "output": "Ak/=/G,0"
+  },
+  {
+   "input": "-",
+   "output": "-"
+  },
+  {
+   "input": "E",
+   "output": "E"
+  },
+  {
+   "input": "0!=0-,+!",
+   "output": "0!=0-,+!"
+  },
+  {
+   "input": "k=",
+   "output": "k="
+  },
+  {
+   "input": " -+&Ak",
+   "output": " -+&Ak"
+  },
+  {
+   "input": "k",
+   "output": "k"
+  },
+  {
+   "input": "-/G&G/&/k",
+   "output": "-/G&G/&/k"
+  },
+  {
+   "input": ",0",
+   "output": ",0"
+  },
+  {
+   "input": "/ 0kG,",
+   "output": "/ 0kG,"
+  },
+  {
+   "input": "=!= ==",
+   "output": "=!= =="
+  },
+  {
+   "input": "GA-+ ===/",
+   "output": "GA-+ ===/"
+  },
+  {
+   "input": "&+,/A=!A",
+   "output": "&+,/A=!A"
+  },
+  {
+   "input": "-!0-+&+kkA",
+   "output": "-!0-+&+kkA"
+  },
+  {
+   "input": "/+G/-=",
+   "output": "/+G/-="
+  },
+  {
+   "input": ",/,&/0",
+   "output": ",/,&/0"
+  },
+  {
+   "input": "!,AG=",
+   "output": "!,AG="
+  },
+  {
+   "input": "&+",
+   "output": "&+"
+  },
+  {
+   "input": ",+=/Ak= -",
+   "output": ",+=/Ak= -"
+  },
+  {
+   "input": "=A",
+   "output": "=A"
+  },
+  {
+   "input": "0k/,!! =",
+   "output": "0k/,!! ="
+  },
+  {
+   "input": "0EAG-!0/Gk,",
+   "output": "0EAG-!0/Gk,"
+  },
+  {
+   "input": "Gk&,,",
+   "output": "Gk&,,"
+  },
+  {
+   "input": " ,",
+   "output": " ,"
+  },
+  {
+   "input": "EA+",
+   "output": "EA+"
+  },
+  {
+   "input": "+  G/= -k",
+   "output": "+  G/= -k"
+  },
+  {
+   "input": ",/,&0kk!!",
+   "output": ",/,퉉"
+  },
+  {
+   "input": "=+0/k/-=",
+   "output": "=+0/k/-="
+  },
+  {
+   "input": "00=G/A!0GA-",
+   "output": "00=G/A!0GA-"
+  },
+  {
+   "input": "/",
+   "output": "/"
+  },
+  {
+   "input": ",,G",
+   "output": ",,G"
+  },
+  {
+   "input": "!&A --k0 ",
+   "output": "!&A --k0 "
+  },
+  {
+   "input": "E,E=,GE!0+",
+   "output": "E,E=,GE!0+"
+  },
+  {
+   "input": "G/=&kA,G",
+   "output": "G/=&kA,G"
+  },
+  {
+   "input": "G++",
+   "output": "G++"
+  },
+  {
+   "input": "k-==0+0",
+   "output": "k-==0+0"
+  },
+  {
+   "input": "&= ",
+   "output": ""
+  },
+  {
+   "input": "&A=GE 0A=",
+   "output": "&A=GE 0A="
+  },
+  {
+   "input": "!!-/=k=E0/",
+   "output": "!!-/=k=E0/"
+  },
+  {
+   "input": "G",
+   "output": "G"
+  },
+  {
+   "input": "/EAE&",
+   "output": "/EAE"
+  },
+  {
+   "input": "A!=,+E/=/- ",
+   "output": "A!=,+E/=/- "
+  },
+  {
+   "input": " -A=+G!",
+   "output": " -A=+G!"
+  },
+  {
+   "input": "=",
+   "output": "="
+  },
+  {
+   "input": "-E--E+, ",
+   "output": "-E--E+, "
+  },
+  {
+   "input": "--=A 0&==",
+   "output": "--=A 0"
+  },
+  {
+   "input": "!  !+&A=",
+   "output": "!  !+&A="
+  },
+  {
+   "input": "=+&=0&-GA",
+   "output": "=+&=0&-GA"
+  },
+  {
+   "input": "+!/0k !/-",
+   "output": "+!/0k !/-"
+  },
+  {
+   "input": " &0& 0 ",
+   "output": " &0& 0 "
+  },
+  {
+   "input": " /A/+E/",
+   "output": " /A/+E/"
+  },
+  {
+   "input": "!-G",
+   "output": "!-G"
+  },
+  {
+   "input": "0",
+   "output": "0"
+  },
+  {
+   "input": "k,k =",
+   "output": "k,k ="
+  },
+  {
+   "input": "E-! !-",
+   "output": "E-! !-"
+  },
+  {
+   "input": "0-!+&AE-!=",
+   "output": "0-!+&AE-!="
+  },
+  {
+   "input": "0/",
+   "output": "0/"
+  },
+  {
+   "input": "=-=,=-,!",
+   "output": "=-=,=-,!"
+  },
+  {
+   "input": ",=G EA=",
+   "output": ",=G EA="
+  },
+  {
+   "input": "k-/",
+   "output": "k-/"
+  },
+  {
+   "input": " 0,+ !-G=/-",
+   "output": " 0,+ !-G=/-"
+  },
+  {
+   "input": "0--! k",
+   "output": "0--! k"
+  },
+  {
+   "input": "EA0 A",
+   "output": "EA0 A"
+  },
+  {
+   "input": "!E =E",
+   "output": "!E =E"
+  },
+  {
+   "input": "0,!=/+GG,",
+   "output": "0,!=/+GG,"
+  },
+  {
+   "input": "0 ",
+   "output": "0 "
+  },
+  {
+   "input": "=,",
+   "output": "=,"
+  },
+  {
+   "input": "0 0E/- k,0",
+   "output": "0 0E/- k,0"
+  },
+  {
+   "input": ",/0/+E,!+/+",
+   "output": ",/0/+E,!+/+"
+  },
+  {
+   "input": "G0,= !+  -",
+   "output": "G0,= !+  -"
+  },
+  {
+   "input": "k =",
+   "output": "k ="
+  },
+  {
+   "input": "AA,",
+   "output": "AA,"
+  },
+  {
+   "input": ",=A/AE0!/k",
+   "output": ",=A/AE0!/k"
+  },
+  {
+   "input": ",!=",
+   "output": ",!="
+  },
+  {
+   "input": "=0,k==A=,E",
+   "output": "=0,k==A=,E"
+  },
+  {
+   "input": " ,-",
+   "output": " ,-"
+  },
+  {
+   "input": "!  A0!G&-k",
+   "output": "!  A0!G&k"
+  },
+  {
+   "input": "E=E= A++!",
+   "output": "E=E= A++!"
+  },
+  {
+   "input": "-!,G",
+   "output": "-!,G"
+  },
+  {
+   "input": "kG-G",
+   "output": "kG-G"
+  },
+  {
+   "input": " ,,k&=,",
+   "output": " ,,k&=,"
+  },
+  {
+   "input": "/E&",
+   "output": "/E"
+  },
+  {
+   "input": "EEG/",
+   "output": "EEG/"
+  },
+  {
+   "input": "+G",
+   "output": "+G"
+  },
+  {
+   "input": "E=& !A",
+   "output": "E=& !A"
+  },
+  {
+   "input": "/!/Gk",
+   "output": "/!/Gk"
+  },
+  {
+   "input": "-A/!=E",
+   "output": "-A/!=E"
+  },
+  {
+   "input": "/EG +E",
+   "output": "/EG +E"
+  },
+  {
+   "input": "G-,!/&",
+   "output": "G-,!/"
+  },
+  {
+   "input": "0&k--A/,G ",
+   "output": "0&k--A/,G "
+  },
+  {
+   "input": "EGG-/!=",
+   "output": "EGG-/!="
+  },
+  {
+   "input": "G0-G!+G",
+   "output": "G0-G!+G"
+  },
+  {
+   "input": "E+,--G",
+   "output": "E+,--G"
+  },
+  {
+   "input": "=-/&==-,/0/",
+   "output": "=-/,/0/"
+  },
+  {
+   "input": "=G  =+=/E,0",
+   "output": "=G  =+=/E,0"
+  },
+  {
+   "input": "/E0&&AGEkE!",
+   "output": "/E0&&AGEkE!"
+  },
+  {
+   "input": "-k& ,+,AG!A",
+   "output": "-k& ,+,AG!A"
+  },
+  {
+   "input": "k++/",
+   "output": "k++/"
+  },
+  {
+   "input": "&,=-&!",
+   "output": "&,=-"
+  },
+  {
+   "input": "0k!-0A + ",
+   "output": "0k!-0A + "
+  },
+  {
+   "input": "+!0Gk++/",
+   "output": "+!0Gk++/"
+  },
+  {
+   "input": ",Gk!E,-&",
+   "output": ",Gk!E,-"
+  },
+  {
+   "input": "E00+0",
+   "output": "E00+0"
+  },
+  {
+   "input": "0+",
+   "output": "0+"
+  },
+  {
+   "input": "-+&,",
+   "output": "-+&,"
+  },
+  {
+   "input": "=0Ek-=kGA  ",
+   "output": "=0Ek-=kGA  "
+  },
+  {
+   "input": "0&-,",
+   "output": "0&,"
+  },
+  {
+   "input": "/! 0GA",
+   "output": "/! 0GA"
+  },
+  {
+   "input": "!A",
+   "output": "!A"
+  },
+  {
+   "input": "A/+/EE!",
+   "output": "A/+/EE!"
+  },
+  {
+   "input": "/Ek!=/!",
+   "output": "/Ek!=/!"
+  },
+  {
+   "input": "!/kkA",
+   "output": "!/kkA"
+  },
+  {
+   "input": "!k-/k0/=00 ",
+   "output": "!k-/k0/=00 "
+  },
+  {
+   "input": "-!+--0E0,",
+   "output": "-!+--0E0,"
+  },
+  {
+   "input": "A,E=&++&&",
+   "output": "A,E=&++&&"
+  },
+  {
+   "input": "//",
+   "output": "//"
+  },
+  {
+   "input": "k00/A/kG+",
+   "output": "k00/A/kG+"
+  },
+  {
+   "input": "+G0,! - ",
+   "output": "+G0,! - "
+  },
+  {
+   "input": "G !=//&A,E",
+   "output": "G !=//ϱ"
+  },
+  {
+   "input": "0!",
+   "output": "0!"
+  },
+  {
+   "input": "-   ",
+   "output": "-   "
+  },
+  {
+   "input": "+0EE+-",
+   "output": "+0EE+-"
+  },
+  {
+   "input": "+!-A!A",
+   "output": "+!-A!A"
+  },
+  {
+   "input": "!k-0!Gk",
+   "output": "!k-0!Gk"
+  },
+  {
+   "input": "k0=+/E",
+   "output": "k0=+/E"
+  },
+  {
+   "input": "!0A+,&&0&,",
+   "output": "!0A+,&&0&,"
+  },
+  {
+   "input": "&,+!!EAG0",
+   "output": "&,+!!EAG0"
+  },
+  {
+   "input": "A/0/=E+=",
+   "output": "A/0/=E+="
+  },
+  {
+   "input": "k=AG&A",
+   "output": "k=AG&A"
+  },
+  {
+   "input": "kEG!+E",
+   "output": "kEG!+E"
+  },
+  {
+   "input": "kkk!!k!",
+   "output": "kkk!!k!"
+  },
+  {
+   "input": "!+G&=0 ,+",
+   "output": "!+G폿"
+  },
+  {
+   "input": "&-=",
+   "output": "&="
+  },
+  {
+   "input": "/+/ !/!",
+   "output": "/+/ !/!"
+  },
+  {
+   "input": "k&!+",
+   "output": "k&!+"
+  },
+  {
+   "input": "A/=0E!=k-",
+   "output": "A/=0E!=k-"
+  },
+  {
+   "input": "= 0E",
+   "output": "= 0E"
+  },
+  {
+   "input": ",,/+=",
+   "output": ",,/+="
+  },
+  {
+   "input": "G0 ,E0=E0",
+   "output": "G0 ,E0=E0"
+  },
+  {
+   "input": "A  k/&=+-E",
+   "output": "A  k/&=+-E"
+  },
+  {
+   "input": "//=+",
+   "output": "//=+"
+  },
+  {
+   "input": "--E",
+   "output": "--E"
+  },
+  {
+   "input": "EAk &A",
+   "output": "EAk &A"
+  },
+  {
+   "input": "/=k",
+   "output": "/=k"
+  },
+  {
+   "input": "/=/-0!+G/0/",
+   "output": "/=/-0!+G/0/"
+  },
+  {
+   "input": "A&GE/G=!,",
+   "output": "A&GE/G=!,"
+  },
+  {
+   "input": "G!00 ,&/-0",
+   "output": "G!00 ,&/-0"
+  },
+  {
+   "input": "k&",
+   "output": "k"
+  },
+  {
+   "input": "!G!!A&",
+   "output": "!G!!A"
+  },
+  {
+   "input": "+=Ek0G/A",
+   "output": "+=Ek0G/A"
+  },
+  {
+   "input": "0A&Gk&+0k",
+   "output": "0A&Gk&+0k"
+  },
+  {
+   "input": "!A!++& =,E+",
+   "output": "!A!++ﱏ"
+  },
+  {
+   "input": "+/A&",
+   "output": "+/A"
+  },
+  {
+   "input": "!G E-+&",
+   "output": "!G E-+"
+  },
+  {
+   "input": "0 &kE- ",
+   "output": "0 &kE- "
+  },
+  {
+   "input": "/+kA+-/0",
+   "output": "/+kA+-/0"
+  },
+  {
+   "input": "GG A-,k0=!",
+   "output": "GG A-,k0=!"
+  },
+  {
+   "input": "/A!",
+   "output": "/A!"
+  },
+  {
+   "input": "0EEG0k-",
+   "output": "0EEG0k-"
+  },
+  {
+   "input": "&,+!",
+   "output": "&,+!"
+  },
+  {
+   "input": "!,,A=!,-EA",
+   "output": "!,,A=!,-EA"
+  },
+  {
+   "input": ",E00A!&0G",
+   "output": ",E00A!&0G"
+  },
+  {
+   "input": "AG,-E-!-0",
+   "output": "AG,-E-!-0"
+  },
+  {
+   "input": "--",
+   "output": "--"
+  },
+  {
+   "input": "!&-Akk",
+   "output": "!&Akk"
+  },
+  {
+   "input": "-=",
+   "output": "-="
+  },
+  {
+   "input": "+!/G/0k-&k",
+   "output": "+!/G/0k-&k"
+  },
+  {
+   "input": "k++,",
+   "output": "k++,"
+  },
+  {
+   "input": "!+0",
+   "output": "!+0"
+  },
+  {
+   "input": "==",
+   "output": "=="
+  },
+  {
+   "input": "=AE0G/-k&,",
+   "output": "=AE0G/-k&,"
+  },
+  {
+   "input": "-!+!kE/",
+   "output": "-!+!kE/"
+  },
+  {
+   "input": "G&E  0A=- ",
+   "output": "Gፀ "
+  },
+  {
+   "input": "G/- kk/A",
+   "output": "G/- kk/A"
+  },
+  {
+   "input": "&&+G!",
+   "output": "&&+G!"
+  },
+  {
+   "input": "=E,EG0++!",
+   "output": "=E,EG0++!"
+  },
+  {
+   "input": " ,,&0",
+   "output": " ,,&0"
+  },
+  {
+   "input": "+A",
+   "output": "+A"
+  },
+  {
+   "input": "!=k",
+   "output": "!=k"
+  },
+  {
+   "input": "0E+-+",
+   "output": "0E+-+"
+  },
+  {
+   "input": "00!,-k& !",
+   "output": "00!,-k"
+  },
+  {
+   "input": ",k",
+   "output": ",k"
+  },
+  {
+   "input": "G00-",
+   "output": "G00-"
+  },
+  {
+   "input": " A--/&k,E-",
+   "output": " A--/鏱"
+  },
+  {
+   "input": " ,&0",
+   "output": " ,&0"
+  },
+  {
+   "input": "!G-kE",
+   "output": "!G-kE"
+  },
+  {
+   "input": "!+ =",
+   "output": "!+ ="
+  },
+  {
+   "input": "k &-  ",
+   "output": "k &  "
+  },
+  {
+   "input": "+",
+   "output": "+"
+  },
+  {
+   "input": "AGG=&+0-++",
+   "output": "AGG=&+0-++"
+  },
+  {
+   "input": "0+A!AG",
+   "output": "0+A!AG"
+  },
+  {
+   "input": "-k",
+   "output": "-k"
+  },
+  {
+   "input": "-=0G00AA",
+   "output": "-=0G00AA"
+  },
+  {
+   "input": "--+0A&0GE",
+   "output": "--+0A큡"
+  },
+  {
+   "input": "+!/&==G-+",
+   "output": "+!/&==G-+"
+  },
+  {
+   "input": "0,E0GG&A//&",
+   "output": "0,E0GG&A//&"
+  },
+  {
+   "input": "G/k=/ !E!",
+   "output": "G/k=/ !E!"
+  },
+  {
+   "input": "E&0!A",
+   "output": "E&0!A"
+  },
+  {
+   "input": "!!G+",
+   "output": "!!G+"
+  },
+  {
+   "input": ",,Ek EA",
+   "output": ",,Ek EA"
+  },
+  {
+   "input": "GG/G",
+   "output": "GG/G"
+  },
+  {
+   "input": "!=0-, E!/-",
+   "output": "!=0-, E!/-"
+  },
+  {
+   "input": "++0E+kE+",
+   "output": "++0E+kE+"
+  },
+  {
+   "input": "k!0",
+   "output": "k!0"
+  },
+  {
+   "input": "& =&!A",
+   "output": "& =&!A"
+  },
+  {
+   "input": "E0,-AGE=0",
+   "output": "E0,-AGE=0"
+  },
+  {
+   "input": " +,0=E=",
+   "output": " +,0=E="
+  },
+  {
+   "input": "!,G0E",
+   "output": "!,G0E"
+  },
+  {
+   "input": "0=,0-,G",
+   "output": "0=,0-,G"
+  },
+  {
+   "input": "A",
+   "output": "A"
+  },
+  {
+   "input": ",AE=!&0",
+   "output": ",AE=!&0"
+  },
+  {
+   "input": ",!&Ak& 0",
+   "output": ",!ɍ"
+  },
+  {
+   "input": "k++&!E0G",
+   "output": "k++&!E0G"
+  },
+  {
+   "input": "A/G& G !=",
+   "output": "A/G& G !="
+  },
+  {
+   "input": "&/E&G/ -",
+   "output": "&/E&G/ -"
+  },
+  {
+   "input": ",,kA/A",
+   "output": ",,kA/A"
+  },
+  {
+   "input": "E/+&!,0E",
+   "output": "E/+&!,0E"
+  },
+  {
+   "input": "&AAk --",
+   "output": "&AAk --"
+  },
+  {
+   "input": "=A/+G/,,G",
+   "output": "=A/+G/,,G"
+  },
+  {
+   "input": "0/k,",
+   "output": "0/k,"
+  },
+  {
+   "input": "E ++&+",
+   "output": "E ++&+"
+  },
+  {
+   "input": "=!0&G&+E/k",
+   "output": "=!0&G&+E/k"
+  },
+  {
+   "input": "/,++",
+   "output": "/,++"
+  },
+  {
+   "input": "A0A &,=+/",
+   "output": "A0A &,=+/"
+  },
+  {
+   "input": ",0=&G-/=/k/",
+   "output": ",0=&G-/=/k/"
+  },
+  {
+   "input": "-,-/ =",
+   "output": "-,-/ ="
+  },
+  {
+   "input": "!+,-kE",
+   "output": "!+,-kE"
+  },
+  {
+   "input": "0AG!-G",
+   "output": "0AG!-G"
+  },
+  {
+   "input": "-+",
+   "output": "-+"
+  },
+  {
+   "input": "k0- ",
+   "output": "k0- "
+  },
+  {
+   "input": "!k-",
+   "output": "!k-"
+  },
+  {
+   "input": "0!k& A&A&-",
+   "output": "0!k& A&A&-"
+  },
+  {
+   "input": "+0&GEG =+0",
+   "output": "+0&GEG =+0"
+  },
+  {
+   "input": "/A+/=-E&G!/",
+   "output": "/A+/=-E&G!/"
+  },
+  {
+   "input": "-EE!++k E0",
+   "output": "-EE!++k E0"
+  },
+  {
+   "input": "GE!k",
+   "output": "GE!k"
+  },
+  {
+   "input": " /&EG,+ ",
+   "output": " /&EG,+ "
+  },
+  {
+   "input": "AG",
+   "output": "AG"
+  },
+  {
+   "input": "+=&+&",
+   "output": "+=&+&"
+  },
+  {
+   "input": "E0,G -E",
+   "output": "E0,G -E"
+  },
+  {
+   "input": "+0,",
+   "output": "+0,"
+  },
+  {
+   "input": "!=!GG-",
+   "output": "!=!GG-"
+  },
+  {
+   "input": "+k",
+   "output": "+k"
+  },
+  {
+   "input": "/EG - ",
+   "output": "/EG - "
+  },
+  {
+   "input": "!G=&kkkAGGA",
+   "output": "!G=&kkkAGGA"
+  },
+  {
+   "input": "!",
+   "output": "!"
+  },
+  {
+   "input": "k& =GG-",
+   "output": "k& =GG-"
+  },
+  {
+   "input": " kk,",
+   "output": " kk,"
+  },
+  {
+   "input": "!!A//A0E",
+   "output": "!!A//A0E"
+  },
+  {
+   "input": "+ +G",
+   "output": "+ +G"
+  },
+  {
+   "input": "0E",
+   "output": "0E"
+  },
+  {
+   "input": "0&,=,/0=  ",
+   "output": "0&,=,/0=  "
+  },
+  {
+   "input": "G,E/+=",
+   "output": "G,E/+="
+  },
+  {
+   "input": "+A ++,",
+   "output": "+A ++,"
+  },
+  {
+   "input": "!=0-++ ",
+   "output": "!=0-++ "
+  },
+  {
+   "input": " E/+-E",
+   "output": " E/+-E"
+  },
+  {
+   "input": "-=&k0",
+   "output": "-=&k0"
+  },
+  {
+   "input": "&+- ",
+   "output": "&+- "
+  },
+  {
+   "input": "GAGG+,E+/=",
+   "output": "GAGG+,E+/="
+  },
+  {
+   "input": "k&G+G",
+   "output": "kᯡ"
+  },
+  {
+   "input": " ",
+   "output": " "
+  },
+  {
+   "input": "G/k",
+   "output": "G/k"
+  },
+  {
+   "input": "/&,A -,G&-&",
+   "output": "/&,A -,G&"
+  },
+  {
+   "input": "kG!",
+   "output": "kG!"
+  },
+  {
+   "input": "&=,0 Ek+",
+   "output": "&=,0 Ek+"
+  },
+  {
+   "input": " /Ek//! ",
+   "output": " /Ek//! "
+  },
+  {
+   "input": "AkA--E",
+   "output": "AkA--E"
+  },
+  {
+   "input": "!EG/G0 0/",
+   "output": "!EG/G0 0/"
+  },
+  {
+   "input": "- /-EE",
+   "output": "- /-EE"
+  },
+  {
+   "input": "!=,/",
+   "output": "!=,/"
+  },
+  {
+   "input": "k,A kG",
+   "output": "k,A kG"
+  },
+  {
+   "input": "kAE00",
+   "output": "kAE00"
+  },
+  {
+   "input": "!E",
+   "output": "!E"
+  },
+  {
+   "input": "k0/",
+   "output": "k0/"
+  },
+  {
+   "input": " =kA &",
+   "output": " =kA "
+  },
+  {
+   "input": "&! ",
+   "output": ""
+  },
+  {
+   "input": "Gk/A+",
+   "output": "Gk/A+"
+  },
+  {
+   "input": "0=++G",
+   "output": "0=++G"
+  },
+  {
+   "input": "&,",
+   "output": "&,"
+  },
+  {
+   "input": "&G//EAA",
+   "output": "᯿쐀"
+  },
+  {
+   "input": "0=- ",
+   "output": "0=- "
+  },
+  {
+   "input": "=/A!!!EE& k",
+   "output": "=/A!!!EE& k"
+  },
+  {
+   "input": ",+k& A!",
+   "output": ",+k& A!"
+  },
+  {
+   "input": "0/=/!GG=A",
+   "output": "0/=/!GG=A"
+  },
+  {
+   "input": ",=++ ",
+   "output": ",=++ "
+  },
+  {
+   "input": "&0++++A",
+   "output": "폯뻸"
+  },
+  {
+   "input": "!+A+&E=",
+   "output": "!+A+&E="
+  },
+  {
+   "input": "/=A,,&=E &",
+   "output": "/=A,,&=E &"
+  },
+  {
+   "input": "=!- A0EEk0 ",
+   "output": "=!- A0EEk0 "
+  },
+  {
+   "input": "&A=!+!",
+   "output": "&A=!+!"
+  },
+  {
+   "input": "0A=  ",
+   "output": "0A=  "
+  },
+  {
+   "input": "&AE,A",
+   "output": "&AE,A"
+  },
+  {
+   "input": "=! k=E E+E",
+   "output": "=! k=E E+E"
+  },
+  {
+   "input": "0E=-+!-A/k",
+   "output": "0E=-+!-A/k"
+  },
+  {
+   "input": "AGk/A+0--G-",
+   "output": "AGk/A+0--G-"
+  },
+  {
+   "input": " A0/Gk& ",
+   "output": " A0/Gk"
+  },
+  {
+   "input": "-& -0=",
+   "output": "-0="
+  },
+  {
+   "input": "&E0,G=00",
+   "output": "&E0,G=00"
+  },
+  {
+   "input": "/ ",
+   "output": "/ "
+  },
+  {
+   "input": ",!A0EA",
+   "output": ",!A0EA"
+  },
+  {
+   "input": "E!G& E",
+   "output": "E!G& E"
+  },
+  {
+   "input": ",G+0G=&",
+   "output": ",G+0G="
+  },
+  {
+   "input": "+E=",
+   "output": "+E="
+  },
+  {
+   "input": "&0k",
+   "output": "&0k"
+  },
+  {
+   "input": "AG-Ak ",
+   "output": "AG-Ak "
+  },
+  {
+   "input": "//=&k ,A0&",
+   "output": "//=&k ,A0&"
+  },
+  {
+   "input": "/00GG/==A&k",
+   "output": "/00GG/==A&k"
+  },
+  {
+   "input": "AG0 E!0-!0",
+   "output": "AG0 E!0-!0"
+  },
+  {
+   "input": " ==E0Ek!/E+",
+   "output": " ==E0Ek!/E+"
+  },
+  {
+   "input": "Ek0&!",
+   "output": "Ek0"
+  },
+  {
+   "input": "!,,=",
+   "output": "!,,="
+  },
+  {
+   "input": "+!",
+   "output": "+!"
+  },
+  {
+   "input": "=+AG",
+   "output": "=+AG"
+  },
+  {
+   "input": "! kE k k!,!",
+   "output": "! kE k k!,!"
+  },
+  {
+   "input": "++A&=/&-0-",
+   "output": "++A&=/&-0-"
+  },
+  {
+   "input": "/-00=E=G!!",
+   "output": "/-00=E=G!!"
+  },
+  {
+   "input": " =+k!kE&",
+   "output": " =+k!kE"
+  },
+  {
+   "input": "&E!,E!G==+",
+   "output": "&E!,E!G==+"
+  },
+  {
+   "input": "+&/0k+ &",
+   "output": "+&/0k+ &"
+  },
+  {
+   "input": "&,/!",
+   "output": "&,/!"
+  },
+  {
+   "input": ",+k ",
+   "output": ",+k "
+  },
+  {
+   "input": "00k",
+   "output": "00k"
+  },
+  {
+   "input": "&G++ E",
+   "output": "&G++ E"
+  },
+  {
+   "input": ",&Ek-+",
+   "output": ",&Ek-+"
+  },
+  {
+   "input": "G0,,A+",
+   "output": "G0,,A+"
+  },
+  {
+   "input": "0 G!k",
+   "output": "0 G!k"
+  },
+  {
+   "input": "k-",
+   "output": "k-"
+  },
+  {
+   "input": "GGA=k,A",
+   "output": "GGA=k,A"
+  },
+  {
+   "input": "+kG/E=A-+/",
+   "output": "+kG/E=A-+/"
+  },
+  {
+   "input": ",,/E/k+0k",
+   "output": ",,/E/k+0k"
+  },
+  {
+   "input": "+& kk=++=-",
+   "output": "+& kk=++=-"
+  },
+  {
+   "input": "G= EG+!k=",
+   "output": "G= EG+!k="
+  },
+  {
+   "input": "!=/EAAE-k&",
+   "output": "!=/EAAE-k"
+  },
+  {
+   "input": "=E!&-0--0/ ",
+   "output": "=E!&0--0/ "
+  },
+  {
+   "input": "/A+EGG=0/+",
+   "output": "/A+EGG=0/+"
+  },
+  {
+   "input": "Ek+,G-&=k,",
+   "output": "Ek+,G-&=k,"
+  },
+  {
+   "input": "A!+--k",
+   "output": "A!+--k"
+  },
+  {
+   "input": ",G  ==!",
+   "output": ",G  ==!"
+  },
+  {
+   "input": ",,-//",
+   "output": ",,-//"
+  },
+  {
+   "input": "!-kG",
+   "output": "!-kG"
+  },
+  {
+   "input": "+,AG-E",
+   "output": "+,AG-E"
+  },
+  {
+   "input": "-/0 + ,&A,",
+   "output": "-/0 + ,&A,"
+  },
+  {
+   "input": ",! -G/E0E",
+   "output": ",! -G/E0E"
+  },
+  {
+   "input": "A-!,",
+   "output": "A-!,"
+  },
+  {
+   "input": "&GA",
+   "output": "&GA"
+  },
+  {
+   "input": "0&A=!= E+0",
+   "output": "0&A=!= E+0"
+  },
+  {
+   "input": "&=/",
+   "output": "&=/"
+  },
+  {
+   "input": "G,=E=!,,,&G",
+   "output": "G,=E=!,,,&G"
+  },
+  {
+   "input": "Gk/G",
+   "output": "Gk/G"
+  },
+  {
+   "input": "A0E&E",
+   "output": "A0E&E"
+  },
+  {
+   "input": "A&+&,GG=!,",
+   "output": "A&+&,GG=!,"
+  },
+  {
+   "input": "+/& E 0/-/k",
+   "output": "+/ፏ/k"
+  },
+  {
+   "input": "0A&G/k&AE+",
+   "output": "0A&G/k&AE+"
+  },
+  {
+   "input": "&E",
+   "output": "&E"
+  },
+  {
+   "input": "+A&",
+   "output": "+A"
+  },
+  {
+   "input": " G0/+A&,+",
+   "output": " G0/+A&,+"
+  },
+  {
+   "input": "G,&E0A",
+   "output": "G,ፀ"
+  },
+  {
+   "input": "!+/-",
+   "output": "!+/-"
+  },
+  {
+   "input": "+0-0+AE +-k",
+   "output": "+0-0+AE +-k"
+  },
+  {
+   "input": "k,+ &=&k",
+   "output": "k,+ &=&k"
+  },
+  {
+   "input": "kE0,A  == ",
+   "output": "kE0,A  == "
+  },
+  {
+   "input": "GG/==0!!A/",
+   "output": "GG/==0!!A/"
+  },
+  {
+   "input": "!A+-",
+   "output": "!A+-"
+  },
+  {
+   "input": "A=+ 0&&",
+   "output": "A=+ 0"
+  },
+  {
+   "input": "/ E=-",
+   "output": "/ E=-"
+  },
+  {
+   "input": "=0&A/E/=&",
+   "output": "=0&A/E/=&"
+  },
+  {
+   "input": "0k=",
+   "output": "0k="
+  },
+  {
+   "input": "0E  =k/0=",
+   "output": "0E  =k/0="
+  },
+  {
+   "input": "/A+k=!GG--,",
+   "output": "/A+k=!GG--,"
+  },
+  {
+   "input": "+&=",
+   "output": "+"
+  },
+  {
+   "input": "G=!",
+   "output": "G=!"
+  },
+  {
+   "input": "A/ /&,AA/ ",
+   "output": "A/ /&,AA/ "
+  },
+  {
+   "input": "&,,!k!!",
+   "output": "￹"
+  },
+  {
+   "input": "=,G-- ",
+   "output": "=,G-- "
+  },
+  {
+   "input": "&A-G!kE ",
+   "output": "&A-G!kE "
+  },
+  {
+   "input": "0,+/= ",
+   "output": "0,+/= "
+  },
+  {
+   "input": "-+!EE",
+   "output": "-+!EE"
+  },
+  {
+   "input": "!-/&+",
+   "output": "!-/&+"
+  },
+  {
+   "input": ",!A/",
+   "output": ",!A/"
+  },
+  {
+   "input": "&G,",
+   "output": "&G,"
+  },
+  {
+   "input": "0 /k=",
+   "output": "0 /k="
+  },
+  {
+   "input": "& ==!0A0G",
+   "output": "& ==!0A0G"
+  },
+  {
+   "input": "=-",
+   "output": "=-"
+  },
+  {
+   "input": "-&E-",
+   "output": "-&E-"
+  },
+  {
+   "input": "-=0k&,",
+   "output": "-=0k&,"
+  },
+  {
+   "input": "A G",
+   "output": "A G"
+  },
+  {
+   "input": "!+ =kG&kE",
+   "output": "!+ =kG&kE"
+  },
+  {
+   "input": "&A0+/ /,E ",
+   "output": "&A0+/ /,E "
+  },
+  {
+   "input": "=+0G/",
+   "output": "=+0G/"
+  },
+  {
+   "input": "=  Gk&&=0/E",
+   "output": "=  Gk폱"
+  },
+  {
+   "input": "G0-+ E&0+G",
+   "output": "G0-+ E폡"
+  },
+  {
+   "input": "&!",
+   "output": ""
+  },
+  {
+   "input": "G=+",
+   "output": "G=+"
+  },
+  {
+   "input": ",E   G0",
+   "output": ",E   G0"
+  },
+  {
+   "input": "!++,00+",
+   "output": "!++,00+"
+  },
+  {
+   "input": "EA-,",
+   "output": "EA-,"
+  },
+  {
+   "input": "Ek-A-",
+   "output": "Ek-A-"
+  },
+  {
+   "input": "AGG-=+=,E=",
+   "output": "AGG-=+=,E="
+  },
+  {
+   "input": "-! ,=E!-k/-",
+   "output": "-! ,=E!-k/-"
+  },
+  {
+   "input": "-0!k-A",
+   "output": "-0!k-A"
+  }
+ ]
+}
