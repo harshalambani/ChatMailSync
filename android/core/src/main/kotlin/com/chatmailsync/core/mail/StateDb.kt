@@ -27,6 +27,27 @@ package com.chatmailsync.core.mail
  * that sequences several of them inside one connection's lifetime.
  */
 interface StateDb : AutoCloseable {
+    /**
+     * One-time connection setup, called by [StateRepository] on a fresh connection
+     * OUTSIDE any transaction and before [beginTransaction] (SQLite refuses
+     * `PRAGMA journal_mode = WAL` inside a transaction). Switches the database file to
+     * write-ahead logging (Android: `enableWriteAheadLogging()`).
+     *
+     * Foreign keys are deliberately left OFF, by parity: the tables declare
+     * `REFERENCES` but `state.py` only ever switched them on inside `init_db`'s own
+     * connection, every other connection (and every existing database's writes) ran
+     * with them off, so enforcing them now could reject rows the shipped app accepts.
+     */
+    fun configure()
+
+    // VALUE TYPES (the contract every implementation must meet): a row's values come back
+    // as String for TEXT, Long for INTEGER (never Int or Short), Double for REAL, and null
+    // for NULL. BLOBs are not used. Bound parameters are String, Long, Int, Double or null.
+    //
+    // TRANSACTIONS: [beginTransaction] really begins one (nothing is written for good until
+    // [commit]); [rollback] discards it. Statements run outside a transaction autocommit.
+    // Each statement is ONE statement; only [execScript] takes several.
+
     /** Runs SQL that returns no rows (DDL, INSERT/UPDATE/DELETE). */
     fun exec(sql: String, params: List<Any?> = emptyList())
 

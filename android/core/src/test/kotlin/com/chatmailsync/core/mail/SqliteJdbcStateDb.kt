@@ -19,7 +19,8 @@ import java.sql.Statement
  */
 class SqliteJdbcStateDb(path: String) : StateDb {
     private val connection: Connection = DriverManager.getConnection("jdbc:sqlite:$path").also {
-        it.autoCommit = false
+        // Like Android's SQLiteDatabase: autocommit until beginTransaction() really begins.
+        it.autoCommit = true
     }
 
     override fun exec(sql: String, params: List<Any?>) {
@@ -33,26 +34,18 @@ class SqliteJdbcStateDb(path: String) : StateDb {
         }
     }
 
+    override fun configure() {
+        // Same as Android's enableWriteAheadLogging(): must run with no transaction open,
+        // and SQLite itself refuses it otherwise (see StateDoubleContractTest).
+        connection.createStatement().use { it.execute("PRAGMA journal_mode = WAL") }
+    }
+
     override fun execScript(sql: String) {
-        // Python's sqlite3.Connection.executescript implicitly COMMITs any
-        // pending transaction before it runs, so every statement in
-        // state.py's _DDL -- including `PRAGMA journal_mode = WAL`, which
-        // SQLite refuses mid-transaction ("cannot change into wal mode from
-        // within a transaction") -- executes with no transaction open. This
-        // connection's autoCommit is false for the ordinary exec()/query()
-        // path (see beginTransaction/commit/rollback below), so it has to be
-        // flipped on for the duration of the script to reproduce that same
-        // "no active transaction" shape, then restored.
-        val previousAutoCommit = connection.autoCommit
+        // Android's execSQL runs ONE statement, so a script is split and run statement by
+        // statement on the current transaction state -- it is NOT implicitly committed the
+        // way Python's executescript is. None of the DDL contains a ';' inside a literal.
         try {
-            connection.autoCommit = true
             connection.createStatement().use { stmt: Statement ->
-                // sqlite-jdbc's Statement.executeUpdate does not support
-                // multiple ';'-separated statements in one call the way
-                // Python's sqlite3.executescript does, so split and run each
-                // non-blank statement individually. None of state.py's DDL
-                // statements contain a semicolon inside a string literal, so
-                // a naive split is safe here.
                 sql.split(";")
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
@@ -60,8 +53,6 @@ class SqliteJdbcStateDb(path: String) : StateDb {
             }
         } catch (e: SQLException) {
             throw StateDbException(e.message ?: "SQLite error", e)
-        } finally {
-            connection.autoCommit = previousAutoCommit
         }
     }
 
@@ -76,7 +67,10 @@ class SqliteJdbcStateDb(path: String) : StateDb {
                     while (rs.next()) {
                         val row = LinkedHashMap<String, Any?>()
                         for (i in 1..colCount) {
-                            row[meta.getColumnLabel(i)] = rs.getObject(i)
+                            row[meta.getColumnLabel(i)] = when (val v = rs.getObject(i)) {
+                                is Int, is Short, is Byte -> (v as Number).toLong()
+                                else -> v
+                            }
                         }
                         rows.add(row)
                     }
@@ -93,28 +87,39 @@ class SqliteJdbcStateDb(path: String) : StateDb {
 
     override fun setUserVersion(version: Int) {
         // PRAGMA statements cannot be parameterised.
-        connection.createStatement().use { it.execute("PRAGMA user_version = $version") }
+        try {
+            connection.createStatement().use { it.execute("PRAGMA user_version = $version") }
+        } catch (e: SQLException) {
+            throw StateDbException(e.message ?: "SQLite error", e)
+        }
     }
 
     override fun lastInsertRowId(): Long =
-        connection.createStatement().use { stmt ->
-            stmt.executeQuery("SELECT last_insert_rowid()").use { rs ->
-                rs.next()
-                rs.getLong(1)
+        try {
+            connection.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT last_insert_rowid()").use { rs ->
+                    rs.next()
+                    rs.getLong(1)
+                }
             }
+        } catch (e: SQLException) {
+            throw StateDbException(e.message ?: "SQLite error", e)
         }
 
-    override fun beginTransaction() {
-        // autoCommit is already false; nothing further to do -- the JDBC
-        // driver starts an implicit transaction on the first statement.
-    }
+    // Real transaction statements, as Android's beginTransaction/setTransactionSuccessful+
+    // endTransaction do. A failing COMMIT/ROLLBACK surfaces as StateDbException.
+    override fun beginTransaction() = run("BEGIN")
 
-    override fun commit() {
-        connection.commit()
-    }
+    override fun commit() = run("COMMIT")
 
-    override fun rollback() {
-        connection.rollback()
+    override fun rollback() = run("ROLLBACK")
+
+    private fun run(sql: String) {
+        try {
+            connection.createStatement().use { it.execute(sql) }
+        } catch (e: SQLException) {
+            throw StateDbException(e.message ?: "SQLite error", e)
+        }
     }
 
     override fun close() {

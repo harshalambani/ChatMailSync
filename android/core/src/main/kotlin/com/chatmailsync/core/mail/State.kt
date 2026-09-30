@@ -39,10 +39,12 @@ class StateRepository(private val openDb: () -> StateDb) {
     // -----------------------------------------------------------------
 
     companion object {
+        // ST-02: state.py's _DDL also opens with `PRAGMA journal_mode = WAL` and
+        // `PRAGMA foreign_keys = ON`. SQLite refuses the first inside a transaction and
+        // silently ignores the second there, and [withDb] always runs inside one, so they
+        // never took effect here. They are now [StateDb.configure], run outside any
+        // transaction (WAL on; foreign keys stay OFF by parity -- see [StateDb.configure]).
         internal val DDL: String = """
-            PRAGMA journal_mode = WAL;
-            PRAGMA foreign_keys = ON;
-
             CREATE TABLE IF NOT EXISTS chats (
                 chat_id           TEXT PRIMARY KEY,
                 display_name      TEXT NOT NULL,
@@ -145,18 +147,39 @@ class StateRepository(private val openDb: () -> StateDb) {
     // Connection helper -- twin of state.py's `_connect` context manager.
     // -----------------------------------------------------------------
 
-    private fun <T> withDb(block: (StateDb) -> T): T {
+    /**
+     * Opens a connection, runs [block] in one transaction, commits, closes.
+     * [configure] runs [StateDb.configure] first, outside any transaction (only [initDb]
+     * needs it: WAL is stored in the file and persists). A failing rollback or close never
+     * replaces the error that caused it; it is attached to it as a suppressed exception.
+     */
+    private fun <T> withDb(configure: Boolean = false, block: (StateDb) -> T): T {
         val db = openDb()
-        return try {
+        var began = false
+        var failure: Throwable? = null
+        try {
+            if (configure) db.configure()
             db.beginTransaction()
+            began = true
             val result = block(db)
             db.commit()
-            result
+            return result
         } catch (t: Throwable) {
-            db.rollback()
+            failure = t
+            if (began) {
+                try {
+                    db.rollback()
+                } catch (r: Throwable) {
+                    t.addSuppressed(r)
+                }
+            }
             throw t
         } finally {
-            db.close()
+            try {
+                db.close()
+            } catch (c: Throwable) {
+                failure?.addSuppressed(c) ?: throw c
+            }
         }
     }
 
@@ -165,7 +188,7 @@ class StateRepository(private val openDb: () -> StateDb) {
     // -----------------------------------------------------------------
 
     fun initDb() {
-        withDb { db ->
+        withDb(configure = true) { db ->
             db.execScript(DDL)
             // Migration for DBs created before the `trigger` column existed.
             try {
