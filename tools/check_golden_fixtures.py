@@ -18,17 +18,27 @@ from pathlib import Path
 
 
 def _dump(path: Path) -> list[str]:
-    con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    # immutable=1: SQLite does no locking and creates no -wal/-shm/-journal side
+    # files, so the checker never writes into the source tree.
+    con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True)
     try:
         return list(con.iterdump())
     finally:
         con.close()
 
 
+def _is_side_file(p: Path) -> bool:
+    return p.name.endswith(("-wal", "-shm", "-journal"))
+
+
+def _fixtures(d: Path) -> list[Path]:
+    return [p for p in d.iterdir() if p.is_file() and not _is_side_file(p)]
+
+
 def compare(fresh: Path, committed: Path) -> list[str]:
     problems: list[str] = []
-    fresh_names = {p.name for p in fresh.iterdir() if p.is_file() and not p.name.endswith(("-wal", "-shm"))}
-    committed_names = {p.name for p in committed.iterdir() if p.is_file() and not p.name.endswith(("-wal", "-shm"))}
+    fresh_names = {p.name for p in _fixtures(fresh)}
+    committed_names = {p.name for p in _fixtures(committed)}
     for name in sorted(committed_names - fresh_names):
         problems.append(f"{name}: committed but no longer generated (stale golden)")
     for name in sorted(fresh_names - committed_names):
@@ -58,7 +68,7 @@ def main(argv: list[str]) -> int:
             print("  " + p)
         print("Regenerate: PYTHONPATH=. python tools/generate_kotlin_core_golden_fixtures.py")
         return 1
-    print(f"All {len(list(committed.iterdir()))} golden fixtures match a fresh regeneration.")
+    print(f"All {len(_fixtures(committed))} golden fixtures match a fresh regeneration.")
     return 0
 
 
