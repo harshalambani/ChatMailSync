@@ -68,9 +68,18 @@ fun isTooLarge(exc: Throwable): Boolean {
     return false
 }
 
-/** Redacts [secret] out of [text], mirroring `_strip_secret`. */
+/**
+ * Redacts [secret] out of [text], mirroring `_strip_secret`, and also its
+ * IMAP quoted-string form (SEC-06): a server that echoes the LOGIN line back
+ * in a BAD/NO reply shows the password with `\` and `"` backslash-escaped,
+ * which the raw form alone would not match. The escaped form is scrubbed
+ * first so a partial raw match cannot leave half of it behind.
+ */
 fun stripSecret(text: String, secret: String?): String {
     if (secret.isNullOrEmpty()) return text
-    if (secret !in text) return text
-    return text.replace(secret, "***")
+    var out = text
+    val escaped = secret.replace("\\", "\\\\").replace("\"", "\\\"")
+    if (escaped != secret && escaped in out) out = out.replace(escaped, "***")
+    if (secret in out) out = out.replace(secret, "***")
+    return out
 }

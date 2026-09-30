@@ -137,7 +137,7 @@ class ImapTransport(
     }
 
     private fun mapResponse(status: String, data: List<String?>, context: String): MailTransportError {
-        val text = joinImapResponse(data)
+        val text = stripSecret(joinImapResponse(data), password)
         return transportError("$context failed ($status): $text", statusForImapText(text))
     }
 
