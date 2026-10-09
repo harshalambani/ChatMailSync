@@ -1618,6 +1618,212 @@ def generate_mime_cases_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases)")
 
 
+
+# ---------------------------------------------------------------------------
+# KT-08: .cmsbackup (src/migration.py) parity goldens
+# ---------------------------------------------------------------------------
+
+_MIG_TABLES = (
+    "chats", "sync_runs", "message_hashes", "chat_cutoffs", "chat_senders",
+    "app_state", "imported_bundles",
+)
+_MIG_NOW = "2026-10-01T10:00:00"
+_MIG_BUNDLE_ID = "00000000-0000-4000-8000-00000000c0de"
+# Settings handed to export_bundle: allowed keys, a hostile host, a credential-looking key
+# and an unknown one. Only the allowed ones may reach settings.json.
+_MIG_EXPORT_SETTINGS = {
+    "chunk_size": "week",
+    "theme_mode": "dark",
+    "imap_provider": "yahoo",
+    "imap_port": 993,
+    "imap_email": "test@example.com",
+    "imap_host": "evil.example.com",
+    "app_password": "not-a-real-password",
+    "unknown_key": "x",
+}
+
+
+def _mig_dump(db_path: Path) -> dict:
+    import sqlite3
+
+    con = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro&immutable=1", uri=True)
+    con.row_factory = sqlite3.Row
+    try:
+        present = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        out = {}
+        for table in _MIG_TABLES:
+            if table in present:
+                out[table] = [dict(r) for r in con.execute(f"SELECT * FROM {table}")]
+        return out
+    finally:
+        con.close()
+
+
+def _mig_seed_source(root: Path) -> None:
+    db = root / "data" / "sync_state.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    state.init_db(db)
+    state.upsert_chat("chat-meera", "Meera Iyer", "Meera Iyer.txt", db_path=db)
+    state.upsert_chat("chat-rohan", "Rohan Mehta", "Rohan Mehta.txt", db_path=db)
+    r1 = state.start_sync_run("chat-meera", db_path=db)
+    state.complete_sync_run(r1, "2026-09-30T09:02:00", "m2", 3, 2, 1, db_path=db)
+    r2 = state.start_sync_run("chat-meera", "scheduled", db_path=db)
+    state.fail_sync_run(r2, "placeholder failure", db_path=db)
+    r3 = state.start_sync_run("chat-rohan", db_path=db)
+    state.complete_sync_run(r3, "2026-09-30T09:01:00", "r1", 1, 1, 0, db_path=db)
+    state.insert_message_hashes(
+        [
+            ("m1", "chat-meera", "2026-09-30T09:01:00", r1),
+            ("m2", "chat-meera", "2026-09-30T09:02:00", r1),
+            ("r1", "chat-rohan", "2026-09-30T09:01:00", r3),
+        ],
+        db_path=db,
+    )
+    state.set_chat_cutoff("chat-meera", "2026-01-01", db_path=db)
+    state.record_chat_senders("chat-meera", {"Meera Iyer": 2, "Rohan Mehta": 1}, "2026-09-30T09:02:00", db_path=db)
+    state.set_app_state("owner_override", "Meera Iyer", db_path=db)
+
+
+def _mig_seed_overlap(root: Path) -> None:
+    """A destination that already holds some of the same history, and some of its own."""
+    db = root / "data" / "sync_state.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    state.init_db(db)
+    state.upsert_chat("chat-meera", "Meera I. (local)", "local.txt", db_path=db)
+    state.upsert_chat("chat-asha", "Asha Nair", "Asha Nair.txt", db_path=db)
+    # Identical to the bundle's first run (same natural key), so it must not be duplicated.
+    r1 = state.start_sync_run("chat-meera", db_path=db)
+    state.complete_sync_run(r1, "2026-09-30T09:02:00", "m2", 3, 2, 1, db_path=db)
+    r2 = state.start_sync_run("chat-asha", db_path=db)
+    state.complete_sync_run(r2, "2026-09-29T08:00:00", "a1", 1, 1, 0, db_path=db)
+    state.insert_message_hashes(
+        [
+            ("m1", "chat-meera", "2026-09-30T09:01:00", r1),
+            ("local-only", "chat-meera", "2026-09-30T09:09:00", r1),
+            ("a1", "chat-asha", "2026-09-29T08:00:00", r2),
+        ],
+        db_path=db,
+    )
+    state.set_chat_cutoff("chat-meera", "2026-06-01", db_path=db)  # the local floor must win
+
+
+def _mig_checkpointed(db: Path) -> None:
+    import sqlite3
+
+    con = sqlite3.connect(db)
+    try:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        con.execute("PRAGMA journal_mode = DELETE")
+    finally:
+        con.close()
+
+
+def _mig_hostile_bundle(path: Path, settings: dict, bundle_id: str) -> None:
+    manifest = {"schema_version": 1, "bundle_id": bundle_id, "created_at": _MIG_NOW,
+                "app_version": "placeholder", "counts": {}}
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("manifest.json", json.dumps(manifest, indent=2))
+        z.writestr("settings.json", json.dumps(settings, indent=2))
+
+
+def generate_migration_golden() -> None:
+    import datetime as _dt
+    import shutil
+    import tempfile
+    from unittest import mock
+
+    from src import migration
+
+    class _FrozenDatetime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt.datetime.fromisoformat(_MIG_NOW)
+
+    tmp = Path(tempfile.mkdtemp(prefix="cms_migration_golden_"))
+    try:
+        with mock.patch.object(state, "_now", return_value=_MIG_NOW), \
+                mock.patch.object(migration, "datetime", _FrozenDatetime), \
+                mock.patch.object(migration.uuid, "uuid4", return_value=_MIG_BUNDLE_ID):
+            src_root = tmp / "src"
+            _mig_seed_source(src_root)
+            _mig_checkpointed(src_root / "data" / "sync_state.db")
+            shutil.copyfile(src_root / "data" / "sync_state.db", GOLDEN_DIR / "migration_source.db")
+
+            overlap_root = tmp / "overlap_seed"
+            _mig_seed_overlap(overlap_root)
+            _mig_checkpointed(overlap_root / "data" / "sync_state.db")
+            shutil.copyfile(overlap_root / "data" / "sync_state.db", GOLDEN_DIR / "migration_overlap_seed.db")
+
+            bundle = GOLDEN_DIR / "migration_python_written.cmsbackup"
+            export = migration.export_bundle(src_root, bundle, _MIG_EXPORT_SETTINGS, app_version="placeholder")
+            _mig_hostile_bundle(
+                GOLDEN_DIR / "migration_hostile_gmail.cmsbackup",
+                {"imap_provider": "gmail", "imap_host": "evil.example.com", "imap_port": 1,
+                 "chunk_size": "day", "app_password": "x"},
+                "hostile-gmail",
+            )
+            _mig_hostile_bundle(
+                GOLDEN_DIR / "migration_hostile_outlook.cmsbackup",
+                {"imap_provider": "outlook", "imap_host": "evil.example.com", "imap_port": 1},
+                "hostile-outlook",
+            )
+            _mig_hostile_bundle(
+                GOLDEN_DIR / "migration_hostile_custom.cmsbackup",
+                {"imap_provider": "custom", "imap_host": "evil.example.com", "imap_port": 2993},
+                "hostile-custom",
+            )
+
+            with zipfile.ZipFile(bundle) as z:
+                manifest_text = z.read("manifest.json").decode("utf-8")
+                settings_text = z.read("settings.json").decode("utf-8")
+                z.extract("sync_state.db", tmp / "bundle_db")
+            bundle_dump = _mig_dump(tmp / "bundle_db" / "sync_state.db")
+
+            cases = []
+            for name, bundle_name, seed in (
+                ("python_written_into_empty", "migration_python_written.cmsbackup", None),
+                ("python_written_into_overlap", "migration_python_written.cmsbackup", "overlap"),
+                ("hostile_gmail", "migration_hostile_gmail.cmsbackup", None),
+                ("hostile_outlook", "migration_hostile_outlook.cmsbackup", None),
+                ("hostile_custom", "migration_hostile_custom.cmsbackup", None),
+            ):
+                root = tmp / ("case_" + name)
+                if seed:
+                    _mig_seed_overlap(root)
+                first = migration.import_bundle(root, GOLDEN_DIR / bundle_name)
+                after_first = _mig_dump(root / "data" / "sync_state.db")
+                second = migration.import_bundle(root, GOLDEN_DIR / bundle_name)
+                after_second = _mig_dump(root / "data" / "sync_state.db")
+                cases.append({
+                    "name": name,
+                    "bundle": bundle_name,
+                    "seed": "migration_overlap_seed.db" if seed else None,
+                    "first": first,
+                    "dump_after_first": after_first,
+                    "second": second,
+                    "dump_unchanged_by_second": after_first == after_second,
+                })
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    golden = {
+        "bundle_id": _MIG_BUNDLE_ID,
+        "created_at": _MIG_NOW,
+        "app_version": "placeholder",
+        "export_settings_input": _MIG_EXPORT_SETTINGS,
+        "export_counts": export["counts"],
+        "export_settings_keys": export["settings_keys"],
+        "manifest_text": manifest_text,
+        "settings_text": settings_text,
+        "bundle_db_dump": bundle_dump,
+        "import_cases": cases,
+    }
+    (GOLDEN_DIR / "migration_golden.json").write_text(
+        json.dumps(golden, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
+    print(f"Wrote {GOLDEN_DIR / 'migration_golden.json'} and the migration_*.cmsbackup / .db fixtures")
+
+
 # ---------------------------------------------------------------------------
 # KT-07: _build_html_mime_message goldens
 #
@@ -1867,6 +2073,7 @@ def main() -> None:
     generate_mime_cases_golden()
     generate_html_mime_golden()
     generate_par06_edge_golden()
+    generate_migration_golden()
 
 
 if __name__ == "__main__":

@@ -37,7 +37,13 @@ class SqliteJdbcStateDb(path: String) : StateDb {
     override fun configure() {
         // Same as Android's enableWriteAheadLogging(): must run with no transaction open,
         // and SQLite itself refuses it otherwise (see StateDoubleContractTest).
-        connection.createStatement().use { it.execute("PRAGMA journal_mode = WAL") }
+        try {
+            connection.createStatement().use { it.execute("PRAGMA journal_mode = WAL") }
+        } catch (e: SQLException) {
+            // KT-08: the StateDb contract is that a driver failure surfaces as StateDbException
+            // (a bundle whose database member is not a database fails exactly here).
+            throw StateDbException(e.message ?: "SQLite error", e)
+        }
     }
 
     override fun execScript(sql: String) {

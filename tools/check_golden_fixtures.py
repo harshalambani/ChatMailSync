@@ -7,13 +7,18 @@ wrote every golden. Every file must exist on both sides and match byte for
 byte, except SQLite databases: the file header records the version of the
 SQLite library that wrote it, which differs between a Windows developer
 machine and a Linux CI runner, so those are compared by their logical content
-(schema and rows via iterdump).
+(schema and rows via iterdump). `.cmsbackup` bundles are zip files whose raw
+bytes carry entry timestamps and an embedded SQLite file, so they are compared
+by DECODED content: the member names, manifest.json and settings.json byte for
+byte, and the sync_state.db member by iterdump.
 """
 
 from __future__ import annotations
 
 import sqlite3
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -25,6 +30,23 @@ def _dump(path: Path) -> list[str]:
         return list(con.iterdump())
     finally:
         con.close()
+
+
+def _bundle_content(path: Path) -> object:
+    """What a .cmsbackup means, with the zip container and SQLite file header stripped away."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = sorted(z.namelist())
+            small = {n: z.read(n) for n in names if n != "sync_state.db"}
+            dump = None
+            if "sync_state.db" in names:
+                with tempfile.TemporaryDirectory() as tmp:
+                    out = Path(tmp) / "sync_state.db"
+                    out.write_bytes(z.read("sync_state.db"))
+                    dump = _dump(out)
+            return names, small, dump
+    except zipfile.BadZipFile:
+        return ("not a zip", path.read_bytes())
 
 
 def _is_side_file(p: Path) -> bool:
@@ -48,6 +70,9 @@ def compare(fresh: Path, committed: Path) -> list[str]:
         if name.endswith(".db"):
             if _dump(a) != _dump(b):
                 problems.append(f"{name}: database content differs")
+        elif name.endswith(".cmsbackup"):
+            if _bundle_content(a) != _bundle_content(b):
+                problems.append(f"{name}: bundle content differs (manifest, settings or database rows)")
         elif a.read_bytes() != b.read_bytes():
             problems.append(f"{name}: bytes differ ({a.stat().st_size} generated vs {b.stat().st_size} committed)")
     return problems

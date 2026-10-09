@@ -1,0 +1,748 @@
+{
+  "app_version": "placeholder",
+  "bundle_db_dump": {
+    "app_state": [
+      {
+        "key": "owner_override",
+        "value": "Meera Iyer"
+      }
+    ],
+    "chat_cutoffs": [
+      {
+        "chat_id": "chat-meera",
+        "cutoff_ts": "2026-01-01T00:00:00",
+        "set_at": "2026-10-01T10:00:00"
+      }
+    ],
+    "chat_senders": [
+      {
+        "chat_id": "chat-meera",
+        "first_seen": "2026-09-30T09:02:00",
+        "last_seen": "2026-09-30T09:02:00",
+        "msg_count": 2,
+        "sender": "Meera Iyer"
+      },
+      {
+        "chat_id": "chat-meera",
+        "first_seen": "2026-09-30T09:02:00",
+        "last_seen": "2026-09-30T09:02:00",
+        "msg_count": 1,
+        "sender": "Rohan Mehta"
+      }
+    ],
+    "chats": [
+      {
+        "anchor_message_id": null,
+        "chat_id": "chat-meera",
+        "created_at": "2026-10-01T10:00:00",
+        "display_name": "Meera Iyer",
+        "gmail_label_id": null,
+        "gmail_thread_id": null,
+        "source_filename": "Meera Iyer.txt",
+        "updated_at": "2026-10-01T10:00:00"
+      },
+      {
+        "anchor_message_id": null,
+        "chat_id": "chat-rohan",
+        "created_at": "2026-10-01T10:00:00",
+        "display_name": "Rohan Mehta",
+        "gmail_label_id": null,
+        "gmail_thread_id": null,
+        "source_filename": "Rohan Mehta.txt",
+        "updated_at": "2026-10-01T10:00:00"
+      }
+    ],
+    "message_hashes": [
+      {
+        "chat_id": "chat-meera",
+        "hash": "m1",
+        "message_ts": "2026-09-30T09:01:00",
+        "run_id": 1
+      },
+      {
+        "chat_id": "chat-meera",
+        "hash": "m2",
+        "message_ts": "2026-09-30T09:02:00",
+        "run_id": 1
+      },
+      {
+        "chat_id": "chat-rohan",
+        "hash": "r1",
+        "message_ts": "2026-09-30T09:01:00",
+        "run_id": 3
+      }
+    ],
+    "sync_runs": [
+      {
+        "chat_id": "chat-meera",
+        "completed_at": "2026-10-01T10:00:00",
+        "error_message": null,
+        "last_synced_hash": "m2",
+        "last_synced_ts": "2026-09-30T09:02:00",
+        "messages_cutoff": 0,
+        "messages_parsed": 3,
+        "messages_skipped": 1,
+        "messages_synced": 2,
+        "run_id": 1,
+        "started_at": "2026-10-01T10:00:00",
+        "status": "complete",
+        "trigger": "manual"
+      },
+      {
+        "chat_id": "chat-meera",
+        "completed_at": "2026-10-01T10:00:00",
+        "error_message": "placeholder failure",
+        "last_synced_hash": null,
+        "last_synced_ts": null,
+        "messages_cutoff": 0,
+        "messages_parsed": 0,
+        "messages_skipped": 0,
+        "messages_synced": 0,
+        "run_id": 2,
+        "started_at": "2026-10-01T10:00:00",
+        "status": "failed",
+        "trigger": "scheduled"
+      },
+      {
+        "chat_id": "chat-rohan",
+        "completed_at": "2026-10-01T10:00:00",
+        "error_message": null,
+        "last_synced_hash": "r1",
+        "last_synced_ts": "2026-09-30T09:01:00",
+        "messages_cutoff": 0,
+        "messages_parsed": 1,
+        "messages_skipped": 0,
+        "messages_synced": 1,
+        "run_id": 3,
+        "started_at": "2026-10-01T10:00:00",
+        "status": "complete",
+        "trigger": "manual"
+      }
+    ]
+  },
+  "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+  "created_at": "2026-10-01T10:00:00",
+  "export_counts": {
+    "chats": 2,
+    "cutoffs": 1,
+    "hashes": 3,
+    "runs": 3,
+    "senders": 2
+  },
+  "export_settings_input": {
+    "app_password": "not-a-real-password",
+    "chunk_size": "week",
+    "imap_email": "test@example.com",
+    "imap_host": "evil.example.com",
+    "imap_port": 993,
+    "imap_provider": "yahoo",
+    "theme_mode": "dark",
+    "unknown_key": "x"
+  },
+  "export_settings_keys": [
+    "chunk_size",
+    "imap_email",
+    "imap_port",
+    "imap_provider",
+    "theme_mode"
+  ],
+  "import_cases": [
+    {
+      "bundle": "migration_python_written.cmsbackup",
+      "dump_after_first": {
+        "app_state": [
+          {
+            "key": "owner_override",
+            "value": "Meera Iyer"
+          }
+        ],
+        "chat_cutoffs": [
+          {
+            "chat_id": "chat-meera",
+            "cutoff_ts": "2026-01-01T00:00:00",
+            "set_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "chat_senders": [
+          {
+            "chat_id": "chat-meera",
+            "first_seen": "2026-09-30T09:02:00",
+            "last_seen": "2026-09-30T09:02:00",
+            "msg_count": 2,
+            "sender": "Meera Iyer"
+          },
+          {
+            "chat_id": "chat-meera",
+            "first_seen": "2026-09-30T09:02:00",
+            "last_seen": "2026-09-30T09:02:00",
+            "msg_count": 1,
+            "sender": "Rohan Mehta"
+          }
+        ],
+        "chats": [
+          {
+            "anchor_message_id": null,
+            "chat_id": "chat-meera",
+            "created_at": "2026-10-01T10:00:00",
+            "display_name": "Meera Iyer",
+            "gmail_label_id": null,
+            "gmail_thread_id": null,
+            "source_filename": "Meera Iyer.txt",
+            "updated_at": "2026-10-01T10:00:00"
+          },
+          {
+            "anchor_message_id": null,
+            "chat_id": "chat-rohan",
+            "created_at": "2026-10-01T10:00:00",
+            "display_name": "Rohan Mehta",
+            "gmail_label_id": null,
+            "gmail_thread_id": null,
+            "source_filename": "Rohan Mehta.txt",
+            "updated_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "imported_bundles": [
+          {
+            "app_version": "placeholder",
+            "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+            "imported_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "message_hashes": [
+          {
+            "chat_id": "chat-meera",
+            "hash": "m1",
+            "message_ts": "2026-09-30T09:01:00",
+            "run_id": 1
+          },
+          {
+            "chat_id": "chat-meera",
+            "hash": "m2",
+            "message_ts": "2026-09-30T09:02:00",
+            "run_id": 1
+          },
+          {
+            "chat_id": "chat-rohan",
+            "hash": "r1",
+            "message_ts": "2026-09-30T09:01:00",
+            "run_id": 3
+          }
+        ],
+        "sync_runs": [
+          {
+            "chat_id": "chat-meera",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": null,
+            "last_synced_hash": "m2",
+            "last_synced_ts": "2026-09-30T09:02:00",
+            "messages_cutoff": 0,
+            "messages_parsed": 3,
+            "messages_skipped": 1,
+            "messages_synced": 2,
+            "run_id": 1,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "complete",
+            "trigger": "manual"
+          },
+          {
+            "chat_id": "chat-meera",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": "placeholder failure",
+            "last_synced_hash": null,
+            "last_synced_ts": null,
+            "messages_cutoff": 0,
+            "messages_parsed": 0,
+            "messages_skipped": 0,
+            "messages_synced": 0,
+            "run_id": 2,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "failed",
+            "trigger": "scheduled"
+          },
+          {
+            "chat_id": "chat-rohan",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": null,
+            "last_synced_hash": "r1",
+            "last_synced_ts": "2026-09-30T09:01:00",
+            "messages_cutoff": 0,
+            "messages_parsed": 1,
+            "messages_skipped": 0,
+            "messages_synced": 1,
+            "run_id": 3,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "complete",
+            "trigger": "manual"
+          }
+        ]
+      },
+      "dump_unchanged_by_second": true,
+      "first": {
+        "already_imported": false,
+        "chats_added": 2,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 1,
+        "hashes_added": 3,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+          "counts": {
+            "chats": 2,
+            "cutoffs": 1,
+            "hashes": 3,
+            "runs": 3,
+            "senders": 2
+          },
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 3,
+        "senders_added": 2,
+        "settings": {
+          "chunk_size": "week",
+          "imap_email": "test@example.com",
+          "imap_host": "imap.mail.yahoo.com",
+          "imap_port": 993,
+          "imap_provider": "yahoo",
+          "theme_mode": "dark"
+        }
+      },
+      "name": "python_written_into_empty",
+      "second": {
+        "already_imported": true,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+          "counts": {
+            "chats": 2,
+            "cutoffs": 1,
+            "hashes": 3,
+            "runs": 3,
+            "senders": 2
+          },
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {}
+      },
+      "seed": null
+    },
+    {
+      "bundle": "migration_python_written.cmsbackup",
+      "dump_after_first": {
+        "app_state": [
+          {
+            "key": "owner_override",
+            "value": "Meera Iyer"
+          }
+        ],
+        "chat_cutoffs": [
+          {
+            "chat_id": "chat-meera",
+            "cutoff_ts": "2026-06-01T00:00:00",
+            "set_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "chat_senders": [
+          {
+            "chat_id": "chat-meera",
+            "first_seen": "2026-09-30T09:02:00",
+            "last_seen": "2026-09-30T09:02:00",
+            "msg_count": 2,
+            "sender": "Meera Iyer"
+          },
+          {
+            "chat_id": "chat-meera",
+            "first_seen": "2026-09-30T09:02:00",
+            "last_seen": "2026-09-30T09:02:00",
+            "msg_count": 1,
+            "sender": "Rohan Mehta"
+          }
+        ],
+        "chats": [
+          {
+            "anchor_message_id": null,
+            "chat_id": "chat-meera",
+            "created_at": "2026-10-01T10:00:00",
+            "display_name": "Meera I. (local)",
+            "gmail_label_id": null,
+            "gmail_thread_id": null,
+            "source_filename": "local.txt",
+            "updated_at": "2026-10-01T10:00:00"
+          },
+          {
+            "anchor_message_id": null,
+            "chat_id": "chat-asha",
+            "created_at": "2026-10-01T10:00:00",
+            "display_name": "Asha Nair",
+            "gmail_label_id": null,
+            "gmail_thread_id": null,
+            "source_filename": "Asha Nair.txt",
+            "updated_at": "2026-10-01T10:00:00"
+          },
+          {
+            "anchor_message_id": null,
+            "chat_id": "chat-rohan",
+            "created_at": "2026-10-01T10:00:00",
+            "display_name": "Rohan Mehta",
+            "gmail_label_id": null,
+            "gmail_thread_id": null,
+            "source_filename": "Rohan Mehta.txt",
+            "updated_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "imported_bundles": [
+          {
+            "app_version": "placeholder",
+            "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+            "imported_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "message_hashes": [
+          {
+            "chat_id": "chat-meera",
+            "hash": "m1",
+            "message_ts": "2026-09-30T09:01:00",
+            "run_id": 1
+          },
+          {
+            "chat_id": "chat-meera",
+            "hash": "local-only",
+            "message_ts": "2026-09-30T09:09:00",
+            "run_id": 1
+          },
+          {
+            "chat_id": "chat-asha",
+            "hash": "a1",
+            "message_ts": "2026-09-29T08:00:00",
+            "run_id": 2
+          },
+          {
+            "chat_id": "chat-meera",
+            "hash": "m2",
+            "message_ts": "2026-09-30T09:02:00",
+            "run_id": 1
+          },
+          {
+            "chat_id": "chat-rohan",
+            "hash": "r1",
+            "message_ts": "2026-09-30T09:01:00",
+            "run_id": 4
+          }
+        ],
+        "sync_runs": [
+          {
+            "chat_id": "chat-meera",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": null,
+            "last_synced_hash": "m2",
+            "last_synced_ts": "2026-09-30T09:02:00",
+            "messages_cutoff": 0,
+            "messages_parsed": 3,
+            "messages_skipped": 1,
+            "messages_synced": 2,
+            "run_id": 1,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "complete",
+            "trigger": "manual"
+          },
+          {
+            "chat_id": "chat-asha",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": null,
+            "last_synced_hash": "a1",
+            "last_synced_ts": "2026-09-29T08:00:00",
+            "messages_cutoff": 0,
+            "messages_parsed": 1,
+            "messages_skipped": 0,
+            "messages_synced": 1,
+            "run_id": 2,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "complete",
+            "trigger": "manual"
+          },
+          {
+            "chat_id": "chat-meera",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": "placeholder failure",
+            "last_synced_hash": null,
+            "last_synced_ts": null,
+            "messages_cutoff": 0,
+            "messages_parsed": 0,
+            "messages_skipped": 0,
+            "messages_synced": 0,
+            "run_id": 3,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "failed",
+            "trigger": "scheduled"
+          },
+          {
+            "chat_id": "chat-rohan",
+            "completed_at": "2026-10-01T10:00:00",
+            "error_message": null,
+            "last_synced_hash": "r1",
+            "last_synced_ts": "2026-09-30T09:01:00",
+            "messages_cutoff": 0,
+            "messages_parsed": 1,
+            "messages_skipped": 0,
+            "messages_synced": 1,
+            "run_id": 4,
+            "started_at": "2026-10-01T10:00:00",
+            "status": "complete",
+            "trigger": "manual"
+          }
+        ]
+      },
+      "dump_unchanged_by_second": true,
+      "first": {
+        "already_imported": false,
+        "chats_added": 1,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 2,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+          "counts": {
+            "chats": 2,
+            "cutoffs": 1,
+            "hashes": 3,
+            "runs": 3,
+            "senders": 2
+          },
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 2,
+        "senders_added": 2,
+        "settings": {
+          "chunk_size": "week",
+          "imap_email": "test@example.com",
+          "imap_host": "imap.mail.yahoo.com",
+          "imap_port": 993,
+          "imap_provider": "yahoo",
+          "theme_mode": "dark"
+        }
+      },
+      "name": "python_written_into_overlap",
+      "second": {
+        "already_imported": true,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "00000000-0000-4000-8000-00000000c0de",
+          "counts": {
+            "chats": 2,
+            "cutoffs": 1,
+            "hashes": 3,
+            "runs": 3,
+            "senders": 2
+          },
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {}
+      },
+      "seed": "migration_overlap_seed.db"
+    },
+    {
+      "bundle": "migration_hostile_gmail.cmsbackup",
+      "dump_after_first": {
+        "app_state": [],
+        "chat_cutoffs": [],
+        "chat_senders": [],
+        "chats": [],
+        "imported_bundles": [
+          {
+            "app_version": "placeholder",
+            "bundle_id": "hostile-gmail",
+            "imported_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "message_hashes": [],
+        "sync_runs": []
+      },
+      "dump_unchanged_by_second": true,
+      "first": {
+        "already_imported": false,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-gmail",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {
+          "chunk_size": "day",
+          "imap_host": "imap.gmail.com",
+          "imap_port": 993,
+          "imap_provider": "gmail"
+        }
+      },
+      "name": "hostile_gmail",
+      "second": {
+        "already_imported": true,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-gmail",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {}
+      },
+      "seed": null
+    },
+    {
+      "bundle": "migration_hostile_outlook.cmsbackup",
+      "dump_after_first": {
+        "app_state": [],
+        "chat_cutoffs": [],
+        "chat_senders": [],
+        "chats": [],
+        "imported_bundles": [
+          {
+            "app_version": "placeholder",
+            "bundle_id": "hostile-outlook",
+            "imported_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "message_hashes": [],
+        "sync_runs": []
+      },
+      "dump_unchanged_by_second": true,
+      "first": {
+        "already_imported": false,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-outlook",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {
+          "imap_port": 1,
+          "imap_provider": "custom"
+        }
+      },
+      "name": "hostile_outlook",
+      "second": {
+        "already_imported": true,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-outlook",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {}
+      },
+      "seed": null
+    },
+    {
+      "bundle": "migration_hostile_custom.cmsbackup",
+      "dump_after_first": {
+        "app_state": [],
+        "chat_cutoffs": [],
+        "chat_senders": [],
+        "chats": [],
+        "imported_bundles": [
+          {
+            "app_version": "placeholder",
+            "bundle_id": "hostile-custom",
+            "imported_at": "2026-10-01T10:00:00"
+          }
+        ],
+        "message_hashes": [],
+        "sync_runs": []
+      },
+      "dump_unchanged_by_second": true,
+      "first": {
+        "already_imported": false,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-custom",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {
+          "imap_port": 2993,
+          "imap_provider": "custom"
+        }
+      },
+      "name": "hostile_custom",
+      "second": {
+        "already_imported": true,
+        "chats_added": 0,
+        "created_at": "2026-10-01T10:00:00",
+        "cutoffs_added": 0,
+        "hashes_added": 0,
+        "manifest": {
+          "app_version": "placeholder",
+          "bundle_id": "hostile-custom",
+          "counts": {},
+          "created_at": "2026-10-01T10:00:00",
+          "schema_version": 1
+        },
+        "ok": true,
+        "runs_added": 0,
+        "senders_added": 0,
+        "settings": {}
+      },
+      "seed": null
+    }
+  ],
+  "manifest_text": "{\n  \"schema_version\": 1,\n  \"bundle_id\": \"00000000-0000-4000-8000-00000000c0de\",\n  \"created_at\": \"2026-10-01T10:00:00\",\n  \"app_version\": \"placeholder\",\n  \"counts\": {\n    \"chats\": 2,\n    \"runs\": 3,\n    \"hashes\": 3,\n    \"cutoffs\": 1,\n    \"senders\": 2\n  }\n}",
+  "settings_text": "{\n  \"chunk_size\": \"week\",\n  \"imap_email\": \"test@example.com\",\n  \"imap_port\": 993,\n  \"imap_provider\": \"yahoo\",\n  \"theme_mode\": \"dark\"\n}"
+}
