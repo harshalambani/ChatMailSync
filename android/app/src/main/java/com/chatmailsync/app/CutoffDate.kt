@@ -13,8 +13,8 @@ package com.chatmailsync.app
  *
  * Deliberately not java.time. The parsing is a handful of digits and a
  * calendar rule, the class has a plain JVM unit test with no Android runtime
- * behind it, and minSdk is 24 -- below java.time's API 26 without library
- * desugaring, which this module does not enable.
+ * behind it. java.time is available at minSdk 30, but there is nothing here
+ * it would make simpler.
  */
 object CutoffDate {
 

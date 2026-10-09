@@ -637,13 +637,43 @@ def _write_state_db_golden_rows(tmp_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def generate_media_extractor_golden() -> None:
+# PAR-08: the MIME type for every extension the media golden uses is PINNED
+# here, not read from whatever table the running Python happens to carry.
+# Python builds its table from its own built-ins plus, on Windows, the registry
+# and, on Linux, /etc/mime.types; two machines can disagree (for example on
+# .m4a, which a registry or a system file may call audio/mp4). The golden
+# records what real Android sees through Chaquopy, where .m4a is NOT mapped, so
+# the table below is the whole truth and ".m4a" is deliberately absent.
+PINNED_MEDIA_MIME_TYPES: dict[str, str] = {
+    ".heic": "image/heic",
+    ".jpg": "image/jpeg",
+    ".mp4": "video/mp4",
+    ".opus": "audio/opus",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+}
+
+
+def pinned_media_guess_type():
+    """A mimetypes.guess_type that answers from PINNED_MEDIA_MIME_TYPES only."""
     import mimetypes
+
+    table = mimetypes.MimeTypes(filenames=())
+    table.types_map = ({}, {})
+    table.types_map_inv = ({}, {})
+    table.suffix_map = {}
+    table.encodings_map = {}
+    for ext, mime in PINNED_MEDIA_MIME_TYPES.items():
+        table.add_type(mime, ext)
+    return table.guess_type
+
+
+def generate_media_extractor_golden() -> None:
     import shutil
     import tempfile
     from unittest import mock
 
-    registry_free_guess_type = mimetypes.MimeTypes(filenames=()).guess_type
+    registry_free_guess_type = pinned_media_guess_type()
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="cms_media_extractor_golden_"))
     try:
