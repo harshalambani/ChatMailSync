@@ -141,4 +141,57 @@ class MigrationGoldenParityTest {
             assertEquals("$name rows after second", expectedDump(case["dump_after_first"]), dumpRoot(db))
         }
     }
+
+    /**
+     * BUG-09: the ONE deliberate difference from Python. Python drops a run's messages_cutoff on
+     * restore (the new row gets 0); Kotlin carries it. Every other field of every row still has
+     * to match Python exactly, so the comparison masks only that column and asserts it apart.
+     */
+    @Test
+    fun `restored runs match Python in every field except messages_cutoff, which Kotlin carries`() {
+        @Suppress("UNCHECKED_CAST")
+        val case = (golden["import_cases"] as List<Map<String, Any?>>).first { it["seed"] == null }
+        val source = resource(case["bundle"] as String)
+
+        // The same Python-written bundle, with a non-zero messages_cutoff set in its database.
+        val dbFile = File(tmp.newFolder(), "sync_state.db")
+        ZipFile(source).use { z -> z.getInputStream(z.getEntry("sync_state.db")).use { i -> dbFile.outputStream().use { o -> i.copyTo(o) } } }
+        openDb(dbFile).use { it.exec("UPDATE sync_runs SET messages_cutoff = 7") }
+        val edited = File(tmp.newFolder(), "edited.cmsbackup")
+        java.util.zip.ZipOutputStream(edited.outputStream()).use { out ->
+            ZipFile(source).use { z ->
+                for (name in listOf("manifest.json", "settings.json", "sync_state.db")) {
+                    val bytes = if (name == "sync_state.db") dbFile.readBytes() else z.getInputStream(z.getEntry(name)).readBytes()
+                    out.putNextEntry(java.util.zip.ZipEntry(name)); out.write(bytes); out.closeEntry()
+                }
+            }
+        }
+
+        val root = tmp.newFolder()
+        val db = bundleDbPath(root)
+        db.parentFile.mkdirs()
+        val got = importBundle(root, edited, openDb, importedAt = golden["created_at"] as String)
+        assertTrue(got.error, got.ok)
+
+        fun mask(row: Any?): String {
+            @Suppress("UNCHECKED_CAST")
+            val m = LinkedHashMap(normal(row) as Map<String, Any?>)
+            m.remove("messages_cutoff")
+            return dumpBundleJson(m)
+        }
+        @Suppress("UNCHECKED_CAST")
+        val expected = (case["dump_after_first"] as Map<String, List<Any?>>).mapValues { (_, rows) -> rows.map(::mask).sorted() }
+        val actual = linkedMapOf<String, List<String>>()
+        var cutoffs = emptyList<Any?>()
+        openDb(db).use { d ->
+            val present = d.query("SELECT name FROM sqlite_master WHERE type='table'").map { it["name"] as String }.toSet()
+            for (t in listOf("chats", "sync_runs", "message_hashes", "chat_cutoffs", "chat_senders", "app_state", "imported_bundles")) {
+                if (t in present) actual[t] = d.query("SELECT * FROM $t").map(::mask).sorted()
+            }
+            cutoffs = d.query("SELECT messages_cutoff AS c FROM sync_runs").map { (it["c"] as Number).toLong() }
+        }
+        assertEquals(expected, actual)
+        assertTrue(cutoffs.isNotEmpty())
+        assertTrue("every restored run carries the bundle's cutoff, Python would give 0: $cutoffs", cutoffs.all { it == 7L })
+    }
 }
