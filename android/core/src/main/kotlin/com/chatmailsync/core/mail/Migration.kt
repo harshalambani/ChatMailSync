@@ -453,8 +453,12 @@ fun importBundle(
         ZipFile(source).use { zf ->
             val settingsEntry = findMember(zf, SETTINGS_NAME)
             if (settingsEntry != null) {
+                // Unparseable settings are treated as empty (as Python does). Settings that
+                // parse but are not an object make Python crash uncaught; here they are refused.
+                var parsedOk = false
                 val raw = decodeStrictUtf8(readSmallMember(zf, settingsEntry))
-                    ?.let { try { parseBundleJson(it) } catch (_: BundleJsonException) { null } }
+                    ?.let { try { parseBundleJson(it).also { parsedOk = true } } catch (_: BundleJsonException) { null } }
+                if (parsedOk && raw !is Map<*, *>) throw BundleError("That backup's settings are unreadable.")
                 val kept = LinkedHashMap<String, Any?>()
                 if (raw is Map<*, *>) {
                     // Filtered on the way in as well as on the way out: a bundle is a file
