@@ -84,10 +84,19 @@ val FORBIDDEN_SUBSTRINGS: List<String> = listOf("password", "secret", "token", "
 
 /**
  * The manifest and the settings are both a few hundred bytes of JSON and are read whole into
- * memory, so they get a ceiling. The database member is not covered and does not need to be:
- * it is streamed to disk, never read whole.
+ * memory, so they get a ceiling. The database member is streamed to disk, never read whole, and
+ * has its own, much larger one ([MAX_BUNDLE_DB_BYTES]).
  */
 const val MAX_BUNDLE_MEMBER_BYTES: Int = 4 * 1_048_576
+
+/** The most the database member may expand to: a hostile or corrupt zip cannot fill the disk. */
+const val MAX_BUNDLE_DB_BYTES: Long = 1L shl 30
+
+private const val HISTORY_UNREADABLE = "That backup's history could not be read."
+
+/** An integer column value, or a refusal: a hand-edited file can hold text, NULL or a real there. */
+private fun historyLong(v: Any?): Long =
+    if (v is Long || v is Int || v is Short || v is Byte) (v as Number).toLong() else throw BundleError(HISTORY_UNREADABLE)
 
 /** A bundle that cannot be read, or cannot be trusted to be read. */
 class BundleError(message: String) : RuntimeException(message)
@@ -418,6 +427,7 @@ fun importBundle(
     openDb: OpenDb,
     tempDir: File? = null,
     importedAt: String = StateRepository.now(),
+    maxDbBytes: Long = MAX_BUNDLE_DB_BYTES,
 ): ImportResult {
     val manifest = try {
         readManifest(source)
@@ -472,7 +482,13 @@ fun importBundle(
             val dbEntry = findMember(zf, BUNDLE_DB_NAME)
             if (dbEntry != null) {
                 val incoming = File(scratch, BUNDLE_DB_NAME)
-                incoming.outputStream().buffered().use { copyChecked(zf, dbEntry, it, Long.MAX_VALUE) }
+                if (dbEntry.size > maxDbBytes) {
+                    throw BundleError(
+                        "That backup's ${dbEntry.name} would expand to ${dbEntry.size} bytes, past the " +
+                            "$maxDbBytes-byte safety limit.",
+                    )
+                }
+                incoming.outputStream().buffered().use { copyChecked(zf, dbEntry, it, maxDbBytes) }
                 // Brought forward before it is read: an older install's DB can be short a column.
                 StateRepository { openDb(incoming) }.initDb()
                 added = mergeDb(db, incoming, openDb)
@@ -605,20 +621,27 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
     val runCols = RUN_COLUMNS.joinToString(", ")
     val existingRuns = HashMap<List<Any?>, Long>()
     for (row in dst.query("SELECT run_id, $runCols FROM sync_runs")) {
-        existingRuns[RUN_COLUMNS.map { row[it] }] = (row["run_id"] as Number).toLong()
+        existingRuns[RUN_COLUMNS.map { row[it] }] = historyLong(row["run_id"])
     }
     val runIdMap = HashMap<Long, Long>()
     var runsAdded = 0
-    for (row in src.query("SELECT run_id, $runCols FROM sync_runs")) {
+    for (row in src.query("SELECT run_id, $runCols, messages_cutoff FROM sync_runs")) {
+        val oldId = historyLong(row["run_id"])
         val key = RUN_COLUMNS.map { row[it] }
         var local = existingRuns[key]
         if (local == null) {
-            dst.exec("INSERT INTO sync_runs ($runCols) VALUES (${placeholders(RUN_COLUMNS.size)})", key)
+            // BUG-09: messages_cutoff is carried across (Python drops it) but is not part of the
+            // natural key, so a run already here keeps its own value and is never rewritten.
+            val cutoff = historyLong(row["messages_cutoff"])
+            dst.exec(
+                "INSERT INTO sync_runs ($runCols, messages_cutoff) VALUES (${placeholders(RUN_COLUMNS.size + 1)})",
+                key + cutoff,
+            )
             local = dst.lastInsertRowId()
             existingRuns[key] = local
             runsAdded++
         }
-        runIdMap[(row["run_id"] as Number).toLong()] = local
+        runIdMap[oldId] = local
     }
 
     // INSERT OR IGNORE: a chat that already has a floor on this device keeps it.
@@ -667,11 +690,11 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         )
         if (page.isEmpty()) break
         for (row in page) {
-            after = (row["rid"] as Number).toLong()
+            after = historyLong(row["rid"])
             // A hash whose run did not come across is skipped, not repointed at some other
             // run: which run it belonged to is bookkeeping, and inventing a link would
             // corrupt the bookkeeping to save a row we cannot place honestly.
-            val newRun = runIdMap[(row["run_id"] as Number).toLong()] ?: continue
+            val newRun = runIdMap[historyLong(row["run_id"])] ?: continue
             dst.exec(
                 "INSERT OR IGNORE INTO message_hashes (hash, chat_id, message_ts, run_id) VALUES (?, ?, ?, ?)",
                 listOf(row["hash"], row["chat_id"], row["message_ts"], newRun),

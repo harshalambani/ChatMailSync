@@ -256,7 +256,10 @@ class StateRepository(
         val doomed = mutableListOf<Pair<Long, Long>>() // (copy, original)
         for (row in rows) {
             val key = RUN_NATURAL_KEY.map { row[it] }
-            val runId = (row["run_id"] as Number).toLong()
+            // BUG-09: a hand-edited file can hold text, NULL or a real here; refuse, do not throw a cast.
+            val rawId = row["run_id"]
+            val runId = if (rawId is Long || rawId is Int) (rawId as Number).toLong()
+            else throw StateDbException("sync_runs.run_id is not an integer")
             val original = seen[key]
             if (original == null) {
                 seen[key] = runId
