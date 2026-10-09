@@ -1,0 +1,901 @@
+{
+ "cases": [
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_plain",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer and Rohan Mehta Weekend Trip Planning Committee Group",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_and_Rohan_Mehta_Weekend_Trip_Plann?=\n =?utf-8?q?ing_Committee_Group_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer and Rohan Mehta Weekend Trip Planning Committee Group\n <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIGFuZCBSb2hhbiBNZWh0YSBXZWVrZW5kIFRyaXAgUGxhbm5pbmcgQ29t\nbWl0dGVlIEdyb3VwIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9yQGxv\nY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAiMjAx\nOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIsCiAg\nImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwidHMi\nOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJmOTc5\nOTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4NWZk\nOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6IlJv\naGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1ZjQw\nOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_long_ascii_name_64",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "मीरा अय्यर और रोहन मेहता का परिवार समूह",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?b?V2hhdHNBcHA6IOCkruClgOCksOCkviDgpIXgpK/gpY3gpK/gpLAg4KSU?=\n =?utf-8?b?4KSwIOCksOCli+CkueCkqCDgpK7gpYfgpLngpKTgpL4g4KSV4KS+IOCkquCksA==?=\n =?utf-8?b?4KS/4KS14KS+4KSwIOCkuOCkruClguCkuSDigJQgMjAxOS0wNS0wMw==?=\nFrom: \n =?utf-8?b?4KSu4KWA4KSw4KS+IOCkheCkr+CljeCkr+CksCDgpJTgpLAg4KSw4KWL4KS54KSoIOCkruClh+CkueCkpOCkviDgpJXgpL4g4KSq4KSw4KS/4KS14KS+4KSwIOCkuOCkruClguCkuQ==?=\n <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICLgpK7gpYDgpLDgpL4g4KSF4KSv4KWN4KSv4KSwIOCklOCksCDgpLDgpYvgpLngpKgg4KSu\n4KWH4KS54KSk4KS+IOCkleCkviDgpKrgpLDgpL/gpLXgpL7gpLAg4KS44KSu4KWC4KS5IiwKICAi\nbWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9yQGxvY2FsPiIsCiAgImNodW5rIjog\nImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNTowMCIs\nCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIsCiAgImFwcF92ZXJzaW9uIjogInVu\na25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwidHMiOiIyMDE5LTA1LTAzVDEwOjE1\nOjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJmOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0\nMTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4NWZkOWRjIn0sCiAgICB7Im4iOjIs\nInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6IlJvaGFuIE1laHRhIiwiaGFzaCI6\nImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1ZjQwOWMzODlhOTVlNmYwMjMxYTM1\nNDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_hindi_group_name",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Rohan Mehta 🎉🎂🥳 Birthday Crew 🎈🎊🎁",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?b?V2hhdHNBcHA6IFJvaGFuIE1laHRhIPCfjonwn46C8J+lsyBCaXJ0aGRh?=\n =?utf-8?b?eSBDcmV3IPCfjojwn46K8J+OgSDigJQgMjAxOS0wNS0wMw==?=\nFrom: \n =?utf-8?b?Um9oYW4gTWVodGEg8J+OifCfjoLwn6WzIEJpcnRoZGF5IENyZXcg8J+OiPCfjorwn46B?=\n <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJSb2hhbiBNZWh0YSDwn46J8J+OgvCfpbMgQmlydGhkYXkgQ3JldyDwn46I8J+OivCfjoEi\nLAogICJtZXNzYWdlX2lkIjogIjxnb2xkZW4tZml4dHVyZS1hbmNob3JAbG9jYWw+IiwKICAiY2h1\nbmsiOiAiZGF5IiwKICAiY291bnQiOiAyLAogICJmaXJzdF90cyI6ICIyMDE5LTA1LTAzVDEwOjE1\nOjAwIiwKICAibGFzdF90cyI6ICIyMDE5LTA1LTAzVDEwOjE2OjAwIiwKICAiYXBwX3ZlcnNpb24i\nOiAidW5rbm93biIsCiAgIm1lc3NhZ2VzIjogWwogICAgeyJuIjoxLCJ0cyI6IjIwMTktMDUtMDNU\nMTA6MTU6MDAiLCJzZW5kZXIiOiJNZWVyYSBJeWVyIiwiaGFzaCI6ImY5Nzk5NDlmMGFkZDM2ODlj\nY2YxMDQxNTZlOTA0ZTRhNTEyZTgwOTk1YWNkZWY1OGI1ODQwNDdmODg1ZmQ5ZGMifSwKICAgIHsi\nbiI6MiwidHMiOiIyMDE5LTA1LTAzVDEwOjE2OjAwIiwic2VuZGVyIjoiUm9oYW4gTWVodGEiLCJo\nYXNoIjoiZDcwNTRmMTAzODFjMmZiMTY5NmFjY2NjY2YwZmYwZWE1YjVmNDA5YzM4OWE5NWU2ZjAy\nMzFhMzU0NjU3NTY4NCJ9CiAgXQp9Cg==\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_emoji_name",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "+91 98765 43210",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_+91_98765_43210_=E2=80=94_2019-05-03?=\nFrom: +919876543210 <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICIrOTEgOTg3NjUgNDMyMTAiLAogICJtZXNzYWdlX2lkIjogIjxnb2xkZW4tZml4dHVyZS1h\nbmNob3JAbG9jYWw+IiwKICAiY2h1bmsiOiAiZGF5IiwKICAiY291bnQiOiAyLAogICJmaXJzdF90\ncyI6ICIyMDE5LTA1LTAzVDEwOjE1OjAwIiwKICAibGFzdF90cyI6ICIyMDE5LTA1LTAzVDEwOjE2\nOjAwIiwKICAiYXBwX3ZlcnNpb24iOiAidW5rbm93biIsCiAgIm1lc3NhZ2VzIjogWwogICAgeyJu\nIjoxLCJ0cyI6IjIwMTktMDUtMDNUMTA6MTU6MDAiLCJzZW5kZXIiOiJNZWVyYSBJeWVyIiwiaGFz\naCI6ImY5Nzk5NDlmMGFkZDM2ODljY2YxMDQxNTZlOTA0ZTRhNTEyZTgwOTk1YWNkZWY1OGI1ODQw\nNDdmODg1ZmQ5ZGMifSwKICAgIHsibiI6MiwidHMiOiIyMDE5LTA1LTAzVDEwOjE2OjAwIiwic2Vu\nZGVyIjoiUm9oYW4gTWVodGEiLCJoYXNoIjoiZDcwNTRmMTAzODFjMmZiMTY5NmFjY2NjY2YwZmYw\nZWE1YjVmNDA5YzM4OWE5NWU2ZjAyMzFhMzU0NjU3NTY4NCJ9CiAgXQp9Cg==\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_phone_name",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera \"Mee\" Iyer, Jr. (Family)",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_=22Mee=22_Iyer=2C_Jr=2E_=28Family=29_?=\n =?utf-8?q?=E2=80=94_2019-05-03?=\nFrom: \"Meera \\\"Mee\\\" Iyer, Jr. (Family)\" <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBcIk1lZVwiIEl5ZXIsIEpyLiAoRmFtaWx5KSIsCiAgIm1lc3NhZ2VfaWQiOiAi\nPGdvbGRlbi1maXh0dXJlLWFuY2hvckBsb2NhbD4iLAogICJjaHVuayI6ICJkYXkiLAogICJjb3Vu\ndCI6IDIsCiAgImZpcnN0X3RzIjogIjIwMTktMDUtMDNUMTA6MTU6MDAiLAogICJsYXN0X3RzIjog\nIjIwMTktMDUtMDNUMTA6MTY6MDAiLAogICJhcHBfdmVyc2lvbiI6ICJ1bmtub3duIiwKICAibWVz\nc2FnZXMiOiBbCiAgICB7Im4iOjEsInRzIjoiMjAxOS0wNS0wM1QxMDoxNTowMCIsInNlbmRlciI6\nIk1lZXJhIEl5ZXIiLCJoYXNoIjoiZjk3OTk0OWYwYWRkMzY4OWNjZjEwNDE1NmU5MDRlNGE1MTJl\nODA5OTVhY2RlZjU4YjU4NDA0N2Y4ODVmZDlkYyJ9LAogICAgeyJuIjoyLCJ0cyI6IjIwMTktMDUt\nMDNUMTA6MTY6MDAiLCJzZW5kZXIiOiJSb2hhbiBNZWh0YSIsImhhc2giOiJkNzA1NGYxMDM4MWMy\nZmIxNjk2YWNjY2NjZjBmZjBlYTViNWY0MDljMzg5YTk1ZTZmMDIzMWEzNTQ2NTc1Njg0In0KICBd\nCn0K\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_quoted_name",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PGltZyBzcmM9ImNpZDppbWctMDAwMDAwMDAwMDAxIj48L2JvZHk+PC9odG1s\nPg==\n\n--===============NORMALIZED2==\nContent-Type: image/png\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-ID: <img-000000000001>\nContent-Disposition: inline\n\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM\nIQAAAABJRU5ErkJggg==\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><img src=\"cid:img-000000000001\"></body></html>",
+   "inReplyTo": null,
+   "inline": [
+    {
+     "cid": "img-000000000001",
+     "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+     "mimeType": "image/png"
+    }
+   ],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_inline_image",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "notes.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Rohan Mehta",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Rohan_Mehta_=E2=80=94_2019-05-03?=\nFrom: Rohan Mehta <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PGltZyBzcmM9ImNpZDppbWctMDAwMDAwMDAwMDAxIj48aW1nIHNyYz0iY2lk\nOmltZy0wMDAwMDAwMDAwMDIiPjwvYm9keT48L2h0bWw+\n\n--===============NORMALIZED2==\nContent-Type: image/png\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-ID: <img-000000000001>\nContent-Disposition: inline\n\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmM\nIQAAAABJRU5ErkJggg==\n\n--===============NORMALIZED2==\nContent-Type: image/jpeg\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-ID: <img-000000000002>\nContent-Disposition: inline\n\n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\nRU5ErkJggg==\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"notes.pdf\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJSb2hhbiBNZWh0YSIsCiAgIm1lc3NhZ2VfaWQiOiAiPGdvbGRlbi1maXh0dXJlLWFuY2hv\nckBsb2NhbD4iLAogICJjaHVuayI6ICJkYXkiLAogICJjb3VudCI6IDIsCiAgImZpcnN0X3RzIjog\nIjIwMTktMDUtMDNUMTA6MTU6MDAiLAogICJsYXN0X3RzIjogIjIwMTktMDUtMDNUMTA6MTY6MDAi\nLAogICJhcHBfdmVyc2lvbiI6ICJ1bmtub3duIiwKICAibWVzc2FnZXMiOiBbCiAgICB7Im4iOjEs\nInRzIjoiMjAxOS0wNS0wM1QxMDoxNTowMCIsInNlbmRlciI6Ik1lZXJhIEl5ZXIiLCJoYXNoIjoi\nZjk3OTk0OWYwYWRkMzY4OWNjZjEwNDE1NmU5MDRlNGE1MTJlODA5OTVhY2RlZjU4YjU4NDA0N2Y4\nODVmZDlkYyJ9LAogICAgeyJuIjoyLCJ0cyI6IjIwMTktMDUtMDNUMTA6MTY6MDAiLCJzZW5kZXIi\nOiJSb2hhbiBNZWh0YSIsImhhc2giOiJkNzA1NGYxMDM4MWMyZmIxNjk2YWNjY2NjZjBmZjBlYTVi\nNWY0MDljMzg5YTk1ZTZmMDIzMWEzNTQ2NTc1Njg0In0KICBdCn0K\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><img src=\"cid:img-000000000001\"><img src=\"cid:img-000000000002\"></body></html>",
+   "inReplyTo": null,
+   "inline": [
+    {
+     "cid": "img-000000000001",
+     "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+     "mimeType": "image/png"
+    },
+    {
+     "cid": "img-000000000002",
+     "dataBase64": "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",
+     "mimeType": "image/jpeg"
+    }
+   ],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_two_inline_images_and_pdf",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "report.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"report.pdf\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_pdf_attachment",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "T2dnUwABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbH",
+     "filename": "voice note.opus",
+     "mimeType": "audio/ogg"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: audio/ogg\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"voice note.opus\"\n\nT2dnUwABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0\nNTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xt\nbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWm\np6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbH\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_audio_attachment",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "",
+     "filename": "empty.bin",
+     "mimeType": "application/octet-stream"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/octet-stream\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"empty.bin\"\n\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_empty_attachment",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "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",
+     "filename": "big.bin",
+     "mimeType": "application/octet-stream"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/octet-stream\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"big.bin\"\n\nAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4\nOTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3Bx\ncnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmq\nq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj\n5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhsc\nHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RV\nVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2O\nj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbH\nyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8A\nAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5\nOjs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFy\nc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6Slpqeoqaqr\nrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk\n5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwd\nHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVW\nV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6P\nkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfI\nycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wAB\nAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6\nOzw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJz\ndHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqus\nra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl\n5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8AAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0e\nHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZX\nWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+Q\nkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJ\nysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAEC\nAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7\nPD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0\ndXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6yt\nrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm\n5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f\nICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\nWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CR\nkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnK\ny8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8AAQID\nBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8\nPT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1\ndnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2u\nr7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn\n6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g\nISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZ\nWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGS\nk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrL\nzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgME\nBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9\nPj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2\nd3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6v\nsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo\n6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8AAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAh\nIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFla\nW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKT\nlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvM\nzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAECAwQF\nBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+\nP0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3\neHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+w\nsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp\n6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEi\nIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpb\nXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOU\nlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zN\nzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8AAQIDBAUG\nBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/\nQEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4\neXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7Cx\nsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq\n6+zt7u/w8fLz9PX29/j5+vv8/f7/AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIj\nJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltc\nXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SV\nlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3O\nz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYH\nCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9A\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5\nent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGy\ns7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err\n7O3u7/Dx8vP09fb3+Pn6+/z9/v8AAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMk\nJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xd\nXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWW\nl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P\n0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAECAwQFBgcI\nCQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BB\nQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6\ne3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKz\ntLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs\n7e7v8PHy8/T19vf4+fr7/P3+/wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQl\nJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1e\nX2BhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaX\nmJmam5ydnp+goaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+v8DBwsPExcbHyMnKy8zNzs/Q\n0dLT1NXW19jZ2tvc3d7f4OHi4+Tl5ufo6err7O3u7/Dx8vP09fb3+Pn6+/z9/v8=\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_big_attachment_multiline",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "we\"ird\\name.txt",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"we\\\"ird\\\\name.txt\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_quote_backslash",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "a;b%20c.txt",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"a;b%20c.txt\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_semicolon_percent",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment;\n filename=\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.pdf\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_long_ascii_100",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "मीरा रिपोर्ट.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment;\n filename*=utf-8''%E0%A4%AE%E0%A5%80%E0%A4%B0%E0%A4%BE%20%E0%A4%B0%E0%A4%BF%E0%A4%AA%E0%A5%8B%E0%A4%B0%E0%A5%8D%E0%A4%9F.pdf\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_hindi",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "मीरा\nरिपोर्ट.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment;\n filename*=utf-8''%E0%A4%AE%E0%A5%80%E0%A4%B0%E0%A4%BE%0A%E0%A4%B0%E0%A4%BF%E0%A4%AA%E0%A5%8B%E0%A4%B0%E0%A5%8D%E0%A4%9F.pdf\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_hindi_with_newline",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "café menu.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename*=utf-8''caf%C3%A9%20menu.pdf\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_accent",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "party 🎉.jpg",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename*=utf-8''party%20%F0%9F%8E%89.jpg\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_emoji",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "a\u0000b.txt",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"a\u0000b.txt\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_nul_ascii",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "a\u001fb.txt",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"a\u001fb.txt\"\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_del_us_ascii",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [
+    {
+     "dataBase64": "JVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4K",
+     "filename": "मममममममममममममममममममममममममममममममममममममममममममममममममममममममममममम.pdf",
+     "mimeType": "application/pdf"
+    }
+   ],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/pdf\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment;\n filename*=utf-8''%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE%E0%A4%AE.pdf\n\nJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYg\nYnl0ZXMgZm9yIHRoZSBnb2xkZW4KJVBERi0xLjQgZmFrZSBwZGYgYnl0ZXMgZm9yIHRoZSBnb2xk\nZW4K\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_filename_hindi_long",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\nIn-Reply-To: <anchor-1@local>\nReferences: <anchor-0@local> <anchor-1@local>\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": "<anchor-1@local>",
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_reply_set",
+   "references": "<anchor-0@local> <anchor-1@local>",
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\nIn-Reply-To: <anchor-1@local>\nReferences: <anchor-1@local>\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": "<anchor-1@local>",
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_reply_no_references",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_reply_unset",
+   "references": "<ignored@local>",
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03__=28Part_2/3?=\n =?utf-8?q?=29?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAi\nMjAxOS0wNS0wM1QxMDoxNTowMCIsCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIs\nCiAgImFwcF92ZXJzaW9uIjogInVua25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwi\ndHMiOiIyMDE5LTA1LTAzVDEwOjE1OjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJm\nOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0MTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4\nNWZkOWRjIn0sCiAgICB7Im4iOjIsInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6\nIlJvaGFuIE1laHRhIiwiaGFzaCI6ImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1\nZjQwOWMzODlhOTVlNmYwMjMxYTM1NDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_part_2_of_3",
+   "references": null,
+   "suffix": "Part 2/3"
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "day",
+   "displayName": "मीरा अय्यर और रोहन मेहता का परिवार समूह",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?b?V2hhdHNBcHA6IOCkruClgOCksOCkviDgpIXgpK/gpY3gpK/gpLAg4KSU?=\n =?utf-8?b?4KSwIOCksOCli+CkueCkqCDgpK7gpYfgpLngpKTgpL4g4KSV4KS+IOCkquCksA==?=\n =?utf-8?b?4KS/4KS14KS+4KSwIOCkuOCkruClguCkuSDigJQgMjAxOS0wNS0wMyAgKFBhcnQg?=\n =?utf-8?b?MTAvMTIp?=\nFrom: \n =?utf-8?b?4KSu4KWA4KSw4KS+IOCkheCkr+CljeCkr+CksCDgpJTgpLAg4KSw4KWL4KS54KSoIOCkruClh+CkueCkpOCkviDgpJXgpL4g4KSq4KSw4KS/4KS14KS+4KSwIOCkuOCkruClguCkuQ==?=\n <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICLgpK7gpYDgpLDgpL4g4KSF4KSv4KWN4KSv4KSwIOCklOCksCDgpLDgpYvgpLngpKgg4KSu\n4KWH4KS54KSk4KS+IOCkleCkviDgpKrgpLDgpL/gpLXgpL7gpLAg4KS44KSu4KWC4KS5IiwKICAi\nbWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9yQGxvY2FsPiIsCiAgImNodW5rIjog\nImRheSIsCiAgImNvdW50IjogMiwKICAiZmlyc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNTowMCIs\nCiAgImxhc3RfdHMiOiAiMjAxOS0wNS0wM1QxMDoxNjowMCIsCiAgImFwcF92ZXJzaW9uIjogInVu\na25vd24iLAogICJtZXNzYWdlcyI6IFsKICAgIHsibiI6MSwidHMiOiIyMDE5LTA1LTAzVDEwOjE1\nOjAwIiwic2VuZGVyIjoiTWVlcmEgSXllciIsImhhc2giOiJmOTc5OTQ5ZjBhZGQzNjg5Y2NmMTA0\nMTU2ZTkwNGU0YTUxMmU4MDk5NWFjZGVmNThiNTg0MDQ3Zjg4NWZkOWRjIn0sCiAgICB7Im4iOjIs\nInRzIjoiMjAxOS0wNS0wM1QxMDoxNjowMCIsInNlbmRlciI6IlJvaGFuIE1laHRhIiwiaGFzaCI6\nImQ3MDU0ZjEwMzgxYzJmYjE2OTZhY2NjY2NmMGZmMGVhNWI1ZjQwOWMzODlhOTVlNmYwMjMxYTM1\nNDY1NzU2ODQifQogIF0KfQo=\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_part_10_of_12_hindi",
+   "references": null,
+   "suffix": "Part 10/12"
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "week",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_Week_18=2C_2019?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogIndlZWsiLAogICJjb3VudCI6IDIsCiAgImZpcnN0X3RzIjog\nIjIwMTktMDUtMDNUMTA6MTU6MDAiLAogICJsYXN0X3RzIjogIjIwMTktMDUtMDNUMTA6MTY6MDAi\nLAogICJhcHBfdmVyc2lvbiI6ICJ1bmtub3duIiwKICAibWVzc2FnZXMiOiBbCiAgICB7Im4iOjEs\nInRzIjoiMjAxOS0wNS0wM1QxMDoxNTowMCIsInNlbmRlciI6Ik1lZXJhIEl5ZXIiLCJoYXNoIjoi\nZjk3OTk0OWYwYWRkMzY4OWNjZjEwNDE1NmU5MDRlNGE1MTJlODA5OTVhY2RlZjU4YjU4NDA0N2Y4\nODVmZDlkYyJ9LAogICAgeyJuIjoyLCJ0cyI6IjIwMTktMDUtMDNUMTA6MTY6MDAiLCJzZW5kZXIi\nOiJSb2hhbiBNZWh0YSIsImhhc2giOiJkNzA1NGYxMDM4MWMyZmIxNjk2YWNjY2NjZjBmZjBlYTVi\nNWY0MDljMzg5YTk1ZTZmMDIzMWEzNTQ2NTc1Njg0In0KICBdCn0K\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_week_chunk",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": "hour",
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03_10=3A00?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogImhvdXIiLAogICJjb3VudCI6IDIsCiAgImZpcnN0X3RzIjog\nIjIwMTktMDUtMDNUMTA6MTU6MDAiLAogICJsYXN0X3RzIjogIjIwMTktMDUtMDNUMTA6MTY6MDAi\nLAogICJhcHBfdmVyc2lvbiI6ICJ1bmtub3duIiwKICAibWVzc2FnZXMiOiBbCiAgICB7Im4iOjEs\nInRzIjoiMjAxOS0wNS0wM1QxMDoxNTowMCIsInNlbmRlciI6Ik1lZXJhIEl5ZXIiLCJoYXNoIjoi\nZjk3OTk0OWYwYWRkMzY4OWNjZjEwNDE1NmU5MDRlNGE1MTJlODA5OTVhY2RlZjU4YjU4NDA0N2Y4\nODVmZDlkYyJ9LAogICAgeyJuIjoyLCJ0cyI6IjIwMTktMDUtMDNUMTA6MTY6MDAiLCJzZW5kZXIi\nOiJSb2hhbiBNZWh0YSIsImhhc2giOiJkNzA1NGYxMDM4MWMyZmIxNjk2YWNjY2NjZjBmZjBlYTVi\nNWY0MDljMzg5YTk1ZTZmMDIzMWEzNTQ2NTc1Njg0In0KICBdCn0K\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_hour_chunk",
+   "references": null,
+   "suffix": ""
+  },
+  {
+   "attachments": [],
+   "chatId": "test_chat",
+   "chunkSize": 2,
+   "displayName": "Meera Iyer",
+   "eml": "Content-Type: multipart/mixed; boundary=\"===============NORMALIZED1==\"\nMIME-Version: 1.0\nSubject: =?utf-8?q?WhatsApp=3A_Meera_Iyer_=E2=80=94_2019-05-03_=28+2_msgs=29?=\nFrom: Meera Iyer <whatsapp-sync@local>\nTo: me\nMessage-ID: <golden-fixture-anchor@local>\nDate: Fri, 03 May 2019 10:15:00 +0000\nX-ChatMailSync-Version: 1\nX-ChatMailSync-Chat: test_chat\nX-ChatMailSync-Count: 2\nX-ChatMailSync-Index: chatmailsync-index.json\n\n--===============NORMALIZED1==\nContent-Type: multipart/related;\n boundary=\"===============NORMALIZED2==\"\nMIME-Version: 1.0\n\n--===============NORMALIZED2==\nContent-Type: text/html; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nPGh0bWw+PGJvZHk+PHA+aGVsbG88L3A+PC9ib2R5PjwvaHRtbD4=\n\n--===============NORMALIZED2==--\n\n--===============NORMALIZED1==\nContent-Type: application/json\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nContent-Disposition: attachment; filename=\"chatmailsync-index.json\"\n\newogICJzY2hlbWEiOiAxLAogICJjaGF0X2lkIjogInRlc3RfY2hhdCIsCiAgImRpc3BsYXlfbmFt\nZSI6ICJNZWVyYSBJeWVyIiwKICAibWVzc2FnZV9pZCI6ICI8Z29sZGVuLWZpeHR1cmUtYW5jaG9y\nQGxvY2FsPiIsCiAgImNodW5rIjogMiwKICAiY291bnQiOiAyLAogICJmaXJzdF90cyI6ICIyMDE5\nLTA1LTAzVDEwOjE1OjAwIiwKICAibGFzdF90cyI6ICIyMDE5LTA1LTAzVDEwOjE2OjAwIiwKICAi\nYXBwX3ZlcnNpb24iOiAidW5rbm93biIsCiAgIm1lc3NhZ2VzIjogWwogICAgeyJuIjoxLCJ0cyI6\nIjIwMTktMDUtMDNUMTA6MTU6MDAiLCJzZW5kZXIiOiJNZWVyYSBJeWVyIiwiaGFzaCI6ImY5Nzk5\nNDlmMGFkZDM2ODljY2YxMDQxNTZlOTA0ZTRhNTEyZTgwOTk1YWNkZWY1OGI1ODQwNDdmODg1ZmQ5\nZGMifSwKICAgIHsibiI6MiwidHMiOiIyMDE5LTA1LTAzVDEwOjE2OjAwIiwic2VuZGVyIjoiUm9o\nYW4gTWVodGEiLCJoYXNoIjoiZDcwNTRmMTAzODFjMmZiMTY5NmFjY2NjY2YwZmYwZWE1YjVmNDA5\nYzM4OWE5NWU2ZjAyMzFhMzU0NjU3NTY4NCJ9CiAgXQp9Cg==\n\n--===============NORMALIZED1==--\n",
+   "htmlBody": "<html><body><p>hello</p></body></html>",
+   "inReplyTo": null,
+   "inline": [],
+   "messageId": "<golden-fixture-anchor@local>",
+   "messages": [
+    {
+     "body": "hello from the past",
+     "sender": "Meera Iyer",
+     "ts": "2019-05-03T10:15:00"
+    },
+    {
+     "body": "line one\nline two continuation",
+     "sender": "Rohan Mehta",
+     "ts": "2019-05-03T10:16:00"
+    }
+   ],
+   "name": "html_count_chunk",
+   "references": null,
+   "suffix": ""
+  }
+ ],
+ "refusedFilenames": [
+  "a\nb.txt",
+  "a\rb.txt",
+  "a\r\nBcc: x@y.z\r\nb.txt",
+  "a\u000bb.txt",
+  "a\fb.txt",
+  "a\u001cb.txt",
+  "a\u001db.txt",
+  "a\u001eb.txt"
+ ]
+}

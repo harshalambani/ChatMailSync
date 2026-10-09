@@ -24,8 +24,8 @@ fun fullLabelName(displayName: String): String = "$LABEL_PARENT/${sanitiseLabelN
  * server's real hierarchy delimiter only at the two points that touch the
  * wire (CREATE/SUBSCRIBE and APPEND) -- see `mailboxToWire`/`mailboxFromWire`.
  *
- * `get_or_create_label`/`push_chunks`/`push_chat` (the callers) are out of
- * scope for this phase -- see the PR body.
+ * `get_or_create_label`/`push_chunks`/`push_chat` (the callers) live in
+ * `MailTransport.kt` and `PushChunks.kt`.
  */
 class ImapTransport(
     private val host: String,
@@ -35,7 +35,7 @@ class ImapTransport(
     private val connectionFactory: (() -> ImapConnection)? = null,
     private val setSeen: Boolean = true,
     private val timeoutSeconds: Long = MAIL_SOCKET_TIMEOUT_SECONDS,
-) {
+) : MailTransport {
     private var conn: ImapConnection? = null
     private var delimiter: String? = null
 
@@ -63,7 +63,7 @@ class ImapTransport(
      * Mirrors `max_message_bytes`: APPENDLIMIT from the live connection, then
      * [PROVIDER_MAX_MESSAGE_BYTES] by hostname, then [DEFAULT_MAX_MESSAGE_BYTES].
      */
-    val maxMessageBytes: Long
+    override val maxMessageBytes: Long
         get() {
             // `if advertised:` -- a zero limit is falsy in Python and falls through (PAR-06).
             appendLimit()?.takeIf { it > 0 }?.let { return it }
@@ -148,7 +148,7 @@ class ImapTransport(
 
     data class Label(val name: String, val id: String)
 
-    fun labelsList(): List<Label> {
+    override fun labelsList(): List<Label> {
         val result = try {
             call { it.list("\"\"", "*") }
         } catch (exc: Exception) {
@@ -172,10 +172,10 @@ class ImapTransport(
     }
 
     /** Mirrors `owns_label_id`. */
-    fun ownsLabelId(labelId: String, displayName: String): Boolean = labelId == fullLabelName(displayName)
+    override fun ownsLabelId(labelId: String, displayName: String): Boolean = labelId == fullLabelName(displayName)
 
     /** Mirrors `labels_create`; returns the label id (== [name]). */
-    fun labelsCreate(name: String): String {
+    override fun labelsCreate(name: String): String {
         val wireArg = mailboxToWire(name)
         val result = try {
             call { it.create(wireArg) }
@@ -196,7 +196,7 @@ class ImapTransport(
     data class InsertResult(val id: String, val threadId: String)
 
     /** Mirrors `messages_insert`. [folder] is the canonical '/'-delimited label/folder name. */
-    fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String? = null): InsertResult {
+    override fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String?): InsertResult {
         val crlfBytes = normalizeCrlf(rawMessageBytes)
         val wireFolder = mailboxToWire(folder)
 

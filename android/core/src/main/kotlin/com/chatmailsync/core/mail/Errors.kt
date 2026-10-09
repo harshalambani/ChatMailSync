@@ -83,3 +83,11 @@ fun stripSecret(text: String, secret: String?): String {
     if (secret in out) out = out.replace(secret, "***")
     return out
 }
+
+/**
+ * A header value that cannot be written without breaking out of its line.
+ * Python's email package raises for the same inputs, which kills the whole
+ * chat's push; Kotlin refuses the one message in the same place. The text
+ * never carries the offending value: an attachment filename can be private.
+ */
+class UnsafeHeaderValueException(message: String) : IllegalArgumentException(message)
