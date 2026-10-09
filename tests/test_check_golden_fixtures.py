@@ -72,3 +72,61 @@ def test_checker_still_fails_on_a_real_difference(tmp_path: Path) -> None:
     result = _run(fresh, committed)
     assert result.returncode == 1
     assert "cutoff_golden.json" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# KT-08: .cmsbackup bundles are compared by decoded content, not raw bytes
+# ---------------------------------------------------------------------------
+
+def _rewrite_bundle(path: Path, *, date=(2000, 1, 1, 0, 0, 0), settings=None, db_edit=None) -> None:
+    """Rewrite [path] with other entry dates, and optionally other settings or a changed db row."""
+    import sqlite3
+    import tempfile
+    import zipfile
+
+    with zipfile.ZipFile(path) as z:
+        members = {n: z.read(n) for n in z.namelist()}
+    if settings is not None:
+        members["settings.json"] = settings.encode("utf-8")
+    if db_edit is not None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "sync_state.db"
+            db.write_bytes(members["sync_state.db"])
+            con = sqlite3.connect(db)
+            con.execute(db_edit)
+            con.commit()
+            con.close()
+            members["sync_state.db"] = db.read_bytes()
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
+        for n, b in members.items():
+            z.writestr(zipfile.ZipInfo(n, date_time=date), b)
+
+
+def test_bundle_with_other_entry_dates_and_compression_is_equal(tmp_path: Path) -> None:
+    committed = _fixture_copy(tmp_path / "committed")
+    fresh = _fixture_copy(tmp_path / "fresh")
+    _rewrite_bundle(fresh / "migration_python_written.cmsbackup")
+    assert (fresh / "migration_python_written.cmsbackup").read_bytes() != (
+        committed / "migration_python_written.cmsbackup"
+    ).read_bytes()
+    result = _run(fresh, committed)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bundle_with_different_settings_or_rows_is_reported(tmp_path: Path) -> None:
+    # NEGATIVE: ignoring the container must not mean ignoring the content.
+    committed = _fixture_copy(tmp_path / "committed")
+    fresh = _fixture_copy(tmp_path / "fresh")
+    _rewrite_bundle(fresh / "migration_python_written.cmsbackup", settings="{}")
+    result = _run(fresh, committed)
+    assert result.returncode == 1
+    assert "migration_python_written.cmsbackup" in result.stdout
+
+    fresh2 = _fixture_copy(tmp_path / "fresh2")
+    _rewrite_bundle(
+        fresh2 / "migration_python_written.cmsbackup",
+        db_edit="UPDATE chats SET display_name = 'Someone Else' WHERE chat_id = 'chat-meera'",
+    )
+    result = _run(fresh2, committed)
+    assert result.returncode == 1
+    assert "migration_python_written.cmsbackup" in result.stdout
