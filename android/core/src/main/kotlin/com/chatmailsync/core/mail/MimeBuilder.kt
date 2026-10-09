@@ -13,9 +13,8 @@ import kotlin.random.Random
  * `_format_sender`, `_build_mime_message`, `_new_message_id` (lines
  * ~1450-1543 there).
  *
- * `_build_html_mime_message` (the HTML-rendered alternative, which depends
- * on the unported `src/html_renderer.py`) is out of scope for this phase --
- * see the PR body.
+ * `_build_html_mime_message` (the builder production uses) lives in
+ * `HtmlMimeBuilder.kt` and shares this object's subject/sender/date helpers.
  *
  * The message is assembled by hand to exactly match what Python's
  * `email.mime` package + `Generator` produce for this specific shape of
@@ -31,7 +30,7 @@ object MimeBuilder {
     private val TIME_HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val DATE_YMD: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val DATE_YMD_H00: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH")
-    private val RFC822_DATE: DateTimeFormatter =
+    internal val RFC822_DATE: DateTimeFormatter =
         DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss", java.util.Locale.ENGLISH)
 
     /** Mirrors `_new_message_id`. */
@@ -185,7 +184,8 @@ object MimeBuilder {
 
     /** Mirrors `base64.encodebytes`: 76-char lines, trailing newline after the last line. */
     fun base64Lines(data: ByteArray): String {
-        if (data.isEmpty()) return "\n"
+        // encodebytes(b"") is b"": no blank line. This used to return "\n", a parity bug.
+        if (data.isEmpty()) return ""
         val full = Base64.getEncoder().encodeToString(data)
         val sb = StringBuilder()
         var i = 0
@@ -197,11 +197,14 @@ object MimeBuilder {
         return sb.toString()
     }
 
-    private fun defaultBoundary(): String {
-        // Shape only needs to survive the golden-fixture test's boundary
-        // normalization (a regex over "===...==" style tokens) -- it need
-        // not match Python's exact RNG output.
+    /**
+     * Same shape as the email package's `_make_boundary`: fifteen "=", the
+     * random token zero-padded to 19 digits (the width of `sys.maxsize - 1`),
+     * two "=". Padding matters for parity: an unpadded token is a different
+     * length from Python's about nine times in ten.
+     */
+    internal fun defaultBoundary(): String {
         val token = Random.nextLong(0, Long.MAX_VALUE)
-        return "===============${token}=="
+        return "===============" + String.format(Locale.ROOT, "%019d", token) + "=="
     }
 }

@@ -1824,6 +1824,217 @@ def generate_migration_golden() -> None:
     print(f"Wrote {GOLDEN_DIR / 'migration_golden.json'} and the migration_*.cmsbackup / .db fixtures")
 
 
+# ---------------------------------------------------------------------------
+# KT-07: _build_html_mime_message goldens
+#
+# The builder takes an already-rendered chunk, so the golden pins the RENDERED
+# input (html body, inline parts, attachments) as explicit data and the Kotlin
+# test builds from exactly that. That keeps the random cids out of the picture
+# and makes this a pure builder-parity check; the renderer has its own golden.
+# Boundaries are random in Python, so both are normalised IN ORDER OF FIRST
+# APPEARANCE (the mixed boundary is in the top header, the related one next),
+# which keeps regeneration byte-stable.
+# ---------------------------------------------------------------------------
+
+_BOUNDARY_ANY_RE = re.compile(rb"={15}\d+==")
+_PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def _normalize_boundaries_ordered(raw: bytes) -> bytes:
+    seen: dict[bytes, bytes] = {}
+
+    def _sub(m: "re.Match[bytes]") -> bytes:
+        tok = m.group(0)
+        if tok not in seen:
+            seen[tok] = b"===============NORMALIZED%d==" % (len(seen) + 1)
+        return seen[tok]
+
+    return _BOUNDARY_ANY_RE.sub(_sub, raw)
+
+
+def _html_case(
+    name: str,
+    display_name: str,
+    html_body: str = "<html><body><p>hello</p></body></html>",
+    inline: "list[tuple[str, bytes, str]] | None" = None,
+    attachments: "list[tuple[str, bytes, str]] | None" = None,
+    suffix: str = "",
+    in_reply_to: "str | None" = None,
+    references: "str | None" = None,
+    chunk_size="day",
+    messages: "list[ParsedMessage] | None" = None,
+) -> dict[str, object]:
+    from src.html_renderer import AttachmentPart, InlinePart, RenderedChunk
+    from src.mail_client import _build_html_mime_message
+
+    chunk = messages if messages is not None else _mime_msgs()
+    inline = inline or []
+    attachments = attachments or []
+    rendered = RenderedChunk(
+        html_body=html_body,
+        inline_parts=[InlinePart(cid=c, data=d, mime_type=m) for c, d, m in inline],
+        attachments=[AttachmentPart(filename=f, data=d, mime_type=m) for f, d, m in attachments],
+    )
+    result = _build_html_mime_message(
+        display_name=display_name,
+        chunk=chunk,
+        chunk_size=chunk_size,
+        rendered=rendered,
+        label_id=f"WhatsApp/{display_name}",
+        message_id=FIXTURE_MESSAGE_ID,
+        suffix=suffix,
+        in_reply_to=in_reply_to,
+        references=references,
+    )
+    raw_bytes = base64.urlsafe_b64decode(result["raw"])
+    return {
+        "name": name,
+        "displayName": display_name,
+        "chatId": chunk[0].chat_id,
+        "messageId": FIXTURE_MESSAGE_ID,
+        "chunkSize": chunk_size,
+        "suffix": suffix,
+        "inReplyTo": in_reply_to,
+        "references": references,
+        "messages": [{"sender": m.sender, "body": m.body, "ts": m.timestamp_iso} for m in chunk],
+        "htmlBody": html_body,
+        "inline": [
+            {"cid": c, "mimeType": m, "dataBase64": base64.b64encode(d).decode("ascii")} for c, d, m in inline
+        ],
+        "attachments": [
+            {"filename": f, "mimeType": m, "dataBase64": base64.b64encode(d).decode("ascii")}
+            for f, d, m in attachments
+        ],
+        "eml": _normalize_boundaries_ordered(raw_bytes).decode("ascii"),
+    }
+
+
+def _html_cases() -> "list[dict[str, object]]":
+    pdf = b"%PDF-1.4 fake pdf bytes for the golden\n" * 3
+    cases: list[dict[str, object]] = []
+    cases.append(_html_case("html_plain", "Meera Iyer"))
+    cases.append(_html_case("html_long_ascii_name_64", _LONG_ASCII_BASE[:64]))
+    cases.append(_html_case("html_hindi_group_name", _HINDI_BASE))
+    cases.append(_html_case("html_emoji_name", _EMOJI_BASE))
+    cases.append(_html_case("html_phone_name", "+91 98765 43210"))
+    cases.append(_html_case("html_quoted_name", 'Meera "Mee" Iyer, Jr. (Family)'))
+    cases.append(
+        _html_case(
+            "html_inline_image",
+            "Meera Iyer",
+            html_body='<html><body><img src="cid:img-000000000001"></body></html>',
+            inline=[("img-000000000001", _PNG_1X1, "image/png")],
+        )
+    )
+    cases.append(
+        _html_case(
+            "html_two_inline_images_and_pdf",
+            "Rohan Mehta",
+            html_body='<html><body><img src="cid:img-000000000001"><img src="cid:img-000000000002"></body></html>',
+            inline=[
+                ("img-000000000001", _PNG_1X1, "image/png"),
+                ("img-000000000002", _PNG_1X1 * 40, "image/jpeg"),
+            ],
+            attachments=[("notes.pdf", pdf, "application/pdf")],
+        )
+    )
+    cases.append(_html_case("html_pdf_attachment", "Meera Iyer", attachments=[("report.pdf", pdf, "application/pdf")]))
+    cases.append(
+        _html_case(
+            "html_audio_attachment",
+            "Meera Iyer",
+            attachments=[("voice note.opus", b"OggS" + bytes(range(200)), "audio/ogg")],
+        )
+    )
+    cases.append(_html_case("html_empty_attachment", "Meera Iyer", attachments=[("empty.bin", b"", "application/octet-stream")]))
+    cases.append(
+        _html_case(
+            "html_big_attachment_multiline",
+            "Meera Iyer",
+            attachments=[("big.bin", bytes(range(256)) * 20, "application/octet-stream")],
+        )
+    )
+    for fname_case, fname in [
+        ("quote_backslash", 'we"ird\\name.txt'),
+        ("semicolon_percent", "a;b%20c.txt"),
+        ("long_ascii_100", "x" * 96 + ".pdf"),
+        ("hindi", "मीरा रिपोर्ट.pdf"),
+        ("hindi_with_newline", "मीरा\nरिपोर्ट.pdf"),
+        ("accent", "café menu.pdf"),
+        ("emoji", "party \U0001f389.jpg"),
+        ("nul_ascii", "a\x00b.txt"),
+        ("del_us_ascii", "a\x1fb\x7f.txt"),
+        ("hindi_long", "म" * 60 + ".pdf"),
+    ]:
+        cases.append(
+            _html_case(
+                f"html_filename_{fname_case}",
+                "Meera Iyer",
+                attachments=[(fname, pdf, "application/pdf")],
+            )
+        )
+    cases.append(
+        _html_case(
+            "html_reply_set",
+            "Meera Iyer",
+            in_reply_to="<anchor-1@local>",
+            references="<anchor-0@local> <anchor-1@local>",
+        )
+    )
+    cases.append(_html_case("html_reply_no_references", "Meera Iyer", in_reply_to="<anchor-1@local>"))
+    cases.append(_html_case("html_reply_unset", "Meera Iyer", in_reply_to=None, references="<ignored@local>"))
+    cases.append(_html_case("html_part_2_of_3", "Meera Iyer", suffix="Part 2/3"))
+    cases.append(_html_case("html_part_10_of_12_hindi", _HINDI_BASE, suffix="Part 10/12"))
+    cases.append(_html_case("html_week_chunk", "Meera Iyer", chunk_size="week"))
+    cases.append(_html_case("html_hour_chunk", "Meera Iyer", chunk_size="hour"))
+    cases.append(_html_case("html_count_chunk", "Meera Iyer", chunk_size=2))
+    return cases
+
+
+def _html_refused_filenames() -> "list[str]":
+    """ASCII filenames Python 3.13 cannot write; asserts that it really raises."""
+    from src.html_renderer import AttachmentPart, RenderedChunk
+    from src.mail_client import _build_html_mime_message
+
+    names = [
+        "a\nb.txt",
+        "a\rb.txt",
+        "a\r\nBcc: x@y.z\r\nb.txt",
+        "a\x0bb.txt",
+        "a\x0cb.txt",
+        "a\x1cb.txt",
+        "a\x1db.txt",
+        "a\x1eb.txt",
+    ]
+    for fname in names:
+        rendered = RenderedChunk(
+            html_body="<p>x</p>",
+            attachments=[AttachmentPart(filename=fname, data=b"x", mime_type="application/pdf")],
+        )
+        try:
+            _build_html_mime_message("Meera Iyer", _mime_msgs(), "day", rendered, "L", FIXTURE_MESSAGE_ID)
+        except Exception:  # noqa: BLE001 - the point is that ANY raise happens
+            continue
+        raise AssertionError(f"Python 3.13 wrote filename {fname!r} without raising; update the Kotlin refusal list")
+    return names
+
+
+def generate_html_mime_golden() -> None:
+    cases = _html_cases()
+    names = [c["name"] for c in cases]
+    assert len(names) == len(set(names)), "duplicate HTML MIME golden case name"
+    payload = {"cases": cases, "refusedFilenames": _html_refused_filenames()}
+    out_path = GOLDEN_DIR / "html_mime_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1860,6 +2071,7 @@ def main() -> None:
     generate_html_renderer_golden()
     generate_mail_index_golden()
     generate_mime_cases_golden()
+    generate_html_mime_golden()
     generate_par06_edge_golden()
     generate_migration_golden()
 

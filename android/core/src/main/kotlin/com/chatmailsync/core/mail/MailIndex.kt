@@ -119,5 +119,37 @@ fun indexBytes(index: MailIndex): ByteArray {
     return (lines.joinToString("\n") + "\n").toByteArray(Charsets.UTF_8)
 }
 
-/** Mirrors `_header_safe`: collapses whitespace so a header value can't break out of its line. */
-fun headerSafe(value: String): String = value.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+/**
+ * True for exactly the characters Python's `str.isspace()` (and therefore
+ * `str.split()`) treats as whitespace: ASCII space and TAB/LF/VT/FF/CR, the
+ * four separators U+001C..U+001F, NEL (U+0085), NBSP (U+00A0), U+1680,
+ * U+2000..U+200A, U+2028, U+2029, U+202F, U+205F and U+3000.
+ */
+internal fun isPythonWhitespace(c: Char): Boolean = when (c.code) {
+    0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x85, 0xA0, 0x1680,
+    0x2028, 0x2029, 0x202F, 0x205F, 0x3000 -> true
+    in 0x2000..0x200A -> true
+    else -> false
+}
+
+/**
+ * Mirrors `_header_safe` (`" ".join(value.split())`): collapses every run of
+ * whitespace -- Python's Unicode notion of it, see [isPythonWhitespace] -- to
+ * one space and trims, so a header value can't break out of its line. Unlike
+ * the regex it replaces, this also collapses NBSP, NEL, U+2028 and friends,
+ * which Python collapses and a plain `\s` does not.
+ */
+fun headerSafe(value: String): String {
+    val sb = StringBuilder(value.length)
+    var pendingSpace = false
+    for (c in value) {
+        if (isPythonWhitespace(c)) {
+            pendingSpace = sb.isNotEmpty()
+        } else {
+            if (pendingSpace) sb.append(' ')
+            pendingSpace = false
+            sb.append(c)
+        }
+    }
+    return sb.toString()
+}
