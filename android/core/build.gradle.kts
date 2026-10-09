@@ -122,3 +122,17 @@ tasks.register<JavaExec>("generateStateFixtureKotlinWritten") {
     args = listOf(projectDir.resolve("../../tests/fixtures/state_fixture_kotlin_written.db").absolutePath)
     dependsOn("fixtureGenClasses")
 }
+
+// One-off run: writes the Kotlin-written .cmsbackup that the Python pytest suite imports with the
+// real src/migration.py (tests/test_migration_kotlin_bundle.py). Not wired into test/build/assemble;
+// MigrationKotlinFixtureTest fails when the committed file goes stale:
+//   cd android && ./gradlew :core:generateBundleFixtureKotlinWritten
+tasks.register<JavaExec>("generateBundleFixtureKotlinWritten") {
+    group = "verification"
+    description = "One-off: writes tests/fixtures/bundle_fixture_kotlin_written.cmsbackup via the " +
+        "Kotlin exportBundle, for the Python pytest suite to import. Never touched by CI, build, test, or assemble."
+    mainClass.set("com.chatmailsync.core.mail.BundleFixtureGeneratorKt")
+    classpath = sourceSets["fixtureGen"].runtimeClasspath
+    args = listOf(projectDir.resolve("../../tests/fixtures/bundle_fixture_kotlin_written.cmsbackup").absolutePath)
+    dependsOn("fixtureGenClasses")
+}

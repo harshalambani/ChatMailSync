@@ -310,4 +310,71 @@ class MigrationTest {
         val e = ByteArrayOutputStream()
         assertNotNull(e)
     }
+
+    // ---------------------------------------------------------------- hostile zip containers
+
+    /** Little-endian patch of the central-directory record for [name]: field at [offset] set to [value]. */
+    private fun patchCentral(zip: File, name: String, offset: Int, value: Long, width: Int = 4) {
+        val b = zip.readBytes()
+        var i = 0
+        while (i + 46 < b.size) {
+            if (b[i] == 0x50.toByte() && b[i + 1] == 0x4b.toByte() && b[i + 2] == 0x01.toByte() && b[i + 3] == 0x02.toByte()) {
+                val nameLen = (b[i + 28].toInt() and 0xff) or ((b[i + 29].toInt() and 0xff) shl 8)
+                if (String(b, i + 46, nameLen, Charsets.UTF_8) == name) {
+                    for (k in 0 until width) b[i + offset + k] = ((value shr (8 * k)) and 0xff).toByte()
+                    zip.writeBytes(b)
+                    return
+                }
+            }
+            i++
+        }
+        error("no central record for $name")
+    }
+
+    @Test
+    fun `a settings member whose header understates its size is refused by the real byte count`() {
+        val root = seededRoot()
+        val big = ByteArray(MAX_BUNDLE_MEMBER_BYTES + 1000) { ' '.code.toByte() }
+        val z = zipOf("manifest.json" to goodManifest, "settings.json" to big)
+        patchCentral(z, "settings.json", 24, 100) // central header: uncompressed size
+        assertRefusedUntouched(z, root)
+    }
+
+    @Test
+    fun `a db member whose header disagrees with its bytes is refused and the db is untouched`() {
+        val root = seededRoot()
+        val z = zipOf("manifest.json" to goodManifest, "sync_state.db" to ByteArray(2000) { 1 })
+        patchCentral(z, "sync_state.db", 16, 0x12345678L) // central header: CRC-32
+        assertRefusedUntouched(z, root)
+    }
+
+    @Test
+    fun `a repeated member name uses the last one, as the Python reader does`() {
+        val root = seededRoot()
+        // Two settings members; rename the first to a different name of the same length is not
+        // the point -- both carry the NAME settings.json after patching the first record back.
+        val z = zipOf("settings.jsoX" to """{"chunk_size":"day"}""".toByteArray(), "manifest.json" to goodManifest,
+            "settings.json" to """{"chunk_size":"week"}""".toByteArray())
+        val bytes = z.readBytes()
+        val needle = "settings.jsoX".toByteArray()
+        var idx = 0
+        while (idx <= bytes.size - needle.size) {
+            if (bytes.copyOfRange(idx, idx + needle.size).contentEquals(needle)) bytes[idx + needle.size - 1] = 'n'.code.toByte()
+            idx++
+        }
+        z.writeBytes(bytes)
+        val r = importBundle(root, z, openDb)
+        assertTrue(r.error, r.ok)
+        assertEquals("week", r.settings["chunk_size"])
+    }
+
+    @Test
+    fun `refusals leave no temp files behind and mention no path`() {
+        val root = seededRoot()
+        val bad = zipOf("manifest.json" to goodManifest, "sync_state.db" to ByteArray(3000) { 9 })
+        val r = importBundle(root, bad, openDb)
+        assertFalse(r.ok)
+        assertFalse(r.error!!, r.error!!.contains(root.path) || r.error!!.contains(bad.path))
+        assertEquals(emptyList<String>(), leftovers(root))
+    }
 }
