@@ -47,7 +47,18 @@ object HtmlRenderer {
      * the body text survives, and the HTML carries a visible placeholder in
      * the file's place.
      */
-    data class MediaOmission(val filename: String, val sizeBytes: Long, val limitBytes: Long)
+    data class MediaOmission(
+        val filename: String,
+        val sizeBytes: Long,
+        val limitBytes: Long,
+        /**
+         * Why the file was left out when it was not for size. Null means the
+         * usual too-large case. Set (D35) when the file name holds a line
+         * break and could not be written into a mail header: that one file is
+         * skipped and every other message and attachment still goes.
+         */
+        val reason: String? = null,
+    )
 
     /** Complete render output for one email. */
     data class RenderedChunk(
@@ -463,6 +474,24 @@ object HtmlRenderer {
             val cid = "img-${UUID.randomUUID().toString().replace("-", "").substring(0, 12)}"
             inlineParts.add(InlinePart(cid = cid, data = data, mimeType = mimeType))
             return "<img src=\"cid:$cid\" alt=\"${escapeHtml(filename)}\" style=\"$IMG\">"
+        }
+
+        // Deliberate difference from Python (D35): a file whose name cannot be
+        // written into a header is left out and announced; Python would fail
+        // the whole chat while serialising. Everything else still goes.
+        if (HtmlMimeBuilder.isUnsendableFilename(filename)) {
+            omissions.add(
+                MediaOmission(
+                    filename = filename,
+                    sizeBytes = data.size.toLong(),
+                    limitBytes = 0L,
+                    reason = HtmlMimeBuilder.UNSENDABLE_FILENAME_REASON,
+                ),
+            )
+            return "<div style=\"$PLACEHOLDER\">" +
+                "$PAPERCLIP_ICON ${escapeHtml(printableName(filename))} $EM_DASH " +
+                "not included (the file name holds a line break). It stays in your WhatsApp export." +
+                "</div>"
         }
 
         // Non-image: render a download card and attach the file.
