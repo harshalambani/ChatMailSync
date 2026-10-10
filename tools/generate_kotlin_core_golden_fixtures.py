@@ -2684,6 +2684,229 @@ def generate_sync_run_golden() -> None:
         print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
+def generate_core_api_golden() -> None:
+    """The src/android_api.py facade, called for real, one scripted pass.
+
+    The Kotlin CoreApi test runs the same script (same step names, same
+    arguments) and compares each result field for field. Values that depend on
+    the clock, the random bundle id or the temp-dir path are masked in both.
+    """
+    import tempfile
+
+    from src import android_api as api
+    from src import config, state
+
+    masked_keys = {
+        "started_at", "completed_at", "last_run_at", "last_started_at", "last_completed_at",
+        "created_at", "bundle_id", "path", "created_at_epoch_ms", "first_seen", "last_seen",
+    }
+
+    def mask(v):
+        if isinstance(v, dict):
+            out = {}
+            for k, x in v.items():
+                if k == "settings_json" and isinstance(x, str):
+                    out[k] = json.loads(x)
+                elif k in masked_keys and x is not None:
+                    out[k] = "<masked>"
+                elif k == "fraction":
+                    out[k] = None if x is None else round(x * 1000)
+                else:
+                    out[k] = mask(x)
+            return out
+        if isinstance(v, (list, tuple)):
+            return [mask(x) for x in v]
+        return v
+
+    class _Transport:
+        def __init__(self):
+            self.calls = 0
+
+        def labels_list(self):
+            return {"labels": []}
+
+        def labels_create(self, body):
+            return {"id": "Label_WA", "name": body.get("name", "")}
+
+        def messages_insert(self, body, thread_id=None):
+            self.calls += 1
+            return {"id": f"m{self.calls}", "threadId": thread_id or f"t{self.calls}"}
+
+    def tie_sorted(rows):
+        # ORDER BY msg_count DESC leaves ties in the engine's hands; pin them for comparison.
+        return sorted(rows, key=lambda r: (-r["msg_count"], r["chat_id"], r["sender"]))
+
+    def run_sorted(rows):
+        # ORDER BY started_at DESC ties when two runs start in the same second; pin by run_id.
+        return sorted(rows, key=lambda r: -r["run_id"])
+
+    steps = []
+
+    def rec(name, value):
+        steps.append({"call": name, "result": mask(value)})
+
+    meera = "WhatsApp Chat with Meera Iyer.txt"
+    rohan = "WhatsApp Chat with Rohan Mehta.txt"
+    asha = "WhatsApp Chat with Asha Rao.txt"
+    t = _sm_chat_text
+
+    def put(path, text):
+        path.write_text(text, encoding="utf-8", newline="\n")
+
+    with tempfile.TemporaryDirectory() as tmp_s, tempfile.TemporaryDirectory() as tmp2_s:
+        tmp, tmp2 = Path(tmp_s), Path(tmp2_s)
+        config.set_root(tmp)
+        try:
+            rec("list_inbox_missing_dir", api.list_inbox())
+            config.INBOX_DIR.mkdir(parents=True, exist_ok=True)
+            put(config.INBOX_DIR / meera, t([20, 21, 22]))
+            put(config.INBOX_DIR / rohan, t([20, 22], per_day=2))
+            put(config.INBOX_DIR / "notes.md", "x")
+            rec("list_inbox", api.list_inbox())
+            rec("remove_from_inbox_present", api.remove_from_inbox("notes.md"))
+            rec("remove_from_inbox_absent", api.remove_from_inbox("notes.md"))
+            rec("imap_providers", api.imap_providers())
+
+            side = tmp / "side"
+            side.mkdir()
+            put(side / meera, t([20, 21, 22]))
+            put(side / asha, "no timestamps here\n")
+            rec("preview_meera", api.preview(str(side / meera)))
+            rec("preview_meera_cutoff_mid", api.preview(str(side / meera), "2025-03-21"))
+            rec("preview_meera_cutoff_after", api.preview(str(side / meera), "2025-04-01"))
+            rec("preview_meera_bad_cutoff", api.preview(str(side / meera), "soon"))
+            rec("preview_empty_file", api.preview(str(side / asha)))
+            rec("preview_text_meera", api.preview_text(str(side / meera)))
+            rec("preview_text_meera_cutoff_mid", api.preview_text(str(side / meera), "2025-03-21"))
+            rec("preview_text_meera_cutoff_after", api.preview_text(str(side / meera), "2025-04-01"))
+            rec("preview_text_empty_file", api.preview_text(str(side / asha)))
+            base = {
+                "ok": True, "display_name": "Meera Iyer", "message_count": 1, "participant_count": 1,
+                "media_count": 1, "first_message_ts": "2025-03-20T09:00:00",
+                "last_message_ts": "2025-03-20T09:00:00", "cutoff_date": None, "error": None,
+            }
+            rec("format_not_ok_with_error", api.format_preview({**base, "ok": False, "error": "It broke."}))
+            rec("format_not_ok_no_error", api.format_preview({**base, "ok": False}))
+            rec("format_ok_with_error", api.format_preview({**base, "error": "Nothing in it."}))
+            rec("format_ok_no_name", api.format_preview({**base, "display_name": None}))
+            rec("format_singular_media", api.format_preview(base))
+            rec("format_plural_no_media", api.format_preview(
+                {**base, "message_count": 3, "participant_count": 2, "media_count": 0}))
+            rec("format_all_older", api.format_preview({**base, "cutoff_date": "2025-03-21"}))
+            rec("format_part_older", api.format_preview(
+                {**base, "last_message_ts": "2025-03-25T09:00:00", "cutoff_date": "2025-03-22"}))
+
+            rec("progress_state_fresh", api.progress_state())
+            events = []
+            stats = api.sync(transport=_Transport(), on_progress=lambda e: events.append(dict(e)))
+            rec("sync_stats", stats)
+            rec("sync_events", events)
+            rec("progress_state_after_sync", api.progress_state())
+            # Two runs that start in the same second tie on ORDER BY started_at, and which one
+            # an engine returns first is its own business. Space them apart so "latest" is defined.
+            import sqlite3
+            from datetime import datetime as _dt, timedelta as _td
+
+            _con = sqlite3.connect(config.STATE_DB_PATH)
+            for _rid, _hrs in ((1, 2), (2, 1)):
+                _con.execute(
+                    "UPDATE sync_runs SET started_at = ? WHERE run_id = ?",
+                    ((_dt.now() - _td(hours=_hrs)).isoformat(timespec="seconds"), _rid),
+                )
+            _con.commit()
+            _con.close()
+            rec("status", api.status())
+            rec("sync_log", run_sorted(api.sync_log()))
+            rec("sync_log_one_day", run_sorted(api.sync_log(1)))
+            rec("sync_status", api.sync_status())
+            rec("sync_status_one_day", api.sync_status(1))
+
+            rec("list_chat_senders_all", tie_sorted(api.list_chat_senders()))
+            rec("list_chat_senders_one", api.list_chat_senders("meera_iyer"))
+            rec("list_chat_senders_none", api.list_chat_senders("nobody"))
+            rec("get_self_sender_before", api.get_self_sender())
+            rec("set_self_sender_name", api.set_self_sender("  Meera Iyer  "))
+            rec("set_self_sender_clear", api.set_self_sender(""))
+            state.set_app_state("self_sender_learned_pending", "Rohan Mehta", config.STATE_DB_PATH)
+            rec("get_pending_banner", api.get_pending_self_sender_banner())
+            api.clear_self_sender_banner()
+            rec("get_pending_banner_cleared", api.get_pending_self_sender_banner())
+
+            rec("get_cutoff_none", api.get_cutoff("Meera Iyer"))
+            rec("set_cutoff_meera", api.set_cutoff("meera iyer", "2025-03-21"))
+            rec("get_cutoff_meera", api.get_cutoff("Meera Iyer"))
+            rec("set_cutoff_long_timestamp", api.set_cutoff("rohan_mehta", " 2025-03-19T08:00:00 "))
+            rec("set_cutoff_bad", api.set_cutoff("rohan_mehta", "yesterday"))
+            rec("set_cutoff_bad_quote", api.set_cutoff("rohan_mehta", "it's"))
+            rec("set_cutoff_unknown_chat", api.set_cutoff("new_chat", "2025-01-01"))
+            rec("get_cutoff_unknown", api.get_cutoff("zzz"))
+            rec("list_cutoffs", api.list_cutoffs())
+            rec("preview_with_chat_cutoff", api.preview(str(side / meera), "2025-03-01"))
+            rec("set_cutoff_clear", api.set_cutoff("meera_iyer", "   "))
+            rec("list_cutoffs_after_clear", api.list_cutoffs())
+
+            rec("reset_preview_meera", api.reset_preview("Meera Iyer"))
+            rec("reset_preview_nobody", api.reset_preview("no body's"))
+            rec("reset_unconfirmed", api.reset("Meera Iyer"))
+            rec("reset_confirmed", api.reset("Meera Iyer", True))
+            rec("list_inbox_after_reset", api.list_inbox())
+            rec("reset_again_nothing_to_restore", api.reset("meera_iyer", True))
+            rec("reset_nobody", api.reset("nobody"))
+            rec("delete_chat_rohan", api.delete_chat("Rohan Mehta"))
+            rec("delete_chat_nobody", api.delete_chat("nobody"))
+            rec("status_after_delete", api.status())
+
+            # A stop requested from inside a progress callback is honoured after the file in hand.
+            put(config.INBOX_DIR / rohan, t([23]))
+            put(config.INBOX_DIR / asha, t([23]))
+            stop_events = []
+
+            def stopper(e):
+                stop_events.append(dict(e))
+                if e.get("type") == "file_done":
+                    api.request_stop()
+
+            rec("sync_stopped_stats", api.sync(transport=_Transport(), on_progress=stopper))
+            rec("sync_stopped_events", stop_events)
+            rec("progress_state_after_stop", api.progress_state())
+            rec("list_inbox_after_stop", api.list_inbox())
+            rec("sync_dry_run", api.sync(
+                transport=_Transport(), dry_run=True, chat_filter="asha", cutoff_date="2025-03-22"))
+
+            bundle = tmp / "out.cmsbackup"
+            rec("export_backup", api.export_backup(
+                str(bundle),
+                json.dumps({"chunk_size": "day", "imap_port": 993, "theme_mode": "dark", "app_password": "hunter2xyz", "bogus": 1}),
+                "9.9.9",
+            ))
+            rec("export_backup_bad_settings", api.export_backup(str(tmp / "b2.cmsbackup"), "not json", "9.9.9"))
+            rec("export_backup_settings_list", api.export_backup(str(tmp / "b3.cmsbackup"), "[1, 2]", ""))
+            rec("describe_backup", api.describe_backup(str(bundle)))
+            junk = tmp / "junk.cmsbackup"
+            put(junk, "this is not a zip")
+            rec("describe_backup_junk", api.describe_backup(str(junk)))
+            rec("import_backup_junk", api.import_backup(str(junk)))
+            rec("status_before_import", api.status())
+
+            config.set_root(tmp2)
+            rec("import_backup_fresh_root", api.import_backup(str(bundle)))
+            rec("import_backup_again", api.import_backup(str(bundle)))
+            rec("status_after_import", api.status())
+            rec("list_cutoffs_after_import", api.list_cutoffs())
+            rec("list_chat_senders_after_import", tie_sorted(api.list_chat_senders()))
+        finally:
+            config.set_root(REPO_ROOT)
+
+    payload = {"steps": steps}
+    out_path = GOLDEN_DIR / "core_api_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2725,6 +2948,7 @@ def main() -> None:
     generate_migration_golden()
     generate_sync_helpers_golden()
     generate_sync_run_golden()
+    generate_core_api_golden()
 
 
 if __name__ == "__main__":

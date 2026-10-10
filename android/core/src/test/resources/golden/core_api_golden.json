@@ -1,0 +1,1129 @@
+{
+ "steps": [
+  {
+   "call": "list_inbox_missing_dir",
+   "result": []
+  },
+  {
+   "call": "list_inbox",
+   "result": [
+    {
+     "name": "WhatsApp Chat with Meera Iyer.txt",
+     "size_bytes": 130
+    },
+    {
+     "name": "WhatsApp Chat with Rohan Mehta.txt",
+     "size_bytes": 174
+    },
+    {
+     "name": "notes.md",
+     "size_bytes": 1
+    }
+   ]
+  },
+  {
+   "call": "remove_from_inbox_present",
+   "result": {
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "remove_from_inbox_absent",
+   "result": {
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "imap_providers",
+   "result": [
+    {
+     "host": "imap.gmail.com",
+     "key": "gmail",
+     "label": "Gmail",
+     "port": 993
+    },
+    {
+     "host": "imap.mail.yahoo.com",
+     "key": "yahoo",
+     "label": "Yahoo",
+     "port": 993
+    },
+    {
+     "host": "imap.mail.me.com",
+     "key": "icloud",
+     "label": "iCloud",
+     "port": 993
+    },
+    {
+     "host": "imap.aol.com",
+     "key": "aol",
+     "label": "AOL",
+     "port": 993
+    },
+    {
+     "host": "imap.fastmail.com",
+     "key": "fastmail",
+     "label": "Fastmail",
+     "port": 993
+    },
+    {
+     "host": "",
+     "key": "custom",
+     "label": "Custom",
+     "port": 993
+    }
+   ]
+  },
+  {
+   "call": "preview_meera",
+   "result": {
+    "cutoff_date": null,
+    "display_name": "Meera Iyer",
+    "error": null,
+    "first_message_ts": "2025-03-20T09:00:00",
+    "last_message_ts": "2025-03-22T09:00:00",
+    "media_count": 0,
+    "message_count": 3,
+    "ok": true,
+    "participant_count": 2
+   }
+  },
+  {
+   "call": "preview_meera_cutoff_mid",
+   "result": {
+    "cutoff_date": "2025-03-21",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "first_message_ts": "2025-03-20T09:00:00",
+    "last_message_ts": "2025-03-22T09:00:00",
+    "media_count": 0,
+    "message_count": 3,
+    "ok": true,
+    "participant_count": 2
+   }
+  },
+  {
+   "call": "preview_meera_cutoff_after",
+   "result": {
+    "cutoff_date": "2025-04-01",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "first_message_ts": "2025-03-20T09:00:00",
+    "last_message_ts": "2025-03-22T09:00:00",
+    "media_count": 0,
+    "message_count": 3,
+    "ok": true,
+    "participant_count": 2
+   }
+  },
+  {
+   "call": "preview_meera_bad_cutoff",
+   "result": {
+    "cutoff_date": null,
+    "display_name": "Meera Iyer",
+    "error": null,
+    "first_message_ts": "2025-03-20T09:00:00",
+    "last_message_ts": "2025-03-22T09:00:00",
+    "media_count": 0,
+    "message_count": 3,
+    "ok": true,
+    "participant_count": 2
+   }
+  },
+  {
+   "call": "preview_empty_file",
+   "result": {
+    "cutoff_date": null,
+    "display_name": "Asha Rao",
+    "error": "No messages could be parsed from this file.",
+    "first_message_ts": null,
+    "last_message_ts": null,
+    "media_count": 0,
+    "message_count": 0,
+    "ok": true,
+    "participant_count": 0
+   }
+  },
+  {
+   "call": "preview_text_meera",
+   "result": "Meera Iyer\n3 messages, 2 participants\n2025-03-20 to 2025-03-22"
+  },
+  {
+   "call": "preview_text_meera_cutoff_mid",
+   "result": "Meera Iyer\n3 messages, 2 participants\n2025-03-20 to 2025-03-22\nYour cutoff date, 2025-03-21, holds back the part of this that is older than it."
+  },
+  {
+   "call": "preview_text_meera_cutoff_after",
+   "result": "Meera Iyer\n3 messages, 2 participants\n2025-03-20 to 2025-03-22\nAll of this is older than your cutoff date, 2025-04-01, so none of it would be sent."
+  },
+  {
+   "call": "preview_text_empty_file",
+   "result": "Asha Rao\nNo messages could be parsed from this file."
+  },
+  {
+   "call": "format_not_ok_with_error",
+   "result": "It broke."
+  },
+  {
+   "call": "format_not_ok_no_error",
+   "result": "This file could not be read."
+  },
+  {
+   "call": "format_ok_with_error",
+   "result": "Meera Iyer\nNothing in it."
+  },
+  {
+   "call": "format_ok_no_name",
+   "result": "This chat\n1 message, 1 participant, 1 media\n2025-03-20 to 2025-03-20"
+  },
+  {
+   "call": "format_singular_media",
+   "result": "Meera Iyer\n1 message, 1 participant, 1 media\n2025-03-20 to 2025-03-20"
+  },
+  {
+   "call": "format_plural_no_media",
+   "result": "Meera Iyer\n3 messages, 2 participants\n2025-03-20 to 2025-03-20"
+  },
+  {
+   "call": "format_all_older",
+   "result": "Meera Iyer\n1 message, 1 participant, 1 media\n2025-03-20 to 2025-03-20\nAll of this is older than your cutoff date, 2025-03-21, so none of it would be sent."
+  },
+  {
+   "call": "format_part_older",
+   "result": "Meera Iyer\n1 message, 1 participant, 1 media\n2025-03-20 to 2025-03-25\nYour cutoff date, 2025-03-22, holds back the part of this that is older than it."
+  },
+  {
+   "call": "progress_state_fresh",
+   "result": {
+    "chat": "",
+    "detail": "",
+    "fraction": -1000,
+    "headline": "",
+    "line": "",
+    "log": "",
+    "milestones": [],
+    "percent": -1,
+    "phase": "idle"
+   }
+  },
+  {
+   "call": "sync_stats",
+   "result": {
+    "chats_recovered": 0,
+    "errors": [],
+    "files_failed": 0,
+    "files_found": 2,
+    "files_skipped": 0,
+    "files_synced": 2,
+    "media_omitted": [],
+    "messages_cutoff": 0,
+    "messages_parsed": 7,
+    "messages_skipped": 0,
+    "messages_synced": 7,
+    "stopped": false
+   }
+  },
+  {
+   "call": "sync_events",
+   "result": [
+    {
+     "n": 2,
+     "type": "files_total"
+    },
+    {
+     "n": 7,
+     "type": "total_messages"
+    },
+    {
+     "name": "Meera Iyer",
+     "type": "syncing"
+    },
+    {
+     "chunk": 1,
+     "global_done": 1,
+     "global_total": 7,
+     "msgs_done": 1,
+     "name": "Meera Iyer",
+     "total_chunks": 3,
+     "total_msgs": 3,
+     "type": "chunk"
+    },
+    {
+     "chunk": 2,
+     "global_done": 2,
+     "global_total": 7,
+     "msgs_done": 2,
+     "name": "Meera Iyer",
+     "total_chunks": 3,
+     "total_msgs": 3,
+     "type": "chunk"
+    },
+    {
+     "chunk": 3,
+     "global_done": 3,
+     "global_total": 7,
+     "msgs_done": 3,
+     "name": "Meera Iyer",
+     "total_chunks": 3,
+     "total_msgs": 3,
+     "type": "chunk"
+    },
+    {
+     "done": 1,
+     "total": 2,
+     "type": "file_done"
+    },
+    {
+     "name": "Rohan Mehta",
+     "type": "syncing"
+    },
+    {
+     "chunk": 1,
+     "global_done": 5,
+     "global_total": 7,
+     "msgs_done": 2,
+     "name": "Rohan Mehta",
+     "total_chunks": 2,
+     "total_msgs": 4,
+     "type": "chunk"
+    },
+    {
+     "chunk": 2,
+     "global_done": 7,
+     "global_total": 7,
+     "msgs_done": 4,
+     "name": "Rohan Mehta",
+     "total_chunks": 2,
+     "total_msgs": 4,
+     "type": "chunk"
+    },
+    {
+     "done": 2,
+     "total": 2,
+     "type": "file_done"
+    }
+   ]
+  },
+  {
+   "call": "progress_state_after_sync",
+   "result": {
+    "chat": "",
+    "detail": "",
+    "fraction": 1000,
+    "headline": "Done",
+    "line": "Done",
+    "log": "Found 2 file(s) to sync\nStarting: Meera Iyer\nFinished 1 / 2 files\nStarting: Rohan Mehta\nFinished 2 / 2 files",
+    "milestones": [
+     "Found 2 file(s) to sync",
+     "Starting: Meera Iyer",
+     "Finished 1 / 2 files",
+     "Starting: Rohan Mehta",
+     "Finished 2 / 2 files"
+    ],
+    "percent": 100,
+    "phase": "done"
+   }
+  },
+  {
+   "call": "status",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "display_name": "Meera Iyer",
+     "gmail_thread_id": "t1",
+     "has_thread": 1,
+     "last_run_at": "<masked>",
+     "last_run_status": "complete",
+     "last_synced_ts": "2025-03-22T09:00:00",
+     "messages_synced": 3,
+     "source_filename": "WhatsApp Chat with Meera Iyer.txt"
+    },
+    {
+     "chat_id": "rohan_mehta",
+     "display_name": "Rohan Mehta",
+     "gmail_thread_id": "t4",
+     "has_thread": 1,
+     "last_run_at": "<masked>",
+     "last_run_status": "complete",
+     "last_synced_ts": "2025-03-22T09:01:00",
+     "messages_synced": 4,
+     "source_filename": "WhatsApp Chat with Rohan Mehta.txt"
+    }
+   ]
+  },
+  {
+   "call": "sync_log",
+   "result": [
+    {
+     "chat_id": "rohan_mehta",
+     "completed_at": "<masked>",
+     "display_name": "Rohan Mehta",
+     "error_message": null,
+     "last_synced_hash": "592466196ce53e96888e4472193394e4191d096f1ee4fec70a8a3f58789887fa",
+     "last_synced_ts": "2025-03-22T09:01:00",
+     "messages_cutoff": 0,
+     "messages_parsed": 4,
+     "messages_skipped": 0,
+     "messages_synced": 4,
+     "run_id": 2,
+     "started_at": "<masked>",
+     "status": "complete",
+     "trigger": "manual",
+     "uneventful": false
+    },
+    {
+     "chat_id": "meera_iyer",
+     "completed_at": "<masked>",
+     "display_name": "Meera Iyer",
+     "error_message": null,
+     "last_synced_hash": "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+     "last_synced_ts": "2025-03-22T09:00:00",
+     "messages_cutoff": 0,
+     "messages_parsed": 3,
+     "messages_skipped": 0,
+     "messages_synced": 3,
+     "run_id": 1,
+     "started_at": "<masked>",
+     "status": "complete",
+     "trigger": "manual",
+     "uneventful": false
+    }
+   ]
+  },
+  {
+   "call": "sync_log_one_day",
+   "result": [
+    {
+     "chat_id": "rohan_mehta",
+     "completed_at": "<masked>",
+     "display_name": "Rohan Mehta",
+     "error_message": null,
+     "last_synced_hash": "592466196ce53e96888e4472193394e4191d096f1ee4fec70a8a3f58789887fa",
+     "last_synced_ts": "2025-03-22T09:01:00",
+     "messages_cutoff": 0,
+     "messages_parsed": 4,
+     "messages_skipped": 0,
+     "messages_synced": 4,
+     "run_id": 2,
+     "started_at": "<masked>",
+     "status": "complete",
+     "trigger": "manual",
+     "uneventful": false
+    },
+    {
+     "chat_id": "meera_iyer",
+     "completed_at": "<masked>",
+     "display_name": "Meera Iyer",
+     "error_message": null,
+     "last_synced_hash": "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+     "last_synced_ts": "2025-03-22T09:00:00",
+     "messages_cutoff": 0,
+     "messages_parsed": 3,
+     "messages_skipped": 0,
+     "messages_synced": 3,
+     "run_id": 1,
+     "started_at": "<masked>",
+     "status": "complete",
+     "trigger": "manual",
+     "uneventful": false
+    }
+   ]
+  },
+  {
+   "call": "sync_status",
+   "result": {
+    "failed_runs": 0,
+    "last_completed_at": "<masked>",
+    "last_display_name": "Rohan Mehta",
+    "last_messages_skipped": 0,
+    "last_messages_synced": 4,
+    "last_run_id": 2,
+    "last_started_at": "<masked>",
+    "last_status": "complete",
+    "running_runs": 0,
+    "total_runs": 2,
+    "window_days": 90
+   }
+  },
+  {
+   "call": "sync_status_one_day",
+   "result": {
+    "failed_runs": 0,
+    "last_completed_at": "<masked>",
+    "last_display_name": "Rohan Mehta",
+    "last_messages_skipped": 0,
+    "last_messages_synced": 4,
+    "last_run_id": 2,
+    "last_started_at": "<masked>",
+    "last_status": "complete",
+    "running_runs": 0,
+    "total_runs": 2,
+    "window_days": 1
+   }
+  },
+  {
+   "call": "list_chat_senders_all",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 2,
+     "sender": "Meera Iyer"
+    },
+    {
+     "chat_id": "rohan_mehta",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 2,
+     "sender": "Meera Iyer"
+    },
+    {
+     "chat_id": "rohan_mehta",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 2,
+     "sender": "Rohan Mehta"
+    },
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 1,
+     "sender": "Rohan Mehta"
+    }
+   ]
+  },
+  {
+   "call": "list_chat_senders_one",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 2,
+     "sender": "Meera Iyer"
+    },
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 1,
+     "sender": "Rohan Mehta"
+    }
+   ]
+  },
+  {
+   "call": "list_chat_senders_none",
+   "result": []
+  },
+  {
+   "call": "get_self_sender_before",
+   "result": {
+    "detail": "Worked out from a one-to-one chat, where the export named the other person and left exactly one name over. Messages from this name are shown as yours. If it is wrong, type the right one here and the app will stop working it out.",
+    "learned": "Meera Iyer",
+    "name": "Meera Iyer",
+    "override": null,
+    "source": "learned",
+    "summary": "Your messages are the ones from Meera Iyer"
+   }
+  },
+  {
+   "call": "set_self_sender_name",
+   "result": {
+    "detail": "You set this name, so the app will not change it. Messages from this name are shown as yours. Clear the box to let the app work it out from a one-to-one chat again.",
+    "learned": "Meera Iyer",
+    "name": "Meera Iyer",
+    "override": "Meera Iyer",
+    "source": "override",
+    "summary": "Your messages are the ones from Meera Iyer"
+   }
+  },
+  {
+   "call": "set_self_sender_clear",
+   "result": {
+    "detail": "Worked out from a one-to-one chat, where the export named the other person and left exactly one name over. Messages from this name are shown as yours. If it is wrong, type the right one here and the app will stop working it out.",
+    "learned": "Meera Iyer",
+    "name": "Meera Iyer",
+    "override": null,
+    "source": "learned",
+    "summary": "Your messages are the ones from Meera Iyer"
+   }
+  },
+  {
+   "call": "get_pending_banner",
+   "result": "Rohan Mehta"
+  },
+  {
+   "call": "get_pending_banner_cleared",
+   "result": null
+  },
+  {
+   "call": "get_cutoff_none",
+   "result": {
+    "chat_id": "meera_iyer",
+    "cutoff_date": null
+   }
+  },
+  {
+   "call": "set_cutoff_meera",
+   "result": {
+    "chat_id": "meera_iyer",
+    "cutoff_date": "2025-03-21",
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "get_cutoff_meera",
+   "result": {
+    "chat_id": "meera_iyer",
+    "cutoff_date": "2025-03-21"
+   }
+  },
+  {
+   "call": "set_cutoff_long_timestamp",
+   "result": {
+    "chat_id": "rohan_mehta",
+    "cutoff_date": "2025-03-19",
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "set_cutoff_bad",
+   "result": {
+    "chat_id": "rohan_mehta",
+    "cutoff_date": null,
+    "error": "'yesterday' is not a date. Use YYYY-MM-DD.",
+    "ok": false
+   }
+  },
+  {
+   "call": "set_cutoff_bad_quote",
+   "result": {
+    "chat_id": "rohan_mehta",
+    "cutoff_date": null,
+    "error": "\"it's\" is not a date. Use YYYY-MM-DD.",
+    "ok": false
+   }
+  },
+  {
+   "call": "set_cutoff_unknown_chat",
+   "result": {
+    "chat_id": "new_chat",
+    "cutoff_date": "2025-01-01",
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "get_cutoff_unknown",
+   "result": {
+    "chat_id": "zzz",
+    "cutoff_date": null
+   }
+  },
+  {
+   "call": "list_cutoffs",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "cutoff_date": "2025-03-21"
+    },
+    {
+     "chat_id": "new_chat",
+     "cutoff_date": "2025-01-01"
+    },
+    {
+     "chat_id": "rohan_mehta",
+     "cutoff_date": "2025-03-19"
+    }
+   ]
+  },
+  {
+   "call": "preview_with_chat_cutoff",
+   "result": {
+    "cutoff_date": "2025-03-21",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "first_message_ts": "2025-03-20T09:00:00",
+    "last_message_ts": "2025-03-22T09:00:00",
+    "media_count": 0,
+    "message_count": 3,
+    "ok": true,
+    "participant_count": 2
+   }
+  },
+  {
+   "call": "set_cutoff_clear",
+   "result": {
+    "chat_id": "meera_iyer",
+    "cutoff_date": null,
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "list_cutoffs_after_clear",
+   "result": [
+    {
+     "chat_id": "new_chat",
+     "cutoff_date": "2025-01-01"
+    },
+    {
+     "chat_id": "rohan_mehta",
+     "cutoff_date": "2025-03-19"
+    }
+   ]
+  },
+  {
+   "call": "reset_preview_meera",
+   "result": {
+    "archived_count": 3,
+    "chat_id": "meera_iyer",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "mailbox_folder": "WhatsApp/Meera Iyer",
+    "ok": true,
+    "requires_confirmation": true
+   }
+  },
+  {
+   "call": "reset_preview_nobody",
+   "result": {
+    "archived_count": 0,
+    "chat_id": null,
+    "display_name": null,
+    "error": "No chat found matching \"no body's\"",
+    "mailbox_folder": null,
+    "ok": false,
+    "requires_confirmation": false
+   }
+  },
+  {
+   "call": "reset_unconfirmed",
+   "result": {
+    "archived_count": 3,
+    "chat_id": "meera_iyer",
+    "display_name": "Meera Iyer",
+    "error": "3 message(s) from this chat are already in WhatsApp/Meera Iyer. Delete them there first, or resetting will file a second copy of every one.",
+    "file_restored": false,
+    "needs_confirmation": true,
+    "ok": false
+   }
+  },
+  {
+   "call": "reset_confirmed",
+   "result": {
+    "archived_count": 0,
+    "chat_id": "meera_iyer",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "file_restored": true,
+    "needs_confirmation": false,
+    "ok": true
+   }
+  },
+  {
+   "call": "list_inbox_after_reset",
+   "result": [
+    {
+     "name": "WhatsApp Chat with Meera Iyer.txt",
+     "size_bytes": 130
+    }
+   ]
+  },
+  {
+   "call": "reset_again_nothing_to_restore",
+   "result": {
+    "archived_count": 0,
+    "chat_id": "meera_iyer",
+    "display_name": "Meera Iyer",
+    "error": null,
+    "file_restored": false,
+    "needs_confirmation": false,
+    "ok": true
+   }
+  },
+  {
+   "call": "reset_nobody",
+   "result": {
+    "archived_count": 0,
+    "chat_id": null,
+    "display_name": null,
+    "error": "No chat found matching 'nobody'",
+    "file_restored": false,
+    "needs_confirmation": false,
+    "ok": false
+   }
+  },
+  {
+   "call": "delete_chat_rohan",
+   "result": {
+    "chat_id": "rohan_mehta",
+    "display_name": "Rohan Mehta",
+    "error": null,
+    "ok": true
+   }
+  },
+  {
+   "call": "delete_chat_nobody",
+   "result": {
+    "chat_id": null,
+    "display_name": null,
+    "error": "No chat found matching 'nobody'",
+    "ok": false
+   }
+  },
+  {
+   "call": "status_after_delete",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "display_name": "Meera Iyer",
+     "gmail_thread_id": null,
+     "has_thread": 0,
+     "last_run_at": null,
+     "last_run_status": null,
+     "last_synced_ts": null,
+     "messages_synced": null,
+     "source_filename": "WhatsApp Chat with Meera Iyer.txt"
+    }
+   ]
+  },
+  {
+   "call": "sync_stopped_stats",
+   "result": {
+    "chats_recovered": 0,
+    "errors": [],
+    "files_failed": 0,
+    "files_found": 3,
+    "files_skipped": 0,
+    "files_synced": 1,
+    "media_omitted": [],
+    "messages_cutoff": 0,
+    "messages_parsed": 1,
+    "messages_skipped": 0,
+    "messages_synced": 1,
+    "stopped": true
+   }
+  },
+  {
+   "call": "sync_stopped_events",
+   "result": [
+    {
+     "n": 3,
+     "type": "files_total"
+    },
+    {
+     "n": 5,
+     "type": "total_messages"
+    },
+    {
+     "name": "Asha Rao",
+     "type": "syncing"
+    },
+    {
+     "chunk": 1,
+     "global_done": 1,
+     "global_total": 5,
+     "msgs_done": 1,
+     "name": "Asha Rao",
+     "total_chunks": 1,
+     "total_msgs": 1,
+     "type": "chunk"
+    },
+    {
+     "done": 1,
+     "total": 3,
+     "type": "file_done"
+    }
+   ]
+  },
+  {
+   "call": "progress_state_after_stop",
+   "result": {
+    "chat": "",
+    "detail": "",
+    "fraction": 1000,
+    "headline": "Stopped",
+    "line": "Stopped",
+    "log": "Found 3 file(s) to sync\nStarting: Asha Rao\nFinished 1 / 3 files",
+    "milestones": [
+     "Found 3 file(s) to sync",
+     "Starting: Asha Rao",
+     "Finished 1 / 3 files"
+    ],
+    "percent": 100,
+    "phase": "done"
+   }
+  },
+  {
+   "call": "list_inbox_after_stop",
+   "result": [
+    {
+     "name": "WhatsApp Chat with Meera Iyer.txt",
+     "size_bytes": 130
+    },
+    {
+     "name": "WhatsApp Chat with Rohan Mehta.txt",
+     "size_bytes": 44
+    }
+   ]
+  },
+  {
+   "call": "sync_dry_run",
+   "result": {
+    "chats_recovered": 0,
+    "errors": [],
+    "files_failed": 0,
+    "files_found": 2,
+    "files_skipped": 0,
+    "files_synced": 0,
+    "media_omitted": [],
+    "messages_cutoff": 0,
+    "messages_parsed": 0,
+    "messages_skipped": 0,
+    "messages_synced": 0,
+    "stopped": false
+   }
+  },
+  {
+   "call": "export_backup",
+   "result": {
+    "bundle_id": "<masked>",
+    "counts": {
+     "chats": 2,
+     "cutoffs": 1,
+     "hashes": 1,
+     "runs": 1,
+     "senders": 3
+    },
+    "ok": true,
+    "path": "<masked>",
+    "settings_keys": [
+     "chunk_size",
+     "imap_port",
+     "theme_mode"
+    ]
+   }
+  },
+  {
+   "call": "export_backup_bad_settings",
+   "result": {
+    "bundle_id": "<masked>",
+    "counts": {
+     "chats": 2,
+     "cutoffs": 1,
+     "hashes": 1,
+     "runs": 1,
+     "senders": 3
+    },
+    "ok": true,
+    "path": "<masked>",
+    "settings_keys": []
+   }
+  },
+  {
+   "call": "export_backup_settings_list",
+   "result": {
+    "bundle_id": "<masked>",
+    "counts": {
+     "chats": 2,
+     "cutoffs": 1,
+     "hashes": 1,
+     "runs": 1,
+     "senders": 3
+    },
+    "ok": true,
+    "path": "<masked>",
+    "settings_keys": []
+   }
+  },
+  {
+   "call": "describe_backup",
+   "result": {
+    "app_version": "9.9.9",
+    "chats": 2,
+    "created_at": "<masked>",
+    "cutoffs": 1,
+    "error": null,
+    "hashes": 1,
+    "ok": true,
+    "runs": 1
+   }
+  },
+  {
+   "call": "describe_backup_junk",
+   "result": {
+    "error": "That file is not a Chat Mail Sync backup.",
+    "ok": false
+   }
+  },
+  {
+   "call": "import_backup_junk",
+   "result": {
+    "error": "That file is not a Chat Mail Sync backup.",
+    "ok": false
+   }
+  },
+  {
+   "call": "status_before_import",
+   "result": [
+    {
+     "chat_id": "asha_rao",
+     "display_name": "Asha Rao",
+     "gmail_thread_id": "t1",
+     "has_thread": 1,
+     "last_run_at": "<masked>",
+     "last_run_status": "complete",
+     "last_synced_ts": "2025-03-23T09:00:00",
+     "messages_synced": 1,
+     "source_filename": "WhatsApp Chat with Asha Rao.txt"
+    },
+    {
+     "chat_id": "meera_iyer",
+     "display_name": "Meera Iyer",
+     "gmail_thread_id": null,
+     "has_thread": 0,
+     "last_run_at": null,
+     "last_run_status": null,
+     "last_synced_ts": null,
+     "messages_synced": null,
+     "source_filename": "WhatsApp Chat with Meera Iyer.txt"
+    }
+   ]
+  },
+  {
+   "call": "import_backup_fresh_root",
+   "result": {
+    "already_imported": false,
+    "chats_added": 2,
+    "created_at": "<masked>",
+    "created_at_epoch_ms": "<masked>",
+    "cutoffs_added": 1,
+    "hashes_added": 1,
+    "manifest": {
+     "app_version": "9.9.9",
+     "bundle_id": "<masked>",
+     "counts": {
+      "chats": 2,
+      "cutoffs": 1,
+      "hashes": 1,
+      "runs": 1,
+      "senders": 3
+     },
+     "created_at": "<masked>",
+     "schema_version": 1
+    },
+    "ok": true,
+    "runs_added": 1,
+    "senders_added": 3,
+    "settings": {
+     "chunk_size": "day",
+     "imap_port": 993,
+     "theme_mode": "dark"
+    },
+    "settings_json": {
+     "chunk_size": "day",
+     "imap_port": 993,
+     "theme_mode": "dark"
+    }
+   }
+  },
+  {
+   "call": "import_backup_again",
+   "result": {
+    "already_imported": true,
+    "chats_added": 0,
+    "created_at": "<masked>",
+    "created_at_epoch_ms": "<masked>",
+    "cutoffs_added": 0,
+    "hashes_added": 0,
+    "manifest": {
+     "app_version": "9.9.9",
+     "bundle_id": "<masked>",
+     "counts": {
+      "chats": 2,
+      "cutoffs": 1,
+      "hashes": 1,
+      "runs": 1,
+      "senders": 3
+     },
+     "created_at": "<masked>",
+     "schema_version": 1
+    },
+    "ok": true,
+    "runs_added": 0,
+    "senders_added": 0,
+    "settings": {},
+    "settings_json": {}
+   }
+  },
+  {
+   "call": "status_after_import",
+   "result": [
+    {
+     "chat_id": "asha_rao",
+     "display_name": "Asha Rao",
+     "gmail_thread_id": "t1",
+     "has_thread": 1,
+     "last_run_at": "<masked>",
+     "last_run_status": "complete",
+     "last_synced_ts": "2025-03-23T09:00:00",
+     "messages_synced": 1,
+     "source_filename": "WhatsApp Chat with Asha Rao.txt"
+    },
+    {
+     "chat_id": "meera_iyer",
+     "display_name": "Meera Iyer",
+     "gmail_thread_id": null,
+     "has_thread": 0,
+     "last_run_at": null,
+     "last_run_status": null,
+     "last_synced_ts": null,
+     "messages_synced": null,
+     "source_filename": "WhatsApp Chat with Meera Iyer.txt"
+    }
+   ]
+  },
+  {
+   "call": "list_cutoffs_after_import",
+   "result": [
+    {
+     "chat_id": "new_chat",
+     "cutoff_date": "2025-01-01"
+    }
+   ]
+  },
+  {
+   "call": "list_chat_senders_after_import",
+   "result": [
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 2,
+     "sender": "Meera Iyer"
+    },
+    {
+     "chat_id": "asha_rao",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 1,
+     "sender": "Rohan Mehta"
+    },
+    {
+     "chat_id": "meera_iyer",
+     "first_seen": "<masked>",
+     "last_seen": "<masked>",
+     "msg_count": 1,
+     "sender": "Rohan Mehta"
+    }
+   ]
+  }
+ ]
+}
