@@ -2366,6 +2366,224 @@ def generate_sync_helpers_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
+def _sm_chat_text(days, senders=("Meera Iyer", "Rohan Mehta"), per_day=1, month="03"):
+    """A made-up export in the 'plain_24h' shape, one or more messages per day."""
+    lines = []
+    for d in days:
+        for k in range(per_day):
+            who = senders[(d + k) % len(senders)]
+            lines.append(f"{d:02d}/{month}/25, 09:{k:02d} - {who}: message {d}.{k}")
+    return "\n".join(lines) + "\n"
+
+
+def _sm_dump_state(db_path, inbox, processed):
+    """Everything a run leaves behind that is not a clock value."""
+    import sqlite3
+
+    con = sqlite3.connect(db_path)
+
+    def rows(sql):
+        return [[None if v is None else str(v) for v in r] for r in con.execute(sql)]
+
+    out = {
+        "runs": rows(
+            "SELECT run_id, chat_id, status, trigger, last_synced_ts, last_synced_hash, messages_parsed, "
+            "messages_synced, messages_skipped, messages_cutoff, error_message FROM sync_runs ORDER BY run_id"
+        ),
+        "hashes": rows(
+            "SELECT hash, chat_id, message_ts, run_id FROM message_hashes ORDER BY run_id, message_ts, hash"
+        ),
+        "chats": rows(
+            # The anchor Message-ID is a random uuid, so only its shape is compared.
+            "SELECT chat_id, display_name, gmail_thread_id, gmail_label_id, "
+            "CASE WHEN anchor_message_id LIKE '<wa-sync-%@local>' THEN '<anchor>' ELSE anchor_message_id END "
+            "AS anchor_message_id, source_filename FROM chats ORDER BY chat_id"
+        ),
+        "senders": rows("SELECT chat_id, sender, msg_count FROM chat_senders ORDER BY chat_id, sender"),
+        "appState": rows("SELECT key, value FROM app_state WHERE key LIKE 'self_sender%' ORDER BY key"),
+        "inbox": sorted(p.name for p in inbox.iterdir()),
+        "processed": sorted(p.name for p in processed.iterdir()),
+    }
+    con.close()
+    return out
+
+
+def _sm_scenarios():
+    meera = "WhatsApp Chat with Meera Iyer.txt"
+    rohan = "WhatsApp Chat with Rohan Mehta.txt"
+    t = _sm_chat_text
+    return [
+        {"name": "fresh_two_chats", "steps": [
+            {"write": {meera: {"text": t([20, 21, 22])}, rohan: {"text": t([20, 22], per_day=2)}}, "options": {}},
+        ]},
+        {"name": "re_export_overlap_then_up_to_date", "steps": [
+            {"write": {meera: {"text": t([20, 21, 22])}}, "options": {}},
+            {"write": {meera: {"text": t([20, 21, 22, 23, 24])}}, "options": {}},
+            {"write": {meera: {"text": t([20, 21, 22, 23, 24])}}, "options": {}},
+        ]},
+        {"name": "app_cutoff_withholds_older", "steps": [
+            {"write": {meera: {"text": t([18, 19, 20, 21])}}, "options": {"cutoff_date": "2025-03-20"}},
+        ]},
+        {"name": "chat_cutoff_beats_app_cutoff", "steps": [
+            {"write": {meera: {"text": t([18, 19, 20, 21])}, rohan: {"text": t([18, 19, 20, 21])}},
+             "options": {"cutoff_date": "2025-03-20", "chat_cutoffs": {"rohan_mehta": "2025-03-19"}}},
+        ]},
+        {"name": "dry_run_writes_nothing", "steps": [
+            {"write": {meera: {"text": t([20, 21])}}, "options": {"dry_run": True}},
+        ]},
+        {"name": "chat_filter_by_name_any_case", "steps": [
+            {"write": {meera: {"text": t([20, 21])}, rohan: {"text": t([20, 21])}},
+             "options": {"chat_filter": "ROHAN mehta"}},
+            {"write": {}, "options": {"chat_filter": "meera_iyer"}},
+            {"write": {}, "options": {"chat_filter": "mehta"}},
+        ]},
+        {"name": "push_failure_leaves_file_and_partial_hashes", "steps": [
+            {"write": {meera: {"text": t([20, 21, 22])}}, "options": {"fail_at": 2}},
+            {"write": {}, "options": {}},
+        ]},
+        {"name": "failed_file_still_moves_the_bar", "steps": [
+            {"write": {meera: {"text": t([20, 21, 22])}, rohan: {"text": t([20, 21])}}, "options": {"fail_at": 1}},
+        ]},
+        {"name": "unreadable_zip_is_a_parse_error", "steps": [
+            {"write": {
+                "WhatsApp Chat with Asha Rao.zip": {"zip": {"notes.md": "no chat in here"}},
+                meera: {"text": t([20])},
+            }, "options": {}},
+        ]},
+        {"name": "stop_between_files", "steps": [
+            {"write": {
+                "WhatsApp Chat with Asha Rao.txt": {"text": t([20])},
+                meera: {"text": t([20, 21])},
+                rohan: {"text": t([20])},
+            }, "options": {"stop_after_files": 1}},
+        ]},
+        {"name": "empty_inbox", "steps": [{"write": {}, "options": {}}]},
+        {"name": "other_files_ignored_and_empty_chat_is_up_to_date", "steps": [
+            {"write": {"notes.md": {"text": "x"}, "pic.jpg": {"text": "x"}, meera: {"text": "no timestamps here\n"}},
+             "options": {}},
+        ]},
+        {"name": "numbered_chunk_size", "steps": [
+            {"write": {meera: {"text": t([20, 21], per_day=5)}}, "options": {"chunk_size": 4}},
+        ]},
+        {"name": "one_to_one_learns_the_account_name", "steps": [
+            {"write": {meera: {"text": t([20, 21, 22])}}, "options": {}},
+        ]},
+        {"name": "trigger_is_recorded", "steps": [
+            {"write": {meera: {"text": t([20])}}, "options": {"trigger": "watched_folder"}},
+        ]},
+    ]
+
+
+def _sm_run_scenarios(tmp, make_manager):
+    """Run every scenario through [make_manager] and record what happened."""
+    import shutil
+    import sqlite3
+
+    results = []
+    for sc in _sm_scenarios():
+        root = tmp / sc["name"]
+        inbox, processed = root / "inbox", root / "processed"
+        inbox.mkdir(parents=True)
+        db_path = root / "state.db"
+        steps_out = []
+        for step in sc["steps"]:
+            for fname, spec in step["write"].items():
+                path = inbox / fname
+                if "zip" in spec:
+                    with zipfile.ZipFile(path, "w") as z:
+                        for ename, etext in spec["zip"].items():
+                            z.writestr(ename, etext)
+                else:
+                    path.write_text(spec["text"], encoding="utf-8", newline="\n")
+            steps_out.append(make_manager(sc["name"], root, db_path, inbox, processed, step["options"]))
+        results.append({"name": sc["name"], "steps": steps_out, "spec": sc})
+    return results
+
+
+def generate_sync_run_golden() -> None:
+    import tempfile
+    from unittest import mock
+
+    from src.sync_manager import ProgressSyncManager
+
+    class _Transport:
+        """Deterministic MailTransport: ids come from a call counter."""
+
+        def __init__(self, fail_at=None):
+            self.fail_at = fail_at
+            self.insert_calls = 0
+
+        def labels_list(self):
+            return {"labels": []}
+
+        def labels_create(self, body):
+            return {"id": "Label_WA", "name": body.get("name", "")}
+
+        def messages_insert(self, body, thread_id=None):
+            self.insert_calls += 1
+            if self.fail_at is not None and self.insert_calls == self.fail_at:
+                raise RuntimeError("simulated crash mid-push")
+            return {"id": f"m{self.insert_calls}", "threadId": thread_id or f"t{self.insert_calls}"}
+
+    class _Queue:
+        def __init__(self):
+            self.events = []
+
+        def put(self, event):
+            self.events.append(dict(event))
+
+    class _Stop:
+        def __init__(self, queue, after_files):
+            self.queue, self.after_files = queue, after_files
+
+        def is_set(self):
+            if self.after_files is None:
+                return False
+            return sum(1 for e in self.queue.events if e["type"] == "file_done") >= self.after_files
+
+    def make_manager(name, root, db_path, inbox, processed, opts):
+        for chat_id, cutoff in (opts.get("chat_cutoffs") or {}).items():
+            state.init_db(db_path)
+            state.set_chat_cutoff(chat_id, cutoff, db_path)
+        queue = _Queue()
+        transport = _Transport(opts.get("fail_at"))
+        mgr = ProgressSyncManager(
+            transport=transport,
+            chunk_size=opts.get("chunk_size", "day"),
+            dry_run=opts.get("dry_run", False),
+            db_path=db_path,
+            inbox_dir=inbox,
+            processed_dir=processed,
+            trigger=opts.get("trigger", "manual"),
+            cutoff_date=opts.get("cutoff_date"),
+            progress_queue=queue,
+            stop_event=_Stop(queue, opts.get("stop_after_files")),
+        )
+        with mock.patch("time.sleep"):
+            stats = mgr.run(chat_filter=opts.get("chat_filter"))
+        from dataclasses import asdict
+
+        return {
+            "stats": asdict(stats),
+            "statsText": str(stats),
+            "events": queue.events,
+            "inserts": transport.insert_calls,
+            "state": _sm_dump_state(db_path, inbox, processed),
+        }
+
+    with tempfile.TemporaryDirectory() as tmp_s:
+        results = _sm_run_scenarios(Path(tmp_s), make_manager)
+
+    payload = {"scenarios": [{"name": r["name"], "spec": r["spec"], "steps": r["steps"]} for r in results]}
+    out_path = GOLDEN_DIR / "sync_run_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2406,6 +2624,7 @@ def main() -> None:
     generate_par06_edge_golden()
     generate_migration_golden()
     generate_sync_helpers_golden()
+    generate_sync_run_golden()
 
 
 if __name__ == "__main__":
