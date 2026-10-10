@@ -2065,6 +2065,307 @@ def generate_html_mime_golden() -> None:
     print(f"Wrote {out_path} ({out_path.stat().st_size} bytes, {len(cases)} cases)")
 
 
+def _sm_manager(base: Path, app_cutoff=None):
+    """A real SyncManager on throwaway directories (made-up data only)."""
+    from src.sync_manager import SyncManager
+
+    base.mkdir(parents=True, exist_ok=True)
+    return SyncManager(
+        db_path=base / "state.db",
+        inbox_dir=base / "inbox",
+        processed_dir=base / "processed",
+        cutoff_date=app_cutoff,
+    )
+
+
+def _sm_msg(chat_id: str, spec):
+    ts, sender, body = spec
+    return ParsedMessage(chat_id=chat_id, timestamp=datetime.fromisoformat(ts), sender=sender, body=body)
+
+
+def _sm_filter_cases(tmp: Path) -> list:
+    chat = "test_chat"
+    base_msgs = [
+        ["2025-01-10T09:00:00", "Meera Iyer", "first"],
+        ["2025-02-20T10:00:00", "Rohan Mehta", "second"],
+        ["2025-03-01T00:00:00", "Meera Iyer", "third at midnight"],
+        ["2025-03-05T18:30:00", "Rohan Mehta", "fourth"],
+        ["2025-03-09T07:15:00", "Meera Iyer", "fifth"],
+    ]
+    specs = [
+        ("no_filters", dict()),
+        ("known_hash_skips", dict(known=[1])),
+        ("overlap_is_less_or_equal", dict(last="2025-03-01T00:00:00")),
+        ("cutoff_midnight_is_kept", dict(app="2025-03-01")),
+        ("rule_order_overlap_beats_cutoff", dict(last="2025-03-05T18:30:00", app="2025-01-01")),
+        ("overlap_and_cutoff_later_wins", dict(last="2025-02-20T10:00:00", app="2025-03-01")),
+        ("chat_cutoff_overrides_app_cutoff", dict(app="2026-01-01", chat="2019-01-01")),
+        ("chat_cutoff_can_be_stricter", dict(app="2019-01-01", chat="2025-03-05")),
+        ("known_hash_beats_cutoff", dict(app="2025-03-01", known=[0])),
+        ("blank_last_ts_is_none", dict(last="")),
+        ("everything_before_cutoff", dict(app="2025-12-31")),
+    ]
+    cases = []
+    for n, (name, spec) in enumerate(specs):
+        mgr = _sm_manager(tmp / f"flt{n}", app_cutoff=spec.get("app"))
+        state.upsert_chat(chat, "Meera Iyer", "Meera Iyer.txt", db_path=mgr.db_path)
+        msgs = [_sm_msg(chat, m) for m in base_msgs]
+        if spec.get("chat"):
+            state.set_chat_cutoff(chat, spec["chat"], mgr.db_path)
+        if spec.get("known"):
+            run_id = state.start_sync_run(chat, db_path=mgr.db_path)
+            state.insert_message_hashes(
+                [
+                    (state.compute_message_hash(m.chat_id, m.timestamp_iso, m.sender, m.body), chat, m.timestamp_iso, run_id)
+                    for i, m in enumerate(msgs)
+                    if i in spec["known"]
+                ],
+                mgr.db_path,
+            )
+        new, skipped, n_cut = mgr._filter_messages(msgs, chat, spec.get("last"))
+        cases.append(
+            {
+                "name": name,
+                "appCutoff": spec.get("app"),
+                "chatCutoff": spec.get("chat"),
+                "lastSyncedTs": spec.get("last"),
+                "knownIdx": spec.get("known", []),
+                "messages": base_msgs,
+                "newIdx": [msgs.index(m) for m in new],
+                "skipped": skipped,
+                "cutoff": n_cut,
+            }
+        )
+    # A file that repeats a message: the filter does not dedupe inside a file.
+    mgr = _sm_manager(tmp / "flt_dup")
+    state.upsert_chat(chat, "Meera Iyer", "Meera Iyer.txt", db_path=mgr.db_path)
+    dup = [base_msgs[0], base_msgs[0]]
+    msgs = [_sm_msg(chat, m) for m in dup]
+    new, skipped, n_cut = mgr._filter_messages(msgs, chat, None)
+    cases.append(
+        {
+            "name": "repeated_message_in_file_stays_twice",
+            "appCutoff": None, "chatCutoff": None, "lastSyncedTs": None, "knownIdx": [],
+            "messages": dup, "newIdx": list(range(len(new))), "skipped": skipped, "cutoff": n_cut,
+        }
+    )
+    return cases
+
+
+def _sm_self_sender_cases(tmp: Path) -> list:
+    chat = "test_chat"
+    specs = [
+        ("one_to_one_derives", None, None, ["Meera Iyer", "Rohan Mehta", "Meera Iyer"]),
+        ("override_wins_and_learned_updates", "Dev Rao", None, ["Meera Iyer", "Rohan Mehta"]),
+        ("blank_override_counts_as_unset", "   ", None, ["Meera Iyer", "Rohan Mehta"]),
+        ("same_learned_is_not_pending", None, "Rohan Mehta", ["Meera Iyer", "Rohan Mehta"]),
+        ("newer_derivation_replaces_learned", None, "Old Name", ["Meera Iyer", "Rohan Mehta"]),
+        ("group_chat_keeps_learned", None, "Rohan Mehta", ["Meera Iyer", "Rohan Mehta", "Dev Rao"]),
+        ("nothing_known_is_you", None, None, ["Meera Iyer", "Rohan Mehta", "Dev Rao"]),
+        ("case_insensitive_same_learned", None, "ROHAN MEHTA", ["Meera Iyer", "Rohan Mehta"]),
+    ]
+    out = []
+    for n, (name, override, learned, senders) in enumerate(specs):
+        mgr = _sm_manager(tmp / f"self{n}")
+        if override is not None:
+            state.set_app_state(state.SELF_SENDER_OVERRIDE, override, mgr.db_path)
+        if learned is not None:
+            state.set_app_state(state.SELF_SENDER_LEARNED, learned, mgr.db_path)
+        msgs = [_sm_msg(chat, ["2025-03-01T10:00:00", s, "hi"]) for s in senders]
+        got = mgr._resolve_self_sender("Meera Iyer", msgs)
+        out.append(
+            {
+                "name": name,
+                "override": override,
+                "learned": learned,
+                "senders": senders,
+                "result": got,
+                "learnedAfter": state.get_app_state(state.SELF_SENDER_LEARNED, mgr.db_path),
+                "pendingAfter": state.get_app_state(state.SELF_SENDER_LEARNED_PENDING, mgr.db_path),
+            }
+        )
+    return out
+
+
+def _sm_record_senders_cases(tmp: Path) -> list:
+    chat = "test_chat"
+    scenarios = [
+        (
+            "accumulates_across_two_files",
+            [
+                (["Meera Iyer", "Rohan Mehta", "Meera Iyer"], ["Meera Iyer", "Meera Iyer"]),
+                (["Meera Iyer", "Rohan Mehta"], ["Rohan Mehta"]),
+            ],
+        ),
+        ("nothing_pushed_still_records_names", [(["Meera Iyer", "Rohan Mehta"], [])]),
+        ("empty_file_records_nothing", [([], [])]),
+        ("unicode_sender", [(["Méeña Iyer", "Rohan Mehta"], ["Méeña Iyer"])]),
+    ]
+    out = []
+    for n, (name, calls) in enumerate(scenarios):
+        mgr = _sm_manager(tmp / f"rec{n}")
+        state.upsert_chat(chat, "Meera Iyer", "Meera Iyer.txt", db_path=mgr.db_path)
+        steps = []
+        for all_s, pushed_s in calls:
+            allm = [_sm_msg(chat, ["2025-03-01T10:00:00", s, "hi"]) for s in all_s]
+            pushed = [_sm_msg(chat, ["2025-03-01T10:00:00", s, "hi"]) for s in pushed_s]
+            mgr._record_chat_senders(chat, allm, pushed)
+            counts = {r["sender"]: r["msg_count"] for r in state.list_chat_senders(chat, mgr.db_path)}
+            steps.append({"all": all_s, "pushed": pushed_s, "countsAfter": counts})
+        out.append({"name": name, "steps": steps})
+    return out
+
+
+def _sm_move_cases(tmp: Path) -> list:
+    scenarios = [
+        ("plain_move", "Meera Iyer.txt", []),
+        ("replaces_same_name", "Meera Iyer.txt", ["Meera Iyer.txt"]),
+        (
+            "prunes_dup_leftovers",
+            "Meera Iyer.txt",
+            ["Meera Iyer.txt", "Meera Iyer_dup_20250101.txt", "Meera Iyer_dup_b.txt"],
+        ),
+        (
+            "narrow_match_keeps_other_chats",
+            "Meera Iyer.txt",
+            ["Meera Iyer_dup_1.zip", "Meera Iyer 2_dup_1.txt", "Meera Iyer2.txt", "Rohan Mehta.txt", "Meera_dup_1.txt"],
+        ),
+        ("zip_suffix", "Rohan Mehta.zip", ["Rohan Mehta_dup_9.zip", "Rohan Mehta_dup_9.txt"]),
+        ("no_suffix", "Rohan Mehta", ["Rohan Mehta_dup_9", "Rohan Mehta_dup_9.txt"]),
+        ("dot_in_name", "Team v1.2.txt", ["Team v1.2_dup_3.txt", "Team v1_dup_3.2.txt"]),
+    ]
+    out = []
+    for n, (name, fname, processed) in enumerate(scenarios):
+        mgr = _sm_manager(tmp / f"mv{n}")
+        mgr.inbox_dir.mkdir(parents=True, exist_ok=True)
+        mgr.processed_dir.mkdir(parents=True, exist_ok=True)
+        src_file = mgr.inbox_dir / fname
+        src_file.write_text("new export", encoding="utf-8")
+        for p in processed:
+            (mgr.processed_dir / p).write_text("old export", encoding="utf-8")
+        superseded = sorted(p.name for p in mgr._superseded_exports(fname) if p != src_file)
+        mgr._move_to_processed(src_file, None)
+        out.append(
+            {
+                "name": name,
+                "filename": fname,
+                "processed": processed,
+                "supersededBeforeMove": superseded,
+                "processedAfter": sorted(p.name for p in mgr.processed_dir.iterdir()),
+                "inboxAfter": sorted(p.name for p in mgr.inbox_dir.iterdir()),
+                "movedContent": (mgr.processed_dir / fname).read_text(encoding="utf-8"),
+            }
+        )
+    return out
+
+
+def generate_sync_helpers_golden() -> None:
+    import tempfile
+
+    from src.sync_manager import SyncStats, _collect_omissions, _scrub_paths
+
+    # SyncStats.__str__
+    stats_specs = [
+        {},
+        dict(files_found=3, files_synced=2, files_skipped=1, messages_parsed=40, messages_synced=25, messages_skipped=15),
+        dict(files_found=1, messages_cutoff=7),
+        dict(chats_recovered=2),
+        dict(files_failed=1, errors=["a.txt: parse error - bad", "Meera Iyer: Mail push failed - boom"]),
+        dict(media_omitted=["Meera Iyer: clip.mp4 (30.0 MB) exceeds the 25 MB per-email limit"]),
+        dict(
+            files_found=2, files_synced=1, files_failed=1, messages_parsed=9, messages_synced=4, messages_skipped=3,
+            messages_cutoff=2, chats_recovered=1, errors=["x"], media_omitted=["y", "z"],
+        ),
+    ]
+    stats_cases = [{"fields": s, "text": str(SyncStats(**s))} for s in stats_specs]
+
+    # _collect_omissions
+    class _Om:
+        def __init__(self, filename, size, limit):
+            self.filename, self.size_bytes, self.limit_bytes = filename, size, limit
+
+    class _Res:
+        def __init__(self, oms):
+            self.omissions = [_Om(*o) for o in oms]
+
+    om_specs = [
+        ("basic", "Meera Iyer", [], [[["clip.mp4", 30_000_000, 25_000_000]]]),
+        ("rounding_half_even_size", "Meera Iyer", [], [[["a.mp4", 1_250_000, 25_000_000], ["b.mp4", 1_050_000, 25_000_000], ["c.mp4", 1_049_999, 25_000_000]]]),
+        ("rounding_half_even_limit", "Meera Iyer", [], [[["a.mp4", 30_000_000, 12_500_000]], [["b.mp4", 30_000_000, 13_500_000]]]),
+        ("dedup_within_and_across_results", "Meera Iyer", [], [[["a.mp4", 30_000_000, 25_000_000], ["a.mp4", 30_000_000, 25_000_000]], [["a.mp4", 30_000_000, 25_000_000]]]),
+        ("dedup_against_existing", "Meera Iyer", ["Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"], [[["a.mp4", 30_000_000, 25_000_000], ["b.mp4", 31_000_000, 25_000_000]]]),
+        ("same_file_other_chat_is_separate", "Rohan Mehta", ["Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"], [[["a.mp4", 30_000_000, 25_000_000]]]),
+        ("no_omissions", "Meera Iyer", [], [[], []]),
+        ("unicode_name", "Meera Iyer", [], [[["vídeo ❤.mp4", 5_500_000, 5_000_000]]]),
+    ]
+    om_cases = []
+    for name, display, existing, results in om_specs:
+        st = SyncStats()
+        st.media_omitted.extend(existing)
+        _collect_omissions(st, display, [_Res(r) for r in results])
+        om_cases.append(
+            {"name": name, "display": display, "existing": existing, "results": results, "mediaOmitted": st.media_omitted}
+        )
+
+    # _scrub_paths (POSIX-shaped input only: Path.name follows the host OS, so a
+    # backslash path would make this golden differ between a Windows machine and CI)
+    scrub_inputs = [
+        "plain text, nothing to do",
+        "open failed: /home/alice/app/data/state.db",
+        "open failed: /data/user/0/com.chatmailsync.app/files/inbox/chat.txt not readable",
+        "only two segments /home/alice",
+        "single segment /home",
+        "https://mail.example.test/gmail/v1/users/me/labels returned 401",
+        "see https://example.test/a/b/c and /var/log/app/err.log today",
+        "quoted '/a/b/c' and (/x/y/z) and [/p/q/r] and \"/m/n/o\"",
+        "list /a/b/c, /d/e/f, done",
+        "trailing slash /a/b/ here",
+        "dot segments /a/b/./c and /a/../b and /a/b/.",
+        "unicode /home/ü/ñ.txt end",
+        "pw=hunter2 stays /a/b/c",
+        "nbsp /a/b/c /d/e/f",
+        "ctl\u001f/a/b/c\u001f/d/e/f",
+        "two urls http://x.test/a/b/c https://y.test/d/e/f /p/q/r",
+        "",
+    ]
+    scrub_cases = [{"input": s, "output": _scrub_paths(s)} for s in scrub_inputs]
+
+    # Path.stem / Path.suffix (3.13 rule: the dot must be neither first nor last)
+    stem_names = [
+        "a.txt", "a.b.txt", ".hidden", ".hidden.txt", "a.", "a..", "noext", "x.zip", "..", "...", "a.b.", "Team v1.2.txt", "é.txt",
+    ]
+    stem_cases = [{"name": n, "stem": Path(n).stem, "suffix": Path(n).suffix} for n in stem_names]
+
+    # Inbox file selection + ordering (names only; no file system involved)
+    listing_names = [
+        "b.txt", "a.txt", "Bb.txt", "chat.zip", "noext", ".hidden", "x.TXT", "notes.md", "é.txt",
+        "\U0001F600.txt", "Ａ.txt", "Z.zip", "a b.txt", "a_b.txt", "a-b.txt", "10.txt", "9.txt", "pic.jpg", "x.txt.bak",
+    ]
+    listing_expected = sorted(n for n in listing_names if Path(n).suffix in (".txt", ".zip", ""))
+    listing = {"names": listing_names, "expected": listing_expected}
+
+    with tempfile.TemporaryDirectory() as tmp_s:
+        tmp = Path(tmp_s)
+        payload = {
+            "statsStr": stats_cases,
+            "omissions": om_cases,
+            "scrubPaths": scrub_cases,
+            "stemSuffix": stem_cases,
+            "inboxListing": listing,
+            "filter": _sm_filter_cases(tmp),
+            "selfSender": _sm_self_sender_cases(tmp),
+            "recordSenders": _sm_record_senders_cases(tmp),
+            "moveToProcessed": _sm_move_cases(tmp),
+        }
+    out_path = GOLDEN_DIR / "sync_helpers_golden.json"
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
+
+
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2104,6 +2405,7 @@ def main() -> None:
     generate_html_mime_golden()
     generate_par06_edge_golden()
     generate_migration_golden()
+    generate_sync_helpers_golden()
 
 
 if __name__ == "__main__":

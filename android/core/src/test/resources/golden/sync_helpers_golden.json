@@ -1,0 +1,1202 @@
+{
+ "filter": [
+  {
+   "appCutoff": null,
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "no_filters",
+   "newIdx": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "skipped": 0
+  },
+  {
+   "appCutoff": null,
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [
+    1
+   ],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "known_hash_skips",
+   "newIdx": [
+    0,
+    2,
+    3,
+    4
+   ],
+   "skipped": 1
+  },
+  {
+   "appCutoff": null,
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": "2025-03-01T00:00:00",
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "overlap_is_less_or_equal",
+   "newIdx": [
+    3,
+    4
+   ],
+   "skipped": 3
+  },
+  {
+   "appCutoff": "2025-03-01",
+   "chatCutoff": null,
+   "cutoff": 2,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "cutoff_midnight_is_kept",
+   "newIdx": [
+    2,
+    3,
+    4
+   ],
+   "skipped": 0
+  },
+  {
+   "appCutoff": "2025-01-01",
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": "2025-03-05T18:30:00",
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "rule_order_overlap_beats_cutoff",
+   "newIdx": [
+    4
+   ],
+   "skipped": 4
+  },
+  {
+   "appCutoff": "2025-03-01",
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": "2025-02-20T10:00:00",
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "overlap_and_cutoff_later_wins",
+   "newIdx": [
+    2,
+    3,
+    4
+   ],
+   "skipped": 2
+  },
+  {
+   "appCutoff": "2026-01-01",
+   "chatCutoff": "2019-01-01",
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "chat_cutoff_overrides_app_cutoff",
+   "newIdx": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "skipped": 0
+  },
+  {
+   "appCutoff": "2019-01-01",
+   "chatCutoff": "2025-03-05",
+   "cutoff": 3,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "chat_cutoff_can_be_stricter",
+   "newIdx": [
+    3,
+    4
+   ],
+   "skipped": 0
+  },
+  {
+   "appCutoff": "2025-03-01",
+   "chatCutoff": null,
+   "cutoff": 1,
+   "knownIdx": [
+    0
+   ],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "known_hash_beats_cutoff",
+   "newIdx": [
+    2,
+    3,
+    4
+   ],
+   "skipped": 1
+  },
+  {
+   "appCutoff": null,
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": "",
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "blank_last_ts_is_none",
+   "newIdx": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "skipped": 0
+  },
+  {
+   "appCutoff": "2025-12-31",
+   "chatCutoff": null,
+   "cutoff": 5,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-02-20T10:00:00",
+     "Rohan Mehta",
+     "second"
+    ],
+    [
+     "2025-03-01T00:00:00",
+     "Meera Iyer",
+     "third at midnight"
+    ],
+    [
+     "2025-03-05T18:30:00",
+     "Rohan Mehta",
+     "fourth"
+    ],
+    [
+     "2025-03-09T07:15:00",
+     "Meera Iyer",
+     "fifth"
+    ]
+   ],
+   "name": "everything_before_cutoff",
+   "newIdx": [],
+   "skipped": 0
+  },
+  {
+   "appCutoff": null,
+   "chatCutoff": null,
+   "cutoff": 0,
+   "knownIdx": [],
+   "lastSyncedTs": null,
+   "messages": [
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ],
+    [
+     "2025-01-10T09:00:00",
+     "Meera Iyer",
+     "first"
+    ]
+   ],
+   "name": "repeated_message_in_file_stays_twice",
+   "newIdx": [
+    0,
+    1
+   ],
+   "skipped": 0
+  }
+ ],
+ "inboxListing": {
+  "expected": [
+   ".hidden",
+   "10.txt",
+   "9.txt",
+   "Bb.txt",
+   "Z.zip",
+   "a b.txt",
+   "a-b.txt",
+   "a.txt",
+   "a_b.txt",
+   "b.txt",
+   "chat.zip",
+   "noext",
+   "é.txt",
+   "Ａ.txt",
+   "😀.txt"
+  ],
+  "names": [
+   "b.txt",
+   "a.txt",
+   "Bb.txt",
+   "chat.zip",
+   "noext",
+   ".hidden",
+   "x.TXT",
+   "notes.md",
+   "é.txt",
+   "😀.txt",
+   "Ａ.txt",
+   "Z.zip",
+   "a b.txt",
+   "a_b.txt",
+   "a-b.txt",
+   "10.txt",
+   "9.txt",
+   "pic.jpg",
+   "x.txt.bak"
+  ]
+ },
+ "moveToProcessed": [
+  {
+   "filename": "Meera Iyer.txt",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "plain_move",
+   "processed": [],
+   "processedAfter": [
+    "Meera Iyer.txt"
+   ],
+   "supersededBeforeMove": []
+  },
+  {
+   "filename": "Meera Iyer.txt",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "replaces_same_name",
+   "processed": [
+    "Meera Iyer.txt"
+   ],
+   "processedAfter": [
+    "Meera Iyer.txt"
+   ],
+   "supersededBeforeMove": [
+    "Meera Iyer.txt"
+   ]
+  },
+  {
+   "filename": "Meera Iyer.txt",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "prunes_dup_leftovers",
+   "processed": [
+    "Meera Iyer.txt",
+    "Meera Iyer_dup_20250101.txt",
+    "Meera Iyer_dup_b.txt"
+   ],
+   "processedAfter": [
+    "Meera Iyer.txt"
+   ],
+   "supersededBeforeMove": [
+    "Meera Iyer.txt",
+    "Meera Iyer_dup_20250101.txt",
+    "Meera Iyer_dup_b.txt"
+   ]
+  },
+  {
+   "filename": "Meera Iyer.txt",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "narrow_match_keeps_other_chats",
+   "processed": [
+    "Meera Iyer_dup_1.zip",
+    "Meera Iyer 2_dup_1.txt",
+    "Meera Iyer2.txt",
+    "Rohan Mehta.txt",
+    "Meera_dup_1.txt"
+   ],
+   "processedAfter": [
+    "Meera Iyer 2_dup_1.txt",
+    "Meera Iyer.txt",
+    "Meera Iyer2.txt",
+    "Meera Iyer_dup_1.zip",
+    "Meera_dup_1.txt",
+    "Rohan Mehta.txt"
+   ],
+   "supersededBeforeMove": []
+  },
+  {
+   "filename": "Rohan Mehta.zip",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "zip_suffix",
+   "processed": [
+    "Rohan Mehta_dup_9.zip",
+    "Rohan Mehta_dup_9.txt"
+   ],
+   "processedAfter": [
+    "Rohan Mehta.zip",
+    "Rohan Mehta_dup_9.txt"
+   ],
+   "supersededBeforeMove": [
+    "Rohan Mehta_dup_9.zip"
+   ]
+  },
+  {
+   "filename": "Rohan Mehta",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "no_suffix",
+   "processed": [
+    "Rohan Mehta_dup_9",
+    "Rohan Mehta_dup_9.txt"
+   ],
+   "processedAfter": [
+    "Rohan Mehta",
+    "Rohan Mehta_dup_9.txt"
+   ],
+   "supersededBeforeMove": [
+    "Rohan Mehta_dup_9"
+   ]
+  },
+  {
+   "filename": "Team v1.2.txt",
+   "inboxAfter": [],
+   "movedContent": "new export",
+   "name": "dot_in_name",
+   "processed": [
+    "Team v1.2_dup_3.txt",
+    "Team v1_dup_3.2.txt"
+   ],
+   "processedAfter": [
+    "Team v1.2.txt",
+    "Team v1_dup_3.2.txt"
+   ],
+   "supersededBeforeMove": [
+    "Team v1.2_dup_3.txt"
+   ]
+  }
+ ],
+ "omissions": [
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [
+    "Meera Iyer: clip.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "name": "basic",
+   "results": [
+    [
+     [
+      "clip.mp4",
+      30000000,
+      25000000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [
+    "Meera Iyer: a.mp4 (1.2 MB) exceeds the 25 MB per-email limit",
+    "Meera Iyer: b.mp4 (1.1 MB) exceeds the 25 MB per-email limit",
+    "Meera Iyer: c.mp4 (1.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "name": "rounding_half_even_size",
+   "results": [
+    [
+     [
+      "a.mp4",
+      1250000,
+      25000000
+     ],
+     [
+      "b.mp4",
+      1050000,
+      25000000
+     ],
+     [
+      "c.mp4",
+      1049999,
+      25000000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 12 MB per-email limit",
+    "Meera Iyer: b.mp4 (30.0 MB) exceeds the 14 MB per-email limit"
+   ],
+   "name": "rounding_half_even_limit",
+   "results": [
+    [
+     [
+      "a.mp4",
+      30000000,
+      12500000
+     ]
+    ],
+    [
+     [
+      "b.mp4",
+      30000000,
+      13500000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "name": "dedup_within_and_across_results",
+   "results": [
+    [
+     [
+      "a.mp4",
+      30000000,
+      25000000
+     ],
+     [
+      "a.mp4",
+      30000000,
+      25000000
+     ]
+    ],
+    [
+     [
+      "a.mp4",
+      30000000,
+      25000000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "mediaOmitted": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit",
+    "Meera Iyer: b.mp4 (31.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "name": "dedup_against_existing",
+   "results": [
+    [
+     [
+      "a.mp4",
+      30000000,
+      25000000
+     ],
+     [
+      "b.mp4",
+      31000000,
+      25000000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Rohan Mehta",
+   "existing": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "mediaOmitted": [
+    "Meera Iyer: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit",
+    "Rohan Mehta: a.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+   ],
+   "name": "same_file_other_chat_is_separate",
+   "results": [
+    [
+     [
+      "a.mp4",
+      30000000,
+      25000000
+     ]
+    ]
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [],
+   "name": "no_omissions",
+   "results": [
+    [],
+    []
+   ]
+  },
+  {
+   "display": "Meera Iyer",
+   "existing": [],
+   "mediaOmitted": [
+    "Meera Iyer: vídeo ❤.mp4 (5.5 MB) exceeds the 5 MB per-email limit"
+   ],
+   "name": "unicode_name",
+   "results": [
+    [
+     [
+      "vídeo ❤.mp4",
+      5500000,
+      5000000
+     ]
+    ]
+   ]
+  }
+ ],
+ "recordSenders": [
+  {
+   "name": "accumulates_across_two_files",
+   "steps": [
+    {
+     "all": [
+      "Meera Iyer",
+      "Rohan Mehta",
+      "Meera Iyer"
+     ],
+     "countsAfter": {
+      "Meera Iyer": 2,
+      "Rohan Mehta": 0
+     },
+     "pushed": [
+      "Meera Iyer",
+      "Meera Iyer"
+     ]
+    },
+    {
+     "all": [
+      "Meera Iyer",
+      "Rohan Mehta"
+     ],
+     "countsAfter": {
+      "Meera Iyer": 2,
+      "Rohan Mehta": 1
+     },
+     "pushed": [
+      "Rohan Mehta"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "nothing_pushed_still_records_names",
+   "steps": [
+    {
+     "all": [
+      "Meera Iyer",
+      "Rohan Mehta"
+     ],
+     "countsAfter": {
+      "Meera Iyer": 0,
+      "Rohan Mehta": 0
+     },
+     "pushed": []
+    }
+   ]
+  },
+  {
+   "name": "empty_file_records_nothing",
+   "steps": [
+    {
+     "all": [],
+     "countsAfter": {},
+     "pushed": []
+    }
+   ]
+  },
+  {
+   "name": "unicode_sender",
+   "steps": [
+    {
+     "all": [
+      "Méeña Iyer",
+      "Rohan Mehta"
+     ],
+     "countsAfter": {
+      "Méeña Iyer": 1,
+      "Rohan Mehta": 0
+     },
+     "pushed": [
+      "Méeña Iyer"
+     ]
+    }
+   ]
+  }
+ ],
+ "scrubPaths": [
+  {
+   "input": "plain text, nothing to do",
+   "output": "plain text, nothing to do"
+  },
+  {
+   "input": "open failed: /home/alice/app/data/state.db",
+   "output": "open failed: state.db"
+  },
+  {
+   "input": "open failed: /data/user/0/com.chatmailsync.app/files/inbox/chat.txt not readable",
+   "output": "open failed: chat.txt not readable"
+  },
+  {
+   "input": "only two segments /home/alice",
+   "output": "only two segments alice"
+  },
+  {
+   "input": "single segment /home",
+   "output": "single segment /home"
+  },
+  {
+   "input": "https://mail.example.test/gmail/v1/users/me/labels returned 401",
+   "output": "https://mail.example.test/gmail/v1/users/me/labels returned 401"
+  },
+  {
+   "input": "see https://example.test/a/b/c and /var/log/app/err.log today",
+   "output": "see https://example.test/a/b/c and err.log today"
+  },
+  {
+   "input": "quoted '/a/b/c' and (/x/y/z) and [/p/q/r] and \"/m/n/o\"",
+   "output": "quoted 'c' and (z) and [r] and \"o\""
+  },
+  {
+   "input": "list /a/b/c, /d/e/f, done",
+   "output": "list c, f, done"
+  },
+  {
+   "input": "trailing slash /a/b/ here",
+   "output": "trailing slash b/ here"
+  },
+  {
+   "input": "dot segments /a/b/./c and /a/../b and /a/b/.",
+   "output": "dot segments c and b and b"
+  },
+  {
+   "input": "unicode /home/ü/ñ.txt end",
+   "output": "unicode ñ.txt end"
+  },
+  {
+   "input": "pw=hunter2 stays /a/b/c",
+   "output": "pw=hunter2 stays c"
+  },
+  {
+   "input": "nbsp /a/b/c /d/e/f",
+   "output": "nbsp c f"
+  },
+  {
+   "input": "ctl\u001f/a/b/c\u001f/d/e/f",
+   "output": "ctl\u001fc\u001ff"
+  },
+  {
+   "input": "two urls http://x.test/a/b/c https://y.test/d/e/f /p/q/r",
+   "output": "two urls http://x.test/a/b/c https://y.test/d/e/f r"
+  },
+  {
+   "input": "",
+   "output": ""
+  }
+ ],
+ "selfSender": [
+  {
+   "learned": null,
+   "learnedAfter": "Rohan Mehta",
+   "name": "one_to_one_derives",
+   "override": null,
+   "pendingAfter": "Rohan Mehta",
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta",
+    "Meera Iyer"
+   ]
+  },
+  {
+   "learned": null,
+   "learnedAfter": "Rohan Mehta",
+   "name": "override_wins_and_learned_updates",
+   "override": "Dev Rao",
+   "pendingAfter": null,
+   "result": "Dev Rao",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta"
+   ]
+  },
+  {
+   "learned": null,
+   "learnedAfter": "Rohan Mehta",
+   "name": "blank_override_counts_as_unset",
+   "override": "   ",
+   "pendingAfter": "Rohan Mehta",
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta"
+   ]
+  },
+  {
+   "learned": "Rohan Mehta",
+   "learnedAfter": "Rohan Mehta",
+   "name": "same_learned_is_not_pending",
+   "override": null,
+   "pendingAfter": null,
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta"
+   ]
+  },
+  {
+   "learned": "Old Name",
+   "learnedAfter": "Rohan Mehta",
+   "name": "newer_derivation_replaces_learned",
+   "override": null,
+   "pendingAfter": "Rohan Mehta",
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta"
+   ]
+  },
+  {
+   "learned": "Rohan Mehta",
+   "learnedAfter": "Rohan Mehta",
+   "name": "group_chat_keeps_learned",
+   "override": null,
+   "pendingAfter": null,
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta",
+    "Dev Rao"
+   ]
+  },
+  {
+   "learned": null,
+   "learnedAfter": null,
+   "name": "nothing_known_is_you",
+   "override": null,
+   "pendingAfter": null,
+   "result": "You",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta",
+    "Dev Rao"
+   ]
+  },
+  {
+   "learned": "ROHAN MEHTA",
+   "learnedAfter": "ROHAN MEHTA",
+   "name": "case_insensitive_same_learned",
+   "override": null,
+   "pendingAfter": null,
+   "result": "Rohan Mehta",
+   "senders": [
+    "Meera Iyer",
+    "Rohan Mehta"
+   ]
+  }
+ ],
+ "statsStr": [
+  {
+   "fields": {},
+   "text": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0"
+  },
+  {
+   "fields": {
+    "files_found": 3,
+    "files_skipped": 1,
+    "files_synced": 2,
+    "messages_parsed": 40,
+    "messages_skipped": 15,
+    "messages_synced": 25
+   },
+   "text": "Files   : found=3  synced=2  skipped=1  failed=0\nMessages: parsed=40  synced=25  skipped=15"
+  },
+  {
+   "fields": {
+    "files_found": 1,
+    "messages_cutoff": 7
+   },
+   "text": "Files   : found=1  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0\nHeld back 7 message(s) from before your cutoff date"
+  },
+  {
+   "fields": {
+    "chats_recovered": 2
+   },
+   "text": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0\nRecovered 2 interrupted run(s)"
+  },
+  {
+   "fields": {
+    "errors": [
+     "a.txt: parse error - bad",
+     "Meera Iyer: Mail push failed - boom"
+    ],
+    "files_failed": 1
+   },
+   "text": "Files   : found=0  synced=0  skipped=0  failed=1\nMessages: parsed=0  synced=0  skipped=0\nErrors:\n  - a.txt: parse error - bad\n  - Meera Iyer: Mail push failed - boom"
+  },
+  {
+   "fields": {
+    "media_omitted": [
+     "Meera Iyer: clip.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+    ]
+   },
+   "text": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0\nMedia too large to email (archived without the file - it stays in your WhatsApp export):\n  - Meera Iyer: clip.mp4 (30.0 MB) exceeds the 25 MB per-email limit"
+  },
+  {
+   "fields": {
+    "chats_recovered": 1,
+    "errors": [
+     "x"
+    ],
+    "files_failed": 1,
+    "files_found": 2,
+    "files_synced": 1,
+    "media_omitted": [
+     "y",
+     "z"
+    ],
+    "messages_cutoff": 2,
+    "messages_parsed": 9,
+    "messages_skipped": 3,
+    "messages_synced": 4
+   },
+   "text": "Files   : found=2  synced=1  skipped=0  failed=1\nMessages: parsed=9  synced=4  skipped=3\nHeld back 2 message(s) from before your cutoff date\nRecovered 1 interrupted run(s)\nMedia too large to email (archived without the file - it stays in your WhatsApp export):\n  - y\n  - z\nErrors:\n  - x"
+  }
+ ],
+ "stemSuffix": [
+  {
+   "name": "a.txt",
+   "stem": "a",
+   "suffix": ".txt"
+  },
+  {
+   "name": "a.b.txt",
+   "stem": "a.b",
+   "suffix": ".txt"
+  },
+  {
+   "name": ".hidden",
+   "stem": ".hidden",
+   "suffix": ""
+  },
+  {
+   "name": ".hidden.txt",
+   "stem": ".hidden",
+   "suffix": ".txt"
+  },
+  {
+   "name": "a.",
+   "stem": "a.",
+   "suffix": ""
+  },
+  {
+   "name": "a..",
+   "stem": "a..",
+   "suffix": ""
+  },
+  {
+   "name": "noext",
+   "stem": "noext",
+   "suffix": ""
+  },
+  {
+   "name": "x.zip",
+   "stem": "x",
+   "suffix": ".zip"
+  },
+  {
+   "name": "..",
+   "stem": "..",
+   "suffix": ""
+  },
+  {
+   "name": "...",
+   "stem": "...",
+   "suffix": ""
+  },
+  {
+   "name": "a.b.",
+   "stem": "a.b.",
+   "suffix": ""
+  },
+  {
+   "name": "Team v1.2.txt",
+   "stem": "Team v1.2",
+   "suffix": ".txt"
+  },
+  {
+   "name": "é.txt",
+   "stem": "é",
+   "suffix": ".txt"
+  }
+ ]
+}

@@ -36,6 +36,17 @@ object HtmlMimeBuilder {
     private val REFUSED_IN_ASCII_FILENAME =
         setOf('\r', '\n', '\u000B', '\u000C', '\u001C', '\u001D', '\u001E')
 
+    internal const val UNSENDABLE_FILENAME_REASON = "its file name holds a line break"
+
+    /**
+     * D35: true when [filename] holds a line break (CR, LF, VT, FF, FS, GS or
+     * RS). Such a file is skipped and listed, never sent. This is wider than
+     * what [contentDisposition] refuses (only pure-ASCII names): a non-ASCII
+     * name would survive as `%0A`, but the decision is one rule for all names.
+     */
+    internal fun isUnsendableFilename(filename: String): Boolean =
+        filename.any { it in REFUSED_IN_ASCII_FILENAME }
+
     /** Controls Python writes raw but that must not travel in a header: not TAB, not the refused set. */
     private fun isBareControl(c: Char): Boolean =
         c.code in 0x00..0x08 || c.code in 0x0E..0x1B || c.code == 0x1F || c.code == 0x7F

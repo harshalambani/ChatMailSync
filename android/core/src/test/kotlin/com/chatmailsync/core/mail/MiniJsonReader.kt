@@ -28,6 +28,7 @@ sealed class JsonNode {
     }
     fun asString(): String = (this as Str).value
     fun asInt(): Int = (this as Num).value.toInt()
+    fun asLong(): Long = (this as Num).value
     fun asBoolean(): Boolean = (this as Bool).value
 
     operator fun get(key: String): JsonNode =
