@@ -31,7 +31,7 @@ class SyncManager(
     private val shouldStop: () -> Boolean = { false },
     /** The app password (or any secret) to remove from error text; never logged. */
     internal val redact: String? = null,
-    private val sleeper: Sleeper = SystemSleeper,
+    internal val sleeper: Sleeper = SystemSleeper,
 ) {
     /** The app-wide floor; a per-chat override beats it for that chat. */
     internal val cutoffDate: String? = normaliseCutoff(cutoffDate)
@@ -106,8 +106,8 @@ class SyncManager(
         return stats
     }
 
-    /** Replaced by the recovery port in the next change; until then nothing is resumed. */
-    internal fun recoverPending(stats: SyncStats): Int = 0
+    /** Finish the runs a crash left pending; see SyncRecovery.kt. */
+    internal fun recoverPending(stats: SyncStats): Int = recoverPendingRuns(stats)
 
     // ------------------------------------------------------------------
     // Pre-scan
