@@ -2474,19 +2474,101 @@ def _sm_scenarios():
     ]
 
 
-def _sm_run_scenarios(tmp, make_manager):
+def _sm_recovery_scenarios():
+    """Runs a crash left pending, and what the next run does about them.
+
+    A crash is a BaseException out of the transport (not an Exception), so no
+    handler in the manager sees it and the run row stays 'pending', exactly as
+    when the process dies.
+    """
+    meera = "WhatsApp Chat with Meera Iyer.txt"
+    asha_zip = "WhatsApp Chat with Asha Rao.zip"
+    t = _sm_chat_text
+    four = t([20, 21, 22, 23])
+    return [
+        {"name": "recovery_resumes_after_a_crash", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 3}},
+            {"write": {}, "options": {}},
+            {"write": {}, "options": {}},
+        ]},
+        {"name": "recovery_runs_before_new_files", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {"WhatsApp Chat with Rohan Mehta.txt": {"text": t([20, 21])}}, "options": {}},
+        ]},
+        {"name": "recovery_crashes_again_then_finishes", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "options": {"crash_at": 2}},
+            {"write": {}, "options": {}},
+        ]},
+        {"name": "recovery_honours_a_cutoff_set_after_the_crash", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 3}},
+            {"write": {}, "options": {"chat_cutoffs": {"meera_iyer": "2025-03-23"}}},
+        ]},
+        {"name": "recovery_cutoff_beyond_everything_leaves_nothing_to_push", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "options": {"chat_cutoffs": {"meera_iyer": "2025-04-01"}}},
+        ]},
+        {"name": "recovery_ignores_the_overlap_rule", "steps": [
+            # A completed run puts the overlap mark at day 23; a pending run
+            # (made by hand, as no normal run can leave one) is for older days
+            # that are still unsent. Recovery sends them; a normal run would
+            # hold them back as already covered.
+            {"write": {meera: {"text": t([23])}}, "options": {}},
+            {"write": {meera: {"text": t([20, 21, 23])}}, "options": {}, "sql": [
+                "INSERT INTO sync_runs (chat_id, status, trigger, started_at) "
+                "VALUES ('meera_iyer', 'pending', 'manual', '2025-01-01T00:00:00')",
+            ]},
+        ]},
+        {"name": "recovery_source_file_missing", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "remove": [meera], "options": {}},
+        ]},
+        {"name": "recovery_chat_record_missing", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "sql": ["DELETE FROM chats WHERE chat_id = 'meera_iyer'"], "options": {}},
+        ]},
+        {"name": "recovery_parse_error", "steps": [
+            {"write": {asha_zip: {"zip": {"_chat.txt": four}}}, "options": {"crash_at": 2}},
+            {"write": {asha_zip: {"zip": {"notes.md": "no chat in here"}}}, "options": {}},
+        ]},
+        {"name": "recovery_push_fails_again", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "options": {"fail_at": 1}},
+            {"write": {}, "options": {}},
+        ]},
+        {"name": "recovery_dry_run_changes_nothing", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {}, "options": {"dry_run": True}},
+            {"write": {}, "options": {}},
+        ]},
+        {"name": "recovery_reparse_finds_no_messages", "steps": [
+            {"write": {meera: {"text": four}}, "options": {"crash_at": 2}},
+            {"write": {meera: {"text": "no timestamps here\n"}}, "options": {}},
+        ]},
+    ]
+
+
+def _sm_run_scenarios(tmp, make_manager, scenarios=None):
     """Run every scenario through [make_manager] and record what happened."""
     import shutil
     import sqlite3
 
     results = []
-    for sc in _sm_scenarios():
+    for sc in (scenarios if scenarios is not None else _sm_scenarios()):
         root = tmp / sc["name"]
         inbox, processed = root / "inbox", root / "processed"
         inbox.mkdir(parents=True)
         db_path = root / "state.db"
         steps_out = []
         for step in sc["steps"]:
+            for fname in step.get("remove", []):
+                (inbox / fname).unlink()
+            if step.get("sql"):
+                con = sqlite3.connect(db_path)
+                for stmt in step["sql"]:
+                    con.execute(stmt)
+                con.commit()
+                con.close()
             for fname, spec in step["write"].items():
                 path = inbox / fname
                 if "zip" in spec:
@@ -2509,8 +2591,9 @@ def generate_sync_run_golden() -> None:
     class _Transport:
         """Deterministic MailTransport: ids come from a call counter."""
 
-        def __init__(self, fail_at=None):
+        def __init__(self, fail_at=None, crash_at=None):
             self.fail_at = fail_at
+            self.crash_at = crash_at
             self.insert_calls = 0
 
         def labels_list(self):
@@ -2521,6 +2604,10 @@ def generate_sync_run_golden() -> None:
 
         def messages_insert(self, body, thread_id=None):
             self.insert_calls += 1
+            if self.crash_at is not None and self.insert_calls == self.crash_at:
+                # Not an Exception: nothing in the manager catches it, so the
+                # run row is left 'pending', as when the process is killed.
+                raise KeyboardInterrupt("simulated process death")
             if self.fail_at is not None and self.insert_calls == self.fail_at:
                 raise RuntimeError("simulated crash mid-push")
             return {"id": f"m{self.insert_calls}", "threadId": thread_id or f"t{self.insert_calls}"}
@@ -2546,7 +2633,7 @@ def generate_sync_run_golden() -> None:
             state.init_db(db_path)
             state.set_chat_cutoff(chat_id, cutoff, db_path)
         queue = _Queue()
-        transport = _Transport(opts.get("fail_at"))
+        transport = _Transport(opts.get("fail_at"), opts.get("crash_at"))
         mgr = ProgressSyncManager(
             transport=transport,
             chunk_size=opts.get("chunk_size", "day"),
@@ -2559,29 +2646,42 @@ def generate_sync_run_golden() -> None:
             progress_queue=queue,
             stop_event=_Stop(queue, opts.get("stop_after_files")),
         )
-        with mock.patch("time.sleep"):
-            stats = mgr.run(chat_filter=opts.get("chat_filter"))
         from dataclasses import asdict
 
-        return {
-            "stats": asdict(stats),
-            "statsText": str(stats),
+        crashed = False
+        stats = None
+        with mock.patch("time.sleep"):
+            try:
+                stats = mgr.run(chat_filter=opts.get("chat_filter"))
+            except KeyboardInterrupt:
+                crashed = True
+
+        out = {
+            "stats": None if crashed else asdict(stats),
+            "statsText": None if crashed else str(stats),
             "events": queue.events,
             "inserts": transport.insert_calls,
             "state": _sm_dump_state(db_path, inbox, processed),
         }
+        if crashed:
+            out["crashed"] = True
+        return out
 
-    with tempfile.TemporaryDirectory() as tmp_s:
-        results = _sm_run_scenarios(Path(tmp_s), make_manager)
+    for scenarios, file_name in (
+        (_sm_scenarios(), "sync_run_golden.json"),
+        (_sm_recovery_scenarios(), "sync_recovery_golden.json"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp_s:
+            results = _sm_run_scenarios(Path(tmp_s), make_manager, scenarios)
 
-    payload = {"scenarios": [{"name": r["name"], "spec": r["spec"], "steps": r["steps"]} for r in results]}
-    out_path = GOLDEN_DIR / "sync_run_golden.json"
-    out_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
+        payload = {"scenarios": [{"name": r["name"], "spec": r["spec"], "steps": r["steps"]} for r in results]}
+        out_path = GOLDEN_DIR / file_name
+        out_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"Wrote {out_path} ({out_path.stat().st_size} bytes)")
 
 
 def main() -> None:

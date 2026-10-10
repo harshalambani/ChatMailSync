@@ -1,0 +1,3086 @@
+{
+ "scenarios": [
+  {
+   "name": "recovery_resumes_after_a_crash",
+   "spec": {
+    "name": "recovery_resumes_after_a_crash",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 3
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "write": {}
+     },
+     {
+      "options": {},
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      },
+      {
+       "chunk": 2,
+       "global_done": 2,
+       "global_total": 4,
+       "msgs_done": 2,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 3,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 2,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "2",
+        "2",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 2
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=2  skipped=0\nRecovered 1 interrupted run(s)"
+    },
+    {
+     "events": [
+      {
+       "n": 0,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "2",
+        "2",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0"
+    }
+   ]
+  },
+  {
+   "name": "recovery_runs_before_new_files",
+   "spec": {
+    "name": "recovery_runs_before_new_files",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "write": {
+       "WhatsApp Chat with Rohan Mehta.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n"
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 2,
+       "type": "files_total"
+      },
+      {
+       "n": 5,
+       "type": "total_messages"
+      },
+      {
+       "name": "Rohan Mehta",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 5,
+       "msgs_done": 1,
+       "name": "Rohan Mehta",
+       "total_chunks": 2,
+       "total_msgs": 2,
+       "type": "chunk"
+      },
+      {
+       "chunk": 2,
+       "global_done": 2,
+       "global_total": 5,
+       "msgs_done": 2,
+       "name": "Rohan Mehta",
+       "total_chunks": 2,
+       "total_msgs": 2,
+       "type": "chunk"
+      },
+      {
+       "done": 1,
+       "total": 2,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 5,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Meera Iyer"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Meera Iyer"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ],
+       [
+        "rohan_mehta",
+        "Rohan Mehta",
+        "t4",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Rohan Mehta.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ],
+       [
+        "63c2ee68e17dc2d7ab152deaa8ade7afd6c76f0d22934cb5a40b0af740fc8e74",
+        "rohan_mehta",
+        "2025-03-20T09:00:00",
+        "2"
+       ],
+       [
+        "b3c00982336bfc34c2c45d2aa64447ce726c640b76fa4b0347c9a6c16a15ab47",
+        "rohan_mehta",
+        "2025-03-21T09:00:00",
+        "2"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt",
+       "WhatsApp Chat with Rohan Mehta.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "3",
+        "1",
+        "0",
+        null
+       ],
+       [
+        "2",
+        "rohan_mehta",
+        "complete",
+        "manual",
+        "2025-03-21T09:00:00",
+        "b3c00982336bfc34c2c45d2aa64447ce726c640b76fa4b0347c9a6c16a15ab47",
+        "2",
+        "2",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ],
+       [
+        "rohan_mehta",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "rohan_mehta",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 1,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 2,
+      "messages_skipped": 0,
+      "messages_synced": 5
+     },
+     "statsText": "Files   : found=1  synced=1  skipped=0  failed=0\nMessages: parsed=2  synced=5  skipped=0\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_crashes_again_then_finishes",
+   "spec": {
+    "name": "recovery_crashes_again_then_finishes",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {}
+     },
+     {
+      "options": {},
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 3,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 2,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "2",
+        "2",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 2
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=2  skipped=0\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_honours_a_cutoff_set_after_the_crash",
+   "spec": {
+    "name": "recovery_honours_a_cutoff_set_after_the_crash",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 3
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {
+       "chat_cutoffs": {
+        "meera_iyer": "2025-03-23"
+       }
+      },
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      },
+      {
+       "chunk": 2,
+       "global_done": 2,
+       "global_total": 4,
+       "msgs_done": 2,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 3,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 1,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 1,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "1",
+        "2",
+        "1",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "0"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 1,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 1
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=1  skipped=0\nHeld back 1 message(s) from before your cutoff date\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_cutoff_beyond_everything_leaves_nothing_to_push",
+   "spec": {
+    "name": "recovery_cutoff_beyond_everything_leaves_nothing_to_push",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {
+       "chat_cutoffs": {
+        "meera_iyer": "2025-04-01"
+       }
+      },
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        null,
+        null,
+        "4",
+        "0",
+        "1",
+        "3",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "0"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "0"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 3,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0\nHeld back 3 message(s) from before your cutoff date\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_ignores_the_overlap_rule",
+   "spec": {
+    "name": "recovery_ignores_the_overlap_rule",
+    "steps": [
+     {
+      "options": {},
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "sql": [
+       "INSERT INTO sync_runs (chat_id, status, trigger, started_at) VALUES ('meera_iyer', 'pending', 'manual', '2025-01-01T00:00:00')"
+      ],
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 1,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 1,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 1,
+       "total_msgs": 1,
+       "type": "chunk"
+      },
+      {
+       "done": 1,
+       "total": 1,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 1,
+     "state": {
+      "appState": [],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "1",
+        "1",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "1"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 1,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 1,
+      "messages_skipped": 0,
+      "messages_synced": 1
+     },
+     "statsText": "Files   : found=1  synced=1  skipped=0  failed=0\nMessages: parsed=1  synced=1  skipped=0"
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ],
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "2"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "2"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "1",
+        "1",
+        "0",
+        "0",
+        null
+       ],
+       [
+        "2",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-21T09:00:00",
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "3",
+        "2",
+        "1",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 2
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=2  skipped=0\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_source_file_missing",
+   "spec": {
+    "name": "recovery_source_file_missing",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "remove": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 0,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "source file not found: WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "senders": []
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0"
+    }
+   ]
+  },
+  {
+   "name": "recovery_chat_record_missing",
+   "spec": {
+    "name": "recovery_chat_record_missing",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "sql": [
+       "DELETE FROM chats WHERE chat_id = 'meera_iyer'"
+      ],
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 3,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 3,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "chunk": 2,
+       "global_done": 2,
+       "global_total": 3,
+       "msgs_done": 2,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "chunk": 3,
+       "global_done": 3,
+       "global_total": 3,
+       "msgs_done": 3,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "done": 1,
+       "total": 1,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 3,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "2"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "2"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "2"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "chat record missing"
+       ],
+       [
+        "2",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "3",
+        "1",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 1,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 4,
+      "messages_skipped": 1,
+      "messages_synced": 3
+     },
+     "statsText": "Files   : found=1  synced=1  skipped=0  failed=0\nMessages: parsed=4  synced=3  skipped=1"
+    }
+   ]
+  },
+  {
+   "name": "recovery_parse_error",
+   "spec": {
+    "name": "recovery_parse_error",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Asha Rao.zip": {
+        "zip": {
+         "_chat.txt": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+        }
+       }
+      }
+     },
+     {
+      "options": {},
+      "write": {
+       "WhatsApp Chat with Asha Rao.zip": {
+        "zip": {
+         "notes.md": "no chat in here"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Asha Rao",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Asha Rao",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [],
+      "chats": [
+       [
+        "asha_rao",
+        "Asha Rao",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Asha Rao.zip"
+       ]
+      ],
+      "hashes": [
+       [
+        "b97a5eff571a0caa943e33acaa7ecd36db7bb098bbbe539f0e50c9ae83727510",
+        "asha_rao",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Asha Rao.zip"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "asha_rao",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      },
+      {
+       "name": "Asha Rao",
+       "type": "syncing"
+      },
+      {
+       "done": 1,
+       "total": 1,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [],
+      "chats": [
+       [
+        "asha_rao",
+        "Asha Rao",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Asha Rao.zip"
+       ]
+      ],
+      "hashes": [
+       [
+        "b97a5eff571a0caa943e33acaa7ecd36db7bb098bbbe539f0e50c9ae83727510",
+        "asha_rao",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Asha Rao.zip"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "asha_rao",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "parse error: ZIP archive 'WhatsApp Chat with Asha Rao.zip' contains no .txt file."
+       ],
+       [
+        "2",
+        "asha_rao",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "ZIP archive 'WhatsApp Chat with Asha Rao.zip' contains no .txt file."
+       ]
+      ],
+      "senders": []
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [
+       "WhatsApp Chat with Asha Rao.zip: parse error — ZIP archive 'WhatsApp Chat with Asha Rao.zip' contains no .txt file."
+      ],
+      "files_failed": 2,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=1  synced=0  skipped=0  failed=2\nMessages: parsed=0  synced=0  skipped=0\nErrors:\n  - WhatsApp Chat with Asha Rao.zip: parse error — ZIP archive 'WhatsApp Chat with Asha Rao.zip' contains no .txt file."
+    }
+   ]
+  },
+  {
+   "name": "recovery_push_fails_again",
+   "spec": {
+    "name": "recovery_push_fails_again",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {
+       "fail_at": 1
+      },
+      "write": {}
+     },
+     {
+      "options": {},
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 3,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 3,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "chunk": 2,
+       "global_done": 2,
+       "global_total": 3,
+       "msgs_done": 2,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "chunk": 3,
+       "global_done": 3,
+       "global_total": 3,
+       "msgs_done": 3,
+       "name": "Meera Iyer",
+       "total_chunks": 3,
+       "total_msgs": 3,
+       "type": "chunk"
+      },
+      {
+       "done": 1,
+       "total": 1,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 4,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t2",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "2"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "2"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "2"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "recovery push failed: simulated crash mid-push"
+       ],
+       [
+        "2",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "3",
+        "1",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 1,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 1,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 4,
+      "messages_skipped": 1,
+      "messages_synced": 3
+     },
+     "statsText": "Files   : found=1  synced=1  skipped=0  failed=1\nMessages: parsed=4  synced=3  skipped=1"
+    },
+    {
+     "events": [
+      {
+       "n": 0,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t2",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "2"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "2"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "2"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "failed",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        "recovery push failed: simulated crash mid-push"
+       ],
+       [
+        "2",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "3",
+        "1",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 0,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0"
+    }
+   ]
+  },
+  {
+   "name": "recovery_dry_run_changes_nothing",
+   "spec": {
+    "name": "recovery_dry_run_changes_nothing",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {
+       "dry_run": true
+      },
+      "write": {}
+     },
+     {
+      "options": {},
+      "write": {}
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 3,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "done": 1,
+       "total": 1,
+       "type": "file_done"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 1,
+      "files_skipped": 0,
+      "files_synced": 1,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 4,
+      "messages_skipped": 1,
+      "messages_synced": 3
+     },
+     "statsText": "Files   : found=1  synced=1  skipped=0  failed=0\nMessages: parsed=4  synced=3  skipped=1\nRecovered 1 interrupted run(s)"
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 3,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 3,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "t1",
+        "Label_WA",
+        "<anchor>",
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ],
+       [
+        "44b5f3f26096bdab954c728fdab31d1c4bf91b52cc382fb0f082497eef05167f",
+        "meera_iyer",
+        "2025-03-21T09:00:00",
+        "1"
+       ],
+       [
+        "9fe2af977dc52db69d82d3a74eefd0736310c79a5505c009079514afff14590c",
+        "meera_iyer",
+        "2025-03-22T09:00:00",
+        "1"
+       ],
+       [
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "meera_iyer",
+        "2025-03-23T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        "2025-03-23T09:00:00",
+        "7a53c800d9cba4be43accb3ca733d0d8dd2714709627dba216166192975c6af2",
+        "4",
+        "3",
+        "1",
+        "0",
+        null
+       ]
+      ],
+      "senders": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        "1"
+       ],
+       [
+        "meera_iyer",
+        "Rohan Mehta",
+        "2"
+       ]
+      ]
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 3
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=3  skipped=0\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  },
+  {
+   "name": "recovery_reparse_finds_no_messages",
+   "spec": {
+    "name": "recovery_reparse_finds_no_messages",
+    "steps": [
+     {
+      "options": {
+       "crash_at": 2
+      },
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "20/03/25, 09:00 - Meera Iyer: message 20.0\n21/03/25, 09:00 - Rohan Mehta: message 21.0\n22/03/25, 09:00 - Meera Iyer: message 22.0\n23/03/25, 09:00 - Rohan Mehta: message 23.0\n"
+       }
+      }
+     },
+     {
+      "options": {},
+      "write": {
+       "WhatsApp Chat with Meera Iyer.txt": {
+        "text": "no timestamps here\n"
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "crashed": true,
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 4,
+       "type": "total_messages"
+      },
+      {
+       "name": "Meera Iyer",
+       "type": "syncing"
+      },
+      {
+       "chunk": 1,
+       "global_done": 1,
+       "global_total": 4,
+       "msgs_done": 1,
+       "name": "Meera Iyer",
+       "total_chunks": 4,
+       "total_msgs": 4,
+       "type": "chunk"
+      }
+     ],
+     "inserts": 2,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "processed": [],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "pending",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": null,
+     "statsText": null
+    },
+    {
+     "events": [
+      {
+       "n": 1,
+       "type": "files_total"
+      },
+      {
+       "n": 0,
+       "type": "total_messages"
+      }
+     ],
+     "inserts": 0,
+     "state": {
+      "appState": [
+       [
+        "self_sender_learned",
+        "Rohan Mehta"
+       ],
+       [
+        "self_sender_learned_pending",
+        "Rohan Mehta"
+       ]
+      ],
+      "chats": [
+       [
+        "meera_iyer",
+        "Meera Iyer",
+        null,
+        null,
+        null,
+        "WhatsApp Chat with Meera Iyer.txt"
+       ]
+      ],
+      "hashes": [
+       [
+        "0e3e102f513f3e00c96da6b9f3d1a021d702464c67441eb3d99eb61f771616c9",
+        "meera_iyer",
+        "2025-03-20T09:00:00",
+        "1"
+       ]
+      ],
+      "inbox": [],
+      "processed": [
+       "WhatsApp Chat with Meera Iyer.txt"
+      ],
+      "runs": [
+       [
+        "1",
+        "meera_iyer",
+        "complete",
+        "manual",
+        null,
+        null,
+        "0",
+        "0",
+        "0",
+        "0",
+        null
+       ]
+      ],
+      "senders": []
+     },
+     "stats": {
+      "chats_recovered": 1,
+      "errors": [],
+      "files_failed": 0,
+      "files_found": 0,
+      "files_skipped": 0,
+      "files_synced": 0,
+      "media_omitted": [],
+      "messages_cutoff": 0,
+      "messages_parsed": 0,
+      "messages_skipped": 0,
+      "messages_synced": 0
+     },
+     "statsText": "Files   : found=0  synced=0  skipped=0  failed=0\nMessages: parsed=0  synced=0  skipped=0\nRecovered 1 interrupted run(s)"
+    }
+   ]
+  }
+ ]
+}
