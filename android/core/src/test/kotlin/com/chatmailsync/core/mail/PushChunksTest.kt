@@ -86,10 +86,106 @@ class PushChunksTest {
         for (k in 0 until n) {
             assertTrue("Part ${k + 1}/$n", prepared[k].rendered.htmlBody.contains("Part ${k + 1}/$n"))
         }
-        // Parity with Python, reported as a finding: push_chunks never passes the
-        // suffix to the builder, so "Part k/N" lives in the body pill only and
-        // every part shares one Subject.
-        assertEquals(1, t.inserted.map { subjectOf(it.bytes) }.toSet().size)
+        // BUG-08, a named and deliberate difference from Python: Python's
+        // push_chunks never passes the suffix to the builder, so there every
+        // part shares one Subject. Here each part's Subject ends in its own
+        // "(Part k/N)", matching the label in the body.
+        assertEquals(n, t.inserted.map { subjectOf(it.bytes) }.toSet().size)
+        for (k in 0 until n) {
+            assertTrue(decodedSubject(t.inserted[k].bytes).endsWith("  (Part ${k + 1}/$n)"))
+        }
+    }
+
+    /** The Subject with RFC 2047 words decoded (utf-8, B or Q) and folding removed. */
+    private fun decodedSubject(bytes: ByteArray): String {
+        val raw = subjectOf(bytes).replace(Regex("\\r?\\n[ \\t]+"), " ")
+        val word = Regex("=\\?utf-8\\?([bBqQ])\\?([^?]*)\\?=")
+        val out = StringBuilder()
+        var pos = 0
+        var lastWasWord = false
+        for (m in word.findAll(raw)) {
+            val gap = raw.substring(pos, m.range.first)
+            if (!(lastWasWord && gap.isBlank())) out.append(gap)
+            val body = m.groupValues[2]
+            val decoded = if (m.groupValues[1].equals("b", true)) {
+                java.util.Base64.getDecoder().decode(body)
+            } else {
+                val bo = java.io.ByteArrayOutputStream()
+                var i = 0
+                while (i < body.length) {
+                    val c = body[i]
+                    if (c == '_') { bo.write(0x20); i++ }
+                    else if (c == '=') { bo.write(body.substring(i + 1, i + 3).toInt(16)); i += 3 }
+                    else { bo.write(c.code); i++ }
+                }
+                bo.toByteArray()
+            }
+            out.append(String(decoded, Charsets.UTF_8))
+            pos = m.range.last + 1
+            lastWasWord = true
+        }
+        out.append(raw.substring(pos))
+        return out.toString()
+    }
+
+    // ---- BUG-08: Subject carries the Part suffix
+
+    @Test
+    fun aDaySplitIntoTwoEmailsGetsTwoDifferentSubjectsEndingInPart1Of2AndPart2Of2() {
+        val limit = limitFor(perEmail = 4, bodyChars = 3000)
+        val t = FakeMailTransport(maxMessageBytes = limit)
+        val r = pushChat(t, name, msgs(8, 3000), sleeper = RecordingSleeper())
+        assertEquals(2, r.results.size)
+        val subjects = t.inserted.map { decodedSubject(it.bytes) }
+        assertEquals(2, subjects.toSet().size)
+        assertTrue(subjects[0], subjects[0].endsWith("(Part 1/2)"))
+        assertTrue(subjects[1], subjects[1].endsWith("(Part 2/2)"))
+        assertEquals("WhatsApp: Meera Iyer — 2026-01-05  (Part 1/2)", subjects[0])
+    }
+
+    @Test
+    fun aDayThatFitsInOneEmailHasNoSuffixOnItsSubject() {
+        val t = FakeMailTransport()
+        pushChat(t, name, msgs(3), sleeper = RecordingSleeper())
+        assertEquals(1, t.inserted.size)
+        val subject = decodedSubject(t.inserted[0].bytes)
+        assertFalse(subject, subject.contains("Part"))
+        assertFalse(subject, subject.contains("("))
+        assertEquals("WhatsApp: Meera Iyer — 2026-01-05", subject)
+    }
+
+    @Test
+    fun theSuffixAppearsExactlyOnceOnEverySubject() {
+        val limit = limitFor(perEmail = 2, bodyChars = 3000)
+        val t = FakeMailTransport(maxMessageBytes = limit)
+        pushChat(t, name, msgs(8, 3000), sleeper = RecordingSleeper())
+        assertTrue(t.inserted.size > 2)
+        for (e in t.inserted) {
+            val subject = decodedSubject(e.bytes)
+            assertEquals(subject, 1, Regex("Part ").findAll(subject).count())
+            assertEquals(subject, 1, Regex("\\(Part \\d+/\\d+\\)").findAll(subject).count())
+        }
+    }
+
+    @Test
+    fun aLongNonAsciiChatNameWithASuffixStillEncodesToCleanAsciiHeaders() {
+        val longName = "मीरा अय्यर " + "रोहन ".repeat(12) + "Rohan Mehta"
+        val limit = limitFor(perEmail = 4, bodyChars = 3000)
+        val t = FakeMailTransport(maxMessageBytes = limit)
+        val r = pushChat(t, longName, msgs(8, 3000), sleeper = RecordingSleeper())
+        val n = r.results.size
+        assertTrue(n > 1)
+        for ((k, e) in t.inserted.withIndex()) {
+            val text = String(e.bytes, Charsets.ISO_8859_1)
+            val head = text.substringBefore("\r\n\r\n").substringBefore("\n\n")
+            assertTrue("header block must be ASCII", head.all { it.code in 0..126 })
+            assertTrue("Subject must be encoded", head.contains("Subject: =?utf-8?"))
+            assertEquals(1, Regex("(?m)^Subject:").findAll(head).count())
+            assertTrue(head.lines().all { it.length <= 998 })
+            val subject = decodedSubject(e.bytes)
+            assertTrue(subject, subject.contains(longName))
+            assertTrue(subject, subject.endsWith("  (Part ${k + 1}/$n)"))
+        }
     }
 
     @Test

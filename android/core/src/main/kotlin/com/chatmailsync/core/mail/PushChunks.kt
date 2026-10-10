@@ -30,8 +30,16 @@ class PushResult(
     val omissions: List<HtmlRenderer.MediaOmission> = emptyList(),
 )
 
-/** One email's worth of messages and its rendering. */
-class PreparedEmail(val messages: List<ParsedMessage>, val rendered: HtmlRenderer.RenderedChunk)
+/**
+ * One email's worth of messages and its rendering. [suffix] is the "Part k/N"
+ * label the rendering was made with ("" when unlabelled); it is also what goes
+ * on the Subject, so the separator and the Subject always agree.
+ */
+class PreparedEmail(
+    val messages: List<ParsedMessage>,
+    val rendered: HtmlRenderer.RenderedChunk,
+    val suffix: String = "",
+)
 
 /** Progress callback: (email index 1-based, total emails, messages done, total messages, messages in this email). */
 typealias OnChunk = (Int, Int, Int, Int, List<ParsedMessage>) -> Unit
@@ -95,12 +103,13 @@ fun prepareEmails(
         val n = pieces.size
         for ((k, piece) in pieces.withIndex()) {
             if (n > 1) {
+                val label = "Part ${k + 1}/$n"
                 val rendered = HtmlRenderer.renderChunk(
-                    piece.messages, displayName, extractor, "Part ${k + 1}/$n",
+                    piece.messages, displayName, extractor, label,
                     maxMediaBytes = mediaBudget(limitBytes),
                     selfSender = selfSender,
                 )
-                result.add(PreparedEmail(piece.messages, rendered))
+                result.add(PreparedEmail(piece.messages, rendered, label))
             } else {
                 result.add(piece)
             }
@@ -156,6 +165,10 @@ fun insertWithBackoff(
  * interrupted. [dryRun] builds and renders but never calls the transport: no
  * byte reaches the wire. [selfSender] names the account owner as the export
  * writes them (null falls back to the literal "You").
+ *
+ * A day split into several emails carries "(Part k/N)" on each Subject. This
+ * is a deliberate difference from Python, whose push_chunks never passes the
+ * suffix on (BUG-08); the Python code is frozen and stays as it is.
  *
  * A size refusal (413 / a size marker) is not retried: the run's ceiling is
  * lowered below what was just tried, the email is halved (lossless) while it
@@ -214,6 +227,7 @@ fun pushChunks(
                 chunkSize = chunkSize,
                 rendered = rendered,
                 messageId = newMid,
+                suffix = worklist[i].suffix,
                 inReplyTo = inReplyTo,
                 references = currentAnchor,
             )
