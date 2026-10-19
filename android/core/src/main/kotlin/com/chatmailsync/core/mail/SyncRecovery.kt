@@ -96,6 +96,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     val results: List<PushResult>
     val labelId: String?
     val threadId: String?
+    var stoppedByUser = false
     try {
         val mail = transport ?: throw IllegalStateException("no mail transport configured")
         val pushed = pushChat(
@@ -111,10 +112,12 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
             onChunk = onChunk,
             selfSender = resolveSelfSenderFor(repo, chat.displayName, allMessages),
             sleeper = sleeper,
+            shouldStop = shouldStop,
         )
         results = pushed.results
         labelId = pushed.labelId
         threadId = pushed.threadId
+        stoppedByUser = pushed.stopped
     } catch (exc: Exception) {
         repo.failSyncRun(runId, clean("recovery push failed: ${exc.message.orEmpty()}"))
         stats.filesFailed += 1
@@ -125,7 +128,14 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
 
     val newAnchor =
         if (chat.anchorMessageId.isNullOrEmpty() && results.isNotEmpty()) results[0].messageId else chat.anchorMessageId
-    repo.updateChatGmailIds(chatId, threadId, labelId, newAnchor)
+    if (!stoppedByUser || results.isNotEmpty()) {
+        repo.updateChatGmailIds(chatId, threadId, labelId, newAnchor)
+    }
+    if (stoppedByUser) {
+        // Cancelled between two emails (BUG-01): the run stays pending, its hashes
+        // are recorded, and the next run recovers the rest.
+        return false
+    }
 
     val totalSynced = priorSynced + remaining.size
     val last = remaining.last()

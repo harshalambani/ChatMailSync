@@ -221,12 +221,41 @@ class CoreApiNegativeTest {
     }
 
     @Test
-    fun aStopRequestIsOnlyHonouredBetweenFiles() {
+    fun aStopRequestIsHonouredBetweenEmailsOfTheFileInHand() {
+        // BUG-01: Python reads its stop event once per file. Here the file in hand stops
+        // after the email being sent, and the next file never starts.
         val a = api(tmp.newFolder("r11"), redact = null)
         a.paths.inboxDir.mkdirs()
         File(a.paths.inboxDir, "WhatsApp Chat with Meera Iyer.txt").writeText(chatText(listOf(20, 21, 22)))
         File(a.paths.inboxDir, "WhatsApp Chat with Rohan Mehta.txt").writeText(chatText(listOf(20)))
-        val r = a.sync(transport = CountingTransport(), onProgress = { if (it["type"] == "syncing") a.requestStop() })
+        val t = CountingTransport()
+        val r = a.sync(transport = t, onProgress = { if (it["type"] == "chunk" && it["chunk"] == 1) a.requestStop() })
+        assertEquals(true, r["stopped"])
+        assertEquals(1, t.insertCalls)
+        assertEquals(0, r["files_synced"])
+        assertEquals(1, r["messages_synced"])
+        assertEquals(0, r["files_failed"])
+    }
+
+    @Test
+    fun aStopRequestedBeforeAnyEmailOfTheFileSendsNothing() {
+        val a = api(tmp.newFolder("r12"), redact = null)
+        a.paths.inboxDir.mkdirs()
+        File(a.paths.inboxDir, "WhatsApp Chat with Meera Iyer.txt").writeText(chatText(listOf(20, 21, 22)))
+        val t = CountingTransport()
+        val r = a.sync(transport = t, onProgress = { if (it["type"] == "syncing") a.requestStop() })
+        assertEquals(true, r["stopped"])
+        assertEquals(0, t.insertCalls)
+        assertEquals(0, r["messages_synced"])
+    }
+
+    @Test
+    fun aStopRequestStillEndsTheRunAfterTheLastEmail() {
+        val a = api(tmp.newFolder("r13"), redact = null)
+        a.paths.inboxDir.mkdirs()
+        File(a.paths.inboxDir, "WhatsApp Chat with Meera Iyer.txt").writeText(chatText(listOf(20, 21, 22)))
+        File(a.paths.inboxDir, "WhatsApp Chat with Rohan Mehta.txt").writeText(chatText(listOf(20)))
+        val r = a.sync(transport = CountingTransport(), onProgress = { if (it["type"] == "chunk" && it["chunk"] == 3) a.requestStop() })
         assertEquals(true, r["stopped"])
         // The file in hand finished completely, and the next one never started.
         assertEquals(1, r["files_synced"])

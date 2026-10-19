@@ -28,7 +28,7 @@ class SyncManager(
     internal val trigger: String = "manual",
     cutoffDate: String? = null,
     private val onProgress: ((Map<String, Any?>) -> Unit)? = null,
-    private val shouldStop: () -> Boolean = { false },
+    internal val shouldStop: () -> Boolean = { false },
     /** The app password (or any secret) to remove from error text; never logged. */
     internal val redact: String? = null,
     internal val sleeper: Sleeper = SystemSleeper,
@@ -141,8 +141,9 @@ class SyncManager(
     // ------------------------------------------------------------------
 
     private fun syncFile(file: File, chatId: String, displayName: String, stats: SyncStats) {
-        // Honour a stop request between files only: the current file is never
-        // started, so no partial state is written.
+        // A stop request is honoured here (the file is never started) and again
+        // before every email of the push (BUG-01), so Cancel does not wait for a
+        // whole export.
         if (shouldStop()) return
         emit(mapOf("type" to "syncing", "name" to displayName))
         // Read before the work runs: parseOrCached() removes the entry.
@@ -214,12 +215,15 @@ class SyncManager(
         // in one insert after the push: if the process dies partway, the store
         // then matches exactly what reached the mailbox, and a recovery run does
         // not re-push the whole chat.
+        var deliveredMsgs = 0
         val onChunk: OnChunk = { i, total, done, tmsgs, chunkMsgs ->
+            deliveredMsgs = done
             repo.insertMessageHashes(buildHashEntries(chunkMsgs, rid))
             onChunkProgress(displayName, i, total, done, tmsgs)
         }
 
         val results: List<PushResult>
+        var pushedStopped = false
         try {
             val mail = transport ?: throw IllegalStateException("no mail transport configured")
             val pushed = pushChat(
@@ -235,10 +239,12 @@ class SyncManager(
                 onChunk = onChunk,
                 selfSender = resolveSelfSenderFor(repo, displayName, all),
                 sleeper = sleeper,
+                shouldStop = shouldStop,
             )
             results = pushed.results
             labelId = pushed.labelId
             threadId = pushed.threadId
+            pushedStopped = pushed.stopped
         } catch (exc: Exception) {
             val raw = exc.message.orEmpty()
             stats.filesFailed += 1
@@ -251,7 +257,20 @@ class SyncManager(
 
         // Persist mail ids (thread id, and the anchor Message-ID from the first chunk).
         val newAnchor = if (anchorMid == null && results.isNotEmpty()) results[0].messageId else anchorMid
-        repo.updateChatGmailIds(chatId, threadId, labelId, newAnchor)
+        if (!pushedStopped || results.isNotEmpty()) {
+            repo.updateChatGmailIds(chatId, threadId, labelId, newAnchor)
+        }
+
+        if (pushedStopped) {
+            // Cancelled between two emails (BUG-01). Left exactly as an interrupted
+            // run is: the emails already sent have their hashes recorded, the run
+            // is closed as not complete, and the file stays in the inbox, so the
+            // next run sends only what is still missing. Not a failure of the
+            // file, so no error is added.
+            stats.messagesSynced += deliveredMsgs
+            repo.failSyncRun(rid, clean("stopped by the user after $deliveredMsgs of ${new.size} messages"))
+            return
+        }
 
         val last = new.last()
         val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body)
