@@ -161,7 +161,7 @@ class SyncManager(
     private fun syncFileCore(file: File, chatId: String, displayName: String, stats: SyncStats) {
         if (!dryRun) repo.upsertChat(chatId, displayName, file.name)
 
-        // Dedup baseline: the latest non-empty time across completed runs.
+        // Dedup baseline: the newest (maximum) non-empty time across completed runs (BUG-07).
         val lastTs = repo.getLastSyncedTs(chatId)
 
         var runId: Long? = null
