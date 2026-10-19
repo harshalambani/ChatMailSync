@@ -3,6 +3,7 @@
 package com.chatmailsync.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -50,6 +51,7 @@ fun SyncProgressScreen(
     // an in-flight sync even if the app process was killed and relaunched
     // mid-sync, since a UUID captured only in Compose state wouldn't
     // survive that.
+    val appContext = LocalContext.current.applicationContext
     val workInfo = workManager
         .getWorkInfosForUniqueWorkFlow(SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC)
         .collectAsState(initial = emptyList())
@@ -172,6 +174,9 @@ fun SyncProgressScreen(
                         OutlinedButton(
                             onClick = {
                                 stopRequested = true
+                                // BUG-02: persist BEFORE asking the engine to stop, so a
+                                // force close right after still remembers the Stop.
+                                AppPrefs.stopMark(appContext).markStopped(workInfo.id.toString())
                                 Python.getInstance().getModule("src.android_api").callAttr("request_stop")
                             },
                             colors = ButtonDefaults.outlinedButtonColors(

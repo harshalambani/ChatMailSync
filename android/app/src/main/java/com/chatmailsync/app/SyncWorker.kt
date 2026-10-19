@@ -65,6 +65,24 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
     }
 
     override suspend fun doWork(): Result {
+        // BUG-02: if the user tapped Stop on this exact work and the process
+        // was then killed, WorkManager re-runs it with the same id. Honour the
+        // Stop: do not start the engine. Result.success is terminal (never
+        // re-run) and matches how a normal Stop already finishes; it writes
+        // no sync_runs row because the engine is never started.
+        val stopMark = AppPrefs.stopMark(applicationContext)
+        val myId = id.toString()
+        if (stopMark.consumeIfStopped(myId)) {
+            return Result.success(workDataOf(KEY_RESULT to "Stopped before it started"))
+        }
+        try {
+            return runSync()
+        } finally {
+            stopMark.clearOnFinish(myId)
+        }
+    }
+
+    private suspend fun runSync(): Result {
         val dryRun = inputData.getBoolean(KEY_DRY_RUN, false)
         val backend = inputData.getString(KEY_MAIL_BACKEND)
             ?: AppPrefs.resolveMailBackend(applicationContext)
