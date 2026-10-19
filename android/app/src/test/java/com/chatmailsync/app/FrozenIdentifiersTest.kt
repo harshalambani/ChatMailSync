@@ -206,6 +206,7 @@ class FrozenIdentifiersTest {
             "KEY_CONNECTED_EMAIL" to "connected_email",
             "KEY_CHUNK_SIZE" to "chunk_size",
             "KEY_DRY_RUN_DEFAULT" to "dry_run_default",
+            "KEY_STOPPED_WORK_ID" to "stopped_work_id",
             "KEY_MAIL_BACKEND" to "mail_backend",
             "KEY_OAUTH_REMOVED_NOTICE_SHOWN" to "oauth_removed_notice_shown",
             "KEY_IMAP_PROVIDER" to "imap_provider",
