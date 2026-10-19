@@ -89,8 +89,16 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     if (dryRun) return true
 
     // Hashes are recorded per chunk, so a second interruption loses nothing.
+    // BUG-11: the same transaction also saves the chat's mail ids and this email's
+    // sender counts, so a second interruption resumes in the same thread.
+    var accepted: PushResult? = null
+    var acceptedLabel: String? = null
+    val onAccepted: OnAccepted = { r, label -> accepted = r; acceptedLabel = label }
     val onChunk: OnChunk = { _, _, _, _, chunkMsgs ->
-        repo.insertMessageHashes(buildHashEntries(chunkMsgs, runId))
+        repo.recordChunkDelivered(
+            chatId, buildHashEntries(chunkMsgs, runId), senderCounts(chunkMsgs),
+            accepted?.threadId, acceptedLabel, accepted?.messageId,
+        )
     }
 
     val results: List<PushResult>
@@ -110,6 +118,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
             dryRun = false,
             sourcePath = sourceFile,
             onChunk = onChunk,
+            onAccepted = onAccepted,
             selfSender = resolveSelfSenderFor(repo, chat.displayName, allMessages),
             sleeper = sleeper,
             shouldStop = shouldStop,
@@ -149,7 +158,8 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
         allMessages.size - totalSynced - nCutoff,
         nCutoff,
     )
-    recordChatSendersFor(repo, chatId, allMessages, remaining)
+    // BUG-11: pushed counts were added per email; only the zero-count rows are ensured here.
+    recordChatSendersFor(repo, chatId, allMessages, emptyList())
     moveToProcessed(sourceFile, processedDir)
     stats.messagesSynced += remaining.size
     return true

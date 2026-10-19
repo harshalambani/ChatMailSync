@@ -215,10 +215,21 @@ class SyncManager(
         // in one insert after the push: if the process dies partway, the store
         // then matches exactly what reached the mailbox, and a recovery run does
         // not re-push the whole chat.
+        //
+        // BUG-11: the same transaction also saves the chat's mail ids (thread, label,
+        // first anchor) and this email's sender counts, so a push that fails or is
+        // stopped at email k resumes in the SAME thread under the SAME anchor, and the
+        // first k emails' senders are already counted.
         var deliveredMsgs = 0
+        var accepted: PushResult? = null
+        var acceptedLabel: String? = null
+        val onAccepted: OnAccepted = { r, label -> accepted = r; acceptedLabel = label }
         val onChunk: OnChunk = { i, total, done, tmsgs, chunkMsgs ->
             deliveredMsgs = done
-            repo.insertMessageHashes(buildHashEntries(chunkMsgs, rid))
+            repo.recordChunkDelivered(
+                chatId, buildHashEntries(chunkMsgs, rid), senderCounts(chunkMsgs),
+                accepted?.threadId, acceptedLabel, accepted?.messageId,
+            )
             onChunkProgress(displayName, i, total, done, tmsgs)
         }
 
@@ -237,6 +248,7 @@ class SyncManager(
                 dryRun = false,
                 sourcePath = file,
                 onChunk = onChunk,
+                onAccepted = onAccepted,
                 selfSender = resolveSelfSenderFor(repo, displayName, all),
                 sleeper = sleeper,
                 shouldStop = shouldStop,
@@ -256,6 +268,8 @@ class SyncManager(
         collectOmissions(stats, displayName, results)
 
         // Persist mail ids (thread id, and the anchor Message-ID from the first chunk).
+        // BUG-11: each email already saved these; this end-of-push write is kept as an
+        // idempotent safety net (same values on a clean run).
         val newAnchor = if (anchorMid == null && results.isNotEmpty()) results[0].messageId else anchorMid
         if (!pushedStopped || results.isNotEmpty()) {
             repo.updateChatGmailIds(chatId, threadId, labelId, newAnchor)
@@ -275,7 +289,9 @@ class SyncManager(
         val last = new.last()
         val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body)
         repo.completeSyncRun(rid, last.timestampIso, lastHash, all.size, new.size, nSkipped, nCutoff)
-        recordChatSendersFor(repo, chatId, all, new)
+        // BUG-11: pushed counts were added per email; only the zero-count rows for
+        // senders with nothing new are ensured here (INSERT OR IGNORE).
+        recordChatSendersFor(repo, chatId, all, emptyList())
 
         // Move the file to processed/ only after everything succeeded.
         moveToProcessed(file, processedDir)

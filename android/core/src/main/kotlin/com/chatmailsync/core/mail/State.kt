@@ -449,6 +449,68 @@ class StateRepository(
         }
     }
 
+    /**
+     * BUG-11: everything one accepted email changes, in ONE transaction: its message hashes,
+     * the chat's mail ids (thread id, label id, and the anchor Message-ID only while the chat
+     * has none), and the per-sender pushed counts for exactly the messages it carried.
+     * Called once per email, after the transport accepted it and before the next one is sent,
+     * so an interrupted push leaves hashes, ids and counts agreeing with the mailbox.
+     *
+     * Atomicity: if the hash insert or the ids update throws, the whole transaction rolls back
+     * and the counts are not recorded either, so a chunk is never counted without its hashes.
+     * The counts are the LAST statements and a failure there is swallowed inside the
+     * transaction, so the hashes and ids still commit (a partial count write is possible).
+     */
+    fun recordChunkDelivered(
+        chatId: String,
+        hashes: List<HashEntry>,
+        senderCounts: Map<String, Int>,
+        threadId: String?,
+        labelId: String?,
+        anchorMessageId: String?,
+    ) {
+        val counts = senderCounts.filterValues { it > 0 }
+        val ts = clock()
+        withDb { db ->
+            for (e in hashes) {
+                db.exec(
+                    "INSERT OR IGNORE INTO message_hashes (hash, chat_id, message_ts, run_id) VALUES (?, ?, ?, ?)",
+                    listOf(e.hash, e.chatId, e.messageTs, e.runId),
+                )
+            }
+            db.exec(
+                """
+                UPDATE chats
+                SET gmail_thread_id   = CASE WHEN gmail_thread_id IS NULL OR gmail_thread_id = ''
+                                             THEN COALESCE(?, gmail_thread_id) ELSE gmail_thread_id END,
+                    gmail_label_id    = COALESCE(?, gmail_label_id),
+                    anchor_message_id = CASE WHEN anchor_message_id IS NULL OR anchor_message_id = ''
+                                             THEN COALESCE(?, anchor_message_id) ELSE anchor_message_id END,
+                    updated_at        = ?
+                WHERE chat_id = ?
+                """.trimIndent(),
+                listOf(threadId, labelId, anchorMessageId, ts, chatId),
+            )
+            try {
+                for ((sender, count) in counts) {
+                    db.exec(
+                        """
+                        INSERT INTO chat_senders (chat_id, sender, first_seen, last_seen, msg_count)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(chat_id, sender) DO UPDATE SET
+                            first_seen = MIN(first_seen, excluded.first_seen),
+                            last_seen = MAX(last_seen, excluded.last_seen),
+                            msg_count = msg_count + excluded.msg_count
+                        """.trimIndent(),
+                        listOf(chatId, sender, ts, ts, count),
+                    )
+                }
+            } catch (_: Exception) {
+                // best effort: a count failure never loses the hashes or ids above
+            }
+        }
+    }
+
     fun getHashesForRun(runId: Long): Set<String> =
         withDb { db ->
             db.query("SELECT hash FROM message_hashes WHERE run_id = ?", listOf(runId))
