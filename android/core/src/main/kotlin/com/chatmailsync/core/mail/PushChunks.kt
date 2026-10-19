@@ -176,6 +176,10 @@ fun insertWithBackoff(
  * for a placeholder. A lone message whose text alone is refused is a real
  * failure and is thrown. Everything still pending is re-split against the
  * lowered ceiling, so one refusal teaches the rest of the chat.
+ *
+ * [shouldStop] is asked before every insert. When it says yes the push ends
+ * there and returns the emails delivered so far (BUG-01; Python only looks at
+ * its stop event once per file).
  */
 fun pushChunks(
     transport: MailTransport,
@@ -190,6 +194,7 @@ fun pushChunks(
     onChunk: OnChunk? = null,
     selfSender: String? = null,
     sleeper: Sleeper = SystemSleeper,
+    shouldStop: () -> Boolean = { false },
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
@@ -206,6 +211,11 @@ fun pushChunks(
         val worklist = emailList.toMutableList()
         var i = 0
         while (i < worklist.size) {
+            // BUG-01: a stop request is honoured here, at the boundary between two
+            // emails: the previous one is accepted and its hashes are recorded
+            // (onChunk ran), the next one has not been built or sent. Never
+            // mid-insert. A dry run sends nothing, so it never stops early.
+            if (!dryRun && shouldStop()) break
             val subChunk = worklist[i].messages
             val rendered = worklist[i].rendered
             val newMid = MimeBuilder.newMessageId()
@@ -296,7 +306,13 @@ fun pushChunks(
 }
 
 /** The three values [pushChat] hands back for the caller to persist. */
-data class PushChatResult(val results: List<PushResult>, val labelId: String, val threadId: String)
+data class PushChatResult(
+    val results: List<PushResult>,
+    val labelId: String,
+    val threadId: String,
+    /** True when [shouldStop] ended the push before every email was sent. */
+    val stopped: Boolean = false,
+)
 
 /**
  * Mirrors `push_chat`: chunk, make sure the label exists, push. A stored label
@@ -317,6 +333,7 @@ fun pushChat(
     onChunk: OnChunk? = null,
     selfSender: String? = null,
     sleeper: Sleeper = SystemSleeper,
+    shouldStop: () -> Boolean = { false },
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -327,6 +344,7 @@ fun pushChat(
     val finalLabel = if (label.isNullOrEmpty()) "dry-run-label" else label
 
     val chunks = chunkMessages(messages, chunkSize)
+    var stopped = false
     val results = pushChunks(
         transport = transport,
         displayName = displayName,
@@ -340,7 +358,12 @@ fun pushChat(
         onChunk = onChunk,
         selfSender = selfSender,
         sleeper = sleeper,
+        shouldStop = {
+            val stop = shouldStop()
+            if (stop) stopped = true
+            stop
+        },
     )
     val finalThread = if (results.isNotEmpty()) results.last().threadId else (threadId ?: "")
-    return PushChatResult(results, finalLabel, finalThread)
+    return PushChatResult(results, finalLabel, finalThread, stopped)
 }

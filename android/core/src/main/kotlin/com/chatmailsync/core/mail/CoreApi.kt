@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * parsing.
  *
  * This is a straight port of today's behaviour. Nothing here fixes a Python quirk (the
- * stop request is still only honoured between files, for one). The deliberate differences
- * are few and each is marked "Difference from Python" below.
+ * stop request is now also honoured between emails of one file, BUG-01, for one). The deliberate
+ * differences are few and each is marked "Difference from Python" below.
  *
  * Error text boundary (the `:core` half of SEC-06(3)): every error string in a result and
  * every exception that leaves this class has [redact] (the app password) removed with
@@ -248,8 +248,10 @@ class CoreApi(
     // ------------------------------------------------------------------
 
     /**
-     * `request_stop` (android_api.py:297): ask the in-flight [sync] to stop. It is only
-     * honoured between files: the file in progress finishes and no further file is started.
+     * `request_stop` (android_api.py:297): ask the in-flight [sync] to stop. Difference from
+     * Python (BUG-01): it is honoured between two emails of the file in progress, not only between
+     * files. The email being sent finishes and is recorded, nothing further is sent, and the rest
+     * of the file goes out on the next run.
      */
     fun requestStop() {
         stopFlag.set(true)
