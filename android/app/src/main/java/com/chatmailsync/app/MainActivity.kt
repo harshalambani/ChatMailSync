@@ -1326,6 +1326,7 @@ fun ChatMailApp(
             )
             .build()
         lastSyncWasDryRun = false
+        AppPrefs.stopMark(context).clearForFreshSync()
         workManager.enqueueUniqueWork(
             SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
             ExistingWorkPolicy.REPLACE,
@@ -1351,6 +1352,7 @@ fun ChatMailApp(
                     .build()
             )
             .build()
+        AppPrefs.stopMark(context).clearForFreshSync()
         workManager.enqueueUniqueWork(
             SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
             ExistingWorkPolicy.REPLACE,

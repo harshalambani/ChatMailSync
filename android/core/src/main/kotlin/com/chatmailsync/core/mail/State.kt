@@ -403,21 +403,26 @@ class StateRepository(
         }
 
     /**
-     * Twin of `state.py:get_last_synced_ts` (BUG-04): the latest NON-EMPTY `last_synced_ts`
-     * across a chat's completed runs, or null. The duplicate rule used to read only the
-     * latest completed run, so a completed run that synced nothing blanked the baseline;
-     * this looks past it (repairing databases already in that state) and a later empty,
-     * failed or pending run can never blank or move it.
+     * The NEWEST NON-EMPTY `last_synced_ts` across a chat's completed runs, or null.
+     *
+     * BUG-04 made this look past a completed run that synced nothing. BUG-07 changes it
+     * from "the latest run's time" to "the MAXIMUM time": a recovered run can close with an
+     * OLDER time than an earlier run already recorded, and reading the latest run then
+     * stepped the overlap baseline BACK (the time rule gets more lenient). The maximum can
+     * never step back. It is a read-side fix on purpose, so databases that already hold a
+     * stepped-back row are repaired too. Plain text MAX is correct because every stored time
+     * is `yyyy-MM-ddTHH:mm:ss` (fixed width, naive local time, same in Python).
+     *
+     * DELIBERATE DIFFERENCE from `state.py:get_last_synced_ts` (frozen, D38), which still
+     * reads the latest non-empty run by run_id.
      */
     fun getLastSyncedTs(chatId: String): String? =
         withDb { db ->
             db.query(
                 """
-                SELECT last_synced_ts FROM sync_runs
+                SELECT MAX(last_synced_ts) AS last_synced_ts FROM sync_runs
                 WHERE chat_id = ? AND status = 'complete'
                   AND last_synced_ts IS NOT NULL AND last_synced_ts != ''
-                ORDER BY run_id DESC
-                LIMIT 1
                 """.trimIndent(),
                 listOf(chatId),
             ).firstOrNull()?.get("last_synced_ts") as String?

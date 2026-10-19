@@ -38,6 +38,7 @@ object AppPrefs {
     private const val KEY_CONNECTED_EMAIL = "connected_email"
     private const val KEY_CHUNK_SIZE = "chunk_size"
     private const val KEY_DRY_RUN_DEFAULT = "dry_run_default"
+    private const val KEY_STOPPED_WORK_ID = "stopped_work_id"
     private const val KEY_MAIL_BACKEND = "mail_backend"
     private const val KEY_OAUTH_REMOVED_NOTICE_SHOWN = "oauth_removed_notice_shown"
     private const val KEY_IMAP_PROVIDER = "imap_provider"
@@ -166,6 +167,15 @@ object AppPrefs {
     fun setCutoffDate(context: Context, value: String) {
         prefs(context).edit().putString(KEY_CUTOFF_DATE, value.trim()).apply()
     }
+
+    /** BUG-02: the persisted "user stopped this manual sync" mark. Holds a
+     * WorkRequest id string only. commit() (not apply()) so it is on disk
+     * before the user can force-close the app. */
+    fun stopMark(context: Context): StopMark = StopMark(
+        read = { prefs(context).getString(KEY_STOPPED_WORK_ID, null) },
+        write = { prefs(context).edit().putString(KEY_STOPPED_WORK_ID, it).commit() },
+        clear = { prefs(context).edit().remove(KEY_STOPPED_WORK_ID).commit() },
+    )
 
     fun isDryRunDefault(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DRY_RUN_DEFAULT, false)
