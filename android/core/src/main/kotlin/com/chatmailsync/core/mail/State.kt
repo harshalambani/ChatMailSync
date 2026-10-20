@@ -336,7 +336,7 @@ class StateRepository(
     }
 
     fun listChats(): List<Chat> =
-        withDb { db -> db.query("SELECT * FROM chats ORDER BY display_name").map(::rowToChat) }
+        withDb { db -> db.query("SELECT * FROM chats ORDER BY display_name, chat_id").map(::rowToChat) }
 
     /** Twin of `state.py:resolve_chat`. */
     fun resolveChat(target: String): Chat? {
@@ -547,7 +547,7 @@ class StateRepository(
                     WHERE chat_id = c.chat_id
                     ORDER BY run_id DESC LIMIT 1
                 )
-                ORDER BY c.display_name
+                ORDER BY c.display_name, c.chat_id
                 """.trimIndent(),
             ).map { row ->
                 SyncSummaryRow(
@@ -573,7 +573,7 @@ class StateRepository(
                 FROM sync_runs
                 JOIN chats ON chats.chat_id = sync_runs.chat_id
                 WHERE sync_runs.started_at >= ?
-                ORDER BY sync_runs.started_at DESC
+                ORDER BY sync_runs.started_at DESC, sync_runs.run_id DESC
                 """.trimIndent(),
                 listOf(cutoff),
             ).map { row -> rowToSyncRun(row).copy(displayName = row["display_name"] as String?) }
@@ -710,10 +710,10 @@ class StateRepository(
     fun listChatSenders(chatId: String? = null): List<ChatSender> =
         withDb { db ->
             val rows = if (chatId == null) {
-                db.query("SELECT chat_id, sender, first_seen, last_seen, msg_count FROM chat_senders ORDER BY msg_count DESC")
+                db.query("SELECT chat_id, sender, first_seen, last_seen, msg_count FROM chat_senders ORDER BY msg_count DESC, chat_id, sender")
             } else {
                 db.query(
-                    "SELECT chat_id, sender, first_seen, last_seen, msg_count FROM chat_senders WHERE chat_id = ? ORDER BY msg_count DESC",
+                    "SELECT chat_id, sender, first_seen, last_seen, msg_count FROM chat_senders WHERE chat_id = ? ORDER BY msg_count DESC, sender",
                     listOf(chatId),
                 )
             }
