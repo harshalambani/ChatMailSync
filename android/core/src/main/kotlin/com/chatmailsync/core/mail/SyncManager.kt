@@ -1,6 +1,7 @@
 package com.chatmailsync.core.mail
 
 import java.io.File
+import java.nio.file.Files
 
 /**
  * Kotlin port of `SyncManager` and `ProgressSyncManager` from
@@ -32,6 +33,8 @@ class SyncManager(
     /** The app password (or any secret) to remove from error text; never logged. */
     internal val redact: String? = null,
     internal val sleeper: Sleeper = SystemSleeper,
+    /** Removes a delivered export from inbox/ (PRIV-03); injectable so tests can make it fail. */
+    internal val exportDeleter: (File) -> Unit = { Files.delete(it.toPath()) },
 ) {
     /** The app-wide floor; a per-chat override beats it for that chat. */
     internal val cutoffDate: String? = normaliseCutoff(cutoffDate)
@@ -54,6 +57,29 @@ class SyncManager(
     init {
         repo.initDb()
         processedDir.mkdirs()
+        // PRIV-03: clear the copies older versions kept in processed/. A real run only (a
+        // dry run deletes nothing); a failure here never fails startup or a sync.
+        if (!dryRun) {
+            try {
+                sweepKeptCopies(processedDir, inboxDir)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /**
+     * PRIV-03: delete the export of a run that just completed. Never fails the run: mail is
+     * already delivered and recorded, so if the file cannot be removed it stays in inbox/ and
+     * the next run re-parses it (the hash check sends nothing twice). The only trace is one
+     * progress event, `export_not_deleted`, with no file name, chat name or error text.
+     */
+    internal fun removeDeliveredExport(file: File) {
+        if (dryRun) return
+        try {
+            if (!deleteCompletedExport(file, inboxDir, exportDeleter)) emit(mapOf("type" to "export_not_deleted"))
+        } catch (_: Exception) {
+            emit(mapOf("type" to "export_not_deleted"))
+        }
     }
 
     // ------------------------------------------------------------------
@@ -192,7 +218,7 @@ class SyncManager(
                 repo.completeSyncRun(runId, lastTs, null, all.size, 0, nSkipped, nCutoff)
                 recordChatSendersFor(repo, chatId, all, emptyList())
             }
-            if (!dryRun) moveToProcessed(file, processedDir)
+            removeDeliveredExport(file)
             return
         }
 
@@ -293,8 +319,8 @@ class SyncManager(
         // senders with nothing new are ensured here (INSERT OR IGNORE).
         recordChatSendersFor(repo, chatId, all, emptyList())
 
-        // Move the file to processed/ only after everything succeeded.
-        moveToProcessed(file, processedDir)
+        // Delete the export only after everything succeeded (PRIV-03).
+        removeDeliveredExport(file)
 
         stats.filesSynced += 1
         stats.messagesSynced += new.size

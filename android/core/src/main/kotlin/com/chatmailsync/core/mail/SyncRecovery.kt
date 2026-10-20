@@ -68,7 +68,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     val priorSynced = run.messagesSynced
     stats.messagesCutoff += nCutoff
 
-    // Nothing left: close the run and move the file.
+    // Nothing left: close the run and delete the file (PRIV-03).
     if (remaining.isEmpty()) {
         repo.completeSyncRun(
             runId,
@@ -82,7 +82,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
             nCutoff,
         )
         recordChatSendersFor(repo, chatId, allMessages, emptyList())
-        moveToProcessed(sourceFile, processedDir)
+        removeDeliveredExport(sourceFile)
         return true
     }
 
@@ -160,7 +160,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     )
     // BUG-11: pushed counts were added per email; only the zero-count rows are ensured here.
     recordChatSendersFor(repo, chatId, allMessages, emptyList())
-    moveToProcessed(sourceFile, processedDir)
+    removeDeliveredExport(sourceFile)
     stats.messagesSynced += remaining.size
     return true
 }

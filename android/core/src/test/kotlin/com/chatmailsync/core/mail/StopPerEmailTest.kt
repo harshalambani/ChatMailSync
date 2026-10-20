@@ -93,7 +93,7 @@ class StopPerEmailTest {
         assertEquals(5, hashCount(s.db))
         assertEquals("every message once", 5, distinctHashCount(s.db))
         assertFalse(File(s.inbox, fileName).exists())
-        assertTrue(File(s.processed, fileName).exists())
+        assertFalse("PRIV-03: nothing is kept in processed/", File(s.processed, fileName).exists())
         assertEquals("the resumed emails join the first thread", listOf("t1", "t1", "t1"), second.threadsSeen)
     }
 
@@ -106,7 +106,8 @@ class StopPerEmailTest {
         assertEquals(5, stats.messagesSynced)
         assertEquals(1, stats.filesSynced)
         assertEquals(5, hashCount(s.db))
-        assertTrue(File(s.processed, fileName).exists())
+        assertFalse("PRIV-03: nothing is kept in processed/", File(s.processed, fileName).exists())
+        assertFalse(File(s.inbox, fileName).exists())
         assertEquals(listOf("complete"), statuses(s.db))
     }
 
@@ -144,7 +145,8 @@ class StopPerEmailTest {
         ).run()
         assertEquals(3, t.inserts)
         assertEquals(1, stats.filesSynced)
-        assertTrue(File(s.processed, fileName).exists())
+        assertFalse("PRIV-03: nothing is kept in processed/", File(s.processed, fileName).exists())
+        assertFalse(File(s.inbox, fileName).exists())
         assertEquals(listOf("complete"), statuses(s.db))
     }
 
@@ -180,6 +182,7 @@ class StopPerEmailTest {
         manager(s, r2).run()
         assertEquals(2, r2.inserts)
         assertEquals(4, distinctHashCount(s.db))
-        assertTrue(File(s.processed, fileName).exists())
+        assertFalse("PRIV-03: nothing is kept in processed/", File(s.processed, fileName).exists())
+        assertFalse(File(s.inbox, fileName).exists())
     }
 }

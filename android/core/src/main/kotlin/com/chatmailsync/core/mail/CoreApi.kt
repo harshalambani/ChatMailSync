@@ -401,8 +401,8 @@ class CoreApi(
     }
 
     /**
-     * `reset` (android_api.py:419): reset one chat's sync state and put its export back in the
-     * inbox. `needs_confirmation` true means nothing was changed.
+     * `reset` (android_api.py:419): reset one chat's sync state (PRIV-03: the export is no longer put
+     * back in the inbox; the user shares a fresh one). `needs_confirmation` true means nothing was changed.
      */
     fun reset(chatIdOrName: String, confirmedMailboxCleared: Boolean = false): Map<String, Any?> = guarded {
         val r = ready()
@@ -435,23 +435,14 @@ class CoreApi(
             )
         }
 
-        var fileRestored = false
-        val sourceFilename = chat.sourceFilename
-        if (sourceFilename.isNotEmpty()) {
-            val src = File(paths.processedDir, sourceFilename)
-            val dest = File(paths.inboxDir, sourceFilename)
-            if (src.exists() && !dest.exists()) {
-                dest.parentFile?.mkdirs()
-                Files.move(src.toPath(), dest.toPath())
-                fileRestored = true
-            }
-        }
-
+        // PRIV-03: no kept copy exists any more, so nothing is moved back. The next export
+        // comes fresh from WhatsApp. "file_restored" stays in the result, always false, so the
+        // result keeps its shape. A file already waiting in the inbox is left alone.
         linkedMapOf(
             "ok" to true,
             "chat_id" to chat.chatId,
             "display_name" to chat.displayName,
-            "file_restored" to fileRestored,
+            "file_restored" to false,
             "archived_count" to 0,
             "needs_confirmation" to false,
             "error" to null,

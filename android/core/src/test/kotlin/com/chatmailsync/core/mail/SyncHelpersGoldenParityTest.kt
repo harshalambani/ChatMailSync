@@ -142,43 +142,9 @@ class SyncHelpersGoldenParityTest {
         }
     }
 
-    @Test
-    fun moveToProcessedMatchesPython() {
-        for ((n, c) in g["moveToProcessed"].asArr().items.withIndex()) {
-            val base = tmp.newFolder("mv$n")
-            val inbox = File(base, "inbox").also { it.mkdirs() }
-            val processed = File(base, "processed").also { it.mkdirs() }
-            val fname = c["filename"].asString()
-            val src = File(inbox, fname).also { it.writeText("new export") }
-            for (p in strings(c["processed"])) File(processed, p).writeText("old export")
-            val name = c["name"].asString()
-
-            assertEquals(
-                "$name superseded",
-                strings(c["supersededBeforeMove"]),
-                supersededExports(processed, fname).filter { it != src }.map { it.name }.sorted(),
-            )
-            moveToProcessed(src, processed)
-            assertEquals("$name processed", strings(c["processedAfter"]), processed.list()!!.sorted())
-            assertEquals("$name inbox", strings(c["inboxAfter"]), inbox.list()!!.sorted())
-            assertEquals("$name content", c["movedContent"].asString(), File(processed, fname).readText())
-        }
-    }
-
-    // ---- negative: the wrong behaviour does not happen
-
-    @Test
-    fun aNeighbouringChatsExportIsNeverPruned() {
-        val processed = tmp.newFolder("neighbour")
-        for (p in listOf("Meera Iyer 2_dup_1.txt", "Meera Iyer2.txt", "Rohan Mehta.txt", "Meera Iyer_dup_1.zip")) {
-            File(processed, p).writeText("keep")
-        }
-        val src = File(tmp.newFolder("neighbour-in"), "Meera Iyer.txt").also { it.writeText("new") }
-        moveToProcessed(src, processed)
-        for (p in listOf("Meera Iyer 2_dup_1.txt", "Meera Iyer2.txt", "Rohan Mehta.txt", "Meera Iyer_dup_1.zip")) {
-            assertTrue("$p must survive", File(processed, p).exists())
-        }
-    }
+    // PRIV-03: moveToProcessed / supersededExports are gone (a completed sync deletes the
+    // export). The "moveToProcessed" golden section stays in the file as Python's record; its
+    // replacement is asserted in DeleteAfterSyncTest.
 
     @Test
     fun aDirectoryOrWrongSuffixIsNeverListed() {

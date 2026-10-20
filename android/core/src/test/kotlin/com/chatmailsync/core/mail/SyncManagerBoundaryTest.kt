@@ -34,6 +34,12 @@ class SyncManagerBoundaryTest {
         return Setup(root, inbox, File(root, "processed"), File(root, "state.db").absolutePath)
     }
 
+    private fun abortingRepo(s: Setup, armed: () -> Boolean) =
+        StateRepository(clock = { StateRepository.now() }) {
+            if (armed()) throw IllegalStateException("cannot open the store for $secret")
+            SqliteJdbcStateDb(s.db)
+        }
+
     private fun storedErrors(db: String): List<String?> =
         SyncRunSupport.rows(db, "SELECT error_message FROM sync_runs ORDER BY run_id", listOf("error_message"))
             .map { it[0] }
@@ -93,15 +99,17 @@ class SyncManagerBoundaryTest {
         val s = setup()
         val name = "WhatsApp Chat with $secret.txt"
         File(s.inbox, name).writeText(chatText(1))
-        // A non-empty folder where the finished file must go makes the move fail.
-        File(s.processed, name).apply { mkdirs() }.resolve("keep.txt").writeText("x")
+        // A store that stops opening once the run has started aborts it (PRIV-03: a failed
+        // delete no longer can, so the store is what breaks here).
+        var armed = false
         val mgr = SyncManager(
-            repo = newRepo(s.root, "state.db"), transport = CountingTransport(), inboxDir = s.inbox,
+            repo = abortingRepo(s) { armed }, transport = CountingTransport(), inboxDir = s.inbox,
             processedDir = s.processed, redact = secret, sleeper = { },
+            onProgress = { if (it["type"] == "files_total") armed = true },
         )
         try {
             mgr.run()
-            fail("the move should have failed")
+            fail("the run should have aborted")
         } catch (e: SyncAbortedException) {
             assertFalse(e.message!!, e.message!!.contains(secret))
             assertNull("no wrapped exception may carry the text back", e.cause)
@@ -115,13 +123,14 @@ class SyncManagerBoundaryTest {
         val s = setup()
         val name = "WhatsApp Chat with $secret.txt"
         File(s.inbox, name).writeText(chatText(1))
-        File(s.processed, name).apply { mkdirs() }.resolve("keep.txt").writeText("x")
+        var armed = false
         try {
             SyncManager(
-                repo = newRepo(s.root, "state.db"), transport = CountingTransport(), inboxDir = s.inbox,
+                repo = abortingRepo(s) { armed }, transport = CountingTransport(), inboxDir = s.inbox,
                 processedDir = s.processed, sleeper = { },
+                onProgress = { if (it["type"] == "files_total") armed = true },
             ).run()
-            fail("the move should have failed")
+            fail("the run should have aborted")
         } catch (e: SyncAbortedException) {
             assertTrue(e.message!!.contains(secret))
         }
@@ -163,6 +172,7 @@ class SyncManagerBoundaryTest {
         assertEquals(1, stats.filesSynced)
         assertEquals(3, stats.messagesSynced)
         assertTrue("three days, three mails", transport.insertCalls == 3)
-        assertTrue(File(s.processed, zip.name).exists())
+        assertFalse(File(s.processed, zip.name).exists())
+        assertFalse("PRIV-03: the delivered export is deleted", zip.exists())
     }
 }
