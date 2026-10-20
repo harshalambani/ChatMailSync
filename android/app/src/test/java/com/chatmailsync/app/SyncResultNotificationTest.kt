@@ -75,4 +75,28 @@ class SyncResultNotificationTest {
             assertFalse(t.contains("WhatsApp Chat with"))
         }
     }
+
+    @Test
+    fun aCancellationIsQuietAndNeverSaysFailed() {
+        for (dry in listOf(false, true)) {
+            val n = syncCancelledNotice(dry)
+            assertFalse(n.alert)
+            assertFalse(n.text.startsWith("Sync failed"))
+            assertEquals(if (dry) "Test run stopped" else "Sync stopped", n.text)
+        }
+        // A genuine exception is unchanged.
+        assertTrue(syncFailedNotice("boom").alert)
+        assertTrue(syncFailedNotice("boom").text.startsWith("Sync failed: "))
+    }
+
+    @Test
+    fun theCancellationCatchComesFirstAndRethrows() {
+        val src = File("src/main/java/com/chatmailsync/app/SyncWorker.kt").readText()
+        val c = src.indexOf("catch (e: CancellationException)")
+        val g = src.indexOf("catch (e: Exception)")
+        assertTrue(c in 0 until g)
+        assertTrue(src.substring(c, g).contains("throw e"))
+        assertTrue(src.substring(c, g).contains("syncCancelledNotice(dryRun)"))
+        assertFalse(src.substring(c, g).contains("syncFailedNotice"))
+    }
 }

@@ -13,6 +13,7 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.chaquo.python.Python
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -195,6 +196,14 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                     syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
                 )
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
+            } catch (e: CancellationException) {
+                // WorkManager stopped us (system stop, REPLACE enqueue, cancelUniqueWork).
+                // Not a failure: quiet notice, then rethrow so coroutine cancellation works
+                // and the finally block below still runs.
+                progressOpen.set(false)
+                pollJob.cancel()
+                postResult(syncCancelledNotice(dryRun))
+                throw e
             } catch (e: Exception) {
                 progressOpen.set(false)
                 pollJob.cancel()
@@ -483,3 +492,7 @@ internal fun syncResultNotice(dryRun: Boolean, stopped: Boolean, messagesSynced:
 
 internal fun syncFailedNotice(message: String?): ResultNotice =
     ResultNotice("Sync failed: $message", alert = true)
+
+/** BUG-13: WorkManager cancelled the worker. Never a failure, never an alert; no stats on this path. */
+internal fun syncCancelledNotice(dryRun: Boolean): ResultNotice =
+    ResultNotice(if (dryRun) "Test run stopped" else "Sync stopped", alert = false)
