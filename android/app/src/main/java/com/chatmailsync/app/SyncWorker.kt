@@ -2,7 +2,9 @@ package com.chatmailsync.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -57,6 +59,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_LOG_LINES = "log_lines"
         const val NOTIFICATION_CHANNEL_ID = "sync_channel"
         const val NOTIFICATION_ID = 1001
+        /** BUG-13: the final result. Never the foreground id, never WatchFolderWorker's 1002. */
+        const val RESULT_NOTIFICATION_ID = 1003
+        /** BUG-13: a new channel; NOTIFICATION_CHANNEL_ID above is frozen and never renamed. */
+        const val RESULT_CHANNEL_ID = "sync_results_channel"
+        const val RESULT_CHANNEL_NAME = "Sync results"
         /** Unique work name for a manual Home-triggered sync (real or dry
          * run) — lets MainActivity/SyncProgressScreen re-find this run's
          * WorkInfo by name after a process restart, instead of relying on
@@ -108,6 +115,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         val trigger = inputData.getString(KEY_TRIGGER) ?: "manual"
         val chatFilter = inputData.getString(KEY_CHAT_FILTER)
 
+        // BUG-13: a new sync clears the previous run's result, so results never stack.
+        clearResultNotification()
         setForeground(createForegroundInfo(if (dryRun) "Starting test run…" else "Starting sync…"))
 
         return coroutineScope {
@@ -128,6 +137,9 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             var postedText: String? = null
             var postedFraction = Float.NaN
             var postedLog: String? = null
+            // BUG-13: false once the final result is being posted, so a poll tick still in
+            // flight can never put a stale "Syncing..." back on the progress id.
+            val progressOpen = java.util.concurrent.atomic.AtomicBoolean(true)
             val pollJob = launch(Dispatchers.IO) {
                 // Check immediately (not delay-then-check): a quick sync —
                 // e.g. all files already up to date, nothing but dedup
@@ -153,9 +165,9 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                         val fraction = stateString(state, "fraction")?.toFloatOrNull() ?: -1f
                         val percent = stateString(state, "percent")?.toIntOrNull() ?: -1
                         val log = stateString(state, "log") ?: ""
-                        if (text != postedText ||
+                        if (progressOpen.get() && (text != postedText ||
                             fraction != postedFraction ||
-                            log != postedLog
+                            log != postedLog)
                         ) {
                             notify(text)
                             setProgress(
@@ -177,11 +189,16 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             try {
                 val statsResult =
                     withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, androidApi)
-                val label = if (dryRun) "Test run complete" else "Sync complete"
-                notify(syncNotificationText(label, statsResult.messagesSynced, statsResult.filesFailed))
+                progressOpen.set(false)
+                pollJob.cancel()
+                postResult(
+                    syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
+                )
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
             } catch (e: Exception) {
-                notify("Sync failed: ${e.message}")
+                progressOpen.set(false)
+                pollJob.cancel()
+                postResult(syncFailedNotice(e.message))
                 Result.failure(workDataOf(KEY_ERROR to (e.message ?: e.toString())))
             } finally {
                 pollJob.cancel()
@@ -271,7 +288,55 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)
+            .setContentIntent(openAppIntent())
             .build()
+
+    private fun openAppIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            applicationContext,
+            0,
+            Intent(applicationContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun clearResultNotification() {
+        try {
+            (applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(RESULT_NOTIFICATION_ID)
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * BUG-13: the final result goes out under its OWN id and channel. It used to reuse the
+     * foreground id, so when the worker ended WorkManager removed it together with the
+     * progress notification. Dismissable, auto-cancelled, taps open the app. Never throws:
+     * with POST_NOTIFICATIONS denied (Android 13+) the system silently drops the post.
+     */
+    private fun postResult(notice: ResultNotice) {
+        try {
+            val manager =
+                applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.createNotificationChannel(
+                    NotificationChannel(RESULT_CHANNEL_ID, RESULT_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            val builder = NotificationCompat.Builder(applicationContext, RESULT_CHANNEL_ID)
+                .setContentTitle("Chat Mail Sync")
+                .setContentText(notice.text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(notice.text))
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(openAppIntent())
+            // A plain success stays quiet (no sound, no pop-up) but is still kept in the shade.
+            if (!notice.alert) builder.setSilent(true)
+            manager.notify(RESULT_NOTIFICATION_ID, builder.build())
+        } catch (_: Exception) {
+        }
+    }
 
     private fun createForegroundInfo(text: String): ForegroundInfo {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -400,3 +465,21 @@ internal fun syncNotificationText(label: String, messagesSynced: Int, filesFaile
     val kept = exportsKeptLine(filesFailed) ?: return base
     return "$base; $kept"
 }
+
+/** What the final notification says, and whether it should alert (sound/pop-up) or stay quiet. */
+internal data class ResultNotice(val text: String, val alert: Boolean)
+
+/**
+ * BUG-13: a finished run. A failed or kept export alerts; a plain success (and a user's own
+ * Stop) is quiet. Carries no chat name.
+ */
+internal fun syncResultNotice(dryRun: Boolean, stopped: Boolean, messagesSynced: Int, filesFailed: Int): ResultNotice {
+    val label = when {
+        stopped -> if (dryRun) "Test run stopped" else "Sync stopped"
+        else -> if (dryRun) "Test run complete" else "Sync complete"
+    }
+    return ResultNotice(syncNotificationText(label, messagesSynced, filesFailed), alert = filesFailed > 0)
+}
+
+internal fun syncFailedNotice(message: String?): ResultNotice =
+    ResultNotice("Sync failed: $message", alert = true)
