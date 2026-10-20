@@ -68,7 +68,10 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.chaquo.python.Python
+import com.chatmailsync.core.mail.checkConnection
+import com.chatmailsync.core.mail.connectionStagePlan
+import com.chatmailsync.core.mail.formatConnectionResult
+import com.chatmailsync.core.mail.retiredProviderLanding
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -577,13 +580,12 @@ fun ChatMailApp(
     // the shared preset table (host/port per provider), so Android never
     // duplicates that data in Kotlin.
     LaunchedEffect(Unit) {
-        val result = Python.getInstance().getModule("src.android_api").callAttr("imap_providers")
-        imapProviders = result.asList().map { entry ->
+        imapProviders = ChatMailApplication.core(context).imapProviders().map { entry ->
             ImapProviderInfo(
-                key = entry.callAttr("get", "key").toString(),
-                label = entry.callAttr("get", "label").toString(),
-                host = entry.callAttr("get", "host").toString(),
-                port = entry.callAttr("get", "port").toString().toIntOrNull() ?: 993,
+                key = entry.str("key").toString(),
+                label = entry.str("label").toString(),
+                host = entry.str("host").toString(),
+                port = entry.long("port")?.toInt() ?: 993,
             )
         }
         // A settings file written by a release that offered a provider this
@@ -595,19 +597,14 @@ fun ChatMailApp(
         // some other provider's host in front of the user without saying so.
         // The saved host is never touched either: only the user knows what it
         // should be.
-        val landing = Python.getInstance().getModule("src.config")
-            .callAttr("retired_provider_landing", imapProvider).toString()
+        val landing = retiredProviderLanding(imapProvider)
         if (landing.isNotEmpty() && landing != imapProvider) {
             imapProvider = landing
             AppPrefs.setImapProvider(context, landing)
         }
-        stagePlan = Python.getInstance().getModule("src.mail_client")
-            .callAttr("connection_stage_plan").asList().map { entry ->
-                WizardStage(
-                    name = entry.callAttr("get", "name").toString(),
-                    label = entry.callAttr("get", "label").toString(),
-                )
-            }
+        stagePlan = connectionStagePlan().map { entry ->
+            WizardStage(name = entry.name, label = entry.label)
+        }
     }
 
     // Whether there is an account to speak of at all: with IMAP the only
@@ -720,16 +717,14 @@ fun ChatMailApp(
             },
         ) {
             Log.i(ConnectionLogTag, "check_connection (save): starting")
-            val mailClient = Python.getInstance().getModule("src.mail_client")
-            val outcome = mailClient.callAttr(
-                "check_connection",
+            val outcome = checkConnection(
                 effectiveHost,
                 port,
                 email,
-                effectivePassword,
+                effectivePassword
             )
-            val connected = outcome.callAttr("get", "ok").toBoolean()
-            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            val connected = outcome.ok
+            val text = formatConnectionResult(outcome)
             Log.i(ConnectionLogTag, "check_connection (save): finished, ok=$connected")
             connected to text
         }
@@ -800,17 +795,15 @@ fun ChatMailApp(
             },
         ) {
             Log.i(ConnectionLogTag, "check_connection (wizard): starting")
-            val mailClient = Python.getInstance().getModule("src.mail_client")
-            val outcome = mailClient.callAttr(
-                "check_connection",
+            val outcome = checkConnection(
                 effectiveHost,
                 port,
                 email,
                 normalizedPassword,
-                listener,
+                { name, label, ok -> listener.onStage(name, label, ok) }
             )
-            val connected = outcome.callAttr("get", "ok").toBoolean()
-            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            val connected = outcome.ok
+            val text = formatConnectionResult(outcome)
             Log.i(ConnectionLogTag, "check_connection (wizard): finished, ok=$connected")
             connected to text
         }
@@ -849,16 +842,14 @@ fun ChatMailApp(
             onResult = { _, text -> onResult(text) },
         ) {
             Log.i(ConnectionLogTag, "check_connection: starting")
-            val mailClient = Python.getInstance().getModule("src.mail_client")
-            val outcome = mailClient.callAttr(
-                "check_connection",
+            val outcome = checkConnection(
                 AppPrefs.getImapHost(context),
                 AppPrefs.getImapPort(context),
                 AppPrefs.getImapEmail(context),
-                password,
+                password.orEmpty()
             )
-            val connected = outcome.callAttr("get", "ok").toBoolean()
-            val text = mailClient.callAttr("format_connection_result", outcome).toString()
+            val connected = outcome.ok
+            val text = formatConnectionResult(outcome)
             Log.i(ConnectionLogTag, "check_connection: finished, ok=$connected")
             connected to text
         }
@@ -880,23 +871,18 @@ fun ChatMailApp(
     var selfSenderSource by remember { mutableStateOf<String?>(null) }
     var selfSenderName by remember { mutableStateOf<String?>(null) }
 
-    fun applySelfSender(described: com.chaquo.python.PyObject) {
-        selfSenderDetail = described.callAttr("get", "detail").toString()
+    fun applySelfSender(described: Map<String, Any?>) {
+        selfSenderDetail = described.str("detail").toString()
         // The stored override, deliberately not the resolved name: filling the
         // box with a name the app worked out would turn it into an override
         // the moment anything else on the screen was touched.
-        val override = described.callAttr("get", "override")
-        selfSenderOverride = if (override == null) "" else override.toString()
-        val source = described.callAttr("get", "source")
-        selfSenderSource = source?.toString()
-        val name = described.callAttr("get", "name")
-        selfSenderName = name?.toString()
+        selfSenderOverride = described.str("override") ?: ""
+        selfSenderSource = described.str("source")
+        selfSenderName = described.str("name")
     }
 
     fun refreshSelfSender() {
-        applySelfSender(
-            Python.getInstance().getModule("src.android_api").callAttr("get_self_sender")
-        )
+        applySelfSender(ChatMailApplication.core(context).getSelfSender())
     }
 
     // The one-time "the app worked out who you are" Home card. A separate
@@ -907,21 +893,16 @@ fun ChatMailApp(
     var pendingSelfSenderBannerName by remember { mutableStateOf<String?>(null) }
 
     fun refreshSelfSenderBanner() {
-        val name = Python.getInstance().getModule("src.android_api")
-            .callAttr("get_pending_self_sender_banner")
-        pendingSelfSenderBannerName = name?.toString()
+        pendingSelfSenderBannerName = ChatMailApplication.core(context).getPendingSelfSenderBanner()
     }
 
     fun dismissSelfSenderBanner() {
-        Python.getInstance().getModule("src.android_api").callAttr("clear_self_sender_banner")
+        ChatMailApplication.core(context).clearSelfSenderBanner()
         pendingSelfSenderBannerName = null
     }
 
     fun setSelfSender(name: String) {
-        applySelfSender(
-            Python.getInstance().getModule("src.android_api")
-                .callAttr("set_self_sender", name)
-        )
+        applySelfSender(ChatMailApplication.core(context).setSelfSender(name))
     }
 
     // Every sender name ever seen across every export, most active first --
@@ -930,12 +911,11 @@ fun ChatMailApp(
     // collapsed here to one row per name, summed across chats, since the
     // picker is choosing a name to be, not a chat to be it in.
     fun listChatSenders(): List<String> {
-        val rows = Python.getInstance().getModule("src.android_api")
-            .callAttr("list_chat_senders").asList()
+        val rows = ChatMailApplication.core(context).listChatSenders()
         val counts = LinkedHashMap<String, Long>()
         for (row in rows) {
-            val sender = row.callAttr("get", "sender").toString()
-            val count = row.callAttr("get", "msg_count").toString().toLongOrNull() ?: 0L
+            val sender = row.str("sender").toString()
+            val count = row.long("msg_count") ?: 0L
             counts[sender] = (counts[sender] ?: 0L) + count
         }
         return counts.entries.sortedByDescending { it.value }.map { it.key }
@@ -946,16 +926,15 @@ fun ChatMailApp(
     var lastResult by remember { mutableStateOf("Nothing run yet.") }
 
     fun refreshInbox() {
-        val result = Python.getInstance().getModule("src.android_api").callAttr("list_inbox")
-        inboxFiles = result.asList().map { entry ->
-            val name = entry.callAttr("get", "name").toString()
-            val size = entry.callAttr("get", "size_bytes").toString().toLongOrNull() ?: 0L
+        inboxFiles = ChatMailApplication.core(context).listInbox().map { entry ->
+            val name = entry.str("name").toString()
+            val size = entry.long("size_bytes") ?: 0L
             name to size
         }
     }
 
     fun removeInboxFile(name: String) {
-        Python.getInstance().getModule("src.android_api").callAttr("remove_from_inbox", name)
+        ChatMailApplication.core(context).removeFromInbox(name)
         refreshInbox()
     }
 
@@ -974,9 +953,8 @@ fun ChatMailApp(
         // "{'ok': True, 'display_name': ..., 'media_count': 15, ...}" -- straight
         // into the user-facing result panel. preview_text() is the same call with
         // format_preview() applied, and is what every other call site already uses.
-        val preview = Python.getInstance()
-            .getModule("src.android_api")
-            .callAttr("preview_text", outcome.file.absolutePath, AppPrefs.getCutoffDate(context))
+        val preview = ChatMailApplication.core(context)
+            .previewText(outcome.file.absolutePath, AppPrefs.getCutoffDate(context))
         lastResult = "Imported ${outcome.file.name}\n\n$preview"
     }
 
@@ -1716,8 +1694,7 @@ fun ChatMailApp(
                     onImportPick = { navController.navigate("importPicker") },
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
-                        Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                        ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
                             .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
@@ -1759,8 +1736,7 @@ fun ChatMailApp(
                     files = inboxFiles,
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
-                        Python.getInstance().getModule("src.android_api")
-                            .callAttr("preview_text", path, AppPrefs.getCutoffDate(context))
+                        ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
                             .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },

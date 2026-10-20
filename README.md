@@ -15,6 +15,8 @@ It ships as an Android app (Kotlin/Compose, embedding the Python sync engine
 in `src/`). A Windows desktop app existed alongside it and ended at v2.1.5
 (tag `windows-final`); the repo is Android-only from here on.
 
+From 2.9.0 the app needs Android 11 or newer; phones on Android 7 to 10 stay on 2.2.0.
+
 > **Looking for the non-technical user guide?** See [docs/user-guide.md](docs/user-guide.md).
 
 ---

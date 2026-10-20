@@ -12,24 +12,27 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.chaquo.python.Python
+import com.chatmailsync.core.mail.ChunkSize
+import com.chatmailsync.core.mail.ImapTransport
+import com.chatmailsync.core.mail.stripSecret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
  * Phase A4: runs one real (non-dry-run) sync pass — inbox -> parse -> dedup
- * -> mail insert/append -> processed — via the shared Python core, as a foreground
+ * -> mail insert/append -> processed — via the shared Kotlin core, as a foreground
  * service so Android doesn't kill it mid-sync.
  *
- * Phase A5: reports live progress by polling android_api.get_progress() on a
- * timer while sync() runs on another thread — Chaquopy has no supported way
- * for Python to call back into an arbitrary Kotlin object as a function (a
- * Kotlin object with a __call__ method raised "is not callable" when tried
- * in Phase A4), so a push-callback bridge isn't an option.
+ * Phase A5: reports live progress by polling CoreApi.progressState() on a
+ * timer while sync() runs on another thread. (It was a poll because Chaquopy
+ * could not call back into Kotlin; the poll stays, it also keeps WorkManager
+ * writes to one per change.)
  *
  * The IMAP password deliberately never travels through inputData.
  * WorkManager persists a request's Data to an on-disk Room database
@@ -121,7 +124,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         setForeground(createForegroundInfo(if (dryRun) "Starting test run…" else "Starting sync…"))
 
         return coroutineScope {
-            val androidApi = Python.getInstance().getModule("src.android_api")
+            val core = ChatMailApplication.core(applicationContext)
             // What was last handed to WorkManager/the notification, as
             // distinct from what the last event said. The poll below runs on a
             // fixed 250ms tick whether or not any event arrived, and it used
@@ -157,15 +160,15 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 // what they say.
                 while (isActive) {
                     val state = try {
-                        androidApi.callAttr("progress_state")
+                        core.progressState()
                     } catch (_: Exception) {
                         null
                     }
-                    val text = state?.let { stateString(it, "line") }?.takeIf { it.isNotBlank() }
+                    val text = state?.str("line")?.takeIf { it.isNotBlank() }
                     if (text != null) {
-                        val fraction = stateString(state, "fraction")?.toFloatOrNull() ?: -1f
-                        val percent = stateString(state, "percent")?.toIntOrNull() ?: -1
-                        val log = stateString(state, "log") ?: ""
+                        val fraction = state.str("fraction")?.toFloatOrNull() ?: -1f
+                        val percent = state.str("percent")?.toIntOrNull() ?: -1
+                        val log = state.str("log") ?: ""
                         if (progressOpen.get() && (text != postedText ||
                             fraction != postedFraction ||
                             log != postedLog)
@@ -189,13 +192,13 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             }
             try {
                 val statsResult =
-                    withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, androidApi)
+                    withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, core)
                 progressOpen.set(false)
                 pollJob.cancel()
                 postResult(
                     syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
                 )
-                Result.success(workDataOf(KEY_RESULT to statsResult.format()))
+                Result.success(workDataOf(KEY_RESULT to scrubSecret(statsResult.format(), currentSecret())))
             } catch (e: CancellationException) {
                 // WorkManager stopped us (system stop, REPLACE enqueue, cancelUniqueWork).
                 // Not a failure: quiet notice, then rethrow so coroutine cancellation works
@@ -207,8 +210,12 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             } catch (e: Exception) {
                 progressOpen.set(false)
                 pollJob.cancel()
-                postResult(syncFailedNotice(e.message))
-                Result.failure(workDataOf(KEY_ERROR to (e.message ?: e.toString())))
+                // SEC-06(3): the password is never put into Data, the notification or the result.
+                // CoreApi already strips it from its own errors; this covers everything else
+                // (transport set-up, the OS, anything that echoes the login).
+                val safe = scrubSecret(e.message ?: e.toString(), currentSecret())
+                postResult(syncFailedNotice(safe))
+                Result.failure(workDataOf(KEY_ERROR to safe))
             } finally {
                 pollJob.cancel()
                 // Reconcile watched-folder synced_file_policy against
@@ -233,8 +240,16 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         dryRun: Boolean,
         trigger: String,
         chatFilter: String?,
-        androidApi: com.chaquo.python.PyObject,
+        core: com.chatmailsync.core.mail.CoreApi,
     ): SyncStatsResult = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        // CUT-02: the engine asks this before every email. A Stop persisted for this work (set
+        // before the engine started, or while it waited its turn) and a cancelled worker (REPLACE,
+        // system stop) both stop the run themselves, so a cancelled worker's blocking sync() winds
+        // down after the email in flight instead of running on beside its replacement.
+        val workJob = currentCoroutineContext().job
+        val stopMark = AppPrefs.stopMark(applicationContext)
+        val myId = id.toString()
+        val externalStop = { stopMark.isStopped(myId) || !workJob.isActive }
         // Built fresh on every run, never held past this function — the IMAP
         // password is read from SecretStore here (not passed in), so it
         // never sits in a field, a log, or WorkManager's Data.
@@ -245,8 +260,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 val port = AppPrefs.getImapPort(applicationContext)
                 val email = AppPrefs.getImapEmail(applicationContext)
                 val password = SecretStore.getSecret(applicationContext, AppPrefs.getImapPasswordSecretKey())
-                Python.getInstance().getModule("src.mail_client")
-                    .callAttr("build_imap_transport", host, port, email, password)
+                ImapTransport(host, port, email, password.orEmpty())
             }
             else -> null
         }
@@ -261,14 +275,21 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             // mail out messages the user asked never to receive. A failed sync
             // can be retried; a sent email cannot be unsent.
             val cutoff = AppPrefs.getCutoffDate(applicationContext)
-            val result = androidApi.callAttr(
-                "sync", transport, chunkSize, dryRun, chatFilter, null, trigger, cutoff,
+            val result = core.sync(
+                transport = transport,
+                chunkSize = parseChunkSize(chunkSize),
+                dryRun = dryRun,
+                chatFilter = chatFilter,
+                onProgress = null,
+                trigger = trigger,
+                cutoffDate = cutoff,
+                externalStop = externalStop,
             )
             SyncStatsResult.from(result)
         } finally {
             if (backend == AppPrefs.MAIL_BACKEND_IMAP && transport != null) {
                 try {
-                    transport.callAttr("close")
+                    transport.close()
                 } catch (_: Exception) {
                     // Best-effort logout — the sync result itself is unaffected.
                 }
@@ -276,11 +297,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
-    /** One field out of progress_state()'s dict, or null. Kotlin never has to
-     * interpret these — src/progress.py has already decided what they say. */
-    private fun stateString(state: com.chaquo.python.PyObject?, key: String): String? =
+    /** The saved app password, read at the moment it is needed to scrub a text. */
+    private fun currentSecret(): String? =
         try {
-            state?.callAttr("get", key)?.toString()?.takeIf { it != "None" }
+            SecretStore.getSecret(applicationContext, AppPrefs.getImapPasswordSecretKey())
         } catch (_: Exception) {
             null
         }
@@ -421,18 +441,11 @@ private data class SyncStatsResult(
     }
 
     companion object {
-        fun from(result: com.chaquo.python.PyObject): SyncStatsResult {
-            fun intOf(key: String): Int =
-                try { result.callAttr("get", key)?.toString()?.toIntOrNull() ?: 0 } catch (_: Exception) { 0 }
+        fun from(result: Map<String, Any?>): SyncStatsResult {
+            fun intOf(key: String): Int = result.long(key)?.toInt() ?: 0
 
-            fun stringsOf(key: String): List<String> {
-                val obj = try { result.callAttr("get", key) } catch (_: Exception) { null }
-                return try {
-                    obj?.asList()?.map { it.toString() } ?: emptyList()
-                } catch (_: Exception) {
-                    emptyList()
-                }
-            }
+            fun stringsOf(key: String): List<String> =
+                (result[key] as? List<*>)?.map { it.toString() } ?: emptyList()
 
             val errors = stringsOf("errors")
             // Older Python side, or a dry run, simply has no such key -- and
@@ -449,7 +462,7 @@ private data class SyncStatsResult(
                 messagesSynced = intOf("messages_synced"),
                 messagesSkipped = intOf("messages_skipped"),
                 messagesCutoff = intOf("messages_cutoff"),
-                stopped = try { result.callAttr("get", "stopped")?.toString() == "True" } catch (_: Exception) { false },
+                stopped = result.flag("stopped"),
                 chatsRecovered = intOf("chats_recovered"),
                 errors = errors,
                 mediaOmitted = mediaOmitted,
@@ -496,3 +509,20 @@ internal fun syncFailedNotice(message: String?): ResultNotice =
 /** BUG-13: WorkManager cancelled the worker. Never a failure, never an alert; no stats on this path. */
 internal fun syncCancelledNotice(dryRun: Boolean): ResultNotice =
     ResultNotice(if (dryRun) "Test run stopped" else "Sync stopped", alert = false)
+
+/**
+ * SEC-06(3): [text] with [secret] (the saved app password) taken out. Applied where the worker
+ * writes a text that leaves it: the failure message in Data, the notification, the result.
+ */
+internal fun scrubSecret(text: String, secret: String?): String = stripSecret(text, secret)
+
+/**
+ * The saved chunk-size text ("day", "hour", "week", or a message count) as the core's type.
+ * Anything unknown falls back to a day, the default the Python core used.
+ */
+internal fun parseChunkSize(text: String?): ChunkSize = when (text?.trim()?.lowercase()) {
+    "hour" -> ChunkSize.Hour
+    "week" -> ChunkSize.Week
+    null, "", "day" -> ChunkSize.Day
+    else -> text.trim().toIntOrNull()?.takeIf { it > 0 }?.let { ChunkSize.Count(it) } ?: ChunkSize.Day
+}

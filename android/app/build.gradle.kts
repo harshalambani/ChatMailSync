@@ -42,8 +42,8 @@ android {
         // released without ever being published; v1.4.1 was the first release
         // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
         // and this repo is Android-only from here on.
-        versionCode = 42
-        versionName = "2.2.0"
+        versionCode = 43
+        versionName = "2.9.0"
 
         // arm64-v8a only. This used to also include x86_64 for emulator
         // testing, with an attempted per-buildType override trimming it back
@@ -104,6 +104,13 @@ android {
     // apps to drop the block since no one outside Google can inspect it —
     // dropping it removes that ask on every channel with no functional
     // effect.
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged manifest/resources on the test classpath.
+            isIncludeAndroidResources = true
+        }
+    }
+
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
@@ -208,12 +215,16 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
 
+    implementation(project(":core"))
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // JVM unit tests only -- no Robolectric, no androidTest runtime. The one
-    // things tested here are Context-free on purpose, which is what lets
-    // plain JUnit assertions check the same truths their Python twins check.
-    // Adding an Android test runtime to assert them would cost more than it
-    // proves.
+    // JVM unit tests. CUT-02 deliberately reverses the old "no Robolectric" rule: the Android
+    // StateDb (AndroidStateDb, SQLiteDatabase) is the one piece the plain JVM cannot run, and an
+    // upgrade over a Python-written database depends on it. Robolectric runs the same contract
+    // cases :core uses for its JDBC double against the real adapter. It is used for that and
+    // nothing else; the Context-free tests stay plain JUnit.
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

@@ -40,6 +40,13 @@ class StopMark(
         return true
     }
 
+    /**
+     * CUT-02: true while the mark for this exact work is set, WITHOUT clearing it. The engine asks
+     * this before every email, so a Stop that landed before the engine started (or whose
+     * in-memory request was reset by the engine's own start) still stops the run.
+     */
+    fun isStopped(workId: String): Boolean = read() == workId
+
     /** A fresh manual sync is about to be enqueued: drop any stale mark. */
     fun clearForFreshSync() {
         clear()

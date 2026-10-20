@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.chaquo.python.Python
 
 @Composable
 fun ChatDetailScreen(
@@ -75,10 +74,7 @@ fun ChatDetailScreen(
         // Null here means "no override", which is the same empty field as
         // never having set one -- the whole point of get_cutoff returning a
         // plain day rather than the stored midnight instant.
-        cutoffText = Python.getInstance().getModule("src.android_api")
-            .callAttr("get_cutoff", chatId)
-            .callAttr("get", "cutoff_date")
-            ?.toString()?.takeIf { it != "None" } ?: ""
+        cutoffText = ChatMailApplication.core(context).getCutoff(chatId).str("cutoff_date") ?: ""
     }
 
     Scaffold(
@@ -183,8 +179,7 @@ fun ChatDetailScreen(
                                 // refused under the field rather than stored and
                                 // met later as a sync that quietly sent nothing.
                                 if (CutoffDate.isReadable(it)) {
-                                    Python.getInstance().getModule("src.android_api")
-                                        .callAttr("set_cutoff", chatId, it.trim())
+                                    ChatMailApplication.core(context).setCutoff(chatId, it.trim())
                                 }
                             },
                             label = { Text("YYYY-MM-DD") },
@@ -198,8 +193,7 @@ fun ChatDetailScreen(
                                 // the same state as never having set one -- not a
                                 // separate cutoff of nothing.
                                 cutoffText = ""
-                                Python.getInstance().getModule("src.android_api")
-                                    .callAttr("set_cutoff", chatId, "")
+                                ChatMailApplication.core(context).setCutoff(chatId, "")
                             },
                             enabled = cutoffText.isNotEmpty(),
                         ) { Text("Clear") }
@@ -237,15 +231,12 @@ fun ChatDetailScreen(
 
                     Button(
                         onClick = {
-                            // Ask Python how much mail is already out there before
+                            // Ask the core how much mail is already out there before
                             // showing anything, so the dialog can name a real count
                             // and the real folder instead of a vague warning.
-                            val preview = Python.getInstance().getModule("src.android_api")
-                                .callAttr("reset_preview", chatId)
-                            archivedCount = preview.callAttr("get", "archived_count")
-                                ?.toString()?.toIntOrNull() ?: 0
-                            mailboxFolder = preview.callAttr("get", "mailbox_folder")
-                                ?.toString() ?: ""
+                            val preview = ChatMailApplication.core(context).resetPreview(chatId)
+                            archivedCount = preview.long("archived_count")?.toInt() ?: 0
+                            mailboxFolder = preview.str("mailbox_folder") ?: ""
                             resetStage = 1
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -277,15 +268,8 @@ fun ChatDetailScreen(
     // src.state.reset_chat refuses to proceed without.
     val performReset = {
         resetStage = 0
-        val result = Python.getInstance().getModule("src.android_api")
-            .callAttr("reset", chatId, true)
-        val ok = result.callAttr("get", "ok")?.toString() == "True"
-        val fileRestored = result.callAttr("get", "file_restored")?.toString() == "True"
-        resetMessage = when {
-            !ok -> "Reset failed: ${result.callAttr("get", "error")}"
-            fileRestored -> "Reset complete. The export file was moved back to your inbox — it'll be re-synced next time you sync."
-            else -> "Reset complete. Re-import the export to rebuild this chat."
-        }
+        val result = ChatMailApplication.core(context).reset(chatId, true)
+        resetMessage = resetResultMessage(result.flag("ok"), result.str("error"))
         chat = loadChatSummaries().find { it.chatId == chatId }
     }
 
@@ -385,10 +369,8 @@ fun ChatDetailScreen(
             confirmText = "Delete",
             onConfirm = {
                 showDeleteConfirm = false
-                val result = Python.getInstance().getModule("src.android_api")
-                    .callAttr("delete_chat", chatId)
-                val ok = result.callAttr("get", "ok")?.toString() == "True"
-                if (ok) onDeleted() else resetMessage = "Delete failed: ${result.callAttr("get", "error")}"
+                val result = ChatMailApplication.core(context).deleteChat(chatId)
+                if (result.flag("ok")) onDeleted() else resetMessage = "Delete failed: ${result.str("error")}"
             },
             onDismiss = { showDeleteConfirm = false },
         ) {
@@ -405,3 +387,11 @@ fun ChatDetailScreen(
         }
     }
 }
+
+/**
+ * PRIV-03: what the Reset result says. The export is never put back in the inbox any more (no
+ * copy is kept), so the success text always tells the user to export the chat again.
+ */
+internal fun resetResultMessage(ok: Boolean, error: String?): String =
+    if (!ok) "Reset failed: $error"
+    else "Reset complete. Export this chat again from WhatsApp and share it to this app to rebuild it."
