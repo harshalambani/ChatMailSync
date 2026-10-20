@@ -211,7 +211,16 @@ class SyncManager(
         stats.messagesSkipped += nSkipped
         stats.messagesCutoff += nCutoff
 
-        // Nothing new to push.
+        // BUG-12: an export that reads as zero messages is NOT a finished sync. It is kept in
+        // inbox/, counted as a failed file and reported, never deleted without a word.
+        if (all.isEmpty()) {
+            stats.filesFailed += 1
+            stats.errors.add(clean("${file.name}: no messages found - kept in the inbox"))
+            if (runId != null) repo.failSyncRun(runId, "no messages found in this export")
+            return
+        }
+
+        // Nothing new to push (everything already sent, or before the cutoff).
         if (new.isEmpty()) {
             stats.filesSkipped += 1
             if (runId != null) {

@@ -178,7 +178,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 val statsResult =
                     withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, androidApi)
                 val label = if (dryRun) "Test run complete" else "Sync complete"
-                notify("$label — ${statsResult.messagesSynced} message(s) synced")
+                notify(syncNotificationText(label, statsResult.messagesSynced, statsResult.filesFailed))
                 Result.success(workDataOf(KEY_RESULT to statsResult.format()))
             } catch (e: Exception) {
                 notify("Sync failed: ${e.message}")
@@ -321,11 +321,16 @@ private data class SyncStatsResult(
     val stopped: Boolean,
 ) {
     fun format(): String {
-        val lines = mutableListOf(
-            if (stopped) "Stopped early — $messagesSynced message(s) synced" else "Done",
+        val lines = mutableListOf<String>()
+        // BUG-12: a failure line first, so it is not buried under the counts.
+        exportsKeptLine(filesFailed)?.let { lines.add(it) }
+        lines.add(
+            if (stopped) "Stopped early — $messagesSynced message(s) synced" else "Done"
+        )
+        lines.addAll(listOf(
             "Files   : found=$filesFound  synced=$filesSynced  skipped=$filesSkipped  failed=$filesFailed",
             "Messages: parsed=$messagesParsed  synced=$messagesSynced  skipped=$messagesSkipped",
-        )
+        ))
         if (messagesCutoff > 0) {
             lines.add("Held back $messagesCutoff message(s) from before your cutoff date")
         }
@@ -377,4 +382,21 @@ private data class SyncStatsResult(
             )
         }
     }
+}
+
+/**
+ * BUG-12: the plain line telling the user how many exports could not be read and were kept in
+ * the inbox, or null when none failed. Never carries a chat name.
+ */
+internal fun exportsKeptLine(filesFailed: Int): String? = when {
+    filesFailed <= 0 -> null
+    filesFailed == 1 -> "1 export could not be read and was kept - see Sync log"
+    else -> "$filesFailed exports could not be read and were kept - see Sync log"
+}
+
+/** The finish notification: the existing text, plus the kept-export line when any failed. */
+internal fun syncNotificationText(label: String, messagesSynced: Int, filesFailed: Int): String {
+    val base = "$label — $messagesSynced message(s) synced"
+    val kept = exportsKeptLine(filesFailed) ?: return base
+    return "$base; $kept"
 }

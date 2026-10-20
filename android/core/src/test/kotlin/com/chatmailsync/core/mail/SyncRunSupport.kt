@@ -5,6 +5,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.rules.TemporaryFolder
 
 /**
@@ -43,6 +44,8 @@ internal class CountingTransport(
 internal class ProcessDeath : Error("simulated process death")
 
 internal object SyncRunSupport {
+
+    private const val ZERO_MESSAGE_SCENARIO = "other_files_ignored_and_empty_chat_is_up_to_date"
 
     /** Run every scenario of [g] and compare each step with the Python result. */
     fun checkScenarios(tmp: TemporaryFolder, g: JsonNode) {
@@ -108,7 +111,13 @@ internal object SyncRunSupport {
                 assertEquals("$label crashed", step.asObj().fields["crashed"] != null, crashed)
 
                 if (!crashed) {
-                    val want = step["stats"].asObj().fields
+                    // BUG-12 (deliberate difference from Python): a zero-message export is a failed file.
+                    val zeroMsg = name == ZERO_MESSAGE_SCENARIO
+                    val want = if (zeroMsg) {
+                        step["stats"].asObj().fields.filterKeys { it !in setOf("errors", "files_failed", "files_skipped") }
+                    } else {
+                        step["stats"].asObj().fields
+                    }
                     val got = stats!!.asMap()
                     for ((k, v) in want) {
                         val actual = got[k]
@@ -117,8 +126,15 @@ internal object SyncRunSupport {
                             else -> assertEquals("$label $k", v.asInt(), actual)
                         }
                     }
-                    assertEquals("$label stats keys", want.keys, got.keys)
-                    assertEquals("$label text", step["statsText"].asString(), stats.toString())
+                    if (zeroMsg) {
+                        assertEquals("$label errors (BUG-12)", listOf("WhatsApp Chat with Meera Iyer.txt: no messages found - kept in the inbox"), got["errors"])
+                        assertEquals("$label files_failed (BUG-12)", 1, got["files_failed"])
+                        assertEquals("$label files_skipped (BUG-12)", 0, got["files_skipped"])
+                        assertTrue("$label text (BUG-12)", stats.toString().contains("failed=1"))
+                    } else {
+                        assertEquals("$label stats keys", want.keys, got.keys)
+                        assertEquals("$label text", step["statsText"].asString(), stats.toString())
+                    }
                 }
 
                 assertEquals(
@@ -130,7 +146,11 @@ internal object SyncRunSupport {
 
                 val d = dump(dbPath, inbox, processed)
                 val ws = step["state"]
-                assertEquals("$label runs", asRows(ws["runs"]), d.runs)
+                if (name == ZERO_MESSAGE_SCENARIO) {
+                    // BUG-12: Python completes the run; Kotlin fails it with a plain reason.
+                    assertEquals("$label runs (BUG-12)", listOf("failed"), d.runs.map { it[2] })
+                    assertEquals("$label run reason (BUG-12)", listOf(true), d.runs.map { r -> r.any { it == "no messages found in this export" } })
+                } else assertEquals("$label runs", asRows(ws["runs"]), d.runs)
                 assertEquals("$label hashes", asRows(ws["hashes"]), d.hashes)
                 val wantChats = Bug11Differences.chats[label]
                 if (wantChats != null) assertEquals("$label chats (BUG-11)", wantChats, d.chats.toString())
@@ -139,7 +159,9 @@ internal object SyncRunSupport {
                 if (wantSenders != null) assertEquals("$label senders (BUG-11)", wantSenders, d.senders.toString())
                 else assertEquals("$label senders", asRows(ws["senders"]), d.senders)
                 assertEquals("$label appState", asRows(ws["appState"]), d.appState)
-                assertEquals("$label inbox", ws["inbox"].asArr().items.map { it.asString() }, d.inbox)
+                if (name == ZERO_MESSAGE_SCENARIO) {
+                    assertEquals("$label inbox (BUG-12)", listOf("WhatsApp Chat with Meera Iyer.txt", "notes.md", "pic.jpg"), d.inbox)
+                } else assertEquals("$label inbox", ws["inbox"].asArr().items.map { it.asString() }, d.inbox)
                 // PRIV-03 (deliberate difference from Python, which keeps moved exports here): a
                 // completed sync deletes the export, so processed/ is always empty. inbox/ above
                 // is still compared with Python's: a file Python moved out is simply gone here too.
