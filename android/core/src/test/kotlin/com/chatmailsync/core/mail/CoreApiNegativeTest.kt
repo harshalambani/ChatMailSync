@@ -195,7 +195,7 @@ class CoreApiNegativeTest {
         assertEquals(false, r["file_restored"])
         assertEquals(before, snapshot(a))
         assertTrue(a.listInbox().isEmpty())
-        assertEquals(1, a.paths.processedDir.listFiles()?.size)
+        assertTrue("PRIV-03: nothing is kept", a.paths.processedDir.listFiles().orEmpty().isEmpty())
     }
 
     @Test

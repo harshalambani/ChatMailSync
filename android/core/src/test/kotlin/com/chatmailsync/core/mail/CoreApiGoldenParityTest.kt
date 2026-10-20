@@ -68,11 +68,15 @@ class CoreApiGoldenParityTest {
     fun everyStepMatchesPython() {
         val expected = golden("core_api_golden.json")["steps"].asArr().items
         var n = 0
-        fun rec(name: String, value: Any?) {
+        // [kotlinDiff]: fields where Kotlin deliberately differs from the frozen Python result.
+        fun rec(name: String, value: Any?, kotlinDiff: Map<String, JsonNode> = emptyMap()) {
             val step = expected[n++]
             assertEquals("step $n name", step["call"].asString(), name)
             val actual = mask(parseJson(CoreApiJson.render(prep(value))))
-            assertEquals("step $n ($name)", mask(step["result"]), actual)
+            val want = step["result"].let { r ->
+                if (kotlinDiff.isEmpty()) r else JsonNode.Obj((r as JsonNode.Obj).fields + kotlinDiff)
+            }
+            assertEquals("step $n ($name)", mask(want), actual)
         }
 
         val root = tmp.newFolder("root")
@@ -176,7 +180,13 @@ class CoreApiGoldenParityTest {
         rec("reset_preview_meera", a.resetPreview("Meera Iyer"))
         rec("reset_preview_nobody", a.resetPreview("no body's"))
         rec("reset_unconfirmed", a.reset("Meera Iyer"))
-        rec("reset_confirmed", a.reset("Meera Iyer", true))
+        // PRIV-03 (deliberate difference from Python): the export was deleted after its sync,
+        // so Reset restores nothing; file_restored is always false. The user shares a fresh
+        // export, which the test stands in for by writing the same file back to the inbox.
+        rec("reset_confirmed", a.reset("Meera Iyer", true), mapOf("file_restored" to JsonNode.Bool(false)))
+        assertTrue("nothing kept in processed/", a.paths.processedDir.listFiles().orEmpty().isEmpty())
+        assertTrue("no file came back by itself", a.listInbox().none { it["name"] == meera })
+        File(inbox, meera).writeText(chatText(listOf(20, 21, 22)))
         rec("list_inbox_after_reset", a.listInbox())
         rec("reset_again_nothing_to_restore", a.reset("meera_iyer", true))
         rec("reset_nobody", a.reset("nobody"))

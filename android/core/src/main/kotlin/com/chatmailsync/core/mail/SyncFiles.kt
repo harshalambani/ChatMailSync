@@ -3,10 +3,11 @@ package com.chatmailsync.core.mail
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 
 /**
  * File-system half of `src/sync_manager.py`: which inbox files a run looks at,
- * and the inbox -> processed move. No database, no mailbox. Not wired into
+ * and the delete-after-sync cleanup. No database, no mailbox. Not wired into
  * `:app`.
  */
 
@@ -49,48 +50,54 @@ fun listInboxFiles(inboxDir: File): List<File> {
 }
 
 /**
- * Mirrors `_superseded_exports`: every processed/ file that a fresh import of
- * [filename] replaces. That is the canonical name plus `_dup_<timestamp>`
- * variants older versions made. Matching is deliberately narrow (stem +
- * "_dup_" + same suffix) so an unrelated chat whose name merely starts the same
- * way is never touched.
+ * PRIV-03: a completed sync no longer keeps a copy of the export. Deletes [file] (the text
+ * or zip, with any media inside it) once its mail is delivered. It refuses, returning false,
+ * for anything that is not a regular, non-link file directly inside [inboxDir], so a
+ * `source_filename` such as `../x` can never reach a file outside the inbox. [deleter] is
+ * injectable for tests; it may throw, and the caller treats that as "left in inbox/".
  */
-fun supersededExports(processedDir: File, filename: String): List<File> {
-    val stem = pyStem(filename)
-    val suffix = pySuffix(filename)
-    val entries = processedDir.listFiles() ?: return emptyList()
-    val out = mutableListOf<File>()
-    for (p in entries) {
-        if (!p.isFile) continue
-        if (p.name == filename) {
-            out.add(p)
-        } else if (pySuffix(p.name) == suffix && pyStem(p.name).startsWith("${stem}_dup_")) {
-            out.add(p)
-        }
-    }
-    return out
+internal fun deleteCompletedExport(
+    file: File,
+    inboxDir: File,
+    deleter: (File) -> Unit = { Files.delete(it.toPath()) },
+): Boolean {
+    val path = file.toPath()
+    if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false
+    val parent = file.absoluteFile.parentFile ?: return false
+    if (parent.canonicalFile != inboxDir.canonicalFile) return false
+    deleter(file)
+    return true
 }
 
 /**
- * Mirrors `_move_to_processed`: move [file] into [processedDir], keeping one
- * export per chat. The newer export takes the canonical name and the copy it
- * supersedes goes, including `_dup_` leftovers. Pruning is housekeeping: a
- * failure to remove a stale copy never fails a sync that already delivered.
- *
- * The move itself may throw, as Python's does; the caller records that as a
- * failed run.
+ * PRIV-03: clears the copies older versions kept in processed/. Removes only entries
+ * directly inside [processedDir]: regular files, and symbolic links as links (the target is
+ * never touched). Sub-directories and anything else are left alone and not entered. Does
+ * nothing when processed/ is itself a link or is the same folder as [inboxDir], and never
+ * touches inbox/. One entry failing does not stop the rest. Returns how many were removed.
  */
-fun moveToProcessed(file: File, processedDir: File) {
-    val dest = File(processedDir, file.name)
-    val superseded = supersededExports(processedDir, file.name).filter { it != file }
-    if (dest.exists()) dest.delete()
-    Files.move(file.toPath(), dest.toPath())
-    for (stale in superseded) {
-        if (stale == dest) continue
+internal fun sweepKeptCopies(processedDir: File, inboxDir: File): Int {
+    try {
+        val root = processedDir.toPath()
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return 0
+        if (processedDir.canonicalFile == inboxDir.canonicalFile) return 0
+    } catch (_: IOException) {
+        return 0
+    }
+    val entries = processedDir.listFiles() ?: return 0
+    var removed = 0
+    for (entry in entries) {
         try {
-            Files.delete(stale.toPath())
+            val p = entry.toPath()
+            val isLink = Files.isSymbolicLink(p)
+            if (!isLink && !Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)) continue
+            if (!isLink && entry.canonicalFile.parentFile != processedDir.canonicalFile) continue
+            Files.delete(p)
+            removed += 1
         } catch (_: IOException) {
             // housekeeping only
+        } catch (_: SecurityException) {
         }
     }
+    return removed
 }

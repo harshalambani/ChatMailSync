@@ -140,7 +140,10 @@ internal object SyncRunSupport {
                 else assertEquals("$label senders", asRows(ws["senders"]), d.senders)
                 assertEquals("$label appState", asRows(ws["appState"]), d.appState)
                 assertEquals("$label inbox", ws["inbox"].asArr().items.map { it.asString() }, d.inbox)
-                assertEquals("$label processed", ws["processed"].asArr().items.map { it.asString() }, d.processed)
+                // PRIV-03 (deliberate difference from Python, which keeps moved exports here): a
+                // completed sync deletes the export, so processed/ is always empty. inbox/ above
+                // is still compared with Python's: a file Python moved out is simply gone here too.
+                assertEquals("$label processed (PRIV-03)", emptyList<String>(), d.processed)
             }
         }
     }
