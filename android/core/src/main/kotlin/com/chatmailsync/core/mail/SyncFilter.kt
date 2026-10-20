@@ -108,6 +108,10 @@ fun resolveSelfSenderFor(repo: StateRepository, displayName: String, messages: L
     return resolved.name
 }
 
+/** Per-sender message counts for one email's messages (BUG-11). */
+fun senderCounts(messages: List<ParsedMessage>): Map<String, Int> =
+    messages.groupingBy { it.sender }.eachCount()
+
 /**
  * Mirrors `_record_chat_senders`: tally per-sender counts over every parsed
  * message, with the exact pushed count for senders that contributed and 0 for

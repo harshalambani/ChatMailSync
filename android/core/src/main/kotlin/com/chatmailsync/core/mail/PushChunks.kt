@@ -42,6 +42,13 @@ class PreparedEmail(
 )
 
 /** Progress callback: (email index 1-based, total emails, messages done, total messages, messages in this email). */
+/**
+ * BUG-11: called with an accepted email's [PushResult] and the label id it went under,
+ * strictly AFTER the transport accepted it and right BEFORE the matching [OnChunk]. Lets the
+ * caller save the thread id, label id and first anchor Message-ID per email.
+ */
+typealias OnAccepted = (PushResult, String) -> Unit
+
 typealias OnChunk = (Int, Int, Int, Int, List<ParsedMessage>) -> Unit
 
 /**
@@ -195,6 +202,7 @@ fun pushChunks(
     selfSender: String? = null,
     sleeper: Sleeper = SystemSleeper,
     shouldStop: () -> Boolean = { false },
+    onAccepted: OnAccepted? = null,
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
@@ -292,7 +300,9 @@ fun pushChunks(
             }
 
             msgsDone += subChunk.size
-            results.add(PushResult(newMid, response.id, response.threadId, rendered.omissions))
+            val accepted = PushResult(newMid, response.id, response.threadId, rendered.omissions)
+            results.add(accepted)
+            onAccepted?.invoke(accepted, labelId)
             onChunk?.invoke(i + 1, totalEmails, msgsDone, totalMsgs, subChunk)
 
             if (currentAnchor == null) currentAnchor = newMid
@@ -334,6 +344,7 @@ fun pushChat(
     selfSender: String? = null,
     sleeper: Sleeper = SystemSleeper,
     shouldStop: () -> Boolean = { false },
+    onAccepted: OnAccepted? = null,
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -356,6 +367,7 @@ fun pushChat(
         dryRun = dryRun,
         sourcePath = sourcePath,
         onChunk = onChunk,
+        onAccepted = onAccepted,
         selfSender = selfSender,
         sleeper = sleeper,
         shouldStop = {
