@@ -426,7 +426,7 @@ private data class SyncStatsResult(
         // BUG-12: a failure line first, so it is not buried under the counts.
         exportsKeptLine(filesFailed)?.let { lines.add(it) }
         lines.add(
-            if (stopped) "Stopped by you — $messagesSynced message(s) synced" else "Done"
+            if (stopped) "Stopped by you \u2014 $messagesSynced message(s) synced" else "Done"
         )
         lines.addAll(listOf(
             "Files   : found=$filesFound  synced=$filesSynced  skipped=$filesSkipped  failed=$filesFailed",

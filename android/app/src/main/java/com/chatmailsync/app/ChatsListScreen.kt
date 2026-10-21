@@ -459,7 +459,7 @@ fun ChatsListScreen(
                                         ChatStatus.FAILED ->
                                             if (when_.isNotEmpty()) "Failed · $when_" else "Failed"
                                         ChatStatus.STOPPED ->
-                                            if (when_.isNotEmpty()) "Stopped by you · $when_" else "Stopped by you"
+                                            if (when_.isNotEmpty()) "Stopped by you \u00b7 $when_" else "Stopped by you"
                                         else -> if (when_.isNotEmpty()) when_ else "Not synced yet"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
