@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 // behaviour, and the two platforms must not say different things about it.
 
 internal const val PRIVACY_LAST_UPDATED =
-    "Last updated: September 17, 2026 - revised for version 2.1.5."
+    "Last updated: October 21, 2026 - revised for version 2.9.0."
 
 internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "Summary" to listOf(
@@ -64,10 +64,11 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "password - a separate credential your provider issues for one application, which " +
             "you can revoke at any time without changing your real password.",
         "• That app password is stored only on your own device and is sent only to the " +
-            "IMAP server you named. It is encrypted at rest on both platforms: with the Android " +
-            "Keystore on Android, and with Windows DPAPI on Windows, inside the app's own data " +
-            "folder readable only by your Windows user account. Because both keys are tied to " +
-            "the device, a saved password does not travel to another phone or PC.",
+            "IMAP server you named. It is encrypted at rest with the Android Keystore, inside the " +
+            "app's own private storage. Android's own backup can carry the encrypted copy to a " +
+            "new phone (see the section on backups below), but the key that opens it never " +
+            "leaves the phone it was made on, so the copy cannot be read anywhere else and you " +
+            "enter the password again on the new phone.",
         "• The app uses the IMAP APPEND command, which adds a message to a folder. It " +
             "creates the folders it needs and lists folder names to check whether they already " +
             "exist. It does not fetch, search, modify or delete any message already in your " +
@@ -80,12 +81,34 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "own privacy policy, not this one.",
     ),
     "Data retention and deletion" to listOf(
-        "The developer retains nothing, because the developer never receives anything. On your " +
-            "own device, the saved app password is kept until you clear it in the app or " +
-            "uninstall, and the local dedup database is stored until you uninstall or clear the " +
-            "app's data. That database holds the names of the chats you have synced, the export " +
-            "filenames, and a one-way hash of each message it has sent - no message text and no " +
+        "The developer retains nothing, because the developer never receives anything. This is " +
+            "everything version 2.9.0 keeps on your own device:",
+        "• The export you import, until its sync is finished. The app holds its own copy of " +
+            "the export file (the text, and any media if it is a zip) in its private storage. " +
+            "When a sync of that chat completes, the app deletes that copy. If the sync fails, " +
+            "is stopped, or finds no messages in the file, the copy is kept so you can try " +
+            "again, and it is deleted when a later sync of it completes. The original file, " +
+            "wherever you keep it, is not touched by this; the only thing that acts on it is " +
+            "the watched-folder setting you choose (leave it, move it, or delete it).",
+        "• A small database, until you uninstall or clear the app's data. It holds the names " +
+            "of the chats you have synced and the export filenames; for each message sent, a " +
+            "one-way hash and the message's time; for each chat, the names or phone numbers of " +
+            "the people who appear in it, with the first and last time each was seen and how " +
+            "many messages each sent; the history of sync runs (times, counts and any error " +
+            "text); and the identifiers of the mailbox folder, conversation and message the " +
+            "app uses to continue a chat in the same place. It holds neither message text nor " +
             "attachments.",
+        "• Your settings. Your email address, IMAP host and port, the folder you watch, your " +
+            "theme and batch choices, and the saved app password (encrypted), which is kept " +
+            "until you clear it in the app or uninstall.",
+        "If you have version 2.2.0 or earlier: those versions kept a copy of every export " +
+            "after it had synced, in the app's private storage (a folder named processed), " +
+            "with no time limit. It was the whole export, message text and any media " +
+            "included, one copy per chat (versions before 2.0.0 could keep more than one). " +
+            "You could not see that folder from outside the app. Version 2.9.0 deletes those " +
+            "copies: the first time a sync runs after you update, it clears that folder. " +
+            "Until that sync has run, the copies are still there. Uninstalling the app or " +
+            "clearing its data removes them too.",
         "Emails the app has added to your mailbox are yours - delete them like any other " +
             "message at any time. The app cannot do it for you, and that is by design rather " +
             "than an omission: it holds no permission to delete anything in your mailbox, so " +
@@ -98,25 +121,35 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "and sent directly from your device to your mail provider's IMAP server over TLS. " +
             "There is no intermediate server operated by the developer that your messages, " +
             "attachments, or credentials ever pass through.",
-        "The app keeps a small local database on your device - chat names, sync status, and a " +
-            "hash of each message sent - purely to avoid sending the same message twice. It " +
-            "stays on your device unless you export a backup of it yourself. Deleting the app " +
-            "removes it.",
+        "The app also keeps a small local database on your device, described under \"Data " +
+            "retention and deletion\" above, purely to avoid sending the same message twice. " +
+            "Apart from the backup routes in the next section, it stays on your device. " +
+            "Deleting the app removes it.",
     ),
     "Backups, and moving to a new device" to listOf(
-        "A new phone with no copy of that database would re-send your entire history, so the " +
-            "app can write a backup file for you to carry across. It is written only when you " +
-            "ask for one, never automatically and never anywhere but where you choose to put it.",
+        "Android's own backup. The app allows Android to back up two things: the database " +
+            "described above and the app's preferences. Android sends them to your Google " +
+            "account's device backup, if you have that turned on, and carries them across in a " +
+            "phone-to-phone transfer. The exports, media and the Keystore key are not " +
+            "included. The preferences include the encrypted app password, but the key that " +
+            "opens it never leaves the phone it was made on, so on a new phone the copy cannot " +
+            "be read and the app asks for the password once. This backup is controlled in your " +
+            "phone's own settings, where you can switch it off.",
+        "The backup file you write yourself. A new phone with no copy of that database would " +
+            "re-send your entire history, so the app can also write a backup file for you to " +
+            "carry across. It is written only when you ask for one, never automatically and " +
+            "never anywhere but where you choose to put it.",
         "What the file contains is fixed and deliberately narrow: the dedup database described " +
-            "above, and a short list of preferences - theme, batch size, IMAP host, port and " +
-            "email address. It contains no password and no credential of any kind. The app " +
+            "above, and a short list of preferences - theme, batch size, mail provider, port " +
+            "and email address. It contains no password and no credential of any kind. The app " +
             "builds it from a list of keys that are permitted to travel rather than by removing " +
             "ones known to be secret, and it refuses to write the file at all if a key that " +
             "looks like a credential ever appears on that list. Your new device asks you for " +
             "the app password once, as a fresh install would.",
         "The backup is an ordinary zip file and it is not encrypted. Once written it is a file " +
             "like any other: the app does not know where you put it and cannot reach it again. " +
-            "Because it names the chats you have synced and your email address, treat it as you " +
+            "Because it names the chats you have synced, the people in them and your email " +
+            "address, treat it as you " +
             "would any personal document, and prefer moving it directly between your own " +
             "devices over leaving it somewhere shared.",
     ),
@@ -130,13 +163,14 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "data travels only between your own device and your own mail provider's servers, so " +
             "there is no third-party system that could store, log, or leak it.",
         "• Credentials stay on your device. The app password is stored only in local app " +
-            "storage, encrypted with a key tied to that device (Windows DPAPI on Windows; the " +
-            "Android Keystore on Android). It is never transmitted anywhere except to the IMAP " +
+            "storage, encrypted with a key tied to that device (the Android Keystore). It is never transmitted anywhere except to the IMAP " +
             "server you named, and never written to a log line or an error message.",
-        "• Minimal local footprint. The only thing the app keeps is a small on-device " +
-            "database of chat names, sync status and message hashes, used purely to avoid " +
-            "re-sending the same message. It contains no message text and no attachments, and " +
-            "it leaves your device only in a backup you export yourself.",
+        "• Limited local footprint. Apart from your settings, the app keeps a small " +
+            "on-device database (chat names, the people in each chat, sync history and " +
+            "message hashes), used purely to avoid re-sending the same message, and it keeps " +
+            "your export file only until its sync is finished. The database contains neither " +
+            "message text nor attachments. It leaves your device only in a backup you " +
+            "export yourself, or in Android's own backup and device transfer described above.",
         "• You control access and can revoke it instantly. An app password is issued by " +
             "your provider for one application and can be revoked there at any time, without " +
             "changing your real password (see the next section).",
