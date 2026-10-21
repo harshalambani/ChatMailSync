@@ -55,7 +55,7 @@ class MigrationGoldenParityTest {
         openDb(db).use { d ->
             val present = d.query("SELECT name FROM sqlite_master WHERE type='table'").map { it["name"] as String }.toSet()
             for (t in listOf("chats", "sync_runs", "message_hashes", "chat_cutoffs", "chat_senders", "app_state", "imported_bundles")) {
-                if (t in present) out[t] = d.query("SELECT * FROM $t").map(::canon).sorted()
+                if (t in present) out[t] = d.query("SELECT * FROM $t").map { r -> canon(r - "stopped") }.sorted() // BUG-15: Kotlin-only column
             }
         }
         return out
@@ -177,6 +177,7 @@ class MigrationGoldenParityTest {
             @Suppress("UNCHECKED_CAST")
             val m = LinkedHashMap(normal(row) as Map<String, Any?>)
             m.remove("messages_cutoff")
+            m.remove("stopped") // BUG-15: Kotlin-only column
             return dumpBundleJson(m)
         }
         @Suppress("UNCHECKED_CAST")

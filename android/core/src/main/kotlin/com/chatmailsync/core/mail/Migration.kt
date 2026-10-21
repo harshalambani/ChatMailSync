@@ -625,7 +625,7 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
     }
     val runIdMap = HashMap<Long, Long>()
     var runsAdded = 0
-    for (row in src.query("SELECT run_id, $runCols, messages_cutoff FROM sync_runs")) {
+    for (row in src.query("SELECT run_id, $runCols, messages_cutoff, stopped FROM sync_runs")) {
         val oldId = historyLong(row["run_id"])
         val key = RUN_COLUMNS.map { row[it] }
         var local = existingRuns[key]
@@ -633,9 +633,11 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
             // BUG-09: messages_cutoff is carried across (Python drops it) but is not part of the
             // natural key, so a run already here keeps its own value and is never rewritten.
             val cutoff = historyLong(row["messages_cutoff"])
+            // BUG-15: the stopped flag travels too (a bundle from 2.2.0 gets 0 from initDb).
+            val stopped = historyLong(row["stopped"])
             dst.exec(
-                "INSERT INTO sync_runs ($runCols, messages_cutoff) VALUES (${placeholders(RUN_COLUMNS.size + 1)})",
-                key + cutoff,
+                "INSERT INTO sync_runs ($runCols, messages_cutoff, stopped) VALUES (${placeholders(RUN_COLUMNS.size + 2)})",
+                key + cutoff + stopped,
             )
             local = dst.lastInsertRowId()
             existingRuns[key] = local

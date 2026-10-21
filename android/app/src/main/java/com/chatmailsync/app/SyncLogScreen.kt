@@ -55,6 +55,7 @@ private val TRIGGER_LABELS = mapOf(
 private val STATUS_HEADLINES = mapOf(
     "complete" to "Finished",
     "failed" to "Failed",
+    "stopped" to "Stopped by you",
     "pending" to "Still running",
 )
 
@@ -140,10 +141,23 @@ fun loadSyncStatus(days: Int = 90): SyncSummary {
     )
 }
 
+private val STOPPED_OF_TOTAL = Regex("after ([0-9]+) of ([0-9]+) messages")
+
+/**
+ * BUG-15: what a run the user stopped moved. The total comes from the run's own note when it
+ * has one ("... after 54 of 120 messages"); Home has no note, so it says the count alone.
+ */
+internal fun stoppedCountsText(synced: Long, note: String?): String {
+    val total = note?.let { STOPPED_OF_TOTAL.find(it)?.groupValues?.get(2)?.toLongOrNull() }
+    return if (total != null && total >= synced) "Stopped by you - $synced of $total uploaded"
+    else "Stopped by you - $synced uploaded"
+}
+
 /** The one-line summary of what a run moved. A run that uploaded nothing says
  * so in words -- "0 synced, 0 skipped" is the same information and reads as a
  * malfunction. */
 private fun runCountsText(run: SyncRunLogEntry): String = when {
+    run.status == "stopped" -> stoppedCountsText(run.messagesSynced, run.errorMessage)
     run.status == "failed" ->
         if (run.messagesSynced > 0) "${run.messagesSynced} synced before it failed"
         else "Nothing uploaded"
@@ -189,6 +203,7 @@ internal fun relativeTime(raw: String?): String {
 /** What the last finished run moved, in the same words the log uses for a
  * single run -- see [runCountsText], which this deliberately mirrors. */
 internal fun summaryCountsText(summary: SyncSummary): String = when {
+    summary.lastStatus == "stopped" -> stoppedCountsText(summary.lastMessagesSynced, null)
     summary.lastStatus == "failed" ->
         if (summary.lastMessagesSynced > 0) "${summary.lastMessagesSynced} synced before it failed"
         else "Nothing uploaded"
@@ -224,6 +239,7 @@ internal fun RunStatusDot(status: String) {
     val color = when (status) {
         "complete" -> MaterialTheme.colorScheme.tertiary
         "failed" -> MaterialTheme.colorScheme.error
+        "stopped" -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.outline
     }
     Box(
@@ -570,6 +586,15 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+
+            if (current.status == "stopped") {
+                Text(
+                    stoppedCountsText(current.messagesSynced, current.errorMessage) +
+                        ". The rest is sent on the next sync.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
 

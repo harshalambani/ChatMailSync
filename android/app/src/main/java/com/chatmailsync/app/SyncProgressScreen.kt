@@ -109,7 +109,11 @@ fun SyncProgressScreen(
         ) {
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
-                    Text("Sync complete", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (workInfo.outputData.getBoolean(SyncWorker.KEY_STOPPED, false)) "Sync stopped"
+                        else "Sync complete",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                     LinearProgressIndicator(progress = { 1f }, modifier = Modifier.fillMaxWidth())
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Text(

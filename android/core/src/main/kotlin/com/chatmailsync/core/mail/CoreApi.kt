@@ -381,7 +381,7 @@ class CoreApi(
             linkedMapOf<String, Any?>(
                 "run_id" to run.runId,
                 "chat_id" to run.chatId,
-                "status" to run.status,
+                "status" to (if (run.stopped) "stopped" else run.status),
                 "trigger" to run.trigger,
                 "last_synced_ts" to run.lastSyncedTs,
                 "last_synced_hash" to run.lastSyncedHash,

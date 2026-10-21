@@ -136,12 +136,14 @@ internal enum class ChatStatus(
 ) {
     SYNCED("Synced", "Synced", "No chats have synced yet."),
     FAILED("Last sync failed", "Failed", "Nothing has failed."),
+    STOPPED("Last sync stopped by you", "Stopped", "Nothing was stopped."),
     NOT_SYNCED("Not synced yet", "Never synced", "Every chat has been synced at least once."),
 }
 
 internal fun chatStatusOf(lastRunStatus: String?): ChatStatus = when (lastRunStatus) {
     "complete" -> ChatStatus.SYNCED
     "failed" -> ChatStatus.FAILED
+    "stopped" -> ChatStatus.STOPPED
     else -> ChatStatus.NOT_SYNCED
 }
 
@@ -174,6 +176,7 @@ internal fun StatusDot(lastRunStatus: String?) {
     val color = when (status) {
         ChatStatus.SYNCED -> MaterialTheme.colorScheme.tertiary
         ChatStatus.FAILED -> MaterialTheme.colorScheme.error
+        ChatStatus.STOPPED -> MaterialTheme.colorScheme.secondary
         ChatStatus.NOT_SYNCED -> MaterialTheme.colorScheme.outline
     }
     Box(
@@ -455,6 +458,8 @@ fun ChatsListScreen(
                                     text = when (status) {
                                         ChatStatus.FAILED ->
                                             if (when_.isNotEmpty()) "Failed · $when_" else "Failed"
+                                        ChatStatus.STOPPED ->
+                                            if (when_.isNotEmpty()) "Stopped by you · $when_" else "Stopped by you"
                                         else -> if (when_.isNotEmpty()) when_ else "Not synced yet"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
