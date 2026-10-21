@@ -94,6 +94,8 @@ def _parse_kotlin() -> tuple[str, list[tuple[str, list[str]]]]:
         if not match:
             break
         text = match.group(1).replace('\\"', '"').replace("\\\\", "\\")
+        # Kotlin sources carry non-ASCII as \uXXXX escapes; compare what is rendered.
+        text = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), text)
         before = body[: match.start()].rstrip()
         after = body[match.end() :].lstrip()
         index = match.end()
@@ -236,3 +238,11 @@ def test_the_retired_sentence_check_can_fail():
     assert "the only thing the app keeps" in _normalise(
         "The only thing the app keeps is a small database"
     ).lower()
+
+
+def test_kotlin_source_is_ascii_and_escapes_decode_to_the_rendered_bullet():
+    """Kotlin sources carry non-ASCII as escapes; the parser must decode them."""
+    src = PRIVACY_SCREEN.read_text(encoding="utf-8")
+    assert src.isascii(), "PrivacyScreen.kt has a literal non-ASCII character"
+    bullets = [p for _, ps in _parse_kotlin()[1] for p in ps if p.startswith("\u2022 ")]
+    assert len(bullets) >= 8

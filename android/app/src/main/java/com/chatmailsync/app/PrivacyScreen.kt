@@ -60,16 +60,16 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "How connecting to your mailbox works" to listOf(
         "No account is created, and nothing is registered with the developer or with any " +
             "server:",
-        "• You supply your email address, your provider's IMAP host and port, and an app " +
+        "\u2022 You supply your email address, your provider's IMAP host and port, and an app " +
             "password - a separate credential your provider issues for one application, which " +
             "you can revoke at any time without changing your real password.",
-        "• That app password is stored only on your own device and is sent only to the " +
+        "\u2022 That app password is stored only on your own device and is sent only to the " +
             "IMAP server you named. It is encrypted at rest with the Android Keystore, inside the " +
             "app's own private storage. Android's own backup can carry the encrypted copy to a " +
             "new phone (see the section on backups below), but the key that opens it never " +
             "leaves the phone it was made on, so the copy cannot be read anywhere else and you " +
             "enter the password again on the new phone.",
-        "• The app uses the IMAP APPEND command, which adds a message to a folder. It " +
+        "\u2022 The app uses the IMAP APPEND command, which adds a message to a folder. It " +
             "creates the folders it needs and lists folder names to check whether they already " +
             "exist. It does not fetch, search, modify or delete any message already in your " +
             "mailbox, and it never sends mail. To be exact about what enforces this: an app " +
@@ -83,14 +83,14 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "Data retention and deletion" to listOf(
         "The developer retains nothing, because the developer never receives anything. This is " +
             "everything version 2.9.0 keeps on your own device:",
-        "• The export you import, until its sync is finished. The app holds its own copy of " +
+        "\u2022 The export you import, until its sync is finished. The app holds its own copy of " +
             "the export file (the text, and any media if it is a zip) in its private storage. " +
             "When a sync of that chat completes, the app deletes that copy. If the sync fails, " +
             "is stopped, or finds no messages in the file, the copy is kept so you can try " +
             "again, and it is deleted when a later sync of it completes. The original file, " +
             "wherever you keep it, is not touched by this; the only thing that acts on it is " +
             "the watched-folder setting you choose (leave it, move it, or delete it).",
-        "• A small database, until you uninstall or clear the app's data. It holds the names " +
+        "\u2022 A small database, until you uninstall or clear the app's data. It holds the names " +
             "of the chats you have synced and the export filenames; for each message sent, a " +
             "one-way hash and the message's time; for each chat, the names or phone numbers of " +
             "the people who appear in it, with the first and last time each was seen and how " +
@@ -98,7 +98,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "text); and the identifiers of the mailbox folder, conversation and message the " +
             "app uses to continue a chat in the same place. It holds neither message text nor " +
             "attachments.",
-        "• Your settings. Your email address, IMAP host and port, the folder you watch, your " +
+        "\u2022 Your settings. Your email address, IMAP host and port, the folder you watch, your " +
             "theme and batch choices, and the saved app password (encrypted), which is kept " +
             "until you clear it in the app or uninstall.",
         "If you have version 2.2.0 or earlier: those versions kept a copy of every export " +
@@ -156,22 +156,22 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "How your data is protected" to listOf(
         "Because the messages you sync are sensitive personal data, the app is built so that " +
             "this data is exposed to as few systems as possible:",
-        "• Encrypted in transit. Every network request the app makes goes directly to your " +
+        "\u2022 Encrypted in transit. Every network request the app makes goes directly to your " +
             "mail provider's IMAP server over TLS. Your messages, attachments and app password " +
             "are never sent over an unencrypted connection.",
-        "• No developer server, ever. There is no backend operated by the developer. Your " +
+        "\u2022 No developer server, ever. There is no backend operated by the developer. Your " +
             "data travels only between your own device and your own mail provider's servers, so " +
             "there is no third-party system that could store, log, or leak it.",
-        "• Credentials stay on your device. The app password is stored only in local app " +
+        "\u2022 Credentials stay on your device. The app password is stored only in local app " +
             "storage, encrypted with a key tied to that device (the Android Keystore). It is never transmitted anywhere except to the IMAP " +
             "server you named, and never written to a log line or an error message.",
-        "• Limited local footprint. Apart from your settings, the app keeps a small " +
+        "\u2022 Limited local footprint. Apart from your settings, the app keeps a small " +
             "on-device database (chat names, the people in each chat, sync history and " +
             "message hashes), used purely to avoid re-sending the same message, and it keeps " +
             "your export file only until its sync is finished. The database contains neither " +
             "message text nor attachments. It leaves your device only in a backup you " +
             "export yourself, or in Android's own backup and device transfer described above.",
-        "• You control access and can revoke it instantly. An app password is issued by " +
+        "\u2022 You control access and can revoke it instantly. An app password is issued by " +
             "your provider for one application and can be revoked there at any time, without " +
             "changing your real password (see the next section).",
         "Because your data lives only on your own device and in your own mailbox, we recommend " +
