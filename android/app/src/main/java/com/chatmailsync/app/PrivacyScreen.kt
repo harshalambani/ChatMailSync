@@ -45,12 +45,6 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "system - the developer never receives, stores, or has access to your messages, " +
             "your mail, or your accounts. This version carries no analytics, no advertising " +
             "and no third-party SDK of any kind.",
-        "One promise does not depend on which version you are reading: your chats, your " +
-            "attachments and your credentials go only to the mailbox you name. They are never " +
-            "sold, never used to target anything at you, and never sent to the developer or to " +
-            "anyone else. If a future version ever collects anything at all, this page and the " +
-            "store listing's data-safety declaration change with the release that does it - " +
-            "before you install it, not after.",
         "There is one way to connect: an email app password over IMAP, which works with any " +
             "IMAP provider, including Gmail, Yahoo, iCloud and Fastmail.",
         "None of this has to be taken on trust. The app is open source, and every claim on " +
@@ -110,7 +104,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "Until that sync has run, the copies are still there. Uninstalling the app or " +
             "clearing its data removes them too.",
         "Emails the app has added to your mailbox are yours - delete them like any other " +
-            "message at any time. The app cannot do it for you, and that is by design rather " +
+            "mail at any time. The app cannot do it for you, and that is by design rather " +
             "than an omission: it holds no permission to delete anything in your mailbox, so " +
             "nothing it could be told to do, and no defect in it, can remove mail you already " +
             "have.",
@@ -124,7 +118,9 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
         "The app also keeps a small local database on your device, described under \"Data " +
             "retention and deletion\" above, purely to avoid sending the same message twice. " +
             "Apart from the backup routes in the next section, it stays on your device. " +
-            "Deleting the app removes it.",
+            "Uninstalling the app, or clearing its data, deletes this database from your " +
+            "phone. A copy already in Android's own backup, or in a backup file you wrote, is " +
+            "not deleted by that.",
     ),
     "Backups, and moving to a new device" to listOf(
         "Android's own backup. The app allows Android to back up two things: the database " +
@@ -137,8 +133,8 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "phone's own settings, where you can switch it off.",
         "The backup file you write yourself. A new phone with no copy of that database would " +
             "re-send your entire history, so the app can also write a backup file for you to " +
-            "carry across. It is written only when you ask for one, never automatically and " +
-            "never anywhere but where you choose to put it.",
+            "carry across. The app writes this file only when you ask it to, and only to the place you " +
+            "pick.",
         "What the file contains is fixed and deliberately narrow: the dedup database described " +
             "above, and a short list of preferences - theme, batch size, mail provider, port " +
             "and email address. It contains no password and no credential of any kind. The app " +
@@ -183,7 +179,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "password), and revoke the app password with your mail provider so it cannot be " +
             "used again.",
         "Revoking access does not delete anything already synced - those are ordinary emails in " +
-            "your mailbox and are yours to keep or delete like any other message.",
+            "your mailbox and are yours to keep or delete like any other mail.",
     ),
     "Third parties" to listOf(
         "None. The app does not share, sell, or transmit any data to any third party. The only " +

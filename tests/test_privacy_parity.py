@@ -246,3 +246,26 @@ def test_kotlin_source_is_ascii_and_escapes_decode_to_the_rendered_bullet():
     assert src.isascii(), "PrivacyScreen.kt has a literal non-ASCII character"
     bullets = [p for _, ps in _parse_kotlin()[1] for p in ps if p.startswith("\u2022 ")]
     assert len(bullets) >= 8
+
+
+_RETIRED_2 = (
+    "one promise",
+    "like any other message",
+    "deleting the app removes it",
+    "never automatically",
+)
+_NEW_SENTENCES = (
+    "uninstalling the app, or clearing its data, deletes this database from your phone. "
+    "a copy already in android's own backup, or in a backup file you wrote, is not deleted by that.",
+    "the app writes this file only when you ask it to, and only to the place you pick.",
+)
+
+
+def test_approved_wording_changes_are_in_both_copies():
+    for kind in ("app", "html"):
+        text = _full_text(kind)
+        for phrase in _RETIRED_2:
+            assert phrase not in text, f"{kind} copy still says: {phrase!r}"
+        for sentence in _NEW_SENTENCES:
+            assert sentence in text, f"{kind} copy is missing: {sentence!r}"
+        assert "like any other mail" in text
