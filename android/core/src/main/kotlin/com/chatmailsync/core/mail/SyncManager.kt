@@ -35,6 +35,8 @@ class SyncManager(
     internal val sleeper: Sleeper = SystemSleeper,
     /** Removes a delivered export from inbox/ (PRIV-03); injectable so tests can make it fail. */
     internal val exportDeleter: (File) -> Unit = { Files.delete(it.toPath()) },
+    /** CUT-02: the running app's version, stamped into every archived email's index. */
+    internal val appVersion: String = UNKNOWN_VERSION,
 ) {
     /** The app-wide floor; a per-chat override beats it for that chat. */
     internal val cutoffDate: String? = normaliseCutoff(cutoffDate)
@@ -287,6 +289,7 @@ class SyncManager(
                 selfSender = resolveSelfSenderFor(repo, displayName, all),
                 sleeper = sleeper,
                 shouldStop = shouldStop,
+                appVersion = appVersion,
             )
             results = pushed.results
             labelId = pushed.labelId

@@ -2,7 +2,6 @@ package com.chatmailsync.app
 
 import android.content.Context
 import android.net.Uri
-import com.chaquo.python.Python
 import org.json.JSONObject
 import java.io.File
 
@@ -37,7 +36,7 @@ object Migration {
         return "chat-mail-sync-$stamp$SUFFIX"
     }
 
-    private fun api() = Python.getInstance().getModule("src.android_api")
+    private fun api(context: Context) = ChatMailApplication.core(context)
 
     /**
      * The preferences worth carrying, as the JSON string the bridge takes.
@@ -110,14 +109,13 @@ object Migration {
     fun exportTo(context: Context, uri: Uri): String {
         val staged = File(context.cacheDir, "backup-out$SUFFIX")
         try {
-            val result = api().callAttr(
-                "export_backup",
+            val result = api(context).exportBackup(
                 staged.absolutePath,
                 currentSettings(context),
                 BuildConfig.VERSION_NAME,
             )
-            if (!result.callAttr("get", "ok").toBoolean()) {
-                return result.callAttr("get", "error").toString()
+            if (!result.flag("ok")) {
+                return result.str("error").toString()
             }
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 staged.inputStream().use { it.copyTo(out) }
@@ -128,9 +126,9 @@ object Migration {
             // tapped would tell them they are protected when they are not.
             AppPrefs.setLastBackupAt(context)
 
-            val counts = result.callAttr("get", "counts")
-            val chats = counts.callAttr("get", "chats").toString().toIntOrNull() ?: 0
-            val hashes = counts.callAttr("get", "hashes").toString().toIntOrNull() ?: 0
+            val counts = result["counts"] as? Map<*, *>
+            val chats = (counts?.get("chats") as? Number)?.toInt() ?: 0
+            val hashes = (counts?.get("hashes") as? Number)?.toInt() ?: 0
             return "Backup saved — ${plural(chats, "chat")}, ${plural(hashes, "message")} " +
                 "already sent. Your mail password is not in it; the restored device asks once."
         } catch (e: Exception) {
@@ -153,9 +151,9 @@ object Migration {
                 staged.outputStream().use { input.copyTo(it) }
             } ?: return RestoreOutcome("That file could not be opened.", success = false)
 
-            val result = api().callAttr("import_backup", staged.absolutePath)
-            if (!result.callAttr("get", "ok").toBoolean()) {
-                return RestoreOutcome(result.callAttr("get", "error").toString(), success = false)
+            val result = api(context).importBackup(staged.absolutePath)
+            if (!result.flag("ok")) {
+                return RestoreOutcome(result.str("error").toString(), success = false)
             }
             // Recorded before the early return as well as after it: a bundle
             // that was already restored here still covers this device's
@@ -163,23 +161,23 @@ object Migration {
             // checking whether they are protected.
             recordCoverFrom(context, result)
 
-            if (result.callAttr("get", "already_imported").toBoolean()) {
+            if (result.flag("already_imported")) {
                 return RestoreOutcome(
                     "That backup has already been restored on this phone. Nothing changed.",
                     success = false,
                 )
             }
 
-            val settingsJson = result.callAttr("get", "settings_json").toString()
+            val settingsJson = result.str("settings_json").toString()
             applySettings(context, settingsJson)
 
-            val chats = result.callAttr("get", "chats_added").toString().toIntOrNull() ?: 0
-            val hashes = result.callAttr("get", "hashes_added").toString().toIntOrNull() ?: 0
+            val chats = result.long("chats_added")?.toInt() ?: 0
+            val hashes = result.long("hashes_added")?.toInt() ?: 0
             // Named only when there are any. A per-chat floor is a decision the
             // user made by hand and would not think to make again, so it has to
             // be visible that it survived -- but a phone that never set one
             // should not be told about a feature it does not use.
-            val cutoffs = result.callAttr("get", "cutoffs_added").toString().toIntOrNull() ?: 0
+            val cutoffs = result.long("cutoffs_added")?.toInt() ?: 0
             val carried =
                 if (cutoffs == 0) ""
                 else " ${plural(cutoffs, "per-chat cutoff date")} came with it."
@@ -201,7 +199,7 @@ object Migration {
                 cutoffs = cutoffs,
                 appliedSettings = parseAppliedSettings(settingsJson),
                 passwordSaved = connected,
-                providerLabels = currentProviderLabels(),
+                providerLabels = currentProviderLabels(context),
             )
             return RestoreOutcome(
                 message = message,
@@ -219,9 +217,9 @@ object Migration {
     /** Provider key -> display label, read fresh from the Python side (the
      *  same config.IMAP_PROVIDERS table MainActivity's own provider picker
      *  reads), for [restoreSummary]'s "Mail account" line. */
-    private fun currentProviderLabels(): Map<String, String> =
-        api().callAttr("imap_providers").asList().associate { entry ->
-            entry.callAttr("get", "key").toString() to entry.callAttr("get", "label").toString()
+    private fun currentProviderLabels(context: Context): Map<String, String> =
+        api(context).imapProviders().associate { entry ->
+            entry.str("key").toString() to entry.str("label").toString()
         }
 
     /**
@@ -267,9 +265,8 @@ object Migration {
      * Never moved backwards: restoring an old bundle onto a device that has a
      * newer one must not make it look less protected than it is.
      */
-    private fun recordCoverFrom(context: Context, result: com.chaquo.python.PyObject) {
-        val made = result.callAttr("get", "created_at_epoch_ms")
-            ?.toString()?.toLongOrNull() ?: 0L
+    private fun recordCoverFrom(context: Context, result: Map<String, Any?>) {
+        val made = result.long("created_at_epoch_ms") ?: 0L
         if (made > 0L && made > AppPrefs.getLastBackupAt(context)) {
             AppPrefs.setLastBackupAt(context, made)
         }
@@ -282,10 +279,10 @@ object Migration {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 staged.outputStream().use { input.copyTo(it) }
             } ?: return null
-            val info = api().callAttr("describe_backup", staged.absolutePath)
-            if (!info.callAttr("get", "ok").toBoolean()) return null
-            val made = info.callAttr("get", "created_at").toString().take(10)
-            val chats = info.callAttr("get", "chats").toString().toIntOrNull() ?: 0
+            val info = api(context).describeBackup(staged.absolutePath)
+            if (!info.flag("ok")) return null
+            val made = info.str("created_at").toString().take(10)
+            val chats = info.long("chats")?.toInt() ?: 0
             return "From $made — ${plural(chats, "chat")}"
         } catch (e: Exception) {
             return null

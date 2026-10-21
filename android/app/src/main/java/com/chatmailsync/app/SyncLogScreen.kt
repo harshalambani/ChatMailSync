@@ -42,7 +42,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.chaquo.python.Python
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -82,10 +81,9 @@ data class SyncRunLogEntry(
 )
 
 fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
-    val result = Python.getInstance().getModule("src.android_api").callAttr("sync_log", days)
-    fun getStr(row: com.chaquo.python.PyObject, key: String): String? =
-        row.callAttr("get", key)?.toString()?.takeIf { it != "None" }
-    return result.asList().map { row ->
+    val result = ChatMailApplication.core().syncLog(days)
+    fun getStr(row: Map<String, Any?>, key: String): String? = row.str(key)
+    return result.map { row ->
         SyncRunLogEntry(
             runId = getStr(row, "run_id")?.toLongOrNull() ?: 0L,
             chatId = getStr(row, "chat_id") ?: "",
@@ -100,7 +98,7 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
             startedAt = getStr(row, "started_at"),
             completedAt = getStr(row, "completed_at"),
             lastSyncedTs = getStr(row, "last_synced_ts"),
-            uneventful = getStr(row, "uneventful")?.equals("True", ignoreCase = true) == true,
+            uneventful = row.flag("uneventful"),
         )
     }
 }
@@ -126,9 +124,8 @@ data class SyncSummary(
 )
 
 fun loadSyncStatus(days: Int = 90): SyncSummary {
-    val row = Python.getInstance().getModule("src.android_api").callAttr("sync_status", days)
-    fun getStr(key: String): String? =
-        row.callAttr("get", key)?.toString()?.takeIf { it != "None" }
+    val row = ChatMailApplication.core().syncStatus(days)
+    fun getStr(key: String): String? = row.str(key)
     fun getLong(key: String): Long = getStr(key)?.toLongOrNull() ?: 0L
     return SyncSummary(
         windowDays = getLong("window_days").toInt(),

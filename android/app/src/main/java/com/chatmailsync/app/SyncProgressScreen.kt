@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.chaquo.python.Python
 import kotlin.math.roundToInt
 
 @Composable
@@ -57,7 +56,7 @@ fun SyncProgressScreen(
         .collectAsState(initial = emptyList())
         .value
         .firstOrNull()
-    // Local only — request_stop() is fire-and-forget on the Python side
+    // Local only — request_stop() is fire-and-forget on the core side
     // (src/android_api.py sets a threading.Event the in-flight sync polls
     // between files). This just tracks that a request was made so the
     // button doesn't look like it did nothing while the current file
@@ -177,7 +176,7 @@ fun SyncProgressScreen(
                                 // BUG-02: persist BEFORE asking the engine to stop, so a
                                 // force close right after still remembers the Stop.
                                 AppPrefs.stopMark(appContext).markStopped(workInfo.id.toString())
-                                Python.getInstance().getModule("src.android_api").callAttr("request_stop")
+                                ChatMailApplication.core(appContext).requestStop()
                             },
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error,

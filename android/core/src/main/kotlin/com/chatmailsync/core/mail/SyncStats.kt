@@ -129,11 +129,10 @@ fun collectOmissions(stats: SyncStats, displayName: String, results: List<PushRe
 
 // Python's \s and \S are Unicode-aware; the extra range is the four ASCII
 // separators str.isspace() also counts.
-private const val PY_SPACE = "\\s\\u001C-\\u001F"
-private val URL_RE: Pattern = Pattern.compile("https?://[^$PY_SPACE]+", Pattern.UNICODE_CHARACTER_CLASS)
+private const val PY_SPACE = PY_SPACE_CLASS_BODY
+private val URL_RE: Pattern = Pattern.compile("https?://[^$PY_SPACE]+")
 private val FS_PATH_RE: Pattern = Pattern.compile(
     "(?:[A-Za-z]:\\\\|\\\\\\\\)[^$PY_SPACE,'\")\\]]+|(?:/[^/$PY_SPACE,'\")\\]]+){2,}",
-    Pattern.UNICODE_CHARACTER_CLASS,
 )
 
 /**

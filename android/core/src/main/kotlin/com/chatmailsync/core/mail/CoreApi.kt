@@ -41,6 +41,8 @@ class CoreApi(
     private val redact: () -> String? = { null },
     clock: () -> String = { StateRepository.now() },
     private val sleeper: Sleeper = SystemSleeper,
+    /** CUT-02: the app's version, stamped into every archived email's index (Python: set_app_version). */
+    private val appVersion: String = UNKNOWN_VERSION,
 ) {
     val paths: RootPaths = RootPaths(root)
 
@@ -49,6 +51,14 @@ class CoreApi(
     private val progressLock = Any()
     private val progressTracker = ProgressTracker()
     private val stopFlag = AtomicBoolean(false)
+
+    /**
+     * CUT-02 single-flight: at most one [sync] runs at a time. Two overlapping passes over the
+     * same database and inbox would send the same mail twice. A second caller waits its turn
+     * (WorkManager's REPLACE cancels the old worker but its blocking sync keeps running until
+     * it stops), and gives up without sending anything if its own stop request arrives first.
+     */
+    private val syncLock = java.util.concurrent.locks.ReentrantLock()
 
     // ------------------------------------------------------------------
     // Error text boundary
@@ -271,6 +281,38 @@ class CoreApi(
         onProgress: ((Map<String, Any?>) -> Unit)? = null,
         trigger: String = "manual",
         cutoffDate: String? = null,
+        /**
+         * CUT-02: an extra stop signal the caller owns (the app's persisted Stop mark, and the
+         * worker being cancelled). Asked before every email, like the in-memory flag, and
+         * also while this call waits for an earlier sync to finish. This closes the race where
+         * a Stop arrives before this call has reset the flag.
+         */
+        externalStop: (() -> Boolean)? = null,
+    ): Map<String, Any?> {
+        // Wait for any earlier sync, but never past our own stop request.
+        while (!syncLock.tryLock(100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+            if (externalStop?.invoke() == true) return stoppedBeforeStart()
+        }
+        try {
+            return runLocked(transport, chunkSize, dryRun, chatFilter, onProgress, trigger, cutoffDate, externalStop)
+        } finally {
+            syncLock.unlock()
+        }
+    }
+
+    /** What a sync that was stopped before it began returns: nothing sent, `stopped` true. */
+    private fun stoppedBeforeStart(): Map<String, Any?> =
+        LinkedHashMap(SyncStats().asMap()).also { it["stopped"] = true }
+
+    private fun runLocked(
+        transport: MailTransport?,
+        chunkSize: ChunkSize?,
+        dryRun: Boolean,
+        chatFilter: String?,
+        onProgress: ((Map<String, Any?>) -> Unit)?,
+        trigger: String,
+        cutoffDate: String?,
+        externalStop: (() -> Boolean)?,
     ): Map<String, Any?> {
         val relay: (Map<String, Any?>) -> Unit = { event ->
             publishProgress(event)
@@ -279,6 +321,12 @@ class CoreApi(
 
         synchronized(progressLock) { progressTracker.reset() }
         stopFlag.set(false)
+        // Latched: once a stop is seen it stays seen, so the result says `stopped`.
+        val stopSeen = AtomicBoolean(false)
+        val shouldStop = {
+            if (stopFlag.get() || externalStop?.invoke() == true) stopSeen.set(true)
+            stopSeen.get()
+        }
         paths.dataDir.mkdirs()
         val mgr = guarded {
             SyncManager(
@@ -291,13 +339,14 @@ class CoreApi(
                 trigger = trigger,
                 cutoffDate = cutoffDate,
                 onProgress = relay,
-                shouldStop = { stopFlag.get() },
+                shouldStop = shouldStop,
                 redact = redact(),
                 sleeper = sleeper,
+                appVersion = appVersion,
             )
         }
         val stats = guarded { mgr.run(chatFilter) }
-        val stopped = stopFlag.get()
+        val stopped = shouldStop()
         // `stopped` travels with the event so the final headline says "Stopped", not "Done".
         publishProgress(linkedMapOf("type" to "done", "stopped" to stopped))
         return LinkedHashMap(stats.asMap()).also { it["stopped"] = stopped }

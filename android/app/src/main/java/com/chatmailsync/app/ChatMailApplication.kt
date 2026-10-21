@@ -2,39 +2,40 @@ package com.chatmailsync.app
 
 import android.app.Application
 import android.content.Context
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
+import com.chatmailsync.core.mail.CoreApi
 import java.io.File
 
 /**
- * Starts the embedded Python runtime once for the process and points the
- * shared core (src/config.py) at Android's app-private storage before
- * anything else touches it — config.set_root() must run before any other
- * src.* module resolves a path-derived constant (see config.py's docstring).
- *
- * Also hands the running app's version to src/mail_index.py so archived
- * emails' traceability index can stamp BuildConfig.VERSION_NAME instead of
- * the desktop-era "development build" placeholder — see
- * mail_index.set_app_version()'s docstring.
+ * CUT-02: builds the process-wide Kotlin core ([CoreApi]) lazily, on first use. It replaces the
+ * embedded Python runtime that used to be started here: nothing in this app starts Python at run
+ * time any more (a unit test guards that). The app's version is handed to the core so archived
+ * emails' traceability index stamps BuildConfig.VERSION_NAME.
  */
 class ChatMailApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
-        val python = Python.getInstance()
-        python.getModule("src.config")
-            .callAttr("set_root", pythonRoot(this).absolutePath)
-        python.getModule("src.mail_index")
-            .callAttr("set_app_version", BuildConfig.VERSION_NAME)
+        appContext = applicationContext
     }
 
     companion object {
-        /** Root directory handed to config.set_root() — everything else
+        @Volatile
+        private var appContext: Context? = null
+
+        /** The one core for the process. Stop, progress and the single-flight lock live in it. */
+        fun core(context: Context? = null): CoreApi = CoreHolder.get {
+            val ctx = (context?.applicationContext ?: appContext)
+                ?: error("ChatMailApplication has not started")
+            CoreApi(
+                root = pythonRoot(ctx),
+                openDb = { AndroidStateDb(it) },
+                redact = { SecretStore.getSecret(ctx, AppPrefs.getImapPasswordSecretKey()) },
+                appVersion = BuildConfig.VERSION_NAME,
+            )
+        }
+
+        /** Root directory handed to the core (CoreApi root) — everything else
          * (data/inbox, data/processed, data/sync_state.db, auth/) is
-         * derived from this by config.py's _apply_root().
+         * derived from this by RootPaths.
          *
          * Renamed alongside the SharedPreferences and Keystore identifiers each
          * time they moved — "wagmail" -> "wamail" (2026-08-08) -> "chatmail"
@@ -53,7 +54,7 @@ class ChatMailApplication : Application() {
         fun inboxDir(context: Context): File =
             File(pythonRoot(context), "data/inbox").apply { mkdirs() }
 
-        /** Mirrors android_api.list_inbox()'s own definition of "something
+        /** Mirrors the core's listInbox()'s own definition of "something
          * waiting" (any plain file directly under data/inbox/) — the single
          * source of truth both MainActivity's Home "Sync now" and
          * WatchFolderWorker's "Sync now" consult for whether there's a

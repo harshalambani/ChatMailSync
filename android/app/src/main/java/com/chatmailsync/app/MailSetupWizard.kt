@@ -40,25 +40,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * How the wizard's step 4 hears about a connection stage the moment it finishes.
+ * How the wizard's step 4 hears about a connection stage the moment it finishes. MainActivity
+ * adapts it to the core's own listener (CUT-02: no Python bridge, so a lambda would do, but the
+ * wizard keeps this small type).
  *
- * This is an interface rather than a Kotlin lambda because it is handed to
- * Python: check_connection's `on_stage` argument crosses the Chaquopy bridge,
- * and a lambda arrives on the far side as an object Python cannot call, while
- * a Java interface implementation arrives as one whose methods can be called
- * by name. src/mail_client.py's _emit_stage does exactly that -- it looks for
- * an `onStage` attribute first and falls back to calling the object directly,
- * which is what lets the shared Python core also be called from a plain
- * script with a plain Python function as the listener.
- *
- * Three primitives rather than a dict, because a dict would have to be
- * converted on the way across for no gain.
+ * Three primitives rather than a dict.
  */
 interface StageListener {
     fun onStage(name: String, label: String, ok: Boolean)
 }
 
-/** One row of the step-4 progress list, as named by the Python core. */
+/** One row of the step-4 progress list, as named by the core. */
 data class WizardStage(val name: String, val label: String)
 
 // Step titles, kept in one place so the header and the "Step n of 4" line

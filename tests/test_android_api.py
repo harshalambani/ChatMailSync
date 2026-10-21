@@ -444,14 +444,15 @@ def test_every_android_preview_call_site_hands_over_the_app_wide_date():
     body = (_REPO / "android/app/src/main/java/com/chatmailsync/app"
             / "MainActivity.kt").read_text(encoding="utf-8")
 
-    calls = body.count('"preview_text"')
+    # CUT-02: the call sites now use the Kotlin core's previewText(path, cutoff).
+    calls = body.count(".previewText(")
     assert calls == 3, "a preview call site was added or removed"
     assert body.count(
-        '"preview_text", outcome.file.absolutePath, '
+        ".previewText(outcome.file.absolutePath, "
         "AppPrefs.getCutoffDate(context))"
     ) == 1
     assert body.count(
-        '"preview_text", path, AppPrefs.getCutoffDate(context))'
+        ".previewText(path, AppPrefs.getCutoffDate(context))"
     ) == 2
 
 

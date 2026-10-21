@@ -243,7 +243,7 @@ const val DATE_ORDER_SCAN_MESSAGES = 50
  *
  * Kept as raw pattern strings rather than compiled `Regex`/`Pattern` values
  * here deliberately — the Phase 2 "parser" port (not this PR) is where
- * `Pattern.UNICODE_CHARACTER_CLASS` gets applied, per the plan document's
+ * `pyPattern` (RegexClasses.kt) gets applied, per the plan document's
  * note that Java's `\s`/`\d` do not match the same character classes as
  * Python's without it. Compiling here with the wrong flags would bake in a
  * silent behavioural drift before the parser even exists.

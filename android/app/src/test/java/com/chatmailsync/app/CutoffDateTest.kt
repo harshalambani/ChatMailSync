@@ -142,16 +142,16 @@ class CutoffDateTest {
         val source = source("src/main/java/com/chatmailsync/app/ChatDetailScreen.kt")
         assertTrue(
             "the screen must load this chat's own cutoff",
-            source.contains("\"get_cutoff\", chatId"),
+            source.contains(".getCutoff(chatId)"),
         )
         assertTrue(
             "and store what was typed",
-            source.contains("\"set_cutoff\", chatId, it.trim()"),
+            source.contains(".setCutoff(chatId, it.trim())"),
         )
         assertTrue(
             "and store the clearing of it, which is a write of its own and not"
                 + " the absence of one",
-            source.contains("\"set_cutoff\", chatId, \"\""),
+            source.contains(".setCutoff(chatId, \"\")"),
         )
     }
 
@@ -194,17 +194,15 @@ class CutoffDateTest {
     }
 
     @Test
-    fun `the cutoff reaches Python on every run`() {
+    fun `the cutoff reaches the core on every run`() {
         val source = syncWorkerSource()
         assertTrue(
             "SyncWorker must read the saved cutoff itself",
             source.contains("AppPrefs.getCutoffDate(applicationContext)"),
         )
         assertTrue(
-            "the cutoff must be the 8th argument to android_api.sync()",
-            source.contains(
-                "\"sync\", transport, chunkSize, dryRun, chatFilter, null, trigger, cutoff,"
-            ),
+            "the cutoff must be passed to CoreApi.sync()",
+            source.contains("cutoffDate = cutoff,"),
         )
     }
 

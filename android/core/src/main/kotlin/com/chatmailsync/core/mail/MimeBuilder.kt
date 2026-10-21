@@ -83,8 +83,8 @@ object MimeBuilder {
         return if (suffix.isNotEmpty()) "$base  ($suffix)" else base
     }
 
-    private val PHONE_STRIP = Regex("(?U)[\\s\\x1c-\\x1f\\-()]")
-    private val PHONE_MATCH = Regex("(?U)^\\+?\\d{7,15}$")
+    private val PHONE_STRIP = Regex("[$PY_SPACE_CLASS_BODY\\-()]")
+    private val PHONE_MATCH = Regex("^\\+?$PY_DIGIT{7,15}$")
 
     /** Mirrors `_format_sender`. */
     fun formatSender(displayName: String): String {

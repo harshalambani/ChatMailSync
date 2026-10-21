@@ -53,7 +53,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import com.chaquo.python.Python
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -83,18 +82,16 @@ data class ChatSummary(
 )
 
 fun loadChatSummaries(): List<ChatSummary> {
-    val result = Python.getInstance().getModule("src.android_api").callAttr("status")
-    return result.asList().map { row ->
+    return ChatMailApplication.core().status().map { row ->
         ChatSummary(
-            chatId = row.callAttr("get", "chat_id").toString(),
-            displayName = row.callAttr("get", "display_name").toString(),
-            hasThread = row.callAttr("get", "has_thread")?.toString() == "1" ||
-                row.callAttr("get", "has_thread")?.toString()?.equals("true", ignoreCase = true) == true,
-            gmailThreadId = row.callAttr("get", "gmail_thread_id")?.toString()?.takeIf { it != "None" },
-            lastRunStatus = row.callAttr("get", "last_run_status")?.toString()?.takeIf { it != "None" },
-            messagesSynced = row.callAttr("get", "messages_synced")?.toString()?.toLongOrNull() ?: 0L,
-            lastRunAt = row.callAttr("get", "last_run_at")?.toString()?.takeIf { it != "None" },
-            sourceFilename = row.callAttr("get", "source_filename")?.toString()?.takeIf { it != "None" },
+            chatId = row.str("chat_id").toString(),
+            displayName = row.str("display_name").toString(),
+            hasThread = row.flag("has_thread"),
+            gmailThreadId = row.str("gmail_thread_id"),
+            lastRunStatus = row.str("last_run_status"),
+            messagesSynced = row.long("messages_synced") ?: 0L,
+            lastRunAt = row.str("last_run_at"),
+            sourceFilename = row.str("source_filename"),
         )
     }
 }

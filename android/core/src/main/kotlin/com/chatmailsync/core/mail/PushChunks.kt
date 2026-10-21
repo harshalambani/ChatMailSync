@@ -203,6 +203,8 @@ fun pushChunks(
     sleeper: Sleeper = SystemSleeper,
     shouldStop: () -> Boolean = { false },
     onAccepted: OnAccepted? = null,
+    /** CUT-02: stamped into the traceability index of every email; "unknown" only when none is given. */
+    appVersion: String = UNKNOWN_VERSION,
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
@@ -248,6 +250,7 @@ fun pushChunks(
                 suffix = worklist[i].suffix,
                 inReplyTo = inReplyTo,
                 references = currentAnchor,
+                appVersion = appVersion,
             )
 
             val response = try {
@@ -345,6 +348,7 @@ fun pushChat(
     sleeper: Sleeper = SystemSleeper,
     shouldStop: () -> Boolean = { false },
     onAccepted: OnAccepted? = null,
+    appVersion: String = UNKNOWN_VERSION,
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -370,6 +374,7 @@ fun pushChat(
         onAccepted = onAccepted,
         selfSender = selfSender,
         sleeper = sleeper,
+        appVersion = appVersion,
         shouldStop = {
             val stop = shouldStop()
             if (stop) stopped = true
