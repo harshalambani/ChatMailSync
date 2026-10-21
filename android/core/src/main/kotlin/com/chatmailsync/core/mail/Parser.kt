@@ -24,13 +24,22 @@ import java.util.zip.ZipFile
  *
  * ## Regex flags: matching Python's Unicode-aware `\s` and `\d`
  *
- * Every pattern below is compiled with [Pattern.UNICODE_CHARACTER_CLASS], so
- * `\s` and `\d` match the same Unicode-property characters Python's `re`
+ * NO regex flag or inline switch that turns on Unicode classes may be used anywhere in core or
+ * app (not the Unicode-character-class flag, not its inline switch form, not the canonical-equivalence flag): Android's
+ * ICU-backed regex throws IllegalArgumentException for them, the JVM and Robolectric tests run the
+ * desktop engine and cannot see it, and the crash only shows on a real phone (found on the Nord).
+ * `AndroidRegexSafetyTest` scans the sources and fails the build if one comes back.
+ *
+ * Every pattern below goes through [pyPattern] (RegexClasses.kt), which spells `\s` and `\d`
+ * out as explicit classes (the engine's own Unicode-class flag is rejected by Android's ICU
+ * regex), so `\s` and `\d` match the same Unicode-property characters Python's `re`
  * matches in its default (Unicode) mode:
- *  - `\s` matches Unicode `White_Space` — critically including U+202F
+ *  - `\s` matches exactly what Python's `str.isspace()` matches (U+0009-000D, U+001C-0020,
+ *    U+0085, U+00A0, U+1680, U+2000-200A, U+2028-2029, U+202F, U+205F, U+3000). That is Unicode
+ *    `White_Space` plus the four separators U+001C-001F -- critically including U+202F
  *    NARROW NO-BREAK SPACE, which iOS inserts before AM/PM in exported
  *    timestamps (`[3/4/25, 2:05:33␣PM]` where `␣` is U+202F, not U+0020).
- *    Java's `\s` *without* that flag is ASCII-only (a space, tab, newline, form feed or carriage return) and
+ *    Java's plain `\s` is ASCII-only (a space, tab, newline, form feed or carriage return) and
  *    would silently fail to lock the AM/PM formats against a real iOS
  *    export. See [aNarrowNoBreakSpaceBeforeAmPmMatchesLikePython] in the
  *    test twin.
@@ -299,11 +308,11 @@ fun extractChatInfo(filename: String): ChatInfo {
 }
 
 private val TRAILING_COUNTER_RE: Pattern =
-    Pattern.compile("\\s*\\([0-9]+\\)$", Pattern.UNICODE_CHARACTER_CLASS)
+    pyPattern("\\s*\\([0-9]+\\)$")
 private val NON_ASCII_ALNUM_RE: Pattern =
-    Pattern.compile("[^a-z0-9\\s]", Pattern.UNICODE_CHARACTER_CLASS)
+    pyPattern("[^a-z0-9\\s]")
 private val WHITESPACE_RUN_RE: Pattern =
-    Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS)
+    pyPattern("\\s+")
 
 /**
  * Twin of `pathlib.Path(filename).stem`: the filename with its last
@@ -421,13 +430,12 @@ private fun decodeUtf8SigReplace(raw: ByteArray): String {
  * Wrap a raw timestamp pattern into a full message-line regex. Twin of
  * `parser.py:_build_line_re`. The resulting pattern captures three groups:
  * (1) date_part (2) time_part (3) remainder (sender: body or system text).
- * Compiled with [Pattern.UNICODE_CHARACTER_CLASS], so the `\d`s already
- * present in [TIMESTAMP_PATTERNS]'s raw pattern strings become Unicode-aware
- * automatically, matching Python's `re` default (Unicode) mode -- see this
+ * Compiled through [pyPattern], so the `\d`s already
+ * present in [TIMESTAMP_PATTERNS]'s raw pattern strings become Unicode-aware, matching Python's `re` default (Unicode) mode -- see this
  * file's top-level KDoc.
  */
 fun buildLineRegex(tsPattern: String): Pattern =
-    Pattern.compile("^$tsPattern - (.+)$", Pattern.UNICODE_CHARACTER_CLASS)
+    pyPattern("^$tsPattern - (.+)$")
 
 /**
  * Return (format_key, line_regex) for the first pattern that matches any
@@ -492,16 +500,15 @@ fun resolveDateOrder(lines: List<String>, lineRe: Pattern, formatKey: String): S
 // Timestamp construction
 // ---------------------------------------------------------------------------
 
-// `\d` here relies on [Pattern.UNICODE_CHARACTER_CLASS] (below) to match any
+// `\d` here relies on [pyPattern] (below) to match any
 // Unicode decimal digit, exactly like Python's `\d` in default (Unicode)
 // mode -- see this file's top-level KDoc. The AM/PM marker also accepts an
 // optional trailing period after each letter ("a.m.", "P.M.", ...): real
 // `TIMESTAMP_PATTERNS` output never contains periods, but `dateutil.parser`
 // accepts the dotted form with the same hour semantics, so this is a
 // harmless widening pinned by the `time_of_day_golden.json` sweep.
-private val TIME_OF_DAY_RE: Pattern = Pattern.compile(
+private val TIME_OF_DAY_RE: Pattern = pyPattern(
     "^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?(?:\\s*([AaPp]\\.?[Mm]\\.?))?$",
-    Pattern.UNICODE_CHARACTER_CLASS,
 )
 
 /**
@@ -712,5 +719,5 @@ private fun buildMessage(
 /** Compiled once — twin of `parser.py`'s module-level `_ATTACHMENT_RES`
  * (`re.IGNORECASE`). */
 private val ATTACHMENT_RES: List<Pattern> = ATTACHMENT_PATTERNS.map {
-    Pattern.compile(it, Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE or Pattern.UNICODE_CHARACTER_CLASS)
+    pyPattern(it, Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
 }
