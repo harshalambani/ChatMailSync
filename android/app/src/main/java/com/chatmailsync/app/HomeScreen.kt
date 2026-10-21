@@ -178,6 +178,7 @@ private fun SyncStatusBlock(summary: SyncSummary, onOpenSyncLog: () -> Unit) {
                 Text(
                     text = when (summary.lastStatus) {
                         "failed" -> "Last sync failed"
+                        "stopped" -> "Last sync stopped by you"
                         "complete" -> "Last sync finished"
                         // Nothing has finished, but runs exist -- one is going
                         // on right now. The progress bar says the rest.

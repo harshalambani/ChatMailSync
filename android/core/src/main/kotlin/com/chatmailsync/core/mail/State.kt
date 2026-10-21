@@ -74,6 +74,7 @@ class StateRepository(
                 messages_synced  INTEGER NOT NULL DEFAULT 0,
                 messages_skipped INTEGER NOT NULL DEFAULT 0,
                 messages_cutoff  INTEGER NOT NULL DEFAULT 0,
+                stopped          INTEGER NOT NULL DEFAULT 0,
                 error_message    TEXT,
                 started_at       TEXT    NOT NULL,
                 completed_at     TEXT
@@ -116,13 +117,15 @@ class StateRepository(
          * deliberately absent -- see that module's comment: this tuple is
          * also the exact column list `migration.py` SELECTs out of an
          * incoming bundle, and a bundle written before the column existed
-         * has no such column to select.
+         * has no such column to select. `stopped` (BUG-15) is absent for the same reason.
          */
         val RUN_NATURAL_KEY: List<String> = listOf(
             "chat_id", "status", "trigger", "last_synced_ts", "last_synced_hash",
             "messages_parsed", "messages_synced", "messages_skipped", "error_message",
             "started_at", "completed_at",
         )
+
+        private val STOPPED_TEXT = Regex("^stopped by the user after ([0-9]+) of ([0-9]+) messages")
 
         /** Twin of `state.py:_SCHEMA_VERSION`. */
         const val SCHEMA_VERSION: Int = 2
@@ -208,6 +211,16 @@ class StateRepository(
             } catch (e: StateDbException) {
                 // column already exists
             }
+            // BUG-15: a run the user stopped keeps status 'failed' (the CHECK allows nothing else)
+            // and is told apart by this flag. Added without a table rebuild or a version bump.
+            var stoppedColumnAdded = false
+            try {
+                db.exec("ALTER TABLE sync_runs ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0")
+                stoppedColumnAdded = true
+            } catch (e: StateDbException) {
+                // column already exists
+            }
+            if (stoppedColumnAdded) backfillStoppedRuns(db)
 
             val version = db.userVersion()
             if (version < 1) {
@@ -216,6 +229,23 @@ class StateRepository(
             if (version < SCHEMA_VERSION) {
                 db.setUserVersion(SCHEMA_VERSION)
             }
+        }
+    }
+
+    /**
+     * BUG-15: runs a user Stop closed before this column existed carry the text
+     * "stopped by the user after N of M messages" and a count of 0. Mark them stopped and
+     * recover N from the text. Runs only in the one open that adds the column.
+     */
+    private fun backfillStoppedRuns(db: StateDb) {
+        val rows = db.query(
+            "SELECT run_id, error_message FROM sync_runs WHERE status = 'failed' AND error_message LIKE ?",
+            listOf("stopped by the user after %"),
+        )
+        for (row in rows) {
+            val id = (row["run_id"] as Number).toLong()
+            val n = STOPPED_TEXT.find(row["error_message"] as String)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            db.exec("UPDATE sync_runs SET stopped = 1, messages_synced = ? WHERE run_id = ?", listOf(n, id))
         }
     }
 
@@ -394,6 +424,22 @@ class StateRepository(
         }
     }
 
+    /**
+     * BUG-15: close a run the user stopped. Status stays 'failed' (the CHECK allows only
+     * pending/complete/failed) with `stopped = 1`, and `messages_synced` holds what was really
+     * delivered. last_synced_ts / last_synced_hash stay NULL, so a stopped run can never move
+     * the overlap baseline; getLastSuccessfulRun only reads 'complete' rows.
+     */
+    fun stopSyncRun(runId: Long, delivered: Int, total: Int) {
+        withDb { db ->
+            db.exec(
+                "UPDATE sync_runs SET status = 'failed', stopped = 1, messages_synced = ?, " +
+                    "error_message = ?, completed_at = ? WHERE run_id = ?",
+                listOf(delivered, "stopped by the user after $delivered of $total messages", clock(), runId),
+            )
+        }
+    }
+
     fun getLastSuccessfulRun(chatId: String): SyncRun? =
         withDb { db ->
             db.query(
@@ -537,7 +583,7 @@ class StateRepository(
                     c.source_filename,
                     c.gmail_thread_id,
                     c.gmail_thread_id IS NOT NULL AS has_thread,
-                    r.status            AS last_run_status,
+                    CASE WHEN r.stopped = 1 THEN 'stopped' ELSE r.status END AS last_run_status,
                     r.last_synced_ts,
                     r.messages_synced,
                     r.started_at        AS last_run_at
@@ -591,10 +637,10 @@ class StateRepository(
         return RunsSummary(
             windowDays = days,
             totalRuns = runs.size,
-            failedRuns = runs.count { it.status == "failed" },
+            failedRuns = runs.count { it.status == "failed" && !it.stopped },
             runningRuns = runs.count { it.status == "pending" },
             lastRunId = last?.runId,
-            lastStatus = last?.status,
+            lastStatus = if (last?.stopped == true) "stopped" else last?.status,
             lastDisplayName = last?.displayName,
             lastStartedAt = last?.startedAt,
             lastCompletedAt = last?.completedAt,
@@ -764,6 +810,7 @@ class StateRepository(
         messagesSynced = (row["messages_synced"] as Number).toInt(),
         messagesSkipped = (row["messages_skipped"] as Number).toInt(),
         messagesCutoff = (row["messages_cutoff"] as Number).toInt(),
+        stopped = asBoolean(row["stopped"]),
         errorMessage = row["error_message"] as String?,
         startedAt = row["started_at"] as String,
         completedAt = row["completed_at"] as String?,
@@ -845,6 +892,8 @@ data class SyncRun(
     val messagesSynced: Int,
     val messagesSkipped: Int,
     val messagesCutoff: Int,
+    /** BUG-15: closed by the user's Stop. [status] is still 'failed'; callers show it as stopped. */
+    val stopped: Boolean,
     val errorMessage: String?,
     val startedAt: String,
     val completedAt: String?,

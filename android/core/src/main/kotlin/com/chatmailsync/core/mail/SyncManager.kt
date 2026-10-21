@@ -320,7 +320,8 @@ class SyncManager(
             // next run sends only what is still missing. Not a failure of the
             // file, so no error is added.
             stats.messagesSynced += deliveredMsgs
-            repo.failSyncRun(rid, clean("stopped by the user after $deliveredMsgs of ${new.size} messages"))
+            // BUG-15: kept as a stopped run with its real count, not a failed one.
+            repo.stopSyncRun(rid, deliveredMsgs, new.size)
             return
         }
 

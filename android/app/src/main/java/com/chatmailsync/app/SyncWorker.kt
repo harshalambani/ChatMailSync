@@ -52,6 +52,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_TRIGGER = "trigger"
         const val KEY_CHAT_FILTER = "chat_filter"
         const val KEY_RESULT = "result"
+        /** BUG-15: true when the user's Stop ended the run, so the progress screen can say so. */
+        const val KEY_STOPPED = "stopped"
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS_TEXT = "progress_text"
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
@@ -84,7 +86,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         val stopMark = AppPrefs.stopMark(applicationContext)
         val myId = id.toString()
         if (stopMark.consumeIfStopped(myId)) {
-            return Result.success(workDataOf(KEY_RESULT to "Stopped before it started"))
+            return Result.success(workDataOf(KEY_RESULT to "Stopped before it started", KEY_STOPPED to true))
         }
         try {
             return runSync()
@@ -198,7 +200,12 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 postResult(
                     syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
                 )
-                Result.success(workDataOf(KEY_RESULT to scrubSecret(statsResult.format(), currentSecret())))
+                Result.success(
+                    workDataOf(
+                        KEY_RESULT to scrubSecret(statsResult.format(), currentSecret()),
+                        KEY_STOPPED to statsResult.stopped,
+                    )
+                )
             } catch (e: CancellationException) {
                 // WorkManager stopped us (system stop, REPLACE enqueue, cancelUniqueWork).
                 // Not a failure: quiet notice, then rethrow so coroutine cancellation works
@@ -419,7 +426,7 @@ private data class SyncStatsResult(
         // BUG-12: a failure line first, so it is not buried under the counts.
         exportsKeptLine(filesFailed)?.let { lines.add(it) }
         lines.add(
-            if (stopped) "Stopped early — $messagesSynced message(s) synced" else "Done"
+            if (stopped) "Stopped by you \u2014 $messagesSynced message(s) synced" else "Done"
         )
         lines.addAll(listOf(
             "Files   : found=$filesFound  synced=$filesSynced  skipped=$filesSkipped  failed=$filesFailed",
