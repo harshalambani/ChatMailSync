@@ -706,6 +706,19 @@ private fun buildMessage(
             break
         }
     }
+    // BUG-14: a photo or file sent with a caption is one message whose body is
+    // "<name> (file attached)" on the first line and the caption below it. The
+    // whole-body match above cannot see it (the pattern ends at the body's
+    // end), so read the FIRST line alone with the same patterns. Only the
+    // Android form is evidenced for captions; the iOS pattern is left to the
+    // whole-body rule. The body itself is untouched, so the hash is unchanged.
+    if (attachmentFilename == null && strippedBody.contains('\n')) {
+        val firstLine = pythonStrip(strippedBody.substringBefore('\n'))
+        val m = ATTACHMENT_RES[0].matcher(firstLine)
+        if (m.matches()) {
+            attachmentFilename = pythonStrip(m.group(1))
+        }
+    }
 
     return ParsedMessage(
         chatId = chatId,

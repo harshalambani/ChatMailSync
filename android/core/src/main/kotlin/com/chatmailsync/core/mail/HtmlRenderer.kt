@@ -183,8 +183,15 @@ object HtmlRenderer {
         Regex("^<attached:\\s*.+?>\\s*$", RegexOption.IGNORE_CASE),
     )
 
+    private val CAPTION_FIRST_LINE_RE = Regex("^.+?\\s+\\(file attached\\)$", RegexOption.IGNORE_CASE)
+
     /** Remove "(file attached)" / "<attached: ...>" suffixes from display text. */
     private fun stripAttachmentMarkers(text: String): String {
+        // BUG-14: "<name> (file attached)" on the first line, caption below it.
+        val nl = text.indexOf('\n')
+        if (nl >= 0 && CAPTION_FIRST_LINE_RE.matches(text.substring(0, nl).trim())) {
+            return text.substring(nl + 1).trim()
+        }
         var result = text
         for (pattern in ATTACHMENT_MARKER_RES) {
             result = pattern.replace(result, "").trim()
