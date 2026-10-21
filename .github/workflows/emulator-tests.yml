@@ -1,0 +1,112 @@
+# QA-01: run the Kotlin tests on real Android (ART), not only on the desktop JVM.
+#
+# Why: the CUT-02 crash (Pattern.UNICODE_CHARACTER_CLASS, which Android's ICU-backed regex
+# rejects) passed ~600 desktop-JVM tests. This job installs the debug app plus the instrumented
+# tests (android/app/src/androidTest) on an x86_64 emulator at API 30 (our minSdk) and API 34 and
+# runs them there. Nothing here signs in anywhere: no account, no password, no secret, no mail
+# server; the fixtures are synthetic.
+#
+# Not continue-on-error, deliberately: a failure here fails the PR.
+#
+# The emulator is x86_64 while the app ships arm64-v8a only, so this job passes
+# -PciEmulatorAbi=x86_64 (see android/app/build.gradle.kts). Release builds never pass it.
+
+name: Emulator tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: emulator-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  emulator:
+    name: Android emulator tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [30, 34]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4.4.0
+
+      # The emulator needs hardware acceleration; GitHub's Linux runners expose /dev/kvm to
+      # the runner user only after this rule is added.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Chaquopy still needs a host Python at build time (chaquopy { version = "3.13" }).
+      - name: Set up Python 3.13 for Chaquopy
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Accept SDK licences and install platform 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4.4.4
+
+      - name: Cache the AVD
+        id: avd-cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api${{ matrix.api-level }}-x86_64-google_apis
+
+      # First run for a key only: boot once and save a snapshot so later runs start warm.
+      - name: Create the AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: false
+          script: echo "AVD snapshot generated"
+
+      - name: Run the instrumented tests on the emulator
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          working-directory: android
+          script: ./gradlew :app:connectedDebugAndroidTest -PciEmulatorAbi=x86_64 --console=plain
+
+      - name: Upload the test report
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: emulator-report-api${{ matrix.api-level }}
+          path: android/app/build/reports/androidTests
+          if-no-files-found: ignore

@@ -56,9 +56,12 @@ android {
         // (or per product flavor), so it's set once here for every variant.
         // All testing so far has been on a real arm64 device anyway; add
         // x86_64 back temporarily if emulator testing is ever needed.
+        // QA-01: the CI emulator job is x86_64 and passes -PciEmulatorAbi=x86_64. Without that
+        // property (every release and local build) this stays exactly arm64-v8a.
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += providers.gradleProperty("ciEmulatorAbi").getOrElse("arm64-v8a")
         }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -201,6 +204,44 @@ chaquopy {
     }
 }
 
+// ---------------------------------------------------------------------------
+// QA-01: the emulator job runs the SAME golden-parity tests :core runs on the desktop JVM, but on
+// ART, by copying the pure ones (no JDBC driver, no sockets, no `internal` access) into this
+// module's androidTest source set at build time. One source of truth: nothing is duplicated in git.
+// The goldens come from :core's test resources and are packaged as classpath resources, so the
+// tests' getResourceAsStream("golden/...") works unchanged inside the test APK.
+// ---------------------------------------------------------------------------
+val coreTestDir = rootProject.projectDir.resolve("core/src/test/kotlin/com/chatmailsync/core/mail")
+val sharedCoreTests = listOf(
+    "MiniJsonReader.kt", "ParserGoldenParityTest.kt", "HtmlRendererGoldenParityTest.kt",
+    "HtmlMimeGoldenParityTest.kt", "MimeGoldenParityTest.kt", "MimeCasesGoldenParityTest.kt",
+    "MailIndexGoldenParityTest.kt", "MediaExtractorGoldenParityTest.kt",
+    "NormaliseCutoffGoldenParityTest.kt",
+    "StateHashGoldenParityTest.kt", "ChunkMessagesAndBudgetsTest.kt", "ImapUtf7Test.kt",
+    
+)
+val qa01SharedDir = layout.projectDirectory.dir("build/generated/qa01/kotlin").asFile
+val syncQa01CoreTests by tasks.registering(Sync::class) {
+    from(coreTestDir) { include(sharedCoreTests) }
+    // The one Robolectric test is made a plain instrumented test: same cases, real SQLite.
+    from(projectDir.resolve("src/test/java/com/chatmailsync/app")) {
+        include("AndroidStateDbContractTest.kt")
+        filter { line ->
+            when {
+                line.contains("org.robolectric") -> null
+                line.trim() == "@RunWith(RobolectricTestRunner::class)" -> null
+                line.trim().startsWith("@SQLiteMode") -> null
+                else -> line
+            }
+        }
+    }
+    into(qa01SharedDir)
+}
+android.sourceSets.getByName("androidTest").kotlin.srcDir(qa01SharedDir)
+android.sourceSets.getByName("androidTest").resources.srcDir(rootProject.projectDir.resolve("core/src/test/resources"))
+tasks.matching { it.name.startsWith("compileDebugAndroidTest") && it.name.endsWith("Kotlin") }
+    .configureEach { dependsOn(syncQa01CoreTests) }
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
@@ -227,4 +268,9 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
+
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("junit:junit:4.13.2")
 }
