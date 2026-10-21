@@ -407,7 +407,9 @@ class StateRepository(
                     messages_synced  = ?,
                     messages_skipped = ?,
                     messages_cutoff  = ?,
-                    completed_at     = ?
+                    completed_at     = ?,
+                    error_message    = CASE WHEN stopped = 1 THEN NULL ELSE error_message END,
+                    stopped          = 0
                 WHERE run_id = ?
                 """.trimIndent(),
                 listOf(lastSyncedTs, lastSyncedHash, messagesParsed, messagesSynced, messagesSkipped, messagesCutoff, clock(), runId),
@@ -418,7 +420,7 @@ class StateRepository(
     fun failSyncRun(runId: Long, errorMessage: String) {
         withDb { db ->
             db.exec(
-                "UPDATE sync_runs SET status = 'failed', error_message = ?, completed_at = ? WHERE run_id = ?",
+                "UPDATE sync_runs SET status = 'failed', stopped = 0, error_message = ?, completed_at = ? WHERE run_id = ?",
                 listOf(errorMessage, clock(), runId),
             )
         }
@@ -435,6 +437,21 @@ class StateRepository(
             db.exec(
                 "UPDATE sync_runs SET status = 'failed', stopped = 1, messages_synced = ?, " +
                     "error_message = ?, completed_at = ? WHERE run_id = ?",
+                listOf(delivered, "stopped by the user after $delivered of $total messages", clock(), runId),
+            )
+        }
+    }
+
+    /**
+     * BUG-16: a Stop during recovery. The run stays 'pending' so [getPendingRuns] still picks it
+     * up next time, exactly as before; `stopped = 1` and the real delivered count make it read
+     * as stopped (not "Still running"). [completeSyncRun] and [failSyncRun] clear the flag.
+     */
+    fun markPendingRunStopped(runId: Long, delivered: Int, total: Int) {
+        withDb { db ->
+            db.exec(
+                "UPDATE sync_runs SET stopped = 1, messages_synced = ?, error_message = ?, " +
+                    "completed_at = ? WHERE run_id = ? AND status = 'pending'",
                 listOf(delivered, "stopped by the user after $delivered of $total messages", clock(), runId),
             )
         }
@@ -632,13 +649,13 @@ class StateRepository(
 
     fun summarizeRecentRuns(days: Int = 90): RunsSummary {
         val runs = getRecentRuns(days)
-        val finished = runs.filter { it.status == "complete" || it.status == "failed" }
+        val finished = runs.filter { it.status == "complete" || it.status == "failed" || it.stopped }
         val last = finished.firstOrNull()
         return RunsSummary(
             windowDays = days,
             totalRuns = runs.size,
             failedRuns = runs.count { it.status == "failed" && !it.stopped },
-            runningRuns = runs.count { it.status == "pending" },
+            runningRuns = runs.count { it.status == "pending" && !it.stopped },
             lastRunId = last?.runId,
             lastStatus = if (last?.stopped == true) "stopped" else last?.status,
             lastDisplayName = last?.displayName,

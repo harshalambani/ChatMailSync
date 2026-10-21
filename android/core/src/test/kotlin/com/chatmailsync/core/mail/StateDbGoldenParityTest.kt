@@ -128,6 +128,9 @@ class StateDbGoldenParityTest {
     fun kotlinCanExtendAPythonWrittenDatabaseWithoutDisturbingWhatPythonWrote() {
         val dbFile = copyFixtureToTempFile()
         val repo = StateRepository { SqliteJdbcStateDb(dbFile.absolutePath) }
+        // The app opens every database through initDb first, which adds the Kotlin-only
+        // `stopped` column (BUG-15) that completeSyncRun now clears (BUG-16).
+        repo.initDb()
 
         // Write: a brand-new chat, a completed run for it, a hash, and a
         // cutoff -- all through the ordinary Kotlin write path.
