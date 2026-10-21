@@ -76,7 +76,7 @@
   <p class="eyebrow">Privacy Policy</p>
   <h1>Chat Mail Sync</h1>
   <p class="updated">
-    Last updated: September 17, 2026 &mdash; revised for version 2.1.5.
+    Last updated: October 21, 2026 &mdash; revised for version 2.9.0.
     Previously published as &ldquo;WhatsApp Chat Sync to Gmail&rdquo;; the app
     is the same, renamed because it is no longer Gmail-only.
   </p>
@@ -89,14 +89,6 @@
     developer never receives, stores, or has access to your messages, your
     mail, or your accounts. This version carries no analytics, no advertising
     and no third-party SDK of any kind.
-  </p>
-  <p>
-    One promise does not depend on which version you are reading: your chats,
-    your attachments and your credentials go only to the mailbox you name.
-    They are never sold, never used to target anything at you, and never sent
-    to the developer or to anyone else. If a future version ever collects
-    anything at all, this page and the store listing's data-safety declaration
-    change with the release that does it &mdash; before you install it, not after.
   </p>
   <p>
     There is one way to connect: an <strong>email app password over IMAP</strong>,
@@ -123,11 +115,12 @@
     </li>
     <li>
       That app password is stored <strong>only on your own device</strong> and is
-      sent only to the IMAP server you named. It is encrypted at rest on both
-      platforms: with the Android Keystore on Android, and with Windows DPAPI on
-      Windows, inside the app's own data folder readable only by your Windows user
-      account. Because both keys are tied to the device, a saved password does not
-      travel to another phone or PC.
+      sent only to the IMAP server you named. It is encrypted at rest with the
+      Android Keystore, inside the app's own private storage. Android's own
+      backup can carry the encrypted copy to a new phone (see the section on
+      backups below), but the key that opens it never leaves the phone it was
+      made on, so the copy cannot be read anywhere else and you enter the
+      password again on the new phone.
     </li>
     <li>
       The app uses the IMAP <code>APPEND</code> command, which adds a message to a
@@ -152,15 +145,50 @@
   <h2>Data retention and deletion</h2>
   <p>
     The developer retains nothing, because the developer never receives
-    anything. On your own device, the saved app password is kept until you clear
-    it in the app or uninstall, and the local dedup database is stored until you
-    uninstall or clear the app's data. That database holds the names of the chats
-    you have synced, the export filenames, and a one-way hash of each message it
-    has sent &mdash; no message text and no attachments.
+    anything. This is everything version 2.9.0 keeps on your own device:
+  </p>
+  <ul>
+    <li>
+      <strong>The export you import, until its sync is finished.</strong> The app
+      holds its own copy of the export file (the text, and any media if it is a
+      zip) in its private storage. When a sync of that chat completes, the app
+      deletes that copy. If the sync fails, is stopped, or finds no messages in
+      the file, the copy is kept so you can try again, and it is deleted when a
+      later sync of it completes. The original file, wherever you keep it, is not
+      touched by this; the only thing that acts on it is the watched-folder
+      setting you choose (leave it, move it, or delete it).
+    </li>
+    <li>
+      <strong>A small database, until you uninstall or clear the app's
+      data.</strong> It holds the names of the chats you have synced and the
+      export filenames; for each message sent, a one-way hash and the message's
+      time; for each chat, the names or phone numbers of the people who appear in
+      it, with the first and last time each was seen and how many messages each
+      sent; the history of sync runs (times, counts and any error text); and the
+      identifiers of the mailbox folder, conversation and message the app uses to
+      continue a chat in the same place. It holds <strong>neither message text nor
+      attachments</strong>.
+    </li>
+    <li>
+      <strong>Your settings.</strong> Your email address, IMAP host and port, the
+      folder you watch, your theme and batch choices, and the saved app password
+      (encrypted), which is kept until you clear it in the app or uninstall.
+    </li>
+  </ul>
+  <p>
+    <strong>If you have version 2.2.0 or earlier:</strong> those versions kept a
+    copy of every export after it had synced, in the app's private storage (a
+    folder named <code>processed</code>), with no time limit. It was the whole
+    export, message text and any media included, one copy per chat (versions
+    before 2.0.0 could keep more than one). You could not see that folder from
+    outside the app. Version 2.9.0 deletes those copies: the first time a sync
+    runs after you update, it clears that folder. Until that sync has run, the
+    copies are still there. Uninstalling the app or clearing its data removes
+    them too.
   </p>
   <p>
     Emails the app has added to your mailbox are yours &mdash; delete them like any
-    other message at any time. <strong>The app cannot do it for you</strong>, and
+    other mail at any time. <strong>The app cannot do it for you</strong>, and
     that is by design rather than an omission: it holds no permission to delete
     anything in your mailbox, so nothing it could be told to do, and no defect in
     it, can remove mail you already have.
@@ -176,23 +204,36 @@
     credentials ever pass through.
   </p>
   <p>
-    The app keeps a small local database on your device &mdash; chat names, sync
-    status, and a hash of each message sent &mdash; purely to avoid sending the
-    same message twice. It stays on your device unless you export a backup of it
-    yourself. Deleting the app removes it.
+    The app also keeps a small local database on your device, described under
+    &ldquo;Data retention and deletion&rdquo; above, purely to avoid sending the
+    same message twice. Apart from the backup routes in the next section, it stays
+    on your device. Uninstalling the app, or clearing its data, deletes this
+    database from your phone. A copy already in Android's own backup, or in a
+    backup file you wrote, is not deleted by that.
   </p>
 
   <h2>Backups, and moving to a new device</h2>
   <p>
-    A new phone with no copy of that database would re-send your entire history,
-    so the app can write a backup file for you to carry across. It is written
-    only when you ask for one, never automatically and never anywhere but where
-    you choose to put it.
+    <strong>Android's own backup.</strong> The app allows Android to back up two
+    things: the database described above and the app's preferences. Android
+    sends them to your Google account's device backup, if you have that turned
+    on, and carries them across in a phone-to-phone transfer. The exports, media
+    and the Keystore key are not included. The preferences include the encrypted
+    app password, but the key that opens it never leaves the phone it was made
+    on, so on a new phone the copy cannot be read and the app asks for the
+    password once. This backup is controlled in your phone's own settings, where
+    you can switch it off.
+  </p>
+  <p>
+    <strong>The backup file you write yourself.</strong> A new phone with no copy
+    of that database would re-send your entire history, so the app can also write
+    a backup file for you to carry across. The app writes this file only when you ask
+    it to, and only to the place you pick.
   </p>
   <p>
     What the file contains is fixed and deliberately narrow: the dedup database
     described above, and a short list of preferences &mdash; theme, batch size,
-    IMAP host, port and email address. It contains <strong>no password and no
+    mail provider, port and email address. It contains <strong>no password and no
     credential of any kind</strong>. The app builds it from a list of keys that
     are permitted to travel rather than by removing ones known to be secret, and
     it refuses to write the file at all if a key that looks like a credential
@@ -202,8 +243,8 @@
   <p>
     The backup is an ordinary zip file and it is not encrypted. Once written it
     is a file like any other: the app does not know where you put it and cannot
-    reach it again. Because it names the chats you have synced and your email
-    address, treat it as you would any personal document, and prefer moving it
+    reach it again. Because it names the chats you have synced, the people in
+    them and your email address, treat it as you would any personal document, and prefer moving it
     directly between your own devices over leaving it somewhere shared.
   </p>
 
@@ -223,14 +264,16 @@
       store, log, or leak it.</li>
     <li><strong>Credentials stay on your device.</strong> The app password is
       stored only in local app storage, encrypted with a key tied to that device
-      (Windows DPAPI on Windows; the Android Keystore on Android). It is never
+      (the Android Keystore). It is never
       transmitted anywhere except to the IMAP server you named, and never
       written to a log line or an error message.</li>
-    <li><strong>Minimal local footprint.</strong> The only thing the app keeps is
-      a small on-device database of chat names, sync status and message hashes,
-      used purely to avoid re-sending the same message. It contains no message
-      text and no attachments, and it leaves your device only in a backup you
-      export yourself.</li>
+    <li><strong>Limited local footprint.</strong> Apart from your settings, the
+      app keeps a small on-device database (chat names, the people in each chat,
+      sync history and message hashes), used purely to avoid re-sending the same
+      message, and it keeps your export file only until its sync is finished. The
+      database contains neither message text nor attachments. It leaves your device
+      only in a backup you export yourself, or in Android's own backup and device
+      transfer described above.</li>
     <li><strong>You control access and can revoke it instantly.</strong> An app
       password is issued by your provider for one application and can be revoked
       there at any time, without changing your real password (see the next
@@ -251,7 +294,7 @@
   <p>
     Revoking access does not delete anything already synced
     &mdash; those are ordinary emails in your mailbox and are yours to keep
-    or delete like any other message.
+    or delete like any other mail.
   </p>
 
   <h2>Third parties</h2>

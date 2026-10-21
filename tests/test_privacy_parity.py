@@ -94,6 +94,8 @@ def _parse_kotlin() -> tuple[str, list[tuple[str, list[str]]]]:
         if not match:
             break
         text = match.group(1).replace('\\"', '"').replace("\\\\", "\\")
+        # Kotlin sources carry non-ASCII as \uXXXX escapes; compare what is rendered.
+        text = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), text)
         before = body[: match.start()].rstrip()
         after = body[match.end() :].lstrip()
         index = match.end()
@@ -178,3 +180,92 @@ def test_no_unresolved_markup_leaked_into_the_app():
         for text in [heading, *paragraphs]:
             assert "<" not in text, f"markup in app text: {text[:60]!r}"
             assert "&amp;" not in text and "&mdash;" not in text
+
+
+# ---------------------------------------------------------------------------
+# PRIV-02: the policy must describe what 2.9.0 really keeps
+# ---------------------------------------------------------------------------
+
+
+def _full_text(path_kind: str) -> str:
+    """Every word of one copy of the policy, normalised, lower-cased."""
+    if path_kind == "app":
+        _, sections = _parse_kotlin()
+        parts = [h + " " + " ".join(p) for h, p in sections]
+    else:
+        src = PRIVACY_HTML.read_text(encoding="utf-8")
+        parts = [re.sub(r"<[^>]+>", " ", src)]
+    return _normalise(" ".join(parts)).lower()
+
+
+# Sentences that were true until the app started keeping more than a database
+# (the export copy, the sender names, Android's own backup) and are false now.
+# NEGATIVE test: they must be gone from BOTH copies, not merely joined by a
+# new paragraph that contradicts them.
+_RETIRED_SENTENCES = (
+    "no message text and no attachments",
+    "stays on your device unless you export a backup",
+    "the only thing the app keeps",
+    "a saved password does not travel",
+    "windows dpapi",
+)
+
+
+def test_retired_sentences_are_gone_from_both_copies():
+    for kind in ("app", "html"):
+        text = _full_text(kind)
+        for sentence in _RETIRED_SENTENCES:
+            assert sentence not in text, f"{kind} copy still says: {sentence!r}"
+
+
+def test_both_copies_state_what_this_version_keeps():
+    required = (
+        "if you have version 2.2.0 or earlier",
+        "no time limit",
+        "the first time a sync runs after you update",
+        "names or phone numbers of the people who appear",
+        "android's own backup",
+        "the key that opens it never leaves the phone",
+    )
+    for kind in ("app", "html"):
+        text = _full_text(kind)
+        for phrase in required:
+            assert phrase in text, f"{kind} copy is missing: {phrase!r}"
+
+
+def test_the_retired_sentence_check_can_fail():
+    """The guard above must not be a test that cannot fail."""
+    assert "the only thing the app keeps" in _normalise(
+        "The only thing the app keeps is a small database"
+    ).lower()
+
+
+def test_kotlin_source_is_ascii_and_escapes_decode_to_the_rendered_bullet():
+    """Kotlin sources carry non-ASCII as escapes; the parser must decode them."""
+    src = PRIVACY_SCREEN.read_text(encoding="utf-8")
+    assert src.isascii(), "PrivacyScreen.kt has a literal non-ASCII character"
+    bullets = [p for _, ps in _parse_kotlin()[1] for p in ps if p.startswith("\u2022 ")]
+    assert len(bullets) >= 8
+
+
+_RETIRED_2 = (
+    "one promise",
+    "like any other message",
+    "deleting the app removes it",
+    "never automatically",
+)
+_NEW_SENTENCES = (
+    "uninstalling the app, or clearing its data, deletes this database from your phone. "
+    "a copy already in android's own backup, or in a backup file you wrote, is not deleted by that.",
+    "the app writes this file only when you ask it to, and only to the place you pick.",
+)
+
+
+def test_approved_wording_changes_are_in_both_copies():
+    for kind in ("app", "html"):
+        text = _full_text(kind)
+        for phrase in _RETIRED_2:
+            assert phrase not in text, f"{kind} copy still says: {phrase!r}"
+        for sentence in _NEW_SENTENCES:
+            assert sentence in text, f"{kind} copy is missing: {sentence!r}"
+        assert "like any other mail" in text
