@@ -142,7 +142,10 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     }
     if (stoppedByUser) {
         // Cancelled between two emails (BUG-01): the run stays pending, its hashes
-        // are recorded, and the next run recovers the rest.
+        // are recorded, and the next run recovers the rest. BUG-16: flag it stopped with
+        // its real count so it does not read "Still running" until then.
+        val delivered = repo.getHashesForRun(runId).size
+        repo.markPendingRunStopped(runId, delivered, allMessages.size - nCutoff)
         return false
     }
 
