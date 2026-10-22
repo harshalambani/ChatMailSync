@@ -90,6 +90,15 @@ class MainActivity : ComponentActivity() {
     /** Hands over a share that arrived before the UI was listening, once. */
     fun takePendingImport(): Uri? = pendingImport.also { pendingImport = null }
 
+    override fun onResume() {
+        super.onResume()
+        // UX-02: the app is open, so the "a chat is waiting" notice has done its job. Only that id.
+        try {
+            androidx.core.app.NotificationManagerCompat.from(this).cancel(SyncWorker.HELD_NOTIFICATION_ID)
+        } catch (_: Exception) {
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -1157,11 +1166,14 @@ fun ChatMailApp(
             confirmButton = {
                 TextButton(onClick = {
                     Thread {
-                        try {
-                            ChatMailApplication.core(context).confirmLink(qNew, qOld, qFile)
-                        } catch (_: Exception) {
+                        val ok = saveLinkAnswer(
+                            { ChatMailApplication.core(context).confirmLink(qNew, qOld, qFile) },
+                            { Log.w("MainActivity", it) },
+                        )
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
+                            linkTick++
                         }
-                        android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
                     }.start()
                 }) { Text("Yes, same chat") }
             },
@@ -1170,11 +1182,14 @@ fun ChatMailApp(
                     TextButton(onClick = { linkSnoozed = linkSnoozed + qKey }) { Text("Ask me later") }
                     TextButton(onClick = {
                         Thread {
-                            try {
-                                ChatMailApplication.core(context).declineLink(qNew, qOld)
-                            } catch (_: Exception) {
+                            val ok = saveLinkAnswer(
+                                { ChatMailApplication.core(context).declineLink(qNew, qOld) },
+                                { Log.w("MainActivity", it) },
+                            )
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
+                                linkTick++
                             }
-                            android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
                         }.start()
                     }) { Text("No, keep separate") }
                 }

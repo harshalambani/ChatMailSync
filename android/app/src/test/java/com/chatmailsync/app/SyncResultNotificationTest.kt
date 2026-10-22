@@ -30,7 +30,7 @@ class SyncResultNotificationTest {
         val src = File("src/main/java/com/chatmailsync/app/SyncWorker.kt").readText()
         // manager.notify is called with the foreground id (progress) and the result id (final) only.
         val calls = Regex("""manager\.notify\((\w+),""").findAll(src).map { it.groupValues[1] }.toList()
-        assertEquals(listOf("NOTIFICATION_ID", "RESULT_NOTIFICATION_ID"), calls)
+        assertEquals(listOf("NOTIFICATION_ID", "RESULT_NOTIFICATION_ID", "HELD_NOTIFICATION_ID"), calls)
         // The progress poll uses notify(text); the result is posted only through postResult.
         assertEquals(1, Regex("""postResult\(\s*syncResultNotice""").findAll(src).count())
         assertEquals(1, Regex("""postResult\(syncFailedNotice""").findAll(src).count())
