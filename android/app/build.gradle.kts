@@ -41,8 +41,8 @@ android {
         // released without ever being published; v1.4.1 was the first release
         // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
         // and this repo is Android-only from here on.
-        versionCode = 44
-        versionName = "2.9.1"
+        versionCode = 45
+        versionName = "2.9.2"
 
         // arm64-v8a only. abiFilters is only honoured at defaultConfig (or per product flavor),
         // never in a buildType, so it is set once here for every variant. The app ships no
