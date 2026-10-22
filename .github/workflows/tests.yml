@@ -140,3 +140,16 @@ jobs:
       - name: Run Kotlin unit tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest :core:test --no-daemon --stacktrace
+
+      # LIC-02: junit:junit is EPL-1.0 and test-only. JunitTestOnlyGuardTest reads the build files;
+      # this checks what Gradle actually resolves for the shipped (release) runtime classpaths.
+      - name: Fail if JUnit reaches a shipped classpath
+        working-directory: android
+        run: |
+          for task in ":app:dependencies --configuration releaseRuntimeClasspath" ":core:dependencies --configuration runtimeClasspath"; do
+            ./gradlew $task --no-daemon --console=plain > "$RUNNER_TEMP/deps.txt"
+            if grep -i 'junit' "$RUNNER_TEMP/deps.txt"; then
+              echo "::error::junit is on a shipped classpath ($task)"
+              exit 1
+            fi
+          done
