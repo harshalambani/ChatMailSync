@@ -41,14 +41,14 @@ android {
         // released without ever being published; v1.4.1 was the first release
         // to carry both. The Windows app ended at v2.1.5 (tag `windows-final`)
         // and this repo is Android-only from here on.
-        versionCode = 43
-        versionName = "2.9.0"
+        versionCode = 44
+        versionName = "2.9.1"
 
         // arm64-v8a only. abiFilters is only honoured at defaultConfig (or per product flavor),
-        // never in a buildType, so it is set once here for every variant. The app now ships no
-        // native libraries of its own (CUT-03 removed the embedded Python runtime), so this is
-        // a no-op for the APK contents; it stays so a future native dependency cannot quietly
-        // widen the supported ABI set.
+        // never in a buildType, so it is set once here for every variant. The app ships no
+        // native code of its own since CUT-03 removed the embedded Python runtime; the only .so
+        // left comes from androidx (graphics-path), and this filter keeps just its arm64-v8a
+        // copy. It also stops a future native dependency from quietly widening the ABI set.
         // QA-01: the CI emulator job is x86_64 and passes -PciEmulatorAbi=x86_64. Without that
         // property (every release and local build) this stays exactly arm64-v8a.
         ndk {

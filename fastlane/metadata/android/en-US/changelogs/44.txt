@@ -1,0 +1,5 @@
+2.9.1: a much smaller download. The app no longer carries the Python
+runtime the old sync engine needed, so it is now about 3 MB instead of
+23 MB. Your settings, history and syncs carry on exactly as before.
+
+The Open-source licences screen now lists only what the app still uses.
