@@ -1,4 +1,7 @@
-# Dev/test-only dependencies — not bundled into the Android app; pytest runs
-# against the shared core, Chaquopy packages only requirements.txt.
+# Dev/test-only dependencies - not bundled into the Android app (the APK ships
+# no Python at all since CUT-03); pytest runs against src/, the parity reference.
 # Install with: pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0.0
+# tools/render_icons.py (icon and store-asset generator, not a test). 8.2.0 is the
+# first Pillow with ImageDraw.rounded_rectangle, the newest API the script calls.
+Pillow>=8.2.0
