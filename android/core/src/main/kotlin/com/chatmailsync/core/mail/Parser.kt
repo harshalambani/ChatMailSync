@@ -19,8 +19,8 @@ import java.util.zip.ZipFile
  * reproduces its answers for exactly the inputs `TIMESTAMP_PATTERNS` can
  * ever hand it.
  *
- * NOT wired into `:app` yet — `:app`/`SyncWorker.kt` still reach
- * `src/parser.py` through Chaquopy (`sync_manager.py` calls it internally).
+ * This is the parser the app runs; `src/parser.py` is the reference it was
+ * ported from.
  *
  * ## Regex flags: matching Python's Unicode-aware `\s` and `\d`
  *

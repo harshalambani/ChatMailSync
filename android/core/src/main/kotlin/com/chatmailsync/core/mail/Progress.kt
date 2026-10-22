@@ -7,10 +7,7 @@ package com.chatmailsync.core.mail
  * right after `config`). A faithful behavioural twin of the Python module,
  * except where a section below explicitly says otherwise.
  *
- * NOT wired into `:app` yet — `:app` still reads `android_api.progress_state()`
- * through Chaquopy (`SyncWorker.kt:129`). This file exists so a later phase
- * can swap that call for [ProgressTracker.state]`.asDict()` without a
- * behavioural surprise.
+ * The app reads [ProgressTracker.state]`.asDict()` from here directly.
  *
  * Android watches the event stream that `ProgressSyncManager` in
  * `src/sync_manager.py` emits (not yet ported — that is a later Phase 2 PR).
@@ -56,7 +53,7 @@ typealias ProgressEvent = Map<String, Any?>
  * `getattr(stats, "messages_synced", None)` in Python, where the real
  * production caller (`android_api.run`, `android_api.py:353`) never actually
  * supplies one — it publishes a bare `{"type": "done", "stopped": stopped}`
- * because `SyncStats` is not JSON-marshallable across Chaquopy and Kotlin
+ * because `SyncStats` is not JSON-marshallable between Python and Kotlin
  * already reads the real numbers off the worker's `Data`. Only
  * `tests/test_progress.py` ever populates it, with a `types.SimpleNamespace`.
  *
@@ -265,8 +262,7 @@ private fun doneHeadline(event: ProgressEvent): String {
 
 /**
  * Events cross into this tracker as whatever the producer put in them (from
- * Kotlin call sites today; from Chaquopy dicts once `android_api`/
- * `sync_manager` are ported), but a malformed one must not be able to kill a
+ * Kotlin call sites today; from loosely typed maps), but a malformed one must not be able to kill a
  * poll loop. Twin of `progress.py:_int`.
  *
  * Mirrors Python's `int(value)` for the shapes that can actually appear in a

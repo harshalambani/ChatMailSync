@@ -93,7 +93,7 @@ class CutoffDateTest {
     // -----------------------------------------------------------------
     // The wiring no JVM test can reach
     //
-    // SyncWorker needs a Context, WorkManager and a live Chaquopy runtime, so
+    // SyncWorker needs a Context and WorkManager, so
     // the two lines that make the cutoff actually do something on this
     // platform cannot be exercised here. They are read as text instead --
     // the same approach FrozenIdentifiersTest takes, and for the same reason:

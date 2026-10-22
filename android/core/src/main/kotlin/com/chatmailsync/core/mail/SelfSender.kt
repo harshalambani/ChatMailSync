@@ -9,12 +9,8 @@ package com.chatmailsync.core.mail
  * behavioural twin of the Python module's public functions, except where a
  * section below explicitly says otherwise.
  *
- * NOT wired into `:app` yet — `:app` still calls `android_api.get_self_sender()`
- * / `set_self_sender()` through Chaquopy (`MainActivity.kt:897,921-922`),
- * which are thin wrappers around this module's `resolve`/`describe`. This
- * file exists so a later phase can swap those Chaquopy calls for direct
- * `SelfSender.resolve(...)`/`SelfSender.describe(...)` calls without a
- * behavioural surprise.
+ * The app calls `SelfSender.resolve(...)`/`SelfSender.describe(...)` directly
+ * (through `CoreApi`).
  *
  * Work out which sender in an export is the account owner.
  *

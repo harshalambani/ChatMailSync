@@ -220,6 +220,7 @@ class FrozenIdentifiersTest {
             "KEY_LAST_BACKUP_AT" to "last_backup_at",
             "KEY_CUTOFF_DATE" to "cutoff_date",
             "KEY_FIRST_RUN_DONE" to "first_run_done",
+            "KEY_CHAQUOPY_CLEANUP_DONE" to "chaquopy_cleanup_done",
         )
         for ((const, value) in keys) {
             assertTrue(

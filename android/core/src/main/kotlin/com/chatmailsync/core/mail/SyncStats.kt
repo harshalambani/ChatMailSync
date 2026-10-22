@@ -8,7 +8,7 @@ import java.util.regex.Pattern
  * Kotlin port of the bookkeeping half of `src/sync_manager.py`: `SyncStats`
  * (with its `__str__`), `_collect_omissions` and `_scrub_paths`.
  *
- * Not wired into `:app`. Nothing here touches the database, the mailbox or
+ * Nothing here touches the database, the mailbox or
  * the file system.
  */
 

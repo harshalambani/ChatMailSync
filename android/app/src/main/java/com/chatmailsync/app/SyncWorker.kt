@@ -30,8 +30,7 @@ import kotlinx.coroutines.launch
  * service so Android doesn't kill it mid-sync.
  *
  * Phase A5: reports live progress by polling CoreApi.progressState() on a
- * timer while sync() runs on another thread. (It was a poll because Chaquopy
- * could not call back into Kotlin; the poll stays, it also keeps WorkManager
+ * timer while sync() runs on another thread. (The poll keeps WorkManager
  * writes to one per change.)
  *
  * The IMAP password deliberately never travels through inputData.

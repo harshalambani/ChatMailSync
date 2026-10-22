@@ -8,7 +8,7 @@ import java.io.IOException
  * `_prepare_emails`, `_insert_with_backoff`, `PushResult`, `push_chunks` and
  * `push_chat`.
  *
- * Not wired into `:app`. No logging (the mail package has none; Python's
+ * No logging (the mail package has none; Python's
  * `log.*` calls are diagnostic only) and no terminal progress bar
  * (`_print_progress` only ever drew on a console; `onChunk` is the progress
  * channel off a console, exactly as the Python docstring says).

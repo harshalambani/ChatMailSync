@@ -78,7 +78,7 @@ class ConnectionCheckHelpersTest {
     }
 
     // Negative (GA4.1 / item 5): a check that fails with a non-Exception
-    // Throwable -- e.g. something crossing the Chaquopy bridge as an Error --
+    // Throwable -- e.g. something thrown by the check as an Error --
     // must still reach onResult exactly once, and the password must not be
     // in the text it delivers. Before the `catch (t: Throwable)` in
     // runConnectionCheckWithScheduler (deliberately not `catch (e:

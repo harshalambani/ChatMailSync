@@ -52,6 +52,7 @@ object AppPrefs {
     private const val KEY_LAST_BACKUP_AT = "last_backup_at"
     private const val KEY_CUTOFF_DATE = "cutoff_date"
     private const val KEY_FIRST_RUN_DONE = "first_run_done"
+    private const val KEY_CHAQUOPY_CLEANUP_DONE = "chaquopy_cleanup_done"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -365,6 +366,15 @@ object AppPrefs {
 
     fun setFirstRunDone(context: Context, done: Boolean) {
         prefs(context).edit().putBoolean(KEY_FIRST_RUN_DONE, done).apply()
+    }
+
+    /** True once the dead `chaquopy` folder from release 2.2.0 is gone (or was never there).
+     * See [ChaquopyCleanup]. */
+    fun isChaquopyCleanupDone(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_CHAQUOPY_CLEANUP_DONE, false)
+
+    fun setChaquopyCleanupDone(context: Context) {
+        prefs(context).edit().putBoolean(KEY_CHAQUOPY_CLEANUP_DONE, true).apply()
     }
 
     /** Clears every saved IMAP field, including the Keystore-encrypted

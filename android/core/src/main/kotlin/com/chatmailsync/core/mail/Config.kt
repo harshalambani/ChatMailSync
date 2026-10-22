@@ -8,11 +8,9 @@ import java.io.File
  * D/E). A faithful behavioural twin of the Python module's constants and
  * pure functions, except where a section below explicitly says otherwise.
  *
- * NOT wired into `:app` yet — `:app` still talks to `src/config.py` through
- * Chaquopy (`ChatMailApplication.kt`'s `config.set_root(...)` call). This
- * file exists so it can be swapped in later (Phase 4) without behavioural
- * surprises, and so `ImapTransport`/`checkConnection` (Phase 1) keep the
- * subset of constants they already depend on unchanged.
+ * This is the config the app runs on; the Python module it was ported from
+ * is no longer part of the app. `ImapTransport`/`checkConnection` depend on the
+ * subset of constants defined here.
  */
 
 // ---------------------------------------------------------------------------
@@ -34,8 +32,8 @@ import java.io.File
  * library has no import-time-binding trap to work around, and reproducing
  * global mutable state here would just reintroduce the exact class of bug
  * that docstring in `config.py` warns callers about. `ChatMailApplication.kt`
- * already owns the one Android root (`pythonRoot`); Phase 4 will construct a
- * `RootPaths` from it once and pass it down explicitly.
+ * already owns the one Android root (`pythonRoot`, the app's `chatmailsync`
+ * folder) and constructs a `RootPaths` from it once, passing it down explicitly.
  *
  * Two things about `config.py` genuinely have no Kotlin twin here, both
  * because they only exist to serve a plain Python source checkout with no

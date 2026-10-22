@@ -420,9 +420,8 @@ fun SettingsScreen(
                         // copy offered from there as a secondary.
                         TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
                         // Third-party notices the distributed APK is required to
-                        // carry (Chaquopy/MIT, the embedded CPython interpreter/
-                        // PSF, androidx and Kotlin/Apache-2.0, python-dateutil and
-                        // six) -- see NOTICE at the repo root, which this screen
+                        // carry (androidx, Jetpack Compose, Kotlin and
+                        // kotlinx.coroutines, all Apache-2.0) -- see NOTICE at the repo root, which this screen
                         // bundles and displays in full.
                         TextButton(onClick = onOpenLicenses) { Text("Open-source licences") }
                     }

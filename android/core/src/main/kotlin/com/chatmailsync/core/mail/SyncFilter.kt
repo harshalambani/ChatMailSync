@@ -7,7 +7,7 @@ import java.util.Locale
  * a parsed file are new, who "me" is, and what a pushed chunk records.
  *
  * Every function takes the [StateRepository] it reads and writes; nothing here
- * opens a mailbox or touches the file system. Not wired into `:app`.
+ * opens a mailbox or touches the file system.
  */
 
 /** What [filterMessages] decided: the messages to push and the two counts. */

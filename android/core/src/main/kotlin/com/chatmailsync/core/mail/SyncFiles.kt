@@ -7,8 +7,7 @@ import java.nio.file.LinkOption
 
 /**
  * File-system half of `src/sync_manager.py`: which inbox files a run looks at,
- * and the delete-after-sync cleanup. No database, no mailbox. Not wired into
- * `:app`.
+ * and the delete-after-sync cleanup. No database, no mailbox.
  */
 
 /** Python 3.13 `PurePath.suffix`: from the last dot, only when it is neither first nor last. */
