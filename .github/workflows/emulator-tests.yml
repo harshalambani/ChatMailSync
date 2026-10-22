@@ -55,12 +55,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Chaquopy still needs a host Python at build time (chaquopy { version = "3.13" }).
-      - name: Set up Python 3.13 for Chaquopy
-        uses: actions/setup-python@v5.6.0
-        with:
-          python-version: "3.13"
-
       - name: Accept SDK licences and install platform 36
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null

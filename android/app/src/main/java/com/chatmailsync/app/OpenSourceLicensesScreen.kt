@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
  * Every third-party component that ships inside the APK, with the licence
  * that governs it. This list is the same one NOTICE documents in full --
  * see NoticeCoverageTest, which fails if a runtime `implementation`
- * dependency in app/build.gradle.kts (or the Chaquopy pip package) goes
+ * dependency in app/build.gradle.kts goes
  * missing from NOTICE, and NoticeAssetTest, which fails if the bundled
  * asset below drifts from the root NOTICE file's text.
  *
@@ -43,18 +43,6 @@ internal data class LicensedComponent(
 )
 
 internal val OPEN_SOURCE_COMPONENTS: List<LicensedComponent> = listOf(
-    LicensedComponent("Chaquopy (Python runtime)", "MIT", "github.com/chaquo/chaquopy"),
-    LicensedComponent(
-        "CPython 3.13 (interpreter + standard library)",
-        "Python Software Foundation License 2.0",
-        "github.com/python/cpython",
-    ),
-    LicensedComponent(
-        "python-dateutil",
-        "Apache-2.0 AND BSD-3-Clause",
-        "github.com/dateutil/dateutil",
-    ),
-    LicensedComponent("six", "MIT", "github.com/benjaminp/six"),
     LicensedComponent(
         "AndroidX / Jetpack Compose",
         "Apache-2.0",
