@@ -10,8 +10,8 @@ import org.junit.Test
  * tested yet" qualifier.
  *
  * The picker's actual *order* is not a Kotlin constant -- it comes straight
- * from src/config.py's IMAP_PROVIDERS dict, read across the Chaquopy bridge
- * (see MainActivity.kt's LaunchedEffect) as a `List<ImapProviderInfo>` handed
+ * from the core's IMAP provider table (ported from src/config.py's
+ * IMAP_PROVIDERS dict; see MainActivity.kt's LaunchedEffect) as a `List<ImapProviderInfo>` handed
  * in from outside. That order is covered on the Python side, in
  * tests/test_config.py (test_provider_order_is_proven_first_then_expected_then_fastmail_then_custom).
  * What *is* a pure Kotlin constant, and belongs here, is PROVIDER_TIER2_NOTE

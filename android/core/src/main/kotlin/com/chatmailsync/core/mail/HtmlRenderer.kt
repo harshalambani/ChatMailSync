@@ -18,9 +18,8 @@ import java.util.UUID
  * only (no `<style>` blocks -- Gmail strips them in some rendering
  * contexts), no external CSS, no web fonts, no JavaScript.
  *
- * NOT wired into `:app` yet -- `:app` still talks to `src/html_renderer.py`
- * through Chaquopy (via `_build_html_mime_message`, itself still unported --
- * see `MimeBuilder.kt`'s class KDoc). This is a byte-parity port only.
+ * This is a byte-parity port of `src/html_renderer.py`, which the app no
+ * longer runs.
  *
  * There is no autolinking anywhere in the Python source (verified by
  * reading the file in full and by running `render_chunk` on a message body

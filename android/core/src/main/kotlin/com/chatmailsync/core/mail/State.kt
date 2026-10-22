@@ -10,9 +10,8 @@ import java.time.format.DateTimeFormatter
  * `user_version` migration logic, and every query helper, except where a
  * section below explicitly says otherwise.
  *
- * NOT wired into `:app` yet -- `:app` still talks to `src/state.py` through
- * Chaquopy (`android_api.py`'s call sites). This file exists so it can be
- * swapped in later (Phase 4) without behavioural surprises.
+ * This is the state store the app runs; `src/state.py` is the reference it
+ * was ported from.
  *
  * `compute_message_hash` is deliberately **not** redeclared here -- it
  * already has a Kotlin twin, [computeMessageHash] in `MailIndex.kt`, ported

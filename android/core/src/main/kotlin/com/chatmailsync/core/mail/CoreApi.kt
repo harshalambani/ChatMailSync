@@ -8,10 +8,8 @@ import java.nio.file.NoSuchFileException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Kotlin port of the Chaquopy facade `src/android_api.py`: one public function per
- * Python function, same arguments, same result shapes.
- *
- * Not wired into `:app` (CUT-02 does that). Until then the app keeps calling Python.
+ * Kotlin port of the former Python facade `src/android_api.py`: one public function per
+ * Python function, same arguments, same result shapes. The app calls this directly.
  *
  * Result shapes. Every function that returns a dict in Python returns a
  * `Map<String, Any?>` here whose keys are exactly Python's, in Python's order; a list of

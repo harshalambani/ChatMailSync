@@ -26,8 +26,8 @@ import java.util.zip.ZipFile
  * `2026-09-17-kotlin-core-fdroid-plan-and-windows-audit.md` for the wider
  * Phase 2 porting rationale.
  *
- * NOT wired into `:app` yet -- `:app` still talks to `src/media_extractor.py`
- * through Chaquopy. This is a byte-parity port only.
+ * This is a byte-parity port of `src/media_extractor.py`, which the app no
+ * longer runs.
  *
  * ## ZIP detection
  * The ZIP is detected by attempting to open it as one (the same
@@ -60,8 +60,8 @@ import java.util.zip.ZipFile
  * Python resolves MIME types via the stdlib `mimetypes.guess_type()`. On the
  * machine used to generate this port's golden fixtures (Windows), the
  * module-level `mimetypes.guess_type()` lazily merges Windows-registry MIME
- * associations that do not exist on the real production target (Android via
- * Chaquopy, a Linux-based CPython with no Windows registry) -- so the golden
+ * associations that do not exist on the real production target (Android, with
+ * no Windows registry) -- so the golden
  * was generated from a fresh, registry-free `mimetypes.MimeTypes(filenames=())`
  * instance instead of the polluted module-level singleton. [guessMimeType]
  * below is a hand-curated Kotlin table restricted to the extensions actually

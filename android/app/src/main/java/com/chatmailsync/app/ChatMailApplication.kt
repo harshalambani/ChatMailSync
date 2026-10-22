@@ -15,6 +15,24 @@ class ChatMailApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         appContext = applicationContext
+        removeDeadChaquopyFolder(applicationContext)
+    }
+
+    /** One-time housekeeping on a background thread, off the main thread and out of the sync
+     * path. See [ChaquopyCleanup]. */
+    private fun removeDeadChaquopyFolder(ctx: Context) {
+        Thread({
+            try {
+                ChaquopyCleanup.run(
+                    filesDir = ctx.filesDir,
+                    isDone = { AppPrefs.isChaquopyCleanupDone(ctx) },
+                    markDone = { AppPrefs.setChaquopyCleanupDone(ctx) },
+                    log = { android.util.Log.w("ChatMailApplication", it) },
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("ChatMailApplication", "chaquopy cleanup failed, will retry")
+            }
+        }, "chaquopy-cleanup").apply { isDaemon = true }.start()
     }
 
     companion object {

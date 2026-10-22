@@ -273,14 +273,14 @@ internal fun backLabelForRoute(route: String?): String = when {
 /**
  * Backstop for "Test connection": how long the UI waits for a result before
  * giving up on it and reporting a timeout of its own, regardless of what the
- * Python side is doing.
+ * core is doing.
  *
  * check_connection()'s own worst case is five stages at
  * CONNECTION_TEST_STAGE_TIMEOUT (8s) each, about 40s -- this is set above
- * that so the Python-side timeout is normally the one that fires and names
- * the actual stage, with this one only as insurance against the Chaquopy
- * bridge itself wedging (a non-Exception Throwable, a call that never
- * returns control at all) rather than the network call inside it.
+ * that so the core's own timeout is normally the one that fires and names
+ * the actual stage, with this one only as insurance against the check itself
+ * wedging (a non-Exception Throwable, a call that never returns control at
+ * all) rather than the network call inside it.
  */
 internal const val ConnectionWatchdogTimeoutMs = 50_000L
 
@@ -310,7 +310,7 @@ internal fun redactSecretText(text: String, secret: String?): String =
  *  - the worker thread finishes, whether [check] succeeds, returns a normal
  *    check_connection() failure outcome, or throws -- `catch (t: Throwable)`
  *    here, deliberately not `catch (e: Exception)`, so a non-Exception
- *    failure crossing the Chaquopy bridge still reports back instead of
+ *    failure thrown by the check still reports back instead of
  *    silently ending the thread with the UI never told; or
  *  - [ConnectionWatchdogTimeoutMs] elapses with no result yet, in which case
  *    this reports its own timeout and leaves the worker thread to finish (or
@@ -572,11 +572,11 @@ fun ChatMailApp(
     var imapProviders by remember { mutableStateOf(listOf<ImapProviderInfo>()) }
     // The five connection stages, in order, so the wizard's last step can draw
     // the whole list greyed out before the check starts rather than growing it
-    // a line at a time. Read from the Python core rather than hardcoded here,
+    // a line at a time. Read from the Kotlin core rather than hardcoded here,
     // so Kotlin never drifts from the source of truth.
     var stagePlan by remember { mutableStateOf(listOf<WizardStage>()) }
 
-    // Reads config.IMAP_PROVIDERS via the Python side once per composition —
+    // Reads the core's IMAP provider table once per composition —
     // the shared preset table (host/port per provider), so Android never
     // duplicates that data in Kotlin.
     LaunchedEffect(Unit) {
@@ -590,8 +590,8 @@ fun ChatMailApp(
         }
         // A settings file written by a release that offered a provider this
         // one has retired still names it, and the picker would otherwise show
-        // the raw key with the host field locked. Ask the Python side what
-        // replaced it (config.RETIRED_IMAP_PROVIDERS), and save the answer so
+        // the raw key with the host field locked. Ask the core what
+        // replaced it (its retired-provider table), and save the answer so
         // the two sides stop disagreeing from here on. A key that was never
         // ours comes back empty and is left alone -- guessing at it would put
         // some other provider's host in front of the user without saying so.

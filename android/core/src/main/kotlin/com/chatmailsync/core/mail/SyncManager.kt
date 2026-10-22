@@ -11,7 +11,7 @@ import java.nio.file.Files
  * the default [shouldStop] gives the plain base behaviour for events and
  * stopping; the pre-scan that sizes the progress bar runs either way.
  *
- * Not wired into `:app`. Nothing here is Android specific: the state store,
+ * Nothing here is Android specific: the state store,
  * the mail transport and the two folders are handed in.
  *
  * Error text boundary: every string that leaves this class, whether stored in

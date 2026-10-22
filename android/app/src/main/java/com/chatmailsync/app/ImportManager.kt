@@ -7,10 +7,9 @@ import java.io.File
 
 /**
  * Copies a WhatsApp export received via share-sheet (ACTION_SEND) or the SAF
- * file picker into the shared core's data/inbox/ directory. Kotlin owns this
- * copy (not android_api.py) because content:// Uris are an Android-only
- * concept — Chaquopy's Python side only ever sees plain files already
- * sitting in inbox/.
+ * file picker into the shared core's data/inbox/ directory. The app owns this
+ * copy because content:// Uris are an Android-only concept — the core only
+ * ever sees plain files already sitting in inbox/.
  */
 /** Result of an import attempt: the file now sitting in the inbox, and
  * whether it was already there before this call (vs. freshly copied in). */
