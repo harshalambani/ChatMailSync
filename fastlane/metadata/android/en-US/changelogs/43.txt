@@ -1,0 +1,10 @@
+2.9.0: a new sync engine, written entirely in Kotlin. Needs Android 11 or
+newer; phones on Android 7 to 10 stay on 2.2.0.
+
+Photos and files sent with a caption are now attached. Cancel stops
+promptly and is not counted as a failure. Each chat export is removed from
+your phone once its sync completes. Restoring a backup is stricter. A new
+Open-source licences screen is in Settings, and the privacy policy is
+rewritten for this version.
+
+Upgrading keeps your history, so nothing is mailed twice.
