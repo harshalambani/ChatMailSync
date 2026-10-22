@@ -6,15 +6,55 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 ## Unreleased
 
+- A chat that was renamed in WhatsApp is now recognised as the same chat and
+  linked to its earlier history, instead of starting over as a new chat.
+- Chats whose names are written in non-Latin scripts (Devanagari, Arabic,
+  Chinese and so on) now each get their own identity, so two different
+  chats no longer risk being treated as one.
+
+## 2.9.1
+
+Released 2026-10-22 (versionCode 44). A much smaller download.
+
+- The app no longer carries the Python runtime the old sync engine needed,
+  so it is about 3 MB instead of 23 MB. Settings, history and syncs carry
+  on exactly as before.
+- The Open-source licences screen and the root `NOTICE` file now list only
+  what the app still uses: AndroidX and Jetpack Compose, the Kotlin
+  standard library and kotlinx.coroutines (all Apache-2.0). The Python
+  runtime, python-dateutil and six entries are gone.
+- JUnit 4 (EPL-1.0) is kept as a test-only dependency and does not ship in
+  the app.
+
+## 2.9.0
+
+Released 2026-10-21 (versionCode 43). A new sync engine, written entirely
+in Kotlin. Needs Android 11 or newer; phones on Android 7 to 10 stay on
+2.2.0. Upgrading keeps your history, so nothing is mailed twice.
+
+- Photos and files sent with a caption are now attached.
+- Cancel stops promptly, between two emails of the same chat export, and a
+  stopped run is shown as stopped rather than failed. A Stop that arrives
+  during recovery of an interrupted run reads as stopped, not "Still
+  running", and a force close after Stop no longer re-runs the sync.
+- Each chat export is removed from your phone once its sync completes.
+- An export that reads as zero messages is kept and reported instead of
+  being silently dropped.
+- The end-of-sync notification is no longer lost when the sync ends.
+- Each part of a long chat now carries its "Part k/N" label on its subject.
+- The picture of what was last synced no longer steps backwards after a
+  recovered run, and recent runs, senders and chats list in a stable order.
+- Restoring a backup is stricter: the restored database is size-capped,
+  `messages_cutoff` is carried across, and history of the wrong type is
+  refused rather than half-loaded.
 - Added third-party licence notices: a root `NOTICE` file covering every
-  component that ships inside the APK (Chaquopy/MIT, the embedded CPython
-  3.13 interpreter and standard library/PSF-2.0, python-dateutil/Apache-2.0
-  AND BSD-3-Clause, six/MIT, AndroidX and Jetpack Compose/Apache-2.0, the
-  Kotlin stdlib/Apache-2.0, and kotlinx.coroutines/Apache-2.0), plus a new
-  "Open-source licences" screen (Settings → Help & About) that bundles the
-  same text into the app. A guard test fails the build if a runtime
-  dependency or the Chaquopy pip package is added without a matching NOTICE
-  entry.
+  component that shipped inside the APK, plus an "Open-source licences"
+  screen (Settings -> Help & About) that bundles the same text into the app.
+  A guard test fails the build if a runtime dependency is added without a
+  matching NOTICE entry.
+- The privacy policy is rewritten for this version.
+- The Kotlin tests now also run on real Android (emulator jobs on API 30
+  and 34).
 
 ## 2.2.0
 
