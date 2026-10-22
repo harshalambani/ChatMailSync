@@ -265,6 +265,11 @@ class CoreApi(
         stopFlag.set(true)
     }
 
+    /** UX-02: exports the last [sync] held for a "same chat?" answer (0 before any sync). */
+    @Volatile
+    var lastSyncFilesHeld: Int = 0
+        private set
+
     /**
      * `sync` (android_api.py:302): one full pass over the inbox. [onProgress] gets the
      * files_total / total_messages / syncing / chunk / file_done events, with the secret
@@ -289,9 +294,13 @@ class CoreApi(
     ): Map<String, Any?> {
         // Wait for any earlier sync, but never past our own stop request.
         while (!syncLock.tryLock(100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-            if (externalStop?.invoke() == true) return stoppedBeforeStart()
+            if (externalStop?.invoke() == true) {
+                lastSyncFilesHeld = 0
+                return stoppedBeforeStart()
+            }
         }
         try {
+            lastSyncFilesHeld = 0
             return runLocked(transport, chunkSize, dryRun, chatFilter, onProgress, trigger, cutoffDate, externalStop)
         } finally {
             syncLock.unlock()
@@ -347,6 +356,8 @@ class CoreApi(
         val stopped = shouldStop()
         // `stopped` travels with the event so the final headline says "Stopped", not "Done".
         publishProgress(linkedMapOf("type" to "done", "stopped" to stopped))
+        // UX-02: kept out of the result map (it must match Python's keys); the app reads it here.
+        lastSyncFilesHeld = stats.filesHeld
         return LinkedHashMap(stats.asMap()).also { it["stopped"] = stopped }
     }
 

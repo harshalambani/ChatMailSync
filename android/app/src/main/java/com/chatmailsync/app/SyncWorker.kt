@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
@@ -69,6 +70,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         /** BUG-13: a new channel; NOTIFICATION_CHANNEL_ID above is frozen and never renamed. */
         const val RESULT_CHANNEL_ID = "sync_results_channel"
         const val RESULT_CHANNEL_NAME = "Sync results"
+        /** UX-02: a chat is waiting for the user's answer. Its own id, so it updates, never stacks. */
+        const val HELD_NOTIFICATION_ID = 1004
         /** Unique work name for a manual Home-triggered sync (real or dry
          * run) — lets MainActivity/SyncProgressScreen re-find this run's
          * WorkInfo by name after a process restart, instead of relying on
@@ -199,6 +202,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 postResult(
                     syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
                 )
+                heldNotice(core.lastSyncFilesHeld, trigger, dryRun)?.let { postHeld(it) }
                 Result.success(
                     workDataOf(
                         KEY_RESULT to scrubSecret(statsResult.format(), currentSecret()),
@@ -373,6 +377,37 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
+    /**
+     * UX-02: one small notification when a background sync held an export for a "same chat?"
+     * answer. Generic text only (it shows on the lock screen), private on the lock screen, same
+     * id every time so it updates. Never throws, never retries: with POST_NOTIFICATIONS denied
+     * the post is skipped.
+     */
+    private fun postHeld(notice: HeldNotice) {
+        try {
+            val manager =
+                applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.createNotificationChannel(
+                    NotificationChannel(RESULT_CHANNEL_ID, RESULT_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) return
+            val builder = NotificationCompat.Builder(applicationContext, RESULT_CHANNEL_ID)
+                .setContentTitle(notice.title)
+                .setContentText(notice.text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(notice.text))
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setSilent(true)
+                .setContentIntent(openAppIntent())
+            manager.notify(HELD_NOTIFICATION_ID, builder.build())
+        } catch (_: Exception) {
+        }
+    }
+
     private fun createForegroundInfo(text: String): ForegroundInfo {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
@@ -511,6 +546,23 @@ internal fun syncResultNotice(dryRun: Boolean, stopped: Boolean, messagesSynced:
 
 internal fun syncFailedNotice(message: String?): ResultNotice =
     ResultNotice("Sync failed: $message", alert = true)
+
+/** UX-02: what the "a chat is waiting" notification says. Generic: no chat name, file or email. */
+internal data class HeldNotice(val title: String, val text: String)
+
+/**
+ * UX-02 (D60): the notice for a sync that held exports for a "same chat?" answer, or null when
+ * there is nothing to say: nothing held, a dry run, or a sync the user started by hand (the app
+ * is open and shows the question itself). Only a background sync (any trigger but "manual")
+ * returns one.
+ */
+internal fun heldNotice(filesHeld: Int, trigger: String, dryRun: Boolean): HeldNotice? {
+    if (filesHeld <= 0 || dryRun || trigger == "manual") return null
+    return HeldNotice(
+        title = "A chat is waiting for your answer",
+        text = "Open Chat Mail Sync to confirm whether it's a renamed chat.",
+    )
+}
 
 /** BUG-13: WorkManager cancelled the worker. Never a failure, never an alert; no stats on this path. */
 internal fun syncCancelledNotice(dryRun: Boolean): ResultNotice =

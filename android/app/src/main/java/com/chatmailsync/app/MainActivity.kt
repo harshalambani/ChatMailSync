@@ -1157,11 +1157,14 @@ fun ChatMailApp(
             confirmButton = {
                 TextButton(onClick = {
                     Thread {
-                        try {
-                            ChatMailApplication.core(context).confirmLink(qNew, qOld, qFile)
-                        } catch (_: Exception) {
+                        val ok = saveLinkAnswer(
+                            { ChatMailApplication.core(context).confirmLink(qNew, qOld, qFile) },
+                            { Log.w("MainActivity", it) },
+                        )
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
+                            linkTick++
                         }
-                        android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
                     }.start()
                 }) { Text("Yes, same chat") }
             },
@@ -1170,11 +1173,14 @@ fun ChatMailApp(
                     TextButton(onClick = { linkSnoozed = linkSnoozed + qKey }) { Text("Ask me later") }
                     TextButton(onClick = {
                         Thread {
-                            try {
-                                ChatMailApplication.core(context).declineLink(qNew, qOld)
-                            } catch (_: Exception) {
+                            val ok = saveLinkAnswer(
+                                { ChatMailApplication.core(context).declineLink(qNew, qOld) },
+                                { Log.w("MainActivity", it) },
+                            )
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
+                                linkTick++
                             }
-                            android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
                         }.start()
                     }) { Text("No, keep separate") }
                 }
