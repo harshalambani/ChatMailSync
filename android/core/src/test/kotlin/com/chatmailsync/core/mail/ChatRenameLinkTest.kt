@@ -69,7 +69,7 @@ class ChatRenameLinkTest {
         assertTrue("the export stays in the inbox", File(e.inbox, "WhatsApp Chat with $saved.txt").exists())
         val p = e.proposals().single()
         assertEquals(LinkKind.RENAME, p.kind)
-        assertEquals(3, p.matched)
+        assertEquals(6, p.matched)
         assertEquals(extractChatInfo("$number.txt").chatId, p.oldChatId)
 
         e.confirmOnly()
@@ -267,5 +267,32 @@ class ChatRenameLinkTest {
         e.repo.addChatLink("a", "c") // would close a loop
         assertEquals("a", e.repo.resolveChatId("c"))
         assertEquals("a", e.repo.resolveChatId("a"))
+    }
+
+    private fun relabelled(other: String, words: String) =
+        (1..6).joinToString("\n") {
+            "%02d/03/25, 09:00 - %s: %s %d".format(it, if (it == 5) self else other, words, it)
+        } + "\n"
+
+    @Test
+    fun aRenameStillLinksWhenOnlyOneMessageKeepsItsSenderLabel() {
+        val e = Env()
+        File(e.inbox, "WhatsApp Chat with $number.txt").writeText(relabelled(number, "same words"))
+        assertEquals(6, e.sync().messagesSynced)
+        File(e.inbox, "WhatsApp Chat with $saved.txt").writeText(relabelled(saved, "same words"))
+        val p = e.proposals().single()
+        assertEquals("all six match once the other party's label is mapped", 6, p.matched)
+        applyLink(e.repo, p, File(e.inbox, p.fileName))
+        assertEquals(0, e.sync().messagesSynced)
+        assertEquals("nothing already archived is mailed again", 6, e.sent())
+    }
+
+    @Test
+    fun aRelabelledPairWithDifferentWordsIsNotLinked() {
+        val e = Env()
+        File(e.inbox, "WhatsApp Chat with $number.txt").writeText(relabelled(number, "old words"))
+        e.sync()
+        File(e.inbox, "WhatsApp Chat with $saved.txt").writeText(relabelled(saved, "new words"))
+        assertEquals(0, e.proposals().size)
     }
 }

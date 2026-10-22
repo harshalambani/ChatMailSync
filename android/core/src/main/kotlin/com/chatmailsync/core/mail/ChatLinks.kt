@@ -61,11 +61,7 @@ fun findLinkProposals(repo: StateRepository, file: File, info: ChatInfo): List<L
     for (c in candidates) {
         val stored = repo.hashesForChat(c.chatId)
         if (stored.isEmpty()) continue
-        val seen = HashSet<String>()
-        for (m in messages) {
-            val h = StateRepository.computeMessageHash(c.chatId, m.timestampIso, m.sender, m.body)
-            if (h in stored) seen.add(h)
-        }
+        val seen = matchedOldHashes(repo, c.chatId, messages, stored).keys
         if (seen.size >= MIN_LINK_MATCHES) {
             out.add(
                 LinkProposal(
@@ -81,6 +77,44 @@ fun findLinkProposals(repo: StateRepository, file: File, info: ChatInfo): List<L
         }
     }
     return out.sortedWith(compareByDescending<LinkProposal> { it.matched }.thenBy { it.oldChatId })
+}
+
+/**
+ * The export's messages whose fingerprint already exists in [oldChatId], keyed by that stored
+ * fingerprint. A rename usually relabels the OTHER party too (a number becomes a saved name), so a
+ * sender label the old chat never had is also tried as each old label the export no longer uses;
+ * the best-matching old label wins, per new label. Only labels, times and fingerprints are read.
+ */
+internal fun matchedOldHashes(
+    repo: StateRepository,
+    oldChatId: String,
+    messages: List<ParsedMessage>,
+    stored: Set<String>,
+): Map<String, ParsedMessage> {
+    val out = LinkedHashMap<String, ParsedMessage>()
+    for (m in messages) {
+        val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, m.sender, m.body)
+        if (h in stored) out.putIfAbsent(h, m)
+    }
+    val oldLabels = repo.listChatSenders(oldChatId).map { it.sender }.toSet()
+    if (oldLabels.isEmpty()) return out
+    val newLabels = messages.map { it.sender }.toSet()
+    val fresh = newLabels - oldLabels
+    val spare = oldLabels - newLabels
+    for (label in fresh) {
+        var best: Map<String, ParsedMessage> = emptyMap()
+        for (old in spare) {
+            val hits = LinkedHashMap<String, ParsedMessage>()
+            for (m in messages) {
+                if (m.sender != label) continue
+                val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, old, m.body)
+                if (h in stored) hits.putIfAbsent(h, m)
+            }
+            if (hits.size > best.size) best = hits
+        }
+        for ((h, m) in best) out.putIfAbsent(h, m)
+    }
+    return out
 }
 
 /** Every open question for the exports waiting in [inboxDir]. Read-only: nothing is written. */
@@ -112,9 +146,11 @@ fun applyLink(repo: StateRepository, proposal: LinkProposal, file: File): Int {
             val stored = repo.hashesForChat(proposal.oldChatId)
             val entries = ArrayList<StateRepository.AdoptEntry>()
             val seen = HashSet<String>()
-            for (m in parseFile(file, proposal.newChatId)) {
-                val old = StateRepository.computeMessageHash(proposal.oldChatId, m.timestampIso, m.sender, m.body)
-                if (old !in stored || !seen.add(old)) continue
+            val parsed = parseFile(file, proposal.newChatId).toList()
+            val matches = matchedOldHashes(repo, proposal.oldChatId, parsed, stored)
+            for (m in parsed) {
+                val old = matches.entries.firstOrNull { it.value === m }?.key ?: continue
+                if (!seen.add(old)) continue
                 val new = StateRepository.computeMessageHash(proposal.newChatId, m.timestampIso, m.sender, m.body)
                 entries.add(StateRepository.AdoptEntry(old, new, m.timestampIso))
             }
