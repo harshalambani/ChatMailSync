@@ -107,6 +107,23 @@ class StateRepository(
                 value TEXT NOT NULL
             );
 
+            -- BUG-05 (schema 3, Kotlin only): a confirmed rename. Exports named [alias_id] now belong
+            -- to the existing chat [target_id], so their fingerprints, cutoff, thread and history
+            -- carry on unchanged. Created by IF NOT EXISTS: a 2.9.1 database just gains the tables.
+            CREATE TABLE IF NOT EXISTS chat_links (
+                alias_id  TEXT PRIMARY KEY,
+                target_id TEXT NOT NULL,
+                linked_at TEXT NOT NULL
+            );
+
+            -- BUG-05: a pair the user said is NOT the same chat, so it is never asked again.
+            CREATE TABLE IF NOT EXISTS link_declines (
+                new_id      TEXT NOT NULL,
+                old_id      TEXT NOT NULL,
+                declined_at TEXT NOT NULL,
+                PRIMARY KEY (new_id, old_id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_message_hashes_chat  ON message_hashes(chat_id);
             CREATE INDEX IF NOT EXISTS idx_sync_runs_chat       ON sync_runs(chat_id);
             CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
@@ -128,7 +145,7 @@ class StateRepository(
         private val STOPPED_TEXT = Regex("^stopped by the user after ([0-9]+) of ([0-9]+) messages")
 
         /** Twin of `state.py:_SCHEMA_VERSION`. */
-        const val SCHEMA_VERSION: Int = 2
+        const val SCHEMA_VERSION: Int = 3
 
         /** Most bound values one statement may carry (SQLITE_MAX_VARIABLE_NUMBER before 3.32). */
         internal const val MAX_BOUND_VALUES: Int = 999
@@ -361,6 +378,94 @@ class StateRepository(
                 WHERE chat_id = ?
                 """.trimIndent(),
                 listOf(gmailThreadId, gmailLabelId, anchorMessageId, clock(), chatId),
+            )
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // BUG-05: chat links (a confirmed rename) and declined pairs
+    // -----------------------------------------------------------------
+
+    /** The chat an export named [chatId] really belongs to: [chatId] itself unless a link says otherwise. */
+    fun resolveChatId(chatId: String): String =
+        withDb { db ->
+            var current = chatId
+            // A chain is flattened when written, so one hop is the norm; the bound only guards a cycle.
+            repeat(8) {
+                val next = db.query("SELECT target_id FROM chat_links WHERE alias_id = ?", listOf(current))
+                    .firstOrNull()?.get("target_id") as String? ?: return@withDb current
+                current = next
+            }
+            current
+        }
+
+    /** True when [chatId] has been linked to another chat (it is an alias, not a chat of its own). */
+    fun isAlias(chatId: String): Boolean =
+        withDb { db -> db.query("SELECT 1 FROM chat_links WHERE alias_id = ?", listOf(chatId)).isNotEmpty() }
+
+    /** True when other names have been linked into [chatId]. */
+    fun hasAliases(chatId: String): Boolean =
+        withDb { db -> db.query("SELECT 1 FROM chat_links WHERE target_id = ?", listOf(chatId)).isNotEmpty() }
+
+    /**
+     * Records that exports named [aliasId] belong to [targetId]. [targetId] is first resolved to
+     * its root and anything already linked to [aliasId] is re-pointed, so the table never holds a
+     * chain and a cycle cannot form.
+     */
+    fun addChatLink(aliasId: String, targetId: String) {
+        val now = clock()
+        withDb { db ->
+            var root = targetId
+            repeat(8) {
+                root = db.query("SELECT target_id FROM chat_links WHERE alias_id = ?", listOf(root))
+                    .firstOrNull()?.get("target_id") as String? ?: root
+            }
+            if (root == aliasId) return@withDb
+            db.exec("UPDATE chat_links SET target_id = ? WHERE target_id = ?", listOf(root, aliasId))
+            db.exec(
+                "INSERT INTO chat_links (alias_id, target_id, linked_at) VALUES (?, ?, ?) " +
+                    "ON CONFLICT(alias_id) DO UPDATE SET target_id = excluded.target_id",
+                listOf(aliasId, root, now),
+            )
+        }
+    }
+
+    fun declineChatLink(newId: String, oldId: String) {
+        val now = clock()
+        withDb { db ->
+            db.exec(
+                "INSERT OR IGNORE INTO link_declines (new_id, old_id, declined_at) VALUES (?, ?, ?)",
+                listOf(newId, oldId, now),
+            )
+        }
+    }
+
+    fun isLinkDeclined(newId: String, oldId: String): Boolean =
+        withDb { db ->
+            db.query("SELECT 1 FROM link_declines WHERE new_id = ? AND old_id = ?", listOf(newId, oldId)).isNotEmpty()
+        }
+
+    /** Every stored fingerprint of [chatId]. Fingerprints only: no message text is stored or read. */
+    fun hashesForChat(chatId: String): Set<String> =
+        withDb { db ->
+            db.query("SELECT hash FROM message_hashes WHERE chat_id = ?", listOf(chatId))
+                .map { it["hash"] as String }
+                .toSet()
+        }
+
+    /** The newest message time archived for [chatId], whatever run it belonged to; null if none. */
+    fun newestArchivedTs(chatId: String): String? =
+        withDb { db ->
+            db.query("SELECT MAX(message_ts) AS ts FROM message_hashes WHERE chat_id = ?", listOf(chatId))
+                .firstOrNull()?.get("ts") as String?
+        }
+
+    /** Shows [displayName] (and the export it came from) for [chatId]; nothing else about the chat changes. */
+    fun setChatDisplayName(chatId: String, displayName: String, sourceFilename: String) {
+        withDb { db ->
+            db.exec(
+                "UPDATE chats SET display_name = ?, source_filename = ?, updated_at = ? WHERE chat_id = ?",
+                listOf(displayName, sourceFilename, clock(), chatId),
             )
         }
     }
@@ -791,8 +896,65 @@ class StateRepository(
             }
         }
 
+    /** One archived message of a shared legacy record, as it was fingerprinted ([oldHash]) and as it will be ([newHash]). */
+    class AdoptEntry(val oldHash: String, val newHash: String, val messageTs: String)
+
+    /**
+     * BUG-06: splits one chat out of the shared legacy `unknown_chat` record in ONE transaction.
+     * The listed fingerprints move to [newChatId] under their new value, [newChatId] gets a chat
+     * row (the folder is carried over only when it is this chat's own), the legacy cutoff, and a
+     * completed run at the newest moved time so nothing older is mailed again. The legacy record's
+     * other rows are left exactly as they were. Returns how many fingerprints moved.
+     */
+    fun adoptFromLegacy(
+        legacyId: String,
+        newChatId: String,
+        displayName: String,
+        sourceFilename: String,
+        entries: List<AdoptEntry>,
+    ): Int {
+        if (entries.isEmpty()) return 0
+        val now = clock()
+        return withDb { db ->
+            val legacy = db.query("SELECT * FROM chats WHERE chat_id = ?", listOf(legacyId)).firstOrNull()
+            val ownFolder = fullLabelName(displayName)
+            val carriedLabel = (legacy?.get("gmail_label_id") as String?)?.takeIf { it == ownFolder }
+            db.exec(
+                "INSERT OR IGNORE INTO chats (chat_id, display_name, gmail_thread_id, gmail_label_id, " +
+                    "anchor_message_id, source_filename, created_at, updated_at) VALUES (?, ?, NULL, ?, NULL, ?, ?, ?)",
+                listOf(newChatId, displayName, carriedLabel, sourceFilename, now, now),
+            )
+            val newest = entries.maxOf { it.messageTs }
+            db.exec(
+                "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, messages_parsed, " +
+                    "messages_synced, messages_skipped, messages_cutoff, stopped, error_message, started_at, completed_at) " +
+                    "VALUES (?, 'complete', 'manual', ?, NULL, ?, ?, 0, 0, 0, NULL, ?, ?)",
+                listOf(newChatId, newest, entries.size, entries.size, now, now),
+            )
+            val runId = db.lastInsertRowId()
+            var moved = 0
+            for (e in entries) {
+                val exists = db.query("SELECT 1 FROM message_hashes WHERE hash = ?", listOf(e.newHash)).isNotEmpty()
+                if (exists) continue
+                db.exec(
+                    "UPDATE message_hashes SET hash = ?, chat_id = ?, run_id = ? WHERE hash = ? AND chat_id = ?",
+                    listOf(e.newHash, newChatId, runId, e.oldHash, legacyId),
+                )
+                moved += (db.query("SELECT changes() AS n").first()["n"] as Number).toInt()
+            }
+            db.exec(
+                "INSERT OR IGNORE INTO chat_cutoffs (chat_id, cutoff_ts, set_at) " +
+                    "SELECT ?, cutoff_ts, ? FROM chat_cutoffs WHERE chat_id = ?",
+                listOf(newChatId, now, legacyId),
+            )
+            moved
+        }
+    }
+
     fun deleteChat(chatId: String) {
         withDb { db ->
+            db.exec("DELETE FROM chat_links WHERE alias_id = ? OR target_id = ?", listOf(chatId, chatId))
+            db.exec("DELETE FROM link_declines WHERE new_id = ? OR old_id = ?", listOf(chatId, chatId))
             db.exec("DELETE FROM message_hashes WHERE chat_id = ?", listOf(chatId))
             db.exec("DELETE FROM sync_runs WHERE chat_id = ?", listOf(chatId))
             db.exec("DELETE FROM chat_cutoffs WHERE chat_id = ?", listOf(chatId))

@@ -146,6 +146,9 @@ class JvmImapConnection private constructor(
 
     override fun subscribe(mailboxWireArg: String): ImapResult = runCommand("SUBSCRIBE $mailboxWireArg")
 
+    override fun rename(oldWireArg: String, newWireArg: String): ImapResult =
+        runCommand("RENAME $oldWireArg $newWireArg")
+
     override fun append(
         mailboxWireArg: String,
         flags: String?,

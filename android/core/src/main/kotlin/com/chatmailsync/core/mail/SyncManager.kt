@@ -37,6 +37,8 @@ class SyncManager(
     internal val exportDeleter: (File) -> Unit = { Files.delete(it.toPath()) },
     /** CUT-02: the running app's version, stamped into every archived email's index. */
     internal val appVersion: String = UNKNOWN_VERSION,
+    /** BUG-05: hold an export that looks like a renamed chat until the user answers. Always on in the app. */
+    internal val detectRenames: Boolean = true,
 ) {
     /** The app-wide floor; a per-chat override beats it for that chat. */
     internal val cutoffDate: String? = normaliseCutoff(cutoffDate)
@@ -55,6 +57,49 @@ class SyncManager(
     )
 
     private val prescanCache = HashMap<String, Planned>()
+
+    /** BUG-05: per export path, whether it waits on a rename question. Decided once per run. */
+    private val heldCache = HashMap<String, Boolean>()
+
+    /** The chat an export belongs to: its own id unless the user confirmed a rename. */
+    private fun effectiveId(info: ChatInfo): String = repo.resolveChatId(info.chatId)
+
+    /**
+     * BUG-05: true when [file] looks like a renamed chat that is already archived under another
+     * name and the user has not answered yet. Such a file is held in the inbox untouched: sending
+     * it now would mail the whole history again under a second chat.
+     */
+    private fun isHeld(file: File, info: ChatInfo): Boolean =
+        detectRenames && heldCache.getOrPut(file.path) {
+            try {
+                findLinkProposals(repo, file, info).isNotEmpty()
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+    /**
+     * The name to show for [info]: the export's own name, except an export still carrying the
+     * chat's OLD name after a confirmed rename, which must not rename the chat back.
+     */
+    private fun shownName(info: ChatInfo, chatId: String): String {
+        if (info.chatId == chatId && repo.hasAliases(chatId)) {
+            repo.getChat(chatId)?.let { return it.displayName }
+        }
+        return info.displayName
+    }
+
+    /**
+     * Dedup baseline: the newest non-empty time across completed runs (BUG-07). A chat that has
+     * names linked into it also honours the newest archived message, because the other party's
+     * label changed with the rename and so those messages carry new fingerprints.
+     */
+    private fun baselineTs(chatId: String): String? {
+        val runTs = repo.getLastSyncedTs(chatId)
+        if (!repo.hasAliases(chatId)) return runTs
+        val archived = repo.newestArchivedTs(chatId)
+        return listOfNotNull(runTs, archived).maxOrNull()
+    }
 
     init {
         repo.initDb()
@@ -128,11 +173,22 @@ class SyncManager(
 
         for (file in inbox) {
             val info = extractChatInfo(file.name)
-            if (!matchesChatFilter(chatFilter, info.chatId, info.displayName)) continue
-            syncFile(file, info.chatId, info.displayName, stats)
+            val chatId = effectiveId(info)
+            if (!matchesFilter(chatFilter, info, chatId)) continue
+            if (isHeld(file, info)) {
+                // BUG-05: waits for the user's answer; left in the inbox, nothing sent.
+                stats.filesHeld += 1
+                emit(mapOf("type" to "link_pending"))
+                continue
+            }
+            syncFile(file, chatId, shownName(info, chatId), stats)
         }
         return stats
     }
+
+    private fun matchesFilter(chatFilter: String?, info: ChatInfo, chatId: String): Boolean =
+        matchesChatFilter(chatFilter, info.chatId, info.displayName) ||
+            (chatId != info.chatId && matchesChatFilter(chatFilter, chatId, info.displayName))
 
     /** Finish the runs a crash left pending; see SyncRecovery.kt. */
     internal fun recoverPending(stats: SyncStats): Int = recoverPendingRuns(stats)
@@ -145,10 +201,12 @@ class SyncManager(
         var total = 0
         for (file in files) {
             val info = extractChatInfo(file.name)
-            if (!matchesChatFilter(chatFilter, info.chatId, info.displayName)) continue
+            val chatId = effectiveId(info)
+            if (!matchesFilter(chatFilter, info, chatId)) continue
             try {
-                val lastTs = repo.getLastSyncedTs(info.chatId)
-                val planned = parseAndFilter(file, info.chatId, lastTs)
+                if (isHeld(file, info)) continue
+                val lastTs = baselineTs(chatId)
+                val planned = parseAndFilter(file, chatId, lastTs)
                 prescanCache[file.path] = planned
                 total += planned.new.size
             } catch (_: Exception) {
@@ -187,10 +245,17 @@ class SyncManager(
     }
 
     private fun syncFileCore(file: File, chatId: String, displayName: String, stats: SyncStats) {
-        if (!dryRun) repo.upsertChat(chatId, displayName, file.name)
+        if (!dryRun) {
+            repo.upsertChat(chatId, displayName, file.name)
+            // BUG-05: upsert never touches the name, so a rename (or a capitals-only change)
+            // would leave the app showing the old one. Update it here.
+            val existing = repo.getChat(chatId)
+            if (existing != null && existing.displayName != displayName) {
+                repo.setChatDisplayName(chatId, displayName, file.name)
+            }
+        }
 
-        // Dedup baseline: the newest (maximum) non-empty time across completed runs (BUG-07).
-        val lastTs = repo.getLastSyncedTs(chatId)
+        val lastTs = baselineTs(chatId)
 
         var runId: Long? = null
         if (!dryRun) runId = repo.startSyncRun(chatId, trigger)
@@ -221,6 +286,9 @@ class SyncManager(
             if (runId != null) repo.failSyncRun(runId, "no messages found in this export")
             return
         }
+
+        // D29: a renamed chat's server folder follows its new name even when nothing is sent now.
+        if (!dryRun) renameFolderIfNeeded(chatId, displayName)
 
         // Nothing new to push (everything already sent, or before the cutoff).
         if (new.isEmpty()) {
@@ -290,6 +358,8 @@ class SyncManager(
                 sleeper = sleeper,
                 shouldStop = shouldStop,
                 appVersion = appVersion,
+                onFolderRenamed = { ok -> emit(mapOf("type" to "folder_renamed", "ok" to ok)) },
+                allowFolderRename = chatId != LEGACY_CHAT_ID,
             )
             results = pushed.results
             labelId = pushed.labelId
@@ -337,6 +407,23 @@ class SyncManager(
 
         stats.filesSynced += 1
         stats.messagesSynced += new.size
+    }
+
+    /**
+     * D29: when the shown name no longer matches the stored folder, rename the folder now. A
+     * refusal keeps the old folder (nothing is created, nothing lost). Never fails the sync:
+     * the push repeats the attempt, and a network problem surfaces there.
+     */
+    private fun renameFolderIfNeeded(chatId: String, displayName: String) {
+        val mail = transport ?: return
+        if (chatId == LEGACY_CHAT_ID) return
+        val stored = repo.getChat(chatId)?.gmailLabelId ?: return
+        if (!stored.startsWith("$LABEL_PARENT/") || stored == fullLabelName(displayName)) return
+        try {
+            val label = folderForPush(mail, stored, displayName, { ok -> emit(mapOf("type" to "folder_renamed", "ok" to ok)) })
+            if (label != stored) repo.updateChatGmailIds(chatId, null, label, null)
+        } catch (_: Exception) {
+        }
     }
 
     private fun onChunkProgress(displayName: String, chunk: Int, totalChunks: Int, msgsDone: Int, totalMsgs: Int) {

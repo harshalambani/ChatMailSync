@@ -193,6 +193,28 @@ class ImapTransport(
         return name
     }
 
+    /**
+     * BUG-05 / D29: renames the folder [oldName] to [newName] and returns the new id. Any refusal
+     * (the target exists, the server does not allow it) throws [MailTransportError] and leaves
+     * the old folder exactly as it was.
+     */
+    override fun labelsRename(oldName: String, newName: String): String {
+        val oldWire = mailboxToWire(oldName)
+        val newWire = mailboxToWire(newName)
+        val result = try {
+            call { it.rename(oldWire, newWire) }
+        } catch (exc: Exception) {
+            throw mapException(exc, "RENAME")
+        }
+        if (result.status != "OK") throw mapResponse(result.status, result.data, "RENAME")
+        try {
+            call { it.subscribe(newWire) }
+        } catch (_: Exception) {
+            // Subscription is best-effort, as for CREATE.
+        }
+        return newName
+    }
+
     data class InsertResult(val id: String, val threadId: String)
 
     /** Mirrors `messages_insert`. [folder] is the canonical '/'-delimited label/folder name. */

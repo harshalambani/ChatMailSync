@@ -682,6 +682,31 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         dst.exec("INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)", listOf(row["key"], row["value"]))
     }
 
+    // BUG-05: confirmed renames and declined pairs travel with the history. A bundle written by
+    // an older app has neither table, which is fine. This device's own answer stands.
+    val linkRows = try {
+        src.query("SELECT alias_id, target_id, linked_at FROM chat_links")
+    } catch (_: StateDbException) {
+        emptyList()
+    }
+    for (row in linkRows) {
+        dst.exec(
+            "INSERT OR IGNORE INTO chat_links (alias_id, target_id, linked_at) VALUES (?, ?, ?)",
+            listOf(row["alias_id"], row["target_id"], row["linked_at"]),
+        )
+    }
+    val declineRows = try {
+        src.query("SELECT new_id, old_id, declined_at FROM link_declines")
+    } catch (_: StateDbException) {
+        emptyList()
+    }
+    for (row in declineRows) {
+        dst.exec(
+            "INSERT OR IGNORE INTO link_declines (new_id, old_id, declined_at) VALUES (?, ?, ?)",
+            listOf(row["new_id"], row["old_id"], row["declined_at"]),
+        )
+    }
+
     var hashesAdded = 0
     var after = Long.MIN_VALUE
     while (true) {

@@ -41,6 +41,14 @@ interface ImapConnection {
     fun list(reference: String, pattern: String): ImapResult
     fun create(mailboxWireArg: String): ImapResult
     fun subscribe(mailboxWireArg: String): ImapResult
+
+    /**
+     * BUG-05: `RENAME old new`. A NO comes back as data like every other command. The default
+     * answers NO so a connection that cannot rename (a test double) reads as a refusal, which
+     * the caller already handles by keeping the old folder.
+     */
+    fun rename(oldWireArg: String, newWireArg: String): ImapResult =
+        ImapResult("NO", listOf("RENAME not supported"))
     fun append(mailboxWireArg: String, flags: String?, internalDate: OffsetDateTime?, message: ByteArray): ImapResult
     fun logout()
 }

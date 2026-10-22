@@ -30,6 +30,13 @@ interface MailTransport {
     /** Creates the label/folder [name] and returns its id. An existing one is success. */
     fun labelsCreate(name: String): String
 
+    /**
+     * BUG-05 / D29: renames the folder [oldName] to [newName], returning the new id. A refusal
+     * throws [MailTransportError]; the caller then keeps the old folder. The default refuses.
+     */
+    fun labelsRename(oldName: String, newName: String): String =
+        throw MailTransportError("RENAME is not supported by this transport")
+
     /** Files [rawMessageBytes] under [folder]. A refusal throws [MailTransportError]. */
     fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String? = null): ImapTransport.InsertResult
 
@@ -57,6 +64,52 @@ fun labelIdIsUsable(transport: MailTransport, labelId: String?, displayName: Str
  * the same sanitising as the write path.
  */
 fun mailboxFolderFor(displayName: String): String = fullLabelName(displayName)
+
+/**
+ * BUG-05 / D29: the folder a push goes to. A stored folder that is the chat's own for [displayName]
+ * is used as it is. A stored folder under the app's parent that is NOT (the chat was renamed) is
+ * renamed to the new name; if the server refuses, the chat keeps filing into the old folder and
+ * no mail is lost or split. Only a stored folder that no longer exists (or an id from another
+ * backend, or none) gets a folder created, as before.
+ *
+ * [onRenamed] is told the outcome of a rename attempt (true = renamed, false = kept the old
+ * folder), so the caller can report it without a name in the text.
+ */
+fun folderForPush(
+    transport: MailTransport,
+    labelId: String?,
+    displayName: String,
+    onRenamed: ((Boolean) -> Unit)? = null,
+    /** False for the shared legacy record, whose stored folder may belong to a different chat. */
+    allowRename: Boolean = true,
+): String {
+    if (labelIdIsUsable(transport, labelId, displayName)) return labelId!!
+    val stored = labelId.orEmpty()
+    if (allowRename && stored.startsWith("$LABEL_PARENT/")) {
+        val target = fullLabelName(displayName)
+        val renamed = try {
+            transport.labelsRename(stored, target)
+        } catch (_: MailTransportError) {
+            null
+        }
+        if (renamed != null) {
+            onRenamed?.invoke(true)
+            return renamed
+        }
+        // Refused: keep the old folder if it is still there. Never create a second one while the
+        // first holds the chat's history.
+        val stillThere = try {
+            transport.labelsList().any { it.name == stored }
+        } catch (_: MailTransportError) {
+            true
+        }
+        if (stillThere) {
+            onRenamed?.invoke(false)
+            return stored
+        }
+    }
+    return getOrCreateLabel(transport, displayName)
+}
 
 /**
  * Mirrors `get_or_create_label`: returns the id of `WhatsApp/<display name>`,

@@ -349,12 +349,16 @@ fun pushChat(
     shouldStop: () -> Boolean = { false },
     onAccepted: OnAccepted? = null,
     appVersion: String = UNKNOWN_VERSION,
+    /** BUG-05: told whether a folder rename went through (true) or fell back to the old folder (false). */
+    onFolderRenamed: ((Boolean) -> Unit)? = null,
+    /** BUG-05: false when the stored folder cannot be trusted to be this chat's (shared legacy record). */
+    allowFolderRename: Boolean = true,
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
     var label = labelId
-    if (!dryRun && !labelIdIsUsable(transport, label, displayName)) {
-        label = getOrCreateLabel(transport, displayName)
+    if (!dryRun) {
+        label = folderForPush(transport, label, displayName, onFolderRenamed, allowFolderRename)
     }
     val finalLabel = if (label.isNullOrEmpty()) "dry-run-label" else label
 

@@ -148,7 +148,7 @@ class CoreApi(
     /** `_preview_cutoff` (android_api.py:150): the floor this file would meet, as a plain day. */
     private fun previewCutoff(chatId: String, appCutoff: String): String? {
         val own: String? = try {
-            ready().getChatCutoff(chatId)
+            ready().let { it.getChatCutoff(it.resolveChatId(chatId)) }
         } catch (_: Exception) {
             null
         }
@@ -510,6 +510,56 @@ class CoreApi(
             )
         r.deleteChat(chat.chatId)
         linkedMapOf("ok" to true, "chat_id" to chat.chatId, "display_name" to chat.displayName, "error" to null)
+    }
+
+    // ------------------------------------------------------------------
+    // BUG-05 / BUG-06: "is this the same chat under a new name?"
+    // ------------------------------------------------------------------
+
+    private fun proposalMap(p: LinkProposal): Map<String, Any?> = linkedMapOf(
+        "new_chat_id" to p.newChatId,
+        "new_display_name" to p.newDisplayName,
+        "old_chat_id" to p.oldChatId,
+        "old_display_name" to p.oldDisplayName,
+        "matched" to p.matched,
+        "kind" to p.kind.name.lowercase(),
+        "file_name" to p.fileName,
+    )
+
+    /** Every open question for the exports in the inbox. Read-only; matching reads fingerprints only. */
+    fun linkProposals(): List<Map<String, Any?>> = guarded {
+        scanLinkProposals(ready(), paths.inboxDir).map(::proposalMap)
+    }
+
+    private fun findOpenProposal(r: StateRepository, newChatId: String, oldChatId: String, fileName: String): LinkProposal? {
+        val base = File(fileName).name
+        val file = File(paths.inboxDir, base)
+        if (base.isEmpty() || !file.isFile) return null
+        return findLinkProposals(r, file, extractChatInfo(file.name))
+            .firstOrNull { it.newChatId == newChatId && it.oldChatId == oldChatId }
+    }
+
+    /**
+     * The user said "yes, same chat". The export is read as the old chat from now on, so nothing
+     * already archived is mailed again. `{"ok", "carried", "error"}`.
+     */
+    fun confirmLink(newChatId: String, oldChatId: String, fileName: String): Map<String, Any?> = guarded {
+        syncLock.lock()
+        try {
+            val r = ready()
+            val proposal = findOpenProposal(r, newChatId, oldChatId, fileName)
+                ?: return@guarded linkedMapOf("ok" to false, "carried" to 0, "error" to "That question is no longer open.")
+            val carried = applyLink(r, proposal, File(paths.inboxDir, File(fileName).name))
+            linkedMapOf("ok" to true, "carried" to carried, "error" to null)
+        } finally {
+            syncLock.unlock()
+        }
+    }
+
+    /** The user said "no, different chat": the pair stays separate and is never asked about again. */
+    fun declineLink(newChatId: String, oldChatId: String): Map<String, Any?> = guarded {
+        ready().declineChatLink(newChatId, oldChatId)
+        linkedMapOf("ok" to true, "error" to null)
     }
 
     // ------------------------------------------------------------------

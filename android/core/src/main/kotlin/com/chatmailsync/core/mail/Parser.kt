@@ -302,9 +302,21 @@ fun extractChatInfo(filename: String): ChatInfo {
     // Normalize: ASCII alphanumeric only, spaces collapsed to underscores.
     var chatId = NON_ASCII_ALNUM_RE.matcher(displayName.lowercase(Locale.ROOT)).replaceAll("")
     chatId = WHITESPACE_RUN_RE.matcher(pythonStrip(chatId)).replaceAll("_").trim('_')
-    if (chatId.isEmpty()) chatId = "unknown_chat"
+    // BUG-06: a name with no ASCII letter or digit used to collapse to one shared id, so
+    // different chats shared one record. Such a name now gets an id derived from the name
+    // itself. Any name that already gives a non-empty id keeps it EXACTLY.
+    if (chatId.isEmpty()) chatId = nameDerivedChatId(displayName)
 
     return ChatInfo(chatId, displayName)
+}
+
+/** "nl_" plus 16 hex of SHA-256 over the NFC-normalised, lower-cased name. Stable and distinct per name. */
+internal fun nameDerivedChatId(displayName: String): String {
+    val norm = java.text.Normalizer.normalize(displayName, java.text.Normalizer.Form.NFC)
+        .lowercase(Locale.ROOT)
+    if (norm.isEmpty()) return LEGACY_CHAT_ID
+    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(norm.toByteArray(Charsets.UTF_8))
+    return "nl_" + digest.take(8).joinToString("") { "%02x".format(it) }
 }
 
 private val TRAILING_COUNTER_RE: Pattern =
