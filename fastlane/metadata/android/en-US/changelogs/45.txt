@@ -1,0 +1,8 @@
+2.9.2: renamed contacts are recognised. If a chat was renamed or the
+contact was newly saved, the app now asks once whether it is the same
+chat, and nothing is sent twice.
+
+A failed answer to that question now shows a message, and a background
+sync that is waiting for your answer shows a notification.
+
+Space left over from older versions is freed on the first start.

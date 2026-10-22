@@ -6,11 +6,21 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 ## Unreleased
 
+## 2.9.2
+
+Released 2026-10-22 (versionCode 45). Renamed contacts are recognised.
+
 - A chat that was renamed in WhatsApp is now recognised as the same chat and
   linked to its earlier history, instead of starting over as a new chat.
 - Chats whose names are written in non-Latin scripts (Devanagari, Arabic,
   Chinese and so on) now each get their own identity, so two different
   chats no longer risk being treated as one.
+- Answering "Is this the same chat?" now says so when saving the answer
+  failed ("Couldn't save your answer. Please try again."), and the question
+  stays open so you can answer again.
+- A background sync that is waiting for that answer now shows one
+  notification, with no chat name in it. It clears when you open the app.
+- Space left over from older versions is freed on the first start.
 
 ## 2.9.1
 
