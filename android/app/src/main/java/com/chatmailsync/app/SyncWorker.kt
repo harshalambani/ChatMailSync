@@ -380,7 +380,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
     /**
      * UX-02: one small notification when a background sync held an export for a "same chat?"
      * answer. Generic text only (it shows on the lock screen), private on the lock screen, same
-     * id every time so it updates. Never throws, never retries: with POST_NOTIFICATIONS denied
+     * id every time so it updates. Cleared when the app is opened (MainActivity.onResume). Never throws, never retries: with POST_NOTIFICATIONS denied
      * the post is skipped.
      */
     private fun postHeld(notice: HeldNotice) {

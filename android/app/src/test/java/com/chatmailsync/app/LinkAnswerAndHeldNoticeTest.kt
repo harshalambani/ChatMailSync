@@ -21,13 +21,35 @@ class LinkAnswerAndHeldNoticeTest {
     }
 
     @Test
-    fun aFailedAnswerReturnsFalseAndLogsOnlyClassAndMessage() {
+    fun aFailedAnswerReturnsFalseAndLogsTheTypeButNotTheMessage() {
         val logs = mutableListOf<String>()
         val ok = saveLinkAnswer({ throw IllegalStateException("disk full") }, { logs += it })
         assertFalse(ok)
         assertEquals(1, logs.size)
         assertTrue(logs[0].contains("IllegalStateException"))
-        assertTrue(logs[0].contains("disk full"))
+        assertFalse(logs[0].contains("disk full"))
+    }
+
+    @Test
+    fun aMissingExportErrorNeverPutsTheChatNameInTheLog() {
+        val logs = mutableListOf<String>()
+        saveLinkAnswer(
+            { throw java.io.FileNotFoundException("/x/WhatsApp Chat with Meera Iyer.txt (No such file or directory)") },
+            { logs += it },
+        )
+        assertEquals(1, logs.size)
+        assertTrue(logs[0].contains("FileNotFoundException"))
+        for (bad in listOf("Meera Iyer", ".txt", "WhatsApp Chat with")) assertFalse(logs[0].contains(bad))
+    }
+
+    @Test
+    fun openingTheAppClearsOnlyTheHeldNotice() {
+        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val body = src.substringAfter("override fun onResume()").substringBefore("override fun onCreate")
+        assertTrue(body.contains("cancel(SyncWorker.HELD_NOTIFICATION_ID)"))
+        assertTrue(body.contains("catch (_: Exception)"))
+        assertFalse(src.contains("cancelAll"))
+        assertFalse(Regex("""cancel\(\s*(SyncWorker\.)?(NOTIFICATION_ID|RESULT_NOTIFICATION_ID)""").containsMatchIn(src))
     }
 
     @Test

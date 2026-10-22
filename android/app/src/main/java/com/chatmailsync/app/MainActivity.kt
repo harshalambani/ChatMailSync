@@ -90,6 +90,15 @@ class MainActivity : ComponentActivity() {
     /** Hands over a share that arrived before the UI was listening, once. */
     fun takePendingImport(): Uri? = pendingImport.also { pendingImport = null }
 
+    override fun onResume() {
+        super.onResume()
+        // UX-02: the app is open, so the "a chat is waiting" notice has done its job. Only that id.
+        try {
+            androidx.core.app.NotificationManagerCompat.from(this).cancel(SyncWorker.HELD_NOTIFICATION_ID)
+        } catch (_: Exception) {
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
