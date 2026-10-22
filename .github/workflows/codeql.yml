@@ -13,8 +13,7 @@
 # left behind. Python needs no build; only the Kotlin half pays for a compile.
 #
 # Cost, so it is not a surprise later: the java-kotlin job runs a real Gradle
-# assembleDebug, which makes Chaquopy download a Python runtime and pip-install
-# the pinned dependencies into the APK. That is the slow job. It is scoped to
+# assembleDebug. That is the slow job. It is scoped to
 # pushes/PRs touching android/ plus a weekly run, rather than every commit.
 
 name: CodeQL
@@ -70,15 +69,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Chaquopy needs a host ("build") Python matching the version pinned in
-      # chaquopy { defaultConfig { version = "3.13" } }. Without this the
-      # Gradle build fails looking for python3.13 on PATH.
-      - name: Set up Python 3.13 for Chaquopy
-        if: matrix.language == 'java-kotlin'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Accept SDK licences and install platform 36
         if: matrix.language == 'java-kotlin'
         run: |
@@ -105,6 +95,21 @@ jobs:
         if: matrix.language == 'java-kotlin'
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # CUT-03 guard: the APK must carry no embedded Python runtime. Lists the built APK and
+      # fails on any entry that looks like Chaquopy, libpython or a Python stdlib bundle.
+      - name: Fail if the APK embeds a Python runtime
+        if: matrix.language == 'java-kotlin'
+        working-directory: android
+        run: |
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          ls -l "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-entries.txt"
+          echo "lib entries:"; grep -E '^lib/' "$RUNNER_TEMP/apk-entries.txt" || echo "(none)"
+          if grep -Ei 'chaquopy|libpython|(^|/)(stdlib|python)[^/]*\.(zip|imy)$|\.imy$' "$RUNNER_TEMP/apk-entries.txt"; then
+            echo "::error::The APK embeds a Python runtime again (entries above)."
+            exit 1
+          fi
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4

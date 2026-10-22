@@ -9,8 +9,8 @@ import java.io.File
  * A licence audit found the APK shipped no third-party notices at all. NOTICE
  * (repo root) now lists every component that reaches the distributed APK --
  * this test is the guard that keeps it that way: it fails if a runtime
- * `implementation` dependency declared in app/build.gradle.kts, or the
- * Chaquopy pip package, goes missing from NOTICE.
+ * `implementation` dependency declared in app/build.gradle.kts goes missing
+ * from NOTICE.
  *
  * It parses the *real* build.gradle.kts and the *real* NOTICE rather than
  * hardcoding an expected list, for the same reason FrozenIdentifiersTest
@@ -68,29 +68,12 @@ class NoticeCoverageTest {
     }
 
     @Test
-    fun `the Chaquopy pip package is covered by NOTICE`() {
-        val pipInstall = Regex("""install\("([^"]+)==([^"]+)"\)""").find(buildGradle)
-            ?: throw AssertionError(
-                "no pip install(...) call found in app/build.gradle.kts's chaquopy block"
-            )
-        val (packageName, version) = pipInstall.destructured
-        assertTrue(
-            "NOTICE does not mention the pinned pip package name '$packageName'",
-            notice.contains(packageName),
-        )
-        assertTrue(
-            "NOTICE does not mention the pinned pip version '$version' for '$packageName'",
-            notice.contains(version),
-        )
-    }
-
-    @Test
-    fun `NOTICE also covers six, the transitive dependency of python-dateutil`() {
-        // Not declared anywhere in build.gradle.kts (it rides in via
-        // requirements-lock.txt's `# via python-dateutil` line), so the
-        // parser above can't discover it on its own -- named directly here
-        // instead.
-        assertTrue("NOTICE does not mention six", notice.contains("six"))
+    fun `NOTICE no longer carries the retired Python runtime sections`() {
+        // Negative test (CUT-03): the APK embeds no Python, so a NOTICE that still claims it does
+        // is documenting something that is not shipped.
+        for (gone in listOf("Chaquopy (Python runtime", "CPython 3.13", "python-dateutil 2.9", "six 1.17")) {
+            assertFalse("NOTICE still has a section for $gone", notice.contains(gone))
+        }
     }
 
     @Test

@@ -15,7 +15,7 @@ class OpenSourceLicensesScreenTest {
     @Test
     fun `every shipped component family named in NOTICE has a summary row`() {
         val names = OPEN_SOURCE_COMPONENTS.map { it.name.lowercase() }
-        for (expected in listOf("chaquopy", "cpython", "python-dateutil", "six", "androidx", "kotlin", "kotlinx.coroutines")) {
+        for (expected in listOf("androidx", "kotlin", "kotlinx.coroutines")) {
             assertTrue(
                 "no OPEN_SOURCE_COMPONENTS row mentions '$expected'",
                 names.any { it.contains(expected) },
@@ -41,6 +41,10 @@ class OpenSourceLicensesScreenTest {
         val haystack = OPEN_SOURCE_COMPONENTS.joinToString(" ") { "${it.name} ${it.upstream}" }
             .lowercase()
         assertFalse("junit must not appear in the shipped-component summary", haystack.contains("junit"))
+        // CUT-03: the embedded Python runtime and its packages are gone from the APK.
+        for (gone in listOf("chaquopy", "cpython", "python-dateutil", "six")) {
+            assertFalse("$gone no longer ships and must not be listed", haystack.contains(gone))
+        }
         assertFalse(
             "the Android Gradle Plugin must not appear in the shipped-component summary",
             haystack.contains("android gradle plugin") || haystack.contains("agp"),

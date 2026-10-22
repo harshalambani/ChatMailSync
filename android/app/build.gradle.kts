@@ -5,7 +5,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.chaquo.python")
 }
 
 // Release signing (Phase A6). keystore.properties is gitignored — never
@@ -45,17 +44,11 @@ android {
         versionCode = 43
         versionName = "2.9.0"
 
-        // arm64-v8a only. This used to also include x86_64 for emulator
-        // testing, with an attempted per-buildType override trimming it back
-        // to arm64-v8a for release (see 2026-07-04-android-feasibility-and-
-        // transposition-plan.md §4's size budget) — but AGP's BuildType DSL
-        // silently ignores an `ndk { abiFilters }` block entirely (confirmed
-        // by inspecting the built release APK: both ABIs' native libs and
-        // Chaquopy stdlib/bootstrap assets were still packaged, ~9MB of pure
-        // waste). abiFilters is only actually honored at defaultConfig
-        // (or per product flavor), so it's set once here for every variant.
-        // All testing so far has been on a real arm64 device anyway; add
-        // x86_64 back temporarily if emulator testing is ever needed.
+        // arm64-v8a only. abiFilters is only honoured at defaultConfig (or per product flavor),
+        // never in a buildType, so it is set once here for every variant. The app now ships no
+        // native libraries of its own (CUT-03 removed the embedded Python runtime), so this is
+        // a no-op for the APK contents; it stays so a future native dependency cannot quietly
+        // widen the supported ABI set.
         // QA-01: the CI emulator job is x86_64 and passes -PciEmulatorAbi=x86_64. Without that
         // property (every release and local build) this stays exactly arm64-v8a.
         ndk {
@@ -121,56 +114,11 @@ android {
 }
 
 // ---------------------------------------------------------------------------
-// Shared Python core: mirror the repo's top-level src/ package into this
-// module's default Chaquopy source dir at build time, instead of pointing
-// Chaquopy's sourceSet directly at ../../src. Chaquopy treats a srcDir's
-// *contents* as sitting at the Python path root, so pointing it straight at
-// ../../src would expose config.py/mail_client.py/etc. as top-level modules
-// (import config) instead of the package the tests and the rest of the shared
-// core already use everywhere (import src.config) — this Copy task instead
-// recreates a literal "src" package folder under src/main/python/ so every
-// existing `from src.x import y` statement in the shared core works unchanged
-// on Android too.
-// The destination is regenerated on every build and is gitignored; the repo's
-// src/ directory (one level up from android/) remains the single source of
-// truth — nothing is hand-edited here.
-// ---------------------------------------------------------------------------
-
-val pythonCoreSrc = rootProject.projectDir.parentFile.resolve("src")
-val pythonCoreDest = layout.projectDirectory.dir("src/main/python/src").asFile
-
-// Sync, not Copy: a Copy task only adds and overwrites, so a module deleted or
-// renamed in the top-level src/ was left behind here forever and still got
-// packaged into the APK. That is worse than a missing file — Chaquopy resolves
-// modules by name at runtime, so getModule("src.old_name") would keep silently
-// succeeding against a frozen copy that drifts further from the real one with
-// every fix. Sync mirrors the source exactly, deletions included.
-val syncPythonCore by tasks.registering(Sync::class) {
-    from(pythonCoreSrc)
-    into(pythonCoreDest)
-    include("**/*.py")
-    exclude("**/__pycache__/**")
-}
-
-tasks.named("preBuild") {
-    dependsOn(syncPythonCore)
-}
-
-// Chaquopy's own per-variant "mergeDebugPythonSources"/"mergeReleasePythonSources"
-// tasks read directly from src/main/python, the same directory syncPythonCore
-// writes into — Gradle's task-validation flags that as an undeclared
-// dependency unless it's explicit, even though preBuild already orders it
-// correctly in practice.
-tasks.matching { it.name.contains("PythonSources") }.configureEach {
-    dependsOn(syncPythonCore)
-}
-
-// ---------------------------------------------------------------------------
 // Bundles the repo's own top-level NOTICE (third-party licence notices) into
 // the APK as a plain-text asset, so the in-app "Open-source licences" screen
 // (OpenSourceLicensesScreen.kt) reads the exact same text a reviewer or a
 // user sees in the repo, rather than a hand-copied duplicate that could
-// drift from it. Same one-source-of-truth pattern as syncPythonCore above:
+// drift from it. One source of truth:
 // the destination is regenerated on every build and gitignored, and NOTICE
 // itself remains the single tracked copy.
 // ---------------------------------------------------------------------------
@@ -189,19 +137,6 @@ tasks.named("preBuild") {
 // than through a packaged APK.
 tasks.matching { it.name.contains("Assets") || it.name.contains("UnitTest") }.configureEach {
     dependsOn(copyNoticeAsset)
-}
-
-chaquopy {
-    defaultConfig {
-        version = "3.13"
-        pip {
-            // Pinned exact versions: these get baked into every release APK,
-            // so an unpinned install() would let a future rebuild silently
-            // pick up a different (possibly vulnerable or breaking) version
-            // with no code change to review. Bump deliberately.
-            install("python-dateutil==2.9.0.post0")
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
