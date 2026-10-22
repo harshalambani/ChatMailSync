@@ -6,3 +6,5 @@ A failed answer to that question now shows a message, and a background
 sync that is waiting for your answer shows a notification.
 
 Space left over from older versions is freed on the first start.
+
+A tap outside no longer hides the question. A waiting chat shows on Home with an Answer button.

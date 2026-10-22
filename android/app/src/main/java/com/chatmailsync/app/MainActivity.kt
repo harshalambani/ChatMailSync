@@ -1132,20 +1132,22 @@ fun ChatMailApp(
             }
         }
     }
-    val openLinkQuestion = linkQuestions.firstOrNull {
-        "${it["new_chat_id"]}|${it["old_chat_id"]}" !in linkSnoozed
-    }
+    val openLinkQuestion = pickOpenQuestion(linkQuestions, linkSnoozed)
+    val waitingNames = waitingFiles(linkQuestions)
     if (openLinkQuestion != null) {
         val qNew = openLinkQuestion["new_chat_id"] as String
         val qOld = openLinkQuestion["old_chat_id"] as String
         val qFile = openLinkQuestion["file_name"] as String
-        val qKey = "$qNew|$qOld"
+        val qKey = linkQuestionKey(openLinkQuestion)
         val isLegacy = openLinkQuestion["kind"] == "legacy"
         val oldName = openLinkQuestion["old_display_name"] as String
         val newName = openLinkQuestion["new_display_name"] as String
         val n = (openLinkQuestion["matched"] as Number).toInt()
         AlertDialog(
-            onDismissRequest = { linkSnoozed = linkSnoozed + qKey },
+            // BUG-18: Back acts like "Ask me later"; a tap outside does nothing, so a stray tap
+            // (e.g. on the tab bar) can no longer hide the question.
+            onDismissRequest = { linkSnoozed = snoozePair(linkSnoozed, qKey) },
+            properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
             title = { Text("Is this the same chat?") },
             text = {
                 Text(
@@ -1179,7 +1181,7 @@ fun ChatMailApp(
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { linkSnoozed = linkSnoozed + qKey }) { Text("Ask me later") }
+                    TextButton(onClick = { linkSnoozed = snoozePair(linkSnoozed, qKey) }) { Text("Ask me later") }
                     TextButton(onClick = {
                         Thread {
                             val ok = saveLinkAnswer(
@@ -1443,6 +1445,7 @@ fun ChatMailApp(
                 val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
                 lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
+                linkTick++
                 // A one-to-one export just synced may be exactly what taught
                 // the app the owner's name -- same reasoning as
                 // refreshSelfSender() just below, but for the one-time
@@ -1506,6 +1509,7 @@ fun ChatMailApp(
         if (autoSyncResultText != null) {
             lastResult = autoSyncResultText
             refreshInbox()
+            linkTick++
             refreshSelfSenderBanner()
         }
     }
@@ -1776,6 +1780,8 @@ fun ChatMailApp(
                         }
                     },
                     inboxFiles = inboxFiles,
+                    waitingNames = waitingNames,
+                    onReopenQuestion = { name -> linkSnoozed = reopenFor(linkSnoozed, linkQuestions, name) },
                     // Goes to our own picker, not the system one. The system
                     // picker is still reachable from inside it, one clearly
                     // secondary button down, for files outside the granted

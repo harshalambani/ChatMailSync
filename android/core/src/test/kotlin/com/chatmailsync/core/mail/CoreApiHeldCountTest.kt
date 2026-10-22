@@ -55,4 +55,22 @@ class CoreApiHeldCountTest {
         a.sync(transport = FakeMailTransport())
         assertEquals(0, a.lastSyncFilesHeld)
     }
+
+    @Test
+    fun aHeldFileWithNoAnswerSendsNothingAndCountsOne() {
+        val a = CoreApi(tmp.newFolder("r3"), { SqliteJdbcStateDb(it.absolutePath) }, { null })
+        a.paths.inboxDir.mkdirs()
+        write(a.paths.inboxDir, number, number)
+        a.sync(transport = FakeMailTransport())
+        write(a.paths.inboxDir, saved, saved)
+        val t = FakeMailTransport()
+        a.sync(transport = t)
+        assertEquals(1, a.lastSyncFilesHeld)
+        assertEquals("a held export sends nothing until it is answered", 0, t.inserted.size)
+        val again = FakeMailTransport()
+        a.sync(transport = again)
+        assertEquals(1, a.lastSyncFilesHeld)
+        assertEquals(0, again.inserted.size)
+        assertEquals("the question stays open", 1, a.linkProposals().size)
+    }
 }

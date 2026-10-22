@@ -21,6 +21,7 @@ Released 2026-10-22 (versionCode 45). Renamed contacts are recognised.
 - A background sync that is waiting for that answer now shows one
   notification, with no chat name in it. It clears when you open the app.
 - Space left over from older versions is freed on the first start.
+- The "Is this the same chat?" question no longer disappears when you tap outside it; a held chat shows as waiting on Home with a button to answer it, and a sync you start yourself says when it held a chat.
 
 ## 2.9.1
 
