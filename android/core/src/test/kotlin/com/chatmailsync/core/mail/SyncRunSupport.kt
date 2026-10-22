@@ -94,6 +94,9 @@ internal object SyncRunSupport {
                     } ?: ChunkSize.Day,
                     dryRun = (opts["dry_run"] as? JsonNode.Bool)?.value ?: false,
                     trigger = opts["trigger"]?.asString() ?: "manual",
+                    // The Python scenarios reuse identical message text across different chats,
+                    // which the rename detector (Kotlin only, BUG-05) would rightly ask about.
+                    detectRenames = false,
                     cutoffDate = opts["cutoff_date"]?.asString(),
                     onProgress = { events.add(it) },
                     shouldStop = {

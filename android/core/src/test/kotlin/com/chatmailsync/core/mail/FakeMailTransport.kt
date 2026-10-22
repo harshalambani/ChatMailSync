@@ -40,6 +40,19 @@ class FakeMailTransport(
         return name
     }
 
+    /** BUG-05: when true the server refuses every RENAME (as a server that forbids it would). */
+    var refuseRename = false
+    val renameCalls = mutableListOf<Pair<String, String>>()
+
+    override fun labelsRename(oldName: String, newName: String): String {
+        renameCalls.add(oldName to newName)
+        if (refuseRename) throw transportError("RENAME failed (NO): [CANNOT] rename refused", 400)
+        if (oldName !in folders) throw transportError("RENAME failed (NO): [NONEXISTENT] no such folder", 404)
+        folders.remove(oldName)
+        folders.add(newName)
+        return newName
+    }
+
     override fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String?): ImapTransport.InsertResult {
         insertAttempts++
         val queued = if (insertOutcomes.isEmpty()) null else insertOutcomes.removeFirst()

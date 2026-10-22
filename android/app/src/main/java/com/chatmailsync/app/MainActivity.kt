@@ -1108,6 +1108,80 @@ fun ChatMailApp(
 
     LaunchedEffect(Unit) { refreshInbox() }
 
+    // ---- BUG-05: "is this the same chat under a new name?" ------------
+    // An export that looks like an already archived chat under another name is held in the
+    // inbox until the user answers. Matching reads stored fingerprints only (never text).
+    var linkQuestions by remember { mutableStateOf(listOf<Map<String, Any?>>()) }
+    var linkTick by remember { mutableStateOf(0) }
+    var linkSnoozed by remember { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(inboxFiles, linkTick) {
+        linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                ChatMailApplication.core(context).linkProposals()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+    val openLinkQuestion = linkQuestions.firstOrNull {
+        "${it["new_chat_id"]}|${it["old_chat_id"]}" !in linkSnoozed
+    }
+    if (openLinkQuestion != null) {
+        val qNew = openLinkQuestion["new_chat_id"] as String
+        val qOld = openLinkQuestion["old_chat_id"] as String
+        val qFile = openLinkQuestion["file_name"] as String
+        val qKey = "$qNew|$qOld"
+        val isLegacy = openLinkQuestion["kind"] == "legacy"
+        val oldName = openLinkQuestion["old_display_name"] as String
+        val newName = openLinkQuestion["new_display_name"] as String
+        val n = (openLinkQuestion["matched"] as Number).toInt()
+        AlertDialog(
+            onDismissRequest = { linkSnoozed = linkSnoozed + qKey },
+            title = { Text("Is this the same chat?") },
+            text = {
+                Text(
+                    (if (isLegacy) {
+                        "\"$newName\" looks like one of the chats that older versions filed together " +
+                            "under one unnamed chat ($n of its messages are already archived there).\n\n" +
+                            "If yes, it becomes a chat of its own and nothing already archived is sent again."
+                    } else {
+                        "\"$newName\" looks like the chat you already have as \"$oldName\" " +
+                            "($n of its messages are already archived).\n\n" +
+                            "If yes, it carries on as that chat: nothing already archived is sent again, " +
+                            "and the mailbox folder is renamed to the new name."
+                    }) +
+                        "\n\nIf no, it is kept as a separate chat and its whole history is mailed " +
+                        "again. You will not be asked about this pair again."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    Thread {
+                        try {
+                            ChatMailApplication.core(context).confirmLink(qNew, qOld, qFile)
+                        } catch (_: Exception) {
+                        }
+                        android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
+                    }.start()
+                }) { Text("Yes, same chat") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { linkSnoozed = linkSnoozed + qKey }) { Text("Ask me later") }
+                    TextButton(onClick = {
+                        Thread {
+                            try {
+                                ChatMailApplication.core(context).declineLink(qNew, qOld)
+                            } catch (_: Exception) {
+                            }
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { linkTick++ }
+                        }.start()
+                    }) { Text("No, keep separate") }
+                }
+            },
+        )
+    }
+
     // ---- Watched folder (Home feedback: auto-detect new export files) --
     var watchedFolderUri by remember { mutableStateOf(AppPrefs.getWatchedFolderUri(context)) }
     var autoWatchEnabled by remember { mutableStateOf(AppPrefs.isAutoWatchEnabled(context)) }
