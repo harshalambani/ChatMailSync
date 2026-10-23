@@ -218,6 +218,8 @@ fun HomeScreen(
     connectActionLabel: String,
     onConnect: () -> Unit,
     inboxFiles: List<Pair<String, Long>>,
+    waitingNames: Set<String> = emptySet(),
+    onReopenQuestion: (String) -> Unit = {},
     onImportPick: () -> Unit,
     onPreview: (String) -> String,
     onRemoveFile: (String) -> Unit,
@@ -438,6 +440,18 @@ fun HomeScreen(
                             }
                             IconButton(onClick = { onRemoveFile(name) }) {
                                 Icon(Icons.Filled.Close, contentDescription = "Remove ${displayNameFor(name)} from queue")
+                            }
+                        }
+                        if (name in waitingNames) {
+                            // BUG-18: a held export says so, and the button reopens its question.
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    WAITING_ROW_TEXT,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                TextButton(onClick = { onReopenQuestion(name) }) { Text("Answer now") }
                             }
                         }
                     }

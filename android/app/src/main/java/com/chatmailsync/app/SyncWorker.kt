@@ -205,7 +205,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 heldNotice(core.lastSyncFilesHeld, trigger, dryRun)?.let { postHeld(it) }
                 Result.success(
                     workDataOf(
-                        KEY_RESULT to scrubSecret(statsResult.format(), currentSecret()),
+                        KEY_RESULT to scrubSecret(
+                            statsResult.format() +
+                                withHeldLine(manualHeldLine(core.lastSyncFilesHeld, trigger, dryRun)),
+                            currentSecret(),
+                        ),
                         KEY_STOPPED to statsResult.stopped,
                     )
                 )
@@ -559,8 +563,8 @@ internal data class HeldNotice(val title: String, val text: String)
 internal fun heldNotice(filesHeld: Int, trigger: String, dryRun: Boolean): HeldNotice? {
     if (filesHeld <= 0 || dryRun || trigger == "manual") return null
     return HeldNotice(
-        title = "A chat is waiting for your answer",
-        text = "Open Chat Mail Sync to confirm whether it's a renamed chat.",
+        title = HELD_NOTICE_TITLE,
+        text = HELD_NOTICE_TEXT,
     )
 }
 
