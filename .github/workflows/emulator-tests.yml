@@ -10,6 +10,17 @@
 #
 # The emulator is x86_64 while the app ships arm64-v8a only, so this job passes
 # -PciEmulatorAbi=x86_64 (see android/app/build.gradle.kts). Release builds never pass it.
+#
+# QA-02: android-emulator-runner v2.38.0 (the newest release; no later fix exists) treats the
+# emulator as booted as soon as `getprop sys.boot_completed` prints 1, then runs
+# `adb shell input keyevent 82` once, unguarded and unretried, BEFORE it runs `script`
+# (src/emulator-manager.ts, launchEmulator). On API 30 the input service is sometimes not yet
+# published at that moment ("No service published for: input"), so the job died before any test.
+# A wait inside `script` is too late, and the runner prepends platform-tools to PATH itself, so
+# pre-emulator-launch-script wraps platform-tools/adb (.github/emulator/install-adb-gate.sh): it
+# only reports boot_completed=1 once `service check input` says found.
+# The runner already polls that getprop every 2 s up to its boot timeout, so it simply waits.
+# Every other adb call passes straight through; a real test failure still fails the job.
 
 name: Emulator tests
 
@@ -81,6 +92,7 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
+          pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: false
           script: echo "AVD snapshot generated"
@@ -92,6 +104,7 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
+          pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           working-directory: android
