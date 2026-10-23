@@ -21,6 +21,15 @@
 # only reports boot_completed=1 once `service check input` says found.
 # The runner already polls that getprop every 2 s up to its boot timeout, so it simply waits.
 # Every other adb call passes straight through; a real test failure still fails the job.
+#
+# D74: on main (run 39934172996) the API 30 input service never came up at all: boot_completed
+# was 1, the gate kept answering 0, and the runner gave up with "Timeout waiting for emulator to
+# boot" after 600 s. Re-running only that job passed, so the emulator step is run a second time,
+# but ONLY for that case. Attempt 1 is continue-on-error and its script starts with a marker file,
+# which exists only once the emulator booted and the runner reached `script`. Attempt 2 runs only
+# when attempt 1 failed and the marker is absent (a boot timeout). A failure after the marker (a
+# real test failure) is never retried: the last step turns it into a red job. The boot timeout
+# is 300 s (a warm boot takes 10-13 s, measured over 26 jobs on both API levels).
 
 name: Emulator tests
 
@@ -98,17 +107,58 @@ jobs:
           script: echo "AVD snapshot generated"
 
       - name: Run the instrumented tests on the emulator
+        id: emu1
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        continue-on-error: true
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          force-avd-creation: false
+          emulator-boot-timeout: 300
+          pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          working-directory: android
+          script: |
+            touch "$RUNNER_TEMP/emulator-booted"
+            ./gradlew :app:connectedDebugAndroidTest -PciEmulatorAbi=x86_64 --console=plain
+
+      # Did attempt 1 get as far as running `script`? The marker is its first line.
+      - name: Did the emulator boot on attempt 1
+        id: boot
+        if: steps.emu1.outcome == 'failure'
+        run: |
+          if [ -f "$RUNNER_TEMP/emulator-booted" ]; then
+            echo "booted=true" >> "$GITHUB_OUTPUT"
+            echo "Attempt 1 booted and then failed: a real failure, no retry."
+          else
+            echo "booted=false" >> "$GITHUB_OUTPUT"
+            echo "Attempt 1 never reached the test script (boot timeout): retrying once."
+          fi
+
+      - name: Retry the emulator step once (boot timeout only)
+        if: steps.emu1.outcome == 'failure' && steps.boot.outputs.booted == 'false'
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: google_apis
           force-avd-creation: false
+          emulator-boot-timeout: 300
           pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           working-directory: android
-          script: ./gradlew :app:connectedDebugAndroidTest -PciEmulatorAbi=x86_64 --console=plain
+          script: |
+            touch "$RUNNER_TEMP/emulator-booted"
+            ./gradlew :app:connectedDebugAndroidTest -PciEmulatorAbi=x86_64 --console=plain
+
+      - name: Fail the job on a real test failure
+        if: steps.emu1.outcome == 'failure' && steps.boot.outputs.booted == 'true'
+        run: |
+          echo "The emulator booted and the instrumented tests failed on attempt 1."
+          exit 1
 
       - name: Upload the test report
         if: always()
