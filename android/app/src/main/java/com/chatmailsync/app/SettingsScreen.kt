@@ -2,7 +2,6 @@
 
 package com.chatmailsync.app
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -12,23 +11,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,8 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -92,94 +89,12 @@ val BASIC_SETTINGS_ROWS = listOf(
     SettingsRowSpec("theme", "Theme"),
     SettingsRowSpec("backup_restore", "Backup & restore"),
     SettingsRowSpec("advanced", "Advanced"),
-    SettingsRowSpec("help_about", "Help & About"),
+    SettingsRowSpec("help_about", "Help"),
 )
 
-val ADVANCED_SETTINGS_ROWS = listOf(
-    SettingsRowSpec("watched_folder", "Watched folder"),
-    SettingsRowSpec("auto_import", "Auto-import"),
-    SettingsRowSpec("watch_interval", "Check interval"),
-    SettingsRowSpec("after_import", "After import"),
-    SettingsRowSpec("cutoff_date", "Cutoff date"),
-    SettingsRowSpec("test_run", "Test run"),
-    SettingsRowSpec("sync_log", "Sync log"),
-    SettingsRowSpec("chunk_size", "Chunk size"),
-    SettingsRowSpec("test_connection", "Test connection"),
-)
-
-/**
- * A full-row navigational entry: title, subtitle, and a trailing chevron --
- * the shape "Mail account", "Your messages" (Me) and "Advanced" already
- * shared informally, and Mail account was quietly missing the chevron the
- * other two had (item 5). Pulled out once so all three -- and any row added
- * here later -- get the same emphasis: a full-strength onSurface title and
- * chevron rather than a dimmer inherited tint, and an explicit outline so
- * the row reads as a bounded tappable card at normal emphasis (item 6). The
- * subtitle stays onSurfaceVariant, which is still readable at this weight.
- */
-@Composable
-private fun SettingsNavRow(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    contentDescriptionOverride: String? = null,
-    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    // Opt-in, trailing, between the text and the chevron -- only the Backup
-    // & restore row uses this (item 2, batch 7). The title Text below is the
-    // one given the weight, not the whole Column, so a long pill label can
-    // never push the chevron off the end of the row; the title ellipsizes
-    // first, and at the very narrowest widths the pill itself may wrap onto
-    // its own line below the title rather than clip.
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    OutlinedButton(
-        onClick = onClick,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .let {
-                if (contentDescriptionOverride != null) {
-                    it.semantics { contentDescription = contentDescriptionOverride }
-                } else {
-                    it
-                }
-            },
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    trailing?.let {
-                        Box(modifier = Modifier.padding(start = 8.dp)) { it() }
-                    }
-                }
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = subtitleColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Icon(
-                Icons.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
+/** Every row on the Advanced screen, in drawn order. Derived from
+ * [ADVANCED_SECTIONS] so the list a test reads is the list the screen draws. */
+val ADVANCED_SETTINGS_ROWS: List<SettingsRowSpec> = ADVANCED_SECTIONS.flatMap { it.rows }
 
 /**
  * The Backup & restore row's status pill: a coloured dot and a few words, in
@@ -240,13 +155,15 @@ private fun AmberPillColors(): Pair<Color, Color> =
     if (isSystemInDarkTheme()) Color(0xFF5C4300) to Color(0xFFF7E4B8)
     else Color(0xFFF7E4B8) to Color(0xFF4A3200)
 
+
+
 @Composable
 fun SettingsScreen(
     mailAccountSummary: String,
     onOpenMailAccount: () -> Unit,
+    // UX-01: one "Help" row. Help & FAQ, the privacy policy, the licences and
+    // the app version live on the Help sub-screen it opens.
     onOpenHelp: () -> Unit,
-    onOpenPrivacy: () -> Unit,
-    onOpenLicenses: () -> Unit,
     onOpenAdvanced: () -> Unit,
     onOpenBackupRestore: () -> Unit,
     themeMode: String,
@@ -261,34 +178,31 @@ fun SettingsScreen(
     selfSenderName: String? = null,
     onOpenMe: () -> Unit = {},
 ) {
-    var themeMenuOpen by remember { mutableStateOf(false) }
+    var themeDialogOpen by remember { mutableStateOf(false) }
     // Computed here, not inside the row loop below, so the masthead's own Me
-    // row (added for item 2 -- see the topBar block) and the Mail account/Me
-    // nav rows in the list both read the same value.
+    // row and the Me list row both read the same value.
     val meDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+
+    if (themeDialogOpen) {
+        OptionDialog(
+            title = "Theme",
+            options = THEME_LABELS.toList(),
+            current = themeMode,
+            onCommit = onThemeModeChange,
+            onDismiss = { themeDialogOpen = false },
+        )
+    }
 
     Scaffold(
         // Zero, deliberately: MainActivity's Scaffold has already padded
         // this NavHost for the status bar and the bottom bars, and insets
         // are not consumed by being turned into padding -- so a screen
         // Scaffold left on the default reserves the same strips a second
-        // time. That silently cost about a row and a half of list height
-        // on every screen, which is how two exports ended up below the
-        // fold on the import picker.
+        // time.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            // item 2: Home and Chats already show the masthead's Me row
-            // (showMe = true), which is what made their band 112dp tall
-            // against Settings' plain 88dp band -- the one real structural
-            // difference between the three, since all three already share
-            // this one ChatMailTopBar component for height, title style,
-            // padding and the connection pill's placement. Settings is the
-            // only one of the three with nowhere else on screen to reach
-            // Me from other than its own nav row, but the masthead row is
-            // one tap closer and matches the other two tabs, so it gets it
-            // too rather than being the odd one out. Nothing existing is
-            // dropped: Settings had no top-bar actions to keep, and the Me
-            // nav row lower on the screen stays exactly where it was.
+            // Unchanged from before UX-01: masthead badge, title, pill and
+            // the Me row in the band.
             ChatMailTopBar(
                 title = "Settings",
                 showMe = true,
@@ -304,129 +218,70 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(14.dp)
                 .fadingEdges(scrollState, MaterialTheme.colorScheme.background)
                 .verticalScrollbar(scrollState)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(scrollState)
+                .padding(vertical = 8.dp),
         ) {
-            // Rendered in BASIC_SETTINGS_ROWS' own order (item 1 / SettingsRowsTest),
-            // so a reorder of that list is a reorder on screen, not just in a
-            // test fixture that could quietly drift from what actually renders.
-            // Theme and Help & About stay their own bespoke bodies (a
-            // dropdown, a couple of links) rather than being forced into the
-            // nav-row shape -- but their position on screen still comes from
-            // this same list.
+            // Rendered in BASIC_SETTINGS_ROWS' own order (SettingsRowsTest), so
+            // a reorder of that list is a reorder on screen.
             BASIC_SETTINGS_ROWS.forEachIndexed { index, row ->
+                val kind = BASIC_SUBTITLE_KINDS.getValue(row.id)
                 when (row.id) {
-                    "mail_account" -> SettingsNavRow(
+                    "mail_account" -> SettingsListRow(
+                        icon = Icons.Filled.Email,
                         title = "Mail account",
                         subtitle = mailAccountSummary,
+                        kind = kind,
                         onClick = onOpenMailAccount,
                     )
 
-                    "me" -> SettingsNavRow(
+                    "me" -> SettingsListRow(
+                        icon = Icons.Filled.Person,
                         title = "Your messages",
                         subtitle = meDisplay.label,
+                        kind = kind,
                         onClick = onOpenMe,
                         contentDescriptionOverride =
                             selfSenderContentDescription(selfSenderSource, selfSenderName),
-                        subtitleColor = meDisplay.color,
                     )
 
-                    "theme" -> {
-                        // One row, title and control side by side -- matches
-                        // the nav rows above/below rather than the earlier
-                        // stacked title-then-button layout. The title takes
-                        // whatever width the button leaves it (weight(1f) is
-                        // RowScope's own, no separate import needed) and
-                        // ellipsizes first if the two can't both fit, e.g. at
-                        // 320dp width or 200% font scale.
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "Theme",
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Box {
-                                OutlinedButton(onClick = { themeMenuOpen = true }) {
-                                    Text(THEME_LABELS[themeMode] ?: themeMode)
-                                }
-                                DropdownMenu(expanded = themeMenuOpen, onDismissRequest = { themeMenuOpen = false }) {
-                                    THEME_LABELS.forEach { (mode, label) ->
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = { onThemeModeChange(mode); themeMenuOpen = false },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    "theme" -> SettingsListRow(
+                        icon = Icons.Filled.Settings,
+                        title = "Theme",
+                        subtitle = THEME_LABELS[themeMode] ?: themeMode,
+                        kind = kind,
+                        onClick = { themeDialogOpen = true },
+                    )
 
-                    // Moved off this list onto its own screen (batch 7) --
-                    // the explanation, the two buttons, the dated status
-                    // line and the password disclaimer that used to be a
-                    // bespoke inline body here now live in
-                    // BackupRestoreScreen, reached via this same nav-row
-                    // shape as Mail account/Me/Advanced. Only the pill is
-                    // new: it is what used to take opening this row to find
-                    // out (is there a backup, and how stale is it).
-                    "backup_restore" -> SettingsNavRow(
+                    "backup_restore" -> SettingsListRow(
+                        icon = Icons.Filled.Share,
                         title = "Backup & restore",
                         subtitle = "Save your sync history, or restore it on a new phone",
+                        kind = kind,
                         onClick = onOpenBackupRestore,
-                        trailing = { BackupStatusPill(Migration.backupPillState(lastBackupAt)) },
+                        titleAccessory = { BackupStatusPill(Migration.backupPillState(lastBackupAt)) },
                     )
 
-                    "advanced" -> SettingsNavRow(
+                    "advanced" -> SettingsListRow(
+                        icon = Icons.Filled.Build,
                         title = "Advanced",
-                        subtitle = "Automatic import, cut-off date, test run and more",
+                        subtitle = ADVANCED_ROW_SUBTITLE,
+                        kind = kind,
                         onClick = onOpenAdvanced,
                     )
 
-                    "help_about" -> {
-                        Text("Help & About", style = MaterialTheme.typography.titleMedium)
-                        // Read from BuildConfig, which gradle generates from
-                        // versionName / versionCode, so this cannot drift from
-                        // the APK. It used to be the hardcoded string "Chat
-                        // Mail Sync — Android (dev build)", which a
-                        // release-signed 1.0.1 went on displaying -- worse
-                        // than showing nothing, because it was confidently
-                        // wrong.
-                        //
-                        // versionCode is shown alongside the name because it
-                        // is the number `adb shell dumpsys package` reports
-                        // and the one the store orders by, so it is what
-                        // actually answers "am I on the current build?".
-                        Text(
-                            "Chat Mail Sync ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
-                                if (BuildConfig.DEBUG) " — debug build" else "",
-                        )
-                        TextButton(onClick = onOpenHelp) { Text("Help & FAQ") }
-                        // The policy is carried in the app now, not linked out
-                        // to. It was a browser link, which is where Indus
-                        // Appstore put the app on hold: a policy that needs a
-                        // second app and a live connection before it can be
-                        // read is not really inside the app at all. This goes
-                        // to a screen that renders offline, with the hosted
-                        // copy offered from there as a secondary.
-                        TextButton(onClick = onOpenPrivacy) { Text("Privacy policy") }
-                        // Third-party notices the distributed APK is required to
-                        // carry (androidx, Jetpack Compose, Kotlin and
-                        // kotlinx.coroutines, all Apache-2.0) -- see NOTICE at the repo root, which this screen
-                        // bundles and displays in full.
-                        TextButton(onClick = onOpenLicenses) { Text("Open-source licences") }
-                    }
+                    "help_about" -> SettingsListRow(
+                        icon = Icons.Filled.Info,
+                        title = "Help",
+                        subtitle = HELP_ROW_SUBTITLE,
+                        kind = kind,
+                        onClick = onOpenHelp,
+                    )
                 }
-                if (index != BASIC_SETTINGS_ROWS.lastIndex) HorizontalDivider()
+                if (index != BASIC_SETTINGS_ROWS.lastIndex) {
+                    HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                }
             }
         }
     }

@@ -149,6 +149,11 @@ fun FirstRunScreen(
     migrationRestoredLines: List<String> = emptyList(),
     migrationNotRestoredLines: List<String> = emptyList(),
     onRestoreFromBackup: () -> Unit = {},
+    // UX-01: set only when this is "Run setup again" (cameFrom != null); the
+    // welcome step then shows a labelled back. Null on a fresh install, where
+    // there is nowhere to go back to.
+    backLabel: String? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     var step by rememberSaveable { mutableStateOf(1) }
     // Which sub-step MailSetupWizardScreen (step 2) opens on. Stays 0 (its
@@ -173,6 +178,8 @@ fun FirstRunScreen(
 
     when (step) {
         1 -> FirstRunWelcomeStep(
+            backLabel = backLabel,
+            onBack = onBack,
             onGetStarted = { step = firstRunStepForward(step) },
             onSetUpLater = onSetUpLater,
             offerRestore = offerRestore,
@@ -239,6 +246,8 @@ fun FirstRunScreen(
 
 @Composable
 private fun FirstRunWelcomeStep(
+    backLabel: String? = null,
+    onBack: (() -> Unit)? = null,
     onGetStarted: () -> Unit,
     onSetUpLater: () -> Unit,
     offerRestore: Boolean = false,
@@ -252,7 +261,14 @@ private fun FirstRunWelcomeStep(
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { ChatMailTopBar(title = "Chat Mail Sync", showConnection = false) },
+        topBar = {
+            ChatMailTopBar(
+                title = "Chat Mail Sync",
+                showConnection = false,
+                backLabel = backLabel,
+                onBack = if (backLabel != null) onBack else null,
+            )
+        },
     ) { padding ->
         Column(
             modifier = Modifier

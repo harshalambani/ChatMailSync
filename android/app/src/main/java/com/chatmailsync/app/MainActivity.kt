@@ -165,7 +165,8 @@ internal fun tabForRoute(route: String?): String? = when {
     route == "first_run" -> null
     route == "home" || route == "syncProgress" || route == "importPicker" -> "home"
     route == "chats" || route.startsWith("chat/") -> "chats"
-    route == "settings" || route == "mailAccount" || route == "help" || route == "advancedSettings" -> "settings"
+    route == "settings" || route == "mailAccount" || route == "help" || route == "helpAbout" ||
+        route == "advancedSettings" -> "settings"
     // The sync log is reachable from Settings, from the status card on Home,
     // and from the always-visible sync bar on every screen there is. Lighting
     // Settings told two thirds of its visitors they were somewhere they had
@@ -262,6 +263,9 @@ internal fun backLabelForRoute(route: String?): String = when {
     // notification and backed out of it.
     route?.startsWith("chat/") == true -> "Chat"
     route == "help" -> "Help"
+    // UX-01: the Help sub-screen. Same word as "help" on purpose -- Help & FAQ,
+    // Privacy and Licences all say "Help" when opened from it.
+    route == "helpAbout" -> "Help"
     route == "privacy" -> "Privacy"
     route == "licenses" -> "Open-source licences"
     route == "mailAccount" -> "Mail account"
@@ -1692,6 +1696,10 @@ fun ChatMailApp(
                 }
                 FirstRunScreen(
                     onSetUpLater = { finishFirstRun() },
+                    // UX-01: "Run setup again" shows a labelled back to where
+                    // it came from; a fresh install (no previous entry) none.
+                    backLabel = welcomeBackLabel(cameFrom),
+                    onBack = { navController.popBackStack() },
                     imapProviders = imapProviders,
                     stagePlan = stagePlan,
                     initialProvider = imapProvider,
@@ -1892,9 +1900,7 @@ fun ChatMailApp(
                 SettingsScreen(
                     mailAccountSummary = mailAccountSummary,
                     onOpenMailAccount = { navController.navigate("mailAccount") },
-                    onOpenHelp = { navController.navigate("help") },
-                    onOpenPrivacy = { navController.navigate("privacy") },
-                    onOpenLicenses = { navController.navigate("licenses") },
+                    onOpenHelp = { navController.navigate("helpAbout") },
                     onOpenAdvanced = { navController.navigate("advancedSettings") },
                     onOpenBackupRestore = { navController.navigate("backupRestore") },
                     themeMode = themeMode,
@@ -2063,6 +2069,16 @@ fun ChatMailApp(
                     onConnect = ::connectWithStages,
                     hasExistingMailbox = imapPasswordSaved,
                     onKeepCurrentMailbox = { navController.popBackStack() },
+                )
+            }
+            composable("helpAbout") {
+                val from = navController.previousBackStackEntry?.destination?.route
+                HelpAboutScreen(
+                    onBack = { navController.popBackStack() },
+                    backLabel = backLabelForRoute(from),
+                    onOpenHelp = { navController.navigate("help") },
+                    onOpenPrivacy = { navController.navigate("privacy") },
+                    onOpenLicenses = { navController.navigate("licenses") },
                 )
             }
             composable("help") {

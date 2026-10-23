@@ -6,6 +6,10 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 ## Unreleased
 
+- UX-01: Settings and Advanced are now lists of rows with icons and one-line
+  summaries. Dropdowns became dialogs with Cancel, help and the privacy policy
+  moved to a Help screen, and Run setup again has a back button.
+
 ## 2.9.2
 
 Released 2026-10-22 (versionCode 45). Renamed contacts are recognised.

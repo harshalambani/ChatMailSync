@@ -61,12 +61,17 @@ class SettingsRowsTest {
                 "watched_folder",
                 "auto_import",
                 "watch_interval",
+                // UX-01 regrouped these under three headers and made the two
+                // loose buttons real rows (check_now, run_setup_again). Every
+                // earlier id is still here -- see SettingsRowsUx01Test.
                 "after_import",
+                "check_now",
                 "cutoff_date",
-                "test_run",
-                "sync_log",
                 "chunk_size",
+                "test_run",
                 "test_connection",
+                "sync_log",
+                "run_setup_again",
             ),
             ADVANCED_SETTINGS_ROWS.map { it.id },
         )
