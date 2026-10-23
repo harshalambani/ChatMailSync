@@ -16,8 +16,9 @@
 # `adb shell input keyevent 82` once, unguarded and unretried, BEFORE it runs `script`
 # (src/emulator-manager.ts, launchEmulator). On API 30 the input service is sometimes not yet
 # published at that moment ("No service published for: input"), so the job died before any test.
-# A wait inside `script` is too late, so the step "Gate boot on the input service" puts an adb
-# shim first on PATH that only reports boot_completed=1 once `service check input` says found.
+# A wait inside `script` is too late, and the runner prepends platform-tools to PATH itself, so
+# pre-emulator-launch-script wraps platform-tools/adb (.github/emulator/install-adb-gate.sh): it
+# only reports boot_completed=1 once `service check input` says found.
 # The runner already polls that getprop every 2 s up to its boot timeout, so it simply waits.
 # Every other adb call passes straight through; a real test failure still fails the job.
 
@@ -73,33 +74,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4.4.4
 
-      # QA-02: see the header. Shims only the runner's boot poll; everything else passes through.
-      - name: Gate boot on the input service
-        run: |
-          mkdir -p "$RUNNER_TEMP/adb-shim"
-          cat > "$RUNNER_TEMP/adb-shim/adb" <<'SHIM'
-          #!/bin/sh
-          REAL="$ANDROID_HOME/platform-tools/adb"
-          if [ "$1" = "-s" ] && [ "$3" = "shell" ] && [ "$4" = "getprop" ] && [ "$5" = "sys.boot_completed" ]; then
-            out=$("$REAL" "$@") || exit $?
-            if [ "$(printf '%s' "$out" | tr -d '[:space:]')" = "1" ]; then
-              svc=$("$REAL" -s "$2" shell service check input 2>&1 | tr -d '\r')
-              case "$svc" in
-                *"not found"*|"") echo "QA-02: boot_completed=1 but the input service is not published yet" >&2; echo 0; exit 0 ;;
-              esac
-              case "$svc" in
-                *found*) ;;
-                *) echo "QA-02: input service not published yet ($svc)" >&2; echo 0; exit 0 ;;
-              esac
-            fi
-            printf '%s\n' "$out"
-            exit 0
-          fi
-          exec "$REAL" "$@"
-          SHIM
-          chmod +x "$RUNNER_TEMP/adb-shim/adb"
-          echo "$RUNNER_TEMP/adb-shim" >> "$GITHUB_PATH"
-
       - name: Cache the AVD
         id: avd-cache
         uses: actions/cache@v5.0.5
@@ -118,6 +92,7 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
+          pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: false
           script: echo "AVD snapshot generated"
@@ -129,6 +104,7 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
+          pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           working-directory: android
