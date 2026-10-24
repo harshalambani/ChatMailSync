@@ -115,7 +115,7 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
-          emulator-boot-timeout: 0
+          emulator-boot-timeout: 300
           pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
