@@ -27,7 +27,7 @@
 # boot" after 600 s. Re-running only that job passed, so the emulator step is run a second time,
 # but ONLY for that case. Attempt 1 is continue-on-error and its script starts with a marker file,
 # which exists only once the emulator booted and the runner reached `script`. Attempt 2 runs only
-# when attempt 1 failed and the marker is absent (a boot timeout). A failure after the marker (a
+# when attempt 1 failed and the marker is absent (a failure before the tests started, in practice a boot timeout). A failure after the marker (a
 # real test failure) is never retried: the last step turns it into a red job. The boot timeout
 # is 300 s (a warm boot takes 10-13 s, measured over 26 jobs on both API levels).
 
@@ -137,7 +137,26 @@ jobs:
             echo "Attempt 1 never reached the test script (boot timeout): retrying once."
           fi
 
-      - name: Retry the emulator step once (boot timeout only)
+      # D77: forced check b2 (run 39991604810) showed the retry on API 30 can hit the very same
+      # never-published input service. In its log both boots loaded the quickboot snapshot
+      # 'default_boot', and the first emulator was killed about 6 s before the second started.
+      # So the retry (1) starts from a clean slate: leftover emulator/qemu processes killed, the
+      # adb server restarted, a pause so the kernel releases the emulator ports and KVM, stale
+      # AVD lock files removed; and (2) cold-boots (-no-snapshot-load) so it cannot reuse the
+      # snapshot state the failed boot may have left behind. The AVD cache step is not touched.
+      # Every command tolerates "nothing to kill / nothing to remove".
+      - name: Clean up before the retry
+        if: steps.emu1.outcome == 'failure' && steps.boot.outputs.booted == 'false'
+        run: |
+          pkill -f 'qemu-[s]ystem' || true
+          pkill -f 'emulator/[e]mulator' || true
+          "$ANDROID_HOME/platform-tools/adb" kill-server || true
+          pkill -x adb || true
+          sleep 25
+          find "$HOME/.android/avd" -name '*.lock' -print -exec rm -rf {} + || true
+          pgrep -fl 'qemu-system|emulator/emulator' || echo "no emulator process left"
+
+      - name: Retry the emulator step once (failure before tests start)
         if: steps.emu1.outcome == 'failure' && steps.boot.outputs.booted == 'false'
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
@@ -145,9 +164,9 @@ jobs:
           arch: x86_64
           target: google_apis
           force-avd-creation: false
-          emulator-boot-timeout: 300
+          emulator-boot-timeout: 600
           pre-emulator-launch-script: sh "$GITHUB_WORKSPACE/.github/emulator/install-adb-gate.sh"
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           working-directory: android
           script: |
