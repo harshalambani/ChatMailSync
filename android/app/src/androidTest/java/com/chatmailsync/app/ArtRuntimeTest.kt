@@ -27,11 +27,6 @@ class ArtRuntimeTest {
     // (a) The CUT-02 crash: a pattern ART rejects throws from <clinit>. Force every class that
     // compiles a Pattern/Regex at class init, so a rejected flag fails here and not on a phone.
     @Test
-    fun d74ThrowawayForcedFailure() {
-        org.junit.Assert.fail("D74 throwaway: forced test failure")
-    }
-
-    @Test
     fun everyClassThatCompilesAPatternInitialisesOnArt() {
         val names = listOf(
             "com.chatmailsync.core.mail.RegexClassesKt",
