@@ -1,0 +1,5 @@
+3.0.0: Settings and Advanced are easier to read. Each setting is now a row with an icon and a one-line summary of its current value, and choices that were dropdowns open as small dialogs with Cancel.
+
+Help and the privacy policy have their own Help screen, and Run setup again now has a back button.
+
+Your settings, history and syncs carry on exactly as before.
