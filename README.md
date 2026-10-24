@@ -11,8 +11,8 @@ Google sign-in path existed until v2.0.0; see
 Currently supports WhatsApp chat exports. The name does not box the app in —
 other chat sources can be added without another rename.
 
-It ships as an Android app (Kotlin/Compose, embedding the Python sync engine
-in `src/`). A Windows desktop app existed alongside it and ended at v2.1.5
+It ships as an Android app (Kotlin/Compose; the sync engine is Kotlin, and the
+Python in `src/` is not shipped in the app). A Windows desktop app existed alongside it and ended at v2.1.5
 (tag `windows-final`); the repo is Android-only from here on.
 
 From 2.9.0 the app needs Android 11 or newer; phones on Android 7 to 10 stay on 2.2.0.
@@ -99,8 +99,8 @@ All runtime paths derive from `PROJECT_ROOT` in `src/config.py`
 ### 1. Prerequisites
 
 - **Python 3.10 or later** (the code uses `X | None` type-union syntax).
-- **Python 3.10 or later**, for running the Python test suite (the sync engine
-  itself ships embedded in the Android app; you don't need Python to use the app).
+- **Python 3.10 or later**, for running the Python test suite (the app
+  contains no Python; you don't need Python to use it).
 - Android Studio / the Gradle wrapper, for building or testing the Android app.
 
 ### 2. Install dependencies
@@ -327,8 +327,8 @@ and inherit that trust without earning it. Copyleft means every descendant of th
 code stays as readable as this one.
 
 The APK also embeds several third-party components under their own (non-GPL)
-licences — Chaquopy, the CPython interpreter it bundles, python-dateutil, six,
-AndroidX/Jetpack Compose, the Kotlin stdlib and kotlinx.coroutines. See
+licences — AndroidX/Jetpack Compose, the Kotlin stdlib and kotlinx.coroutines. The
+app bundles no Python runtime and no Python packages: its sync engine is Kotlin. See
 [NOTICE](NOTICE) for the full list and licence texts; the same content is
-bundled into the app itself, reachable from Settings → Help & About →
-Open-source licences.
+bundled into the app itself, reachable from Settings → Help → Open-source
+licences.
