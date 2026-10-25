@@ -33,8 +33,8 @@ time, into a mailbox that cannot tell the copies apart. A backup avoids that.
 5. **Install the F-Droid build.**
 6. **Restore.** On the first screen tap **Moving from another phone? Restore from a
    backup** (or, once set up, **Settings -> Backup & restore -> Restore from a
-   backup**) and pick the `.cmsbackup` file. The app shows a summary of what came back; tap
-   **Continue**. On a fresh install this line on the welcome screen is the way in.
+   backup**) and pick the `.cmsbackup` file. The app shows a summary of what came back;
+   tap **Continue**.
 7. **Enter your app password once** to finish. The page is titled "Finish restoring -
    enter your app password" and your mail address is already filled in. Type the
    password, tap **Connect**, wait for the check to finish, then tap **Done**. Then
