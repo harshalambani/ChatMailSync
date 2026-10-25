@@ -86,6 +86,11 @@ private fun BackgroundHealthCard(issue: BackgroundIssue, onAction: () -> Unit) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(issue.title, style = MaterialTheme.typography.titleSmall)
             Text(issue.detail, style = MaterialTheme.typography.bodySmall)
+            Text(
+                BACKGROUND_HEALTH_TURN_OFF_HINT,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedButton(onClick = onAction) { Text(issue.actionLabel) }
         }
     }

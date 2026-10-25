@@ -59,6 +59,18 @@ internal val OPEN_SOURCE_COMPONENTS: List<LicensedComponent> = listOf(
 /** The asset path copyNoticeAsset (app/build.gradle.kts) copies NOTICE to. */
 internal const val NOTICE_ASSET_PATH = "NOTICE.txt"
 
+/**
+ * UX-05: the sentence above the component list. The licence text it points to
+ * has to be somewhere the reader can actually go: the app has no Licence
+ * section in Settings, and this screen carries the third-party notices, not
+ * the GPL text, so it names the LICENSE file in the repository.
+ */
+internal const val OPEN_SOURCE_INTRO: String =
+    "Chat Mail Sync is GPL-3.0; the full text is the LICENSE file at " +
+        "github.com/harshalambani/ChatMailSync. The APK also carries the " +
+        "third-party components below, each under its own licence. Their " +
+        "full licence texts follow the summary."
+
 @Composable
 fun OpenSourceLicensesScreen(onBack: () -> Unit, backLabel: String = "Settings") {
     val context = LocalContext.current
@@ -101,9 +113,7 @@ fun OpenSourceLicensesScreen(onBack: () -> Unit, backLabel: String = "Settings")
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Chat Mail Sync is GPL-3.0 (see the Licence section of Settings). The " +
-                    "APK also carries the third-party components below, each under its " +
-                    "own licence. Their full licence texts follow the summary.",
+                OPEN_SOURCE_INTRO,
                 style = MaterialTheme.typography.bodyMedium,
             )
             OPEN_SOURCE_COMPONENTS.forEach { component ->

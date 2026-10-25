@@ -73,4 +73,39 @@ class BackgroundHealthTest {
             assertTrue(it.actionLabel, it.actionLabel.startsWith("Open "))
         }
     }
+
+    // UX-04 (D82 = A): the card titles say the sync is on, and every card tells the user how to
+    // make it go away.
+
+    @Test
+    fun `titles say automatic sync is on and name the risk`() {
+        assertEquals("Automatic sync is on, but Android may stop it", BackgroundIssue.BATTERY_OPTIMISED.title)
+        assertEquals(
+            "Automatic sync is on, but you won't see it run",
+            BackgroundIssue.NOTIFICATIONS_BLOCKED.title,
+        )
+        BackgroundIssue.values().forEach { assertTrue(it.title, it.title.startsWith("Automatic sync is on")) }
+    }
+
+    @Test
+    fun `the turn-off hint is exact and points at Settings`() {
+        assertEquals(
+            "Don't need automatic sync? Turn it off in Settings and this card goes away.",
+            BACKGROUND_HEALTH_TURN_OFF_HINT,
+        )
+    }
+
+    @Test
+    fun `no card and so no hint shows when automatic sync is off`() {
+        // Negative test: the hint is drawn per issue, so no issue means no hint, whatever the
+        // battery and notification state is.
+        for (battery in listOf(true, false)) {
+            for (notify in listOf(true, false)) {
+                assertEquals(
+                    emptyList<BackgroundIssue>(),
+                    backgroundHealthIssues(autoWatchOn = false, batteryExempt = battery, notificationsAllowed = notify),
+                )
+            }
+        }
+    }
 }
