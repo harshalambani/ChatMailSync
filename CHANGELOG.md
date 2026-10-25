@@ -10,7 +10,7 @@ Nothing yet.
 
 ## 3.0.0
 
-Not yet released (versionCode 46). The redesigned Settings.
+Released 2026-10-25 (versionCode 46). The redesigned Settings.
 
 - UX-01: Settings and Advanced are now lists of rows with icons and one-line
   summaries. Dropdowns became dialogs with Cancel, help and the privacy policy
