@@ -95,9 +95,20 @@ fun backgroundIssueIntent(context: Context, issue: BackgroundIssue): Intent? = w
 /** Headline: the consequence, in the user's terms, not the setting's name. */
 val BackgroundIssue.title: String
     get() = when (this) {
-        BackgroundIssue.BATTERY_OPTIMISED -> "Automatic sync may be stopped"
-        BackgroundIssue.NOTIFICATIONS_BLOCKED -> "You won't see automatic syncs"
+        BackgroundIssue.BATTERY_OPTIMISED -> "Automatic sync is on, but Android may stop it"
+        BackgroundIssue.NOTIFICATIONS_BLOCKED -> "Automatic sync is on, but you won't see it run"
     }
+
+/**
+ * UX-04: the way out for someone who never wanted automatic sync. These cards
+ * only appear while it is on, so switching it off is the other fix. The toggle
+ * is Auto-import on Settings > Advanced; the sentence names that row
+ * exactly (and the
+ * AdvancedSettingsScreen row is titled "Auto-import") so the user can find it
+ * by name.
+ */
+const val BACKGROUND_HEALTH_TURN_OFF_HINT: String =
+    "Don't need automatic sync? Turn off Auto-import in Settings > Advanced and this card goes away."
 
 /** What to do once the system screen opens, since neither of these lands on a
  *  single switch and both screens are a list of every app on the phone. */

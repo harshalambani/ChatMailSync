@@ -1451,9 +1451,10 @@ fun ChatMailApp(
                 refreshInbox()
                 linkTick++
                 // A one-to-one export just synced may be exactly what taught
-                // the app the owner's name -- same reasoning as
-                // refreshSelfSender() just below, but for the one-time
-                // banner rather than the ongoing masthead answer.
+                // the app the owner's name: re-read the masthead answer (the
+                // live progress stamp below usually got there first) and the
+                // one-time banner.
+                refreshSelfSender()
                 refreshSelfSenderBanner()
             }
             WorkInfo.State.FAILED -> {
@@ -1514,6 +1515,25 @@ fun ChatMailApp(
             lastResult = autoSyncResultText
             refreshInbox()
             linkTick++
+            refreshSelfSender()
+            refreshSelfSenderBanner()
+        }
+    }
+
+    // UX-03: the Me row follows the running sync. SyncWorker puts the current
+    // self-sender stamp on every progress update, so the row moves as soon as
+    // the engine resolves the name (just before it sends) instead of when the
+    // whole sync ends. The effect is keyed on the stamps, so it runs only when
+    // a stamp actually changed, and refreshSelfSender() is skipped when the
+    // masthead already shows that answer. No timer, no extra loop.
+    val liveSelfStamp = syncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
+    val liveAutoSelfStamp = autoSyncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
+    LaunchedEffect(liveSelfStamp, liveAutoSelfStamp) {
+        val shown = selfSenderStamp(selfSenderSource, selfSenderName)
+        if (shouldRefreshSelfSender(liveSelfStamp, shown) ||
+            shouldRefreshSelfSender(liveAutoSelfStamp, shown)
+        ) {
+            refreshSelfSender()
             refreshSelfSenderBanner()
         }
     }

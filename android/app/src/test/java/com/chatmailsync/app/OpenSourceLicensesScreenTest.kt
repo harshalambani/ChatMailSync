@@ -63,4 +63,14 @@ class OpenSourceLicensesScreenTest {
             )
         }
     }
+
+    @Test
+    fun `intro no longer points at a Licence section of Settings`() {
+        // UX-05. Negative test: Settings has no such section, so the old wording sent people
+        // looking for something that was not there.
+        assertFalse(OPEN_SOURCE_INTRO.contains("Licence section", ignoreCase = true))
+        assertFalse(OPEN_SOURCE_INTRO.contains("section of Settings", ignoreCase = true))
+        assertTrue(OPEN_SOURCE_INTRO.contains("GPL-3.0"))
+        assertTrue(OPEN_SOURCE_INTRO.contains("LICENSE"))
+    }
 }

@@ -35,6 +35,25 @@ fun selfSenderSourceOf(source: String?): SelfSenderSource = when (source) {
 }
 
 /**
+ * UX-03: one comparable string for "who is Me right now" -- the source and the
+ * resolved name together, so a name learned, a name overridden and nothing
+ * known yet all differ from each other. Built by SyncWorker on every progress
+ * update and by Home from what the masthead is showing, so the two can be
+ * compared without a second read.
+ */
+fun selfSenderStamp(source: String?, name: String?): String =
+    "${source.orEmpty()}|${name.orEmpty()}"
+
+/**
+ * UX-03: should Home re-read the Me row, given the stamp a running sync last
+ * reported and the stamp the masthead is showing? Only when the sync reported
+ * one and it differs. No report (no sync running, or a read failed: "") or an
+ * unchanged answer means no read at all.
+ */
+fun shouldRefreshSelfSender(liveStamp: String?, shownStamp: String): Boolean =
+    !liveStamp.isNullOrEmpty() && liveStamp != shownStamp
+
+/**
  * Label and colour for wherever "Me" is shown -- the masthead row, and every
  * later screen that repeats it. One place, so a fourth spot never re-derives
  * this slightly differently from the other three.

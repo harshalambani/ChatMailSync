@@ -63,6 +63,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
          * by a percentage point. */
         const val KEY_PROGRESS_PERCENT = "progress_percent"
         const val KEY_LOG_LINES = "log_lines"
+        /** UX-03: who "Me" is right now, as [selfSenderStamp]. Rides on every
+         * progress update so Home can re-read the Me row the moment the engine
+         * works the name out (just before it sends), not when the sync ends. */
+        const val KEY_SELF_SENDER_STAMP = "self_sender_stamp"
         const val NOTIFICATION_CHANNEL_ID = "sync_channel"
         const val NOTIFICATION_ID = 1001
         /** BUG-13: the final result. Never the foreground id, never WatchFolderWorker's 1002. */
@@ -145,6 +149,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             var postedText: String? = null
             var postedFraction = Float.NaN
             var postedLog: String? = null
+            var postedSelfStamp: String? = null
             // BUG-13: false once the final result is being posted, so a poll tick still in
             // flight can never put a stale "Syncing..." back on the progress id.
             val progressOpen = java.util.concurrent.atomic.AtomicBoolean(true)
@@ -173,9 +178,17 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                         val fraction = state.str("fraction")?.toFloatOrNull() ?: -1f
                         val percent = state.str("percent")?.toIntOrNull() ?: -1
                         val log = state.str("log") ?: ""
+                        // UX-03: two app_state reads on a tick that already
+                        // exists; a failed read just reports "no stamp".
+                        val selfStamp = try {
+                            core.getSelfSender().let { selfSenderStamp(it.str("source"), it.str("name")) }
+                        } catch (_: Exception) {
+                            ""
+                        }
                         if (progressOpen.get() && (text != postedText ||
                             fraction != postedFraction ||
-                            log != postedLog)
+                            log != postedLog ||
+                            selfStamp != postedSelfStamp)
                         ) {
                             notify(text)
                             setProgress(
@@ -184,8 +197,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                                     KEY_PROGRESS_FRACTION to fraction,
                                     KEY_PROGRESS_PERCENT to percent,
                                     KEY_LOG_LINES to log,
+                                    KEY_SELF_SENDER_STAMP to selfStamp,
                                 )
                             )
+                            postedSelfStamp = selfStamp
                             postedText = text
                             postedFraction = fraction
                             postedLog = log
