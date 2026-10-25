@@ -102,12 +102,13 @@ val BackgroundIssue.title: String
 /**
  * UX-04: the way out for someone who never wanted automatic sync. These cards
  * only appear while it is on, so switching it off is the other fix. The toggle
- * is Auto-import on Settings > Advanced; the sentence says "Settings" (and the
+ * is Auto-import on Settings > Advanced; the sentence names that row
+ * exactly (and the
  * AdvancedSettingsScreen row is titled "Auto-import") so the user can find it
  * by name.
  */
 const val BACKGROUND_HEALTH_TURN_OFF_HINT: String =
-    "Don't need automatic sync? Turn it off in Settings and this card goes away."
+    "Don't need automatic sync? Turn off Auto-import in Settings > Advanced and this card goes away."
 
 /** What to do once the system screen opens, since neither of these lands on a
  *  single switch and both screens are a list of every app on the phone. */

@@ -88,9 +88,9 @@ class BackgroundHealthTest {
     }
 
     @Test
-    fun `the turn-off hint is exact and points at Settings`() {
+    fun `the turn-off hint is exact and names the Auto-import row`() {
         assertEquals(
-            "Don't need automatic sync? Turn it off in Settings and this card goes away.",
+            "Don't need automatic sync? Turn off Auto-import in Settings > Advanced and this card goes away.",
             BACKGROUND_HEALTH_TURN_OFF_HINT,
         )
     }
