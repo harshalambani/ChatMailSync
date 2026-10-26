@@ -23,6 +23,16 @@ kotlin {
     }
 }
 
+// F-Droid builds on JDK 21. Without this, compileJava follows the running JDK (21)
+// while compileKotlin is pinned to 17, and Gradle fails with "Inconsistent
+// JVM-target compatibility". This keeps compileJava matched to the Kotlin target.
+// Deliberately not jvmToolchain: that makes Gradle download a JDK, which breaks
+// F-Droid's offline build.
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 // A third source set, separate from `main` and `test`, that holds only
 // LiveImapHarness.kt (the interactive, human-run, real-network entry
 // point). It is never part of `main` — see the harnessJar task below —
