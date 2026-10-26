@@ -8,6 +8,11 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 Nothing yet.
 
+## 3.0.1
+
+Released 2026-10-26 (versionCode 47). Build fix so the app builds on newer Java
+versions; no change in how the app works.
+
 ## 3.0.0
 
 Released 2026-10-25 (versionCode 46). The redesigned Settings.

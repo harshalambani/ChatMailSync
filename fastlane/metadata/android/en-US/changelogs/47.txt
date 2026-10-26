@@ -1,0 +1,1 @@
+Build fix so the app builds on newer Java versions; no change in how the app works.
