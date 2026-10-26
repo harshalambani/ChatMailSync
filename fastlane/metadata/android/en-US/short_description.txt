@@ -1,1 +1,1 @@
-Sync chat exports to mail
+File WhatsApp chat exports in your own mailbox. One way, no third-party account.
