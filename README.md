@@ -27,7 +27,7 @@ Messages flow from a drop folder, through a parser and deduplication layer, into
 your mailbox over IMAP:
 
 ```
-data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (IMAP APPEND)  →  data/processed/
+data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (IMAP APPEND)
 ```
 
 - Messages are added with `APPEND`, never `send()`. Nothing leaves your mailbox
@@ -40,7 +40,9 @@ data/inbox/  →  parser  →  dedup (SQLite)  →  mail push (IMAP APPEND)  →
   second instance — another phone, or a reinstall that did not restore its data.
   The app can add mail but never remove it, so the cleanup is manual. Replacing
   an instance is fine — carry `sync_state.db` across.
-- Files move from `inbox/` to `processed/` only after a fully successful sync.
+- A fully successful sync deletes the app's copy of the export from `inbox/`; no
+  copy is kept in a `processed/` folder. A file that could not be read stays in
+  `inbox/` and is reported.
 - Every provider caps the size of a single message (25 MB at Gmail/Yahoo,
   20 MB at iCloud; RFC 7889 `APPENDLIMIT` is honoured when advertised, and a
   refusal in flight lowers the ceiling for the rest of the run). A chunk that
@@ -79,7 +81,6 @@ email format, and packaging — see
 │   └── imap_credentials.json  # Written on first connect; no password stored here on Android
 ├── data/
 │   ├── inbox/               # Drop zone: put exported .txt / .zip files here
-│   ├── processed/           # Files land here after a successful sync
 │   └── sync_state.db        # SQLite per-chat sync state
 ├── android/                 # Kotlin/Compose Android app
 ├── tools/                   # Dev/build helper scripts
@@ -244,10 +245,11 @@ An
 app-specific password is a *bearer* credential — no provider lets you restrict
 one to "append only". Anything holding it can, as far as the protocol is
 concerned, read and delete freely. What backs the claim here is structural and
-independently checkable: `ImapTransport` in `src/mail_client.py` issues exactly
-four commands over its whole lifetime — `LIST`, `CREATE`, `SUBSCRIBE`, `APPEND`.
-There is no `SELECT`, `FETCH`, `STORE`, `SEARCH`, `EXPUNGE`, `COPY` or `MOVE`
-anywhere in the file, and without `SELECT` the connection never enters the IMAP
+independently checkable: `ImapTransport` in
+`android/core/src/main/kotlin/com/chatmailsync/core/mail/` issues exactly four
+mailbox commands over its whole lifetime — `LIST`, `CREATE`, `SUBSCRIBE`,
+`APPEND` — plus `LOGIN` and `LOGOUT` around them. There is no `SELECT`, `FETCH`,
+`STORE`, `SEARCH`, `EXPUNGE`, `COPY` or `MOVE` anywhere in that package's IMAP code, and without `SELECT` the connection never enters the IMAP
 state in which a message can be read or flagged at all. The protocol itself
 gates it; the source is public and it takes about a minute to verify.
 
@@ -305,8 +307,12 @@ The APK is signed with the project's own release key. That key never changes, so
 updates install cleanly over each other — but it also means an APK from anywhere
 else will refuse to install over this one, which is the intended behaviour.
 
-Requires 64-bit ARM (`arm64-v8a`). The build carries a Python runtime and ships no
-other ABI, so it will not install on an emulator.
+Requires Android 11 or newer on a 64-bit ARM phone (`arm64-v8a`). The app contains
+no Python.
+
+A build signed with a different key, such as the F-Droid build, cannot be installed
+over this one. Moving between them means uninstalling first, so save a backup
+first: see [docs/switching-to-fdroid.md](docs/switching-to-fdroid.md).
 
 ---
 

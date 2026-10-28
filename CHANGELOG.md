@@ -6,7 +6,7 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 ## Unreleased
 
-Nothing yet.
+- DOC-02: Help and docs brought up to date with 2.9.0 to 3.0.1.
 
 ## 3.0.1
 
