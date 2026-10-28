@@ -21,6 +21,8 @@ This app takes those exported chat files and copies the conversations into
 It **adds** the messages to your mailbox. It never sends anything, never deletes
 anything, and never posts anything back to WhatsApp.
 
+It needs Android 11 or newer, on a 64-bit ARM phone.
+
 ---
 
 ## 2. One-time setup: connecting to your mailbox
@@ -106,7 +108,7 @@ Once the export file is on your phone:
 - Nominate a **watched folder** and let the app collect files from it for you
   (see section 6 below).
 
-Added files appear in the **Files in inbox** list, with a count like
+Added files appear in the queue on **Home**, with a count like
 "2 files ready to sync". You can add several chats at once.
 
 ### Letting the app fetch them for you — the watched folder
@@ -121,7 +123,7 @@ one. That is section 6.
 
 1. On the **Home** tab, make sure the connection pill (top of the screen) says
    **Connected**.
-2. With one or more exports in the **Files in inbox** list, tap **Sync now**.
+2. With one or more exports queued on Home (it reads "N files ready to sync"), tap **Sync now**.
    - Want a practice run first? Tap **Try it first, without sending anything**
      (shown the first time, before you've ever synced) to turn on **Test run**.
      While it's on, the button reads **Run test sync** and reports what *would*
@@ -136,8 +138,9 @@ one. That is section 6.
    and reopens the full view on tap.
 
 When it's done, the result appears on Home under **Last result**, and each
-synced chat is browsable under the **Chats** tab. Synced files move out of the
-inbox automatically.
+synced chat is browsable under the **Chats** tab. Once a sync completes, the app
+deletes its own queued copy of each export; your original is left alone unless
+**After import** says otherwise.
 
 If a **cutoff date** is set (in Settings → Advanced), a card above the inbox says so, and
 nothing older than that day is sent. The card stays there for as long as the
@@ -160,8 +163,8 @@ it to do.
    own file picker, so it can be a cloud folder your provider exposes there).
 2. **Check and sync** in the same section looks immediately, and sends whatever
    it finds, whether or not auto-import is on.
-3. Turn on **Auto-import from this folder** and choose an interval.
-4. **After import, synced files:** *Leave in place* (default) · *Move to a
+3. Turn on **Auto-import** and choose an interval.
+4. **After import:** *Leave in place* (default) · *Move to a
    "synced" subfolder* · *Delete after import*.
 
 **Interval options:** every 15 min (default) · every 30 min · every
@@ -223,7 +226,7 @@ affects unattended checks.
   why the `synced` subfolder is never re-imported.
 - `.txt` and `.zip` only, the same as a manual import.
 - Each source file is picked up exactly once, however often the check runs.
-- The **After syncing / After import** rule is applied only once a file has
+- The **After import** setting is applied only once a file has
   genuinely reached your mailbox. A sync that fails, or that you stop, leaves
   your originals exactly where they are.
 - If a file cannot be moved or removed, the app says so and leaves it alone
@@ -374,9 +377,9 @@ under **Settings → Mail account** on the new device.
 
 **A.** Only `.txt` and `.zip` files are accepted. Make sure you exported the chat
 (not a screenshot or contact card), and that the file actually arrived — shared
-to the app or picked with **Choose exports to import** on Home. Leaving Home and
-coming back re-reads the queue, if it was changed from somewhere else (e.g. a
-watched folder or another app).
+to the app or picked with **Choose exports to import** on Home. If it came from
+another app or a watched folder, close the app completely and open it again; that
+re-reads the queue.
 
 ---
 
@@ -494,7 +497,7 @@ WhatsApp exports land — and any `.txt` or `.zip` that appears there is picked 
 and queued for the next sync. Only that one folder is looked at, subfolders are
 left alone, and each file is picked up only once, so leaving it switched on
 costs you nothing. Your original is never touched at import time: the
-**After syncing** / **After import** setting takes effect only once a file has
+**After import** setting takes effect only once a file has
 actually reached your mailbox, so a sync that fails, or one you stop, leaves
 everything exactly where it was. Section 6 covers it in full.
 
@@ -595,8 +598,11 @@ is a second copy of every one of them landing there.
 Your mail password is deliberately left out, so the new phone asks for it once.
 Restoring **merges** rather than replaces, so a restore onto an app that has
 already synced something keeps both sides, and restoring the same backup twice
-does nothing the second time. You will still need to add your export files again
-on the new phone.
+does nothing the second time. A backup made by a newer version of the app is
+refused ("Update this device first, then restore"), and a file that cannot be read
+is refused with a sentence and changes nothing. The backup file ends in
+`.cmsbackup`. You will still need to add your export files again on the new phone,
+and to choose the watched folder again in **Settings → Advanced**.
 
 Restoring during first-run setup takes you straight to entering your app
 password and then Home — it does not walk you back through the rest of the
@@ -617,8 +623,9 @@ way to tell the copies apart.
 The protection is **Settings -> Backup & restore -> Save a backup**. It writes that
 record to a file you keep somewhere else — not inside the app's own storage, which
 is the thing that goes missing. Keep a recent one; the section tells you when the
-last one was taken. Android's own system backup carries the record as well. Your
-mail password is in neither, so you enter it once after a restore.
+last one was taken. Android's own system backup may bring the record back too,
+depending on your phone and settings, but do not rely on it. Your mail password
+is in neither, so you enter it once after a restore.
 
 ---
 
@@ -663,8 +670,9 @@ everything waiting in the inbox.
 ### Q. I want to re-do a chat from scratch. What does Reset do?
 
 **A.** Open the chat and choose **Reset (forget sync history)**. This clears the
-app's record of that chat and, where it can, moves its file back to the inbox so
-you can sync it again. It does **not** delete anything already in your mailbox.
+app's record of that chat. It does **not** bring its export file back: export the
+chat again from WhatsApp and share it to the app, and the next sync files it
+fresh. It does **not** delete anything already in your mailbox.
 
 **Delete the old mail first.** This app can only add mail, never remove it, so if
 the earlier messages are still in your mailbox the next sync files a second copy
@@ -681,8 +689,48 @@ clear and asks you to confirm you have cleared it before it will reset.
 ### Q. I removed a chat from the list by mistake.
 
 **A.** Removing a chat from the list — **Delete from list** — does **not** delete
-anything from your mailbox. Your emails are safe. Just add the export file again
-to bring it back.
+anything from your mailbox, so your emails are safe. It does forget which of the
+chat's messages were already archived. If you ever import that export again, the
+app has no record of what it already sent and files a second copy of every
+message, unless you first delete the old mail in your mailbox. To send a chat
+again on purpose, use **Reset** instead: it asks you to clear the mailbox folder
+first.
+
+---
+
+### Q. A chat is waiting for my answer. What is "Is this the same chat?"
+
+**A.** When you share an export whose chat looks like one you already archived under another name, the app holds the file in the queue and asks "Is this the same chat?" instead of mailing everything a second time by mistake. Home marks the held file "Waiting for your answer" with an "Answer now" button, and a background check posts a notification titled "A chat is waiting for your answer". "Yes, same chat": it carries on as that chat, nothing already archived is sent again, and the mailbox folder is renamed to the new name. "No, keep separate": it is kept as a separate chat, its whole history is mailed again, and you are not asked about that pair again. "Ask me later", or the Back button, leaves it waiting; tapping outside the box does nothing. If the answer cannot be saved you will see "Couldn't save your answer. Please try again." and can answer again. A held export is not synced until you answer.
+
+---
+
+### Q. What does "Cancel sync" do?
+
+**A.** On the sync progress screen, "Cancel sync" asks the app to stop. It stops between emails, so the one being sent finishes first. Whatever has already reached your mailbox stays there and is recorded, so a later sync sends only what is still missing and nothing twice. A file that had not finished stays in the queue. The result then reads "Sync stopped", Home shows "Last sync stopped by you", and it is not counted as a failure. Backing out of the progress screen is not the same thing: the sync keeps running in the background.
+
+---
+
+### Q. The sync said an export could not be read and was kept.
+
+**A.** The result begins with a line such as "1 export could not be read and was kept - see Sync log", and the notification alerts you. This happens when an export reads as zero messages (the log says "no messages found - kept in the inbox") or cannot be handled. Nothing was sent from that file and it is not deleted. Check that you exported the chat itself as a .txt or .zip, open Settings -> Advanced -> Sync log for the reason, then remove the kept file from the queue with its X and import a fresh export.
+
+---
+
+### Q. What notifications does the app show?
+
+**A.** While a sync runs, a progress notification keeps it going in the background. When it finishes, a "Sync results" notification says, for example, "Sync complete - 12 message(s) synced". A plain success, or a sync you stopped yourself, is quiet; a failure or a kept export alerts. If a background check holds an export for the same-chat question, "A chat is waiting for your answer" appears. None of them carries a chat name. On Android 13 or newer you may be asked to allow notifications; if you decline, syncing still works but you will not see these.
+
+---
+
+### Q. I am switching to the F-Droid build. What do I do?
+
+**A.** F-Droid signs the app with its own key, so Android will not install it over the GitHub or store build: you must uninstall the old app first, which deletes the record of what has already been sent. Without that record the new app mails every chat a second time. So: (1) in the old app, Settings -> Backup & restore -> "Save a backup", and choose Downloads or a cloud folder, not the watched folder; the file ends in .cmsbackup and the screen shows a dated line when it is done. (2) Have your app password ready. (3) Uninstall the old app in Android settings. (4) Install the F-Droid build. (5) On the first screen tap "Moving from another phone? Restore from a backup" and pick the file. (6) Enter your app password once, then choose the watched folder again in Settings -> Advanced; both are listed under "Not restored". The backup holds the sent record, per-chat cutoff dates and your preferences, not the password, the watched folder or your export files. Android's own system backup may help on some phones, but do not rely on it. If you already uninstalled without a backup, your chats are still in the mailbox; the first sync sends them again, so delete the duplicates or set a cutoff date for each chat first. The full steps are in docs/switching-to-fdroid.md in the project repository.
+
+---
+
+### Q. Which Android versions does the app need?
+
+**A.** Android 11 or newer, on a 64-bit ARM phone, which covers nearly every current phone. Phones on Android 7 to 10 stay on version 2.2.0.
 
 ---
 
