@@ -4,9 +4,13 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
-## Unreleased
+## 3.0.2
 
-- DOC-02: Help and docs brought up to date with 2.9.0 to 3.0.1.
+Released 2026-10-29 (versionCode 48). Help and docs update.
+
+- DOC-02: Help and docs brought up to date with 2.9.0 to 3.0.1 (#144).
+- Store listing text names WhatsApp again (#143).
+- CUT-04: the build fails if the bundled NOTICE has CRLF line endings (#145).
 
 ## 3.0.1
 

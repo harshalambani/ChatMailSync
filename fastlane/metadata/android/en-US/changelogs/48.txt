@@ -1,0 +1,3 @@
+Help and docs brought up to date with the latest releases.
+Store text names WhatsApp again.
+Build checks that the bundled notice file is reproducible.
