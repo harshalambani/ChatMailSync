@@ -32,6 +32,8 @@ Read these before anything else. Neither is recoverable.
 ## Before the release
 
 - [ ] Working tree clean, on `main`, everything intended is merged.
+- [ ] `git ls-files --eol NOTICE` shows `w/lf`. A CRLF working copy makes the
+      APK differ from a Linux build, and the build now stops on it.
 - [ ] Bump `android/app/build.gradle.kts` - `versionCode` **and** `versionName`.
 - [ ] Python suite green: `python -m pytest tests/ -q` (PowerShell - it is
       denied under Bash here).
@@ -49,6 +51,10 @@ Read these before anything else. Neither is recoverable.
       `C:/Android/Sdk/build-tools/36.0.0/aapt2.exe dump badging <apk>`
       (`aapt2`, not `aapt` - `aapt` silently prints nothing).
       Check package, `versionCode`, `versionName`.
+- [ ] Before uploading anywhere: rebuild the same commit the way F-Droid
+      does (WSL Ubuntu, fresh LF clone, `:app:assembleRelease`, no keystore)
+      and run `apksigcopier compare <signed apk> --unsigned <linux apk>`.
+      No output and exit code 0 means the release is reproducible.
 
 The Windows portable build ended at 2.1.5 (tag `windows-final`); releases are
 APK-only from 2.2.0.

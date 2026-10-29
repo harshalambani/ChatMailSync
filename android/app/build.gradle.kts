@@ -126,6 +126,18 @@ val copyNoticeAsset by tasks.registering(Copy::class) {
     from(rootProject.projectDir.parentFile.resolve("NOTICE"))
     into(layout.projectDirectory.dir("src/main/assets"))
     rename { "NOTICE.txt" }
+    // A CRLF NOTICE (stale Windows working copy) would change the APK bytes and
+    // make the release differ from a Linux build. Fail loudly rather than
+    // normalising silently; .gitattributes keeps the checkout LF.
+    val noticeSource = rootProject.projectDir.parentFile.resolve("NOTICE")
+    doFirst {
+        if (noticeSource.readBytes().any { it == 13.toByte() }) {
+            throw GradleException(
+                "NOTICE contains carriage returns (CRLF). Re-checkout it with LF " +
+                    "(see .gitattributes) before building, or the APK will not be reproducible.",
+            )
+        }
+    }
 }
 
 tasks.named("preBuild") {

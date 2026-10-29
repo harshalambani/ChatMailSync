@@ -16,6 +16,10 @@
 *.kt   text eol=lf
 *.spec text eol=lf
 
+# NOTICE has no extension, so the rules above miss it. It is bundled into the
+# APK as an asset; a CRLF checkout changes the APK and breaks reproducible builds.
+NOTICE text eol=lf
+
 # gradlew.bat is the only Windows-native script format left; stays CRLF.
 *.bat  text eol=crlf
 
