@@ -8,6 +8,14 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 - DOC-02: Help and docs brought up to date with 2.9.0 to 3.0.1.
 
+## 3.0.2
+
+Released 2026-10-29 (versionCode 48). Help and docs update.
+
+- DOC-02: Help and docs brought up to date with 2.9.0 to 3.0.1 (#144).
+- Store listing text names WhatsApp again (#143).
+- CUT-04: the build fails if the bundled NOTICE has CRLF line endings (#145).
+
 ## 3.0.1
 
 Released 2026-10-26 (versionCode 47). Build fix so the app builds on newer Java
