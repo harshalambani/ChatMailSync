@@ -297,6 +297,11 @@ installed directly, but a bare APK never tells you when it is out of date.
 project's releases and offers you the update as soon as one is published — the part
 of a store you actually want, without the store.
 
+If Obtainium is already on your phone, tap this badge. It opens **Add App** with
+everything filled in, so you can skip to step 3.
+
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.chatmailsync.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fharshalambani%2FChatMailSync%22%2C%22author%22%3A%22harshalambani%22%2C%22name%22%3A%22Chat%20Mail%20Sync%22%7D"><img src="docs/images/badge_obtainium.png" alt="Get it on Obtainium" height="48"></a>
+
 1. Install [Obtainium](https://github.com/ImranR98/Obtainium) (itself available from
    F-Droid or its own releases page).
 2. In Obtainium, tap **Add App** and paste
