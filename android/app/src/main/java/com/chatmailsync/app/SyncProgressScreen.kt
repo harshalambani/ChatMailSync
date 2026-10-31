@@ -49,16 +49,18 @@ import kotlin.math.roundToInt
 internal fun ProgressTextRow(text: String, percentLabel: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.testTag(PROGRESS_TEXT_TAG),
+            modifier = Modifier.weight(1f).testTag(PROGRESS_TEXT_TAG),
         )
         Text(
             percentLabel,
             style = MaterialTheme.typography.bodyMedium,
+            softWrap = false,
+            maxLines = 1,
             modifier = Modifier.testTag(PROGRESS_PERCENT_TAG),
         )
     }
