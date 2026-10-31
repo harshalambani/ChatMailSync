@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -110,6 +111,11 @@ fun loadSyncLog(days: Int = 90): List<SyncRunLogEntry> {
  * Computed in the shared core (state.summarize_recent_runs) rather than by
  * folding [loadSyncLog]'s rows here, so the block on Home can never claim a
  * different history than the log screen it links to.
+ *
+ * One exception: [failedRuns] is the failure count over the whole window and
+ * is what Home shows only until the Sync log has been opened once. After that
+ * Home shows [failedSince] over [loadSyncLog]'s rows, counted from the moment
+ * the log was last opened (AppPrefs.getSyncLogSeenAt).
  */
 data class SyncSummary(
     val windowDays: Int,
@@ -141,7 +147,39 @@ fun loadSyncStatus(days: Int = 90): SyncSummary {
     )
 }
 
-private val STOPPED_OF_TOTAL = Regex("after ([0-9]+) of ([0-9]+) messages")
+/**
+ * How many failed runs happened after [seenAt] -- the moment the Sync log was
+ * last opened, as a naive local ISO string. A run's time is when it finished,
+ * or when it started if it has no finish time.
+ *
+ * A null [seenAt] (log never opened) counts every failure. A run whose time
+ * cannot be parsed is counted too: when in doubt the line must show, never
+ * hide. A later successful run changes nothing -- only failures are counted
+ * and nothing here looks at the others.
+ */
+internal fun failedSince(rows: List<SyncRunLogEntry>, seenAt: String?): Int {
+    val seen = seenAt?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        // Never opened, or the saved value is unreadable: show everything.
+        ?: return rows.count { it.status == "failed" }
+    return rows.count { run ->
+        if (run.status != "failed") return@count false
+        val raw = run.completedAt ?: run.startedAt
+        val at = raw?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        at == null || at.isAfter(seen)
+    }
+}
+
+/** The red line on Home. Before the log has ever been opened ([seenAt] null)
+ * it keeps the old whole-window wording; afterwards it counts only what is new
+ * since the last look. Null when there is nothing to say. */
+internal fun failedRunsLine(windowDays: Int, windowFailed: Int, seenAt: String?, sinceSeen: Int): String? =
+    if (seenAt == null) {
+        if (windowFailed > 0) "${plural(windowFailed, "run")} failed in the last $windowDays days" else null
+    } else {
+        if (sinceSeen > 0) "${plural(sinceSeen, "run")} failed since you last checked" else null
+    }
+
+private val STOPPED_OF_TOTAL =Regex("after ([0-9]+) of ([0-9]+) messages")
 
 /**
  * BUG-15: what a run the user stopped moved. The total comes from the run's own note when it
@@ -280,6 +318,16 @@ fun SyncLogScreen(
     var expanded by remember { mutableStateOf(setOf<Long>()) }
 
     LaunchedEffect(Unit) { runs = loadSyncLog() }
+
+    // Opening the log is what "checked" means: Home's red line counts only
+    // failures after this moment.
+    val appContext = LocalContext.current.applicationContext
+    LaunchedEffect(Unit) {
+        AppPrefs.setSyncLogSeenAt(
+            appContext,
+            LocalDateTime.now().withNano(0).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+        )
+    }
 
     val errorCount = runs.count { it.status == "failed" }
     val visible = if (errorsOnly) runs.filter { it.status == "failed" } else runs

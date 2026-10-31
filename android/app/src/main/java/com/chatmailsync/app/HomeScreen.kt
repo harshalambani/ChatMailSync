@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 // Mirrors extract_chat_info's prefix-stripping (src/parser.py) so the queued
@@ -167,7 +168,11 @@ private fun SelfSenderLearnedBanner(
  * install is a box explaining that there is nothing to explain.
  */
 @Composable
-private fun SyncStatusBlock(summary: SyncSummary, onOpenSyncLog: () -> Unit) {
+private fun SyncStatusBlock(
+    summary: SyncSummary,
+    failedLine: String?,
+    onOpenSyncLog: () -> Unit,
+) {
     val status = summary.lastStatus ?: "pending"
     Card(
         modifier = Modifier
@@ -201,13 +206,12 @@ private fun SyncStatusBlock(summary: SyncSummary, onOpenSyncLog: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            // The count is over the same 90-day window the log shows, so
-            // tapping through lands on exactly these runs and not a longer or
-            // shorter history.
-            if (summary.failedRuns > 0) {
+            // Until the log has been opened this counts the whole 90-day
+            // window, which is exactly what the log lists. After that it
+            // counts only failures since the last look (see failedSince).
+            if (failedLine != null) {
                 Text(
-                    "${plural(summary.failedRuns, "run")} failed in the last " +
-                        "${summary.windowDays} days",
+                    failedLine,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -256,7 +260,11 @@ fun HomeScreen(
 ) {
     // Re-read whenever a sync starts or stops, so the block is right the
     // moment a run ends rather than on the next visit to this screen.
+    // Coming back from the Sync log re-composes Home from scratch, so this
+    // runs again and the red line reflects the look that was just taken.
+    val homeContext = LocalContext.current.applicationContext
     var summary by remember { mutableStateOf<SyncSummary?>(null) }
+    var failedLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(syncInProgress, lastResult) {
         summary = try {
             loadSyncStatus()
@@ -264,6 +272,18 @@ fun HomeScreen(
             // A summary is a convenience; failing to read it must never be
             // the reason Home does not render.
             null
+        }
+        failedLine = try {
+            val s = summary
+            if (s == null) null else {
+                val seenAt = AppPrefs.getSyncLogSeenAt(homeContext)
+                val since = if (seenAt == null) 0 else failedSince(loadSyncLog(s.windowDays), seenAt)
+                failedRunsLine(s.windowDays, s.failedRuns, seenAt, since)
+            }
+        } catch (_: Exception) {
+            // Cannot filter: fall back to the whole-window count rather than
+            // hide failures.
+            summary?.let { failedRunsLine(it.windowDays, it.failedRuns, null, 0) }
         }
     }
     var previewText by remember { mutableStateOf<String?>(null) }
@@ -554,7 +574,7 @@ fun HomeScreen(
             // above this line is either something to do or something blocking
             // it from being done.
             summary?.takeIf { it.totalRuns > 0 }?.let {
-                SyncStatusBlock(summary = it, onOpenSyncLog = onOpenSyncLog)
+                SyncStatusBlock(summary = it, failedLine = failedLine, onOpenSyncLog = onOpenSyncLog)
             }
 
             // A line, in the window, with the fix attached -- not a dialog and
