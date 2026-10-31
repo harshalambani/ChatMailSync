@@ -53,6 +53,7 @@ object AppPrefs {
     private const val KEY_CUTOFF_DATE = "cutoff_date"
     private const val KEY_FIRST_RUN_DONE = "first_run_done"
     private const val KEY_CHAQUOPY_CLEANUP_DONE = "chaquopy_cleanup_done"
+    private const val KEY_SYNC_LOG_SEEN_AT = "sync_log_seen_at"
     /** Control character used to pack a "filename<sep>sourceUri" pair into
      * one StringSet element — SharedPreferences has no native Map type, and
      * this can't collide with a real filename or content:// Uri. */
@@ -306,6 +307,17 @@ object AppPrefs {
 
     fun setLastBackupAt(context: Context, atMillis: Long = System.currentTimeMillis()) {
         prefs(context).edit().putLong(KEY_LAST_BACKUP_AT, atMillis).apply()
+    }
+
+    /** When the Sync log screen was last opened, as a naive local
+     * "yyyy-MM-ddTHH:mm:ss" string -- the same form the run rows carry, so the
+     * two compare without a time-zone conversion. Null until it has been
+     * opened once. Home's red failed-runs line counts only failures after it. */
+    fun getSyncLogSeenAt(context: Context): String? =
+        prefs(context).getString(KEY_SYNC_LOG_SEEN_AT, null)
+
+    fun setSyncLogSeenAt(context: Context, isoLocal: String) {
+        prefs(context).edit().putString(KEY_SYNC_LOG_SEEN_AT, isoLocal).apply()
     }
 
     /** Forget any verdict — for when the account itself changes underneath
