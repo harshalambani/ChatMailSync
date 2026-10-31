@@ -44,14 +44,15 @@ class ProgressTextRowTest {
         assertEquals(1, layoutOf(PROGRESS_PERCENT_TAG).lineCount)
     }
 
-    // NEGATIVE: the percent is not cut short; the full string is laid out, not ellipsised.
+    // NEGATIVE: the percent is not cut short: the whole string is on the one visible line, not ellipsised.
     @Test
     fun percentIsShownInFull() {
         render()
         rule.onNodeWithTag(PROGRESS_PERCENT_TAG).assertIsDisplayed()
         val layout = layoutOf(PROGRESS_PERCENT_TAG)
         assertEquals("73%", layout.layoutInput.text.text)
-        assertTrue(!layout.hasVisualOverflow)
+        assertTrue(!layout.isLineEllipsized(0))
+        assertEquals("73%".length, layout.getLineEnd(0, visibleEnd = true))
     }
 
     @Test
