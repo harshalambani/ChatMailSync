@@ -179,7 +179,7 @@ internal fun failedRunsLine(windowDays: Int, windowFailed: Int, seenAt: String?,
         if (sinceSeen > 0) "${plural(sinceSeen, "run")} failed since you last checked" else null
     }
 
-private val STOPPED_OF_TOTAL =Regex("after ([0-9]+) of ([0-9]+) messages")
+private val STOPPED_OF_TOTAL = Regex("after ([0-9]+) of ([0-9]+) messages")
 
 /**
  * BUG-15: what a run the user stopped moved. The total comes from the run's own note when it
