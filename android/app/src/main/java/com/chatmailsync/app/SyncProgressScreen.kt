@@ -30,11 +30,42 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlin.math.roundToInt
+
+/**
+ * The progress text with its percent at the right edge.
+ *
+ * The text takes the remaining width and wraps on its own lines; the percent
+ * keeps its natural width on a single line. Without the weight, a long text
+ * claimed the whole row and squeezed the percent into a one-character column
+ * (BUG-20).
+ */
+@Composable
+internal fun ProgressTextRow(text: String, percentLabel: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag(PROGRESS_TEXT_TAG),
+        )
+        Text(
+            percentLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag(PROGRESS_PERCENT_TAG),
+        )
+    }
+}
+
+internal const val PROGRESS_TEXT_TAG = "progress_text"
+internal const val PROGRESS_PERCENT_TAG = "progress_percent"
 
 @Composable
 fun SyncProgressScreen(
@@ -153,16 +184,10 @@ fun SyncProgressScreen(
                             progress = { fraction },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(text, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                if (percent >= 0) "$percent%" else "${(fraction * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
+                        ProgressTextRow(
+                            text = text,
+                            percentLabel = if (percent >= 0) "$percent%" else "${(fraction * 100).roundToInt()}%",
+                        )
                     } else {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         Text(text, style = MaterialTheme.typography.bodyMedium)

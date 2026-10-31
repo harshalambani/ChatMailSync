@@ -506,6 +506,8 @@ private fun SyncStatusBar(
                 if (running && percent != null && percent >= 0) {
                     Text(
                         "$percent%",
+                        softWrap = false,
+                        maxLines = 1,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
