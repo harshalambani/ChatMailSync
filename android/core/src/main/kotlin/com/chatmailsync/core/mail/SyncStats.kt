@@ -36,6 +36,8 @@ class SyncStats {
     var chatsRecovered: Int = 0
     /** BUG-05: exports left in the inbox because they wait for a "same chat?" answer. Not in [asMap]. */
     var filesHeld: Int = 0
+    /** BUG-19: failed files moved out of the queue because their chat text cannot be read. Not in [asMap]. */
+    var filesUnreadable: Int = 0
     val errors: MutableList<String> = mutableListOf()
     /**
      * Media that no email could carry, or that a file name made unsafe to

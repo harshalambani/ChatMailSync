@@ -232,6 +232,8 @@ fun HomeScreen(
     onImportPick: () -> Unit,
     onPreview: (String) -> String,
     onRemoveFile: (String) -> Unit,
+    unreadableFiles: List<Pair<String, Long>> = emptyList(),
+    onRemoveUnreadable: (String) -> Unit = {},
     dryRunDefault: Boolean,
     onDryRunDefaultChange: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
@@ -480,6 +482,7 @@ fun HomeScreen(
                             }
                         }
                     }
+                    UnreadableSection(unreadableFiles, onRemoveUnreadable)
                     if (inboxFiles.size > HOME_QUEUE_ROWS) {
                         // Says how many are hidden rather than just "Show all",
                         // because the count is the reason to tap it.
@@ -615,6 +618,36 @@ fun HomeScreen(
                 HorizontalDivider()
                 Text("Last result:", style = MaterialTheme.typography.titleSmall)
                 Text(lastResult, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+
+/**
+ * BUG-19: exports whose chat text could not be read. They are shown apart from the queue
+ * (they are not synced and not counted) with a Remove that clears them.
+ */
+@Composable
+fun UnreadableSection(files: List<Pair<String, Long>>, onRemove: (String) -> Unit) {
+    if (files.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Cannot be read", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "These were moved out of the queue and will not be synced. Remove clears them.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        files.forEach { (name, _) ->
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    displayNameFor(name),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = { onRemove(name) }) { Text("Remove") }
             }
         }
     }

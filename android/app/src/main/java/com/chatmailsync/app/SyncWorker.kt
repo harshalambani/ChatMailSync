@@ -212,10 +212,14 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             try {
                 val statsResult =
                     withDispatcherIO(backend, chunkSize, dryRun, trigger, chatFilter, core)
+                        .copy(filesUnreadable = core.lastSyncFilesUnreadable)
                 progressOpen.set(false)
                 pollJob.cancel()
                 postResult(
-                    syncResultNotice(dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed)
+                    syncResultNotice(
+                        dryRun, statsResult.stopped, statsResult.messagesSynced, statsResult.filesFailed,
+                        statsResult.filesUnreadable,
+                    )
                 )
                 heldNotice(core.lastSyncFilesHeld, trigger, dryRun)?.let { postHeld(it) }
                 Result.success(
@@ -473,11 +477,13 @@ private data class SyncStatsResult(
     // run. Mirrors SyncStats.media_omitted.
     val mediaOmitted: List<String>,
     val stopped: Boolean,
+    // BUG-19: how many of the failed files were moved to the Cannot be read list.
+    val filesUnreadable: Int = 0,
 ) {
     fun format(): String {
         val lines = mutableListOf<String>()
         // BUG-12: a failure line first, so it is not buried under the counts.
-        exportsKeptLine(filesFailed)?.let { lines.add(it) }
+        exportsKeptLine(filesFailed, filesUnreadable)?.let { lines.add(it) }
         lines.add(
             if (stopped) "Stopped by you \u2014 $messagesSynced message(s) synced" else "Done"
         )
@@ -535,16 +541,28 @@ private data class SyncStatsResult(
  * BUG-12: the plain line telling the user how many exports could not be read and were kept in
  * the inbox, or null when none failed. Never carries a chat name.
  */
-internal fun exportsKeptLine(filesFailed: Int): String? = when {
-    filesFailed <= 0 -> null
-    filesFailed == 1 -> "1 export could not be read and was kept - see Sync log"
-    else -> "$filesFailed exports could not be read and were kept - see Sync log"
+internal fun exportsKeptLine(filesFailed: Int, filesUnreadable: Int = 0): String? {
+    if (filesFailed <= 0) return null
+    val moved = filesUnreadable.coerceIn(0, filesFailed)
+    val kept = filesFailed - moved
+    val keptLine = when {
+        kept <= 0 -> null
+        kept == 1 -> "1 export could not be read and was kept - see Sync log"
+        else -> "$kept exports could not be read and were kept - see Sync log"
+    }
+    // BUG-19: an unreadable export leaves the queue; say where it went and how to clear it.
+    val movedLine = when {
+        moved <= 0 -> null
+        moved == 1 -> "1 export could not be read and was moved out of the queue to Cannot be read on Home - Remove clears it"
+        else -> "$moved exports could not be read and were moved out of the queue to Cannot be read on Home - Remove clears them"
+    }
+    return listOfNotNull(keptLine, movedLine).joinToString("; ")
 }
 
 /** The finish notification: the existing text, plus the kept-export line when any failed. */
-internal fun syncNotificationText(label: String, messagesSynced: Int, filesFailed: Int): String {
+internal fun syncNotificationText(label: String, messagesSynced: Int, filesFailed: Int, filesUnreadable: Int = 0): String {
     val base = "$label — $messagesSynced message(s) synced"
-    val kept = exportsKeptLine(filesFailed) ?: return base
+    val kept = exportsKeptLine(filesFailed, filesUnreadable) ?: return base
     return "$base; $kept"
 }
 
@@ -555,12 +573,18 @@ internal data class ResultNotice(val text: String, val alert: Boolean)
  * BUG-13: a finished run. A failed or kept export alerts; a plain success (and a user's own
  * Stop) is quiet. Carries no chat name.
  */
-internal fun syncResultNotice(dryRun: Boolean, stopped: Boolean, messagesSynced: Int, filesFailed: Int): ResultNotice {
+internal fun syncResultNotice(
+    dryRun: Boolean,
+    stopped: Boolean,
+    messagesSynced: Int,
+    filesFailed: Int,
+    filesUnreadable: Int = 0,
+): ResultNotice {
     val label = when {
         stopped -> if (dryRun) "Test run stopped" else "Sync stopped"
         else -> if (dryRun) "Test run complete" else "Sync complete"
     }
-    return ResultNotice(syncNotificationText(label, messagesSynced, filesFailed), alert = filesFailed > 0)
+    return ResultNotice(syncNotificationText(label, messagesSynced, filesFailed, filesUnreadable), alert = filesFailed > 0)
 }
 
 internal fun syncFailedNotice(message: String?): ResultNotice =

@@ -938,6 +938,8 @@ fun ChatMailApp(
 
     // ---- Inbox + import (Phase A2) -----------------------------------
     var inboxFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
+    // BUG-19: exports whose chat text could not be read; they wait here, outside the queue.
+    var unreadableFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
     var lastResult by remember { mutableStateOf("Nothing run yet.") }
 
     fun refreshInbox() {
@@ -946,10 +948,22 @@ fun ChatMailApp(
             val size = entry.long("size_bytes") ?: 0L
             name to size
         }
+        unreadableFiles = ChatMailApplication.core(context).listUnreadable().map { entry ->
+            entry.str("name").toString() to (entry.long("size_bytes") ?: 0L)
+        }
     }
 
     fun removeInboxFile(name: String) {
         ChatMailApplication.core(context).removeFromInbox(name)
+        // A removed file was never delivered: its original in the watched folder
+        // must not be moved or deleted on its account.
+        AppPrefs.removePendingSyncedFile(context, name)
+        refreshInbox()
+    }
+
+    fun removeUnreadableFile(name: String) {
+        ChatMailApplication.core(context).removeFromUnreadable(name)
+        AppPrefs.removePendingSyncedFile(context, name)
         refreshInbox()
     }
 
@@ -1823,6 +1837,8 @@ fun ChatMailApp(
                             .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
+                    unreadableFiles = unreadableFiles,
+                    onRemoveUnreadable = { name -> removeUnreadableFile(name) },
                     dryRunDefault = dryRunDefault,
                     onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
@@ -1865,6 +1881,8 @@ fun ChatMailApp(
                             .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },
+                    unreadableFiles = unreadableFiles,
+                    onRemoveUnreadable = { name -> removeUnreadableFile(name) },
                     onImportPick = { navController.navigate("importPicker") },
                     onBack = { navController.popBackStack() },
                 )

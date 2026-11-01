@@ -64,6 +64,8 @@ fun QueueScreen(
     files: List<Pair<String, Long>>,
     onPreview: (String) -> String,
     onRemove: (String) -> Unit,
+    unreadableFiles: List<Pair<String, Long>> = emptyList(),
+    onRemoveUnreadable: (String) -> Unit = {},
     onImportPick: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -190,6 +192,13 @@ fun QueueScreen(
                             Text("Preview")
                         }
                     }
+                }
+            }
+
+            if (unreadableFiles.isNotEmpty()) {
+                HorizontalDivider()
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    UnreadableSection(unreadableFiles, onRemoveUnreadable)
                 }
             }
 

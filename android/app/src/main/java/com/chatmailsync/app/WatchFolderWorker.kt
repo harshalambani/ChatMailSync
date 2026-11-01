@@ -102,13 +102,21 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
          * A pending entry whose file is still in inbox/ (sync failed, was
          * skipped, or hasn't run yet) is left untouched — safe to retry on
          * the next call, and never mistaken for "must have delivered by now". */
+        /** BUG-19: a name counts as delivered only when it is in neither the queue nor the
+         * unreadable folder. A file moved to the unreadable folder was never sent, so the
+         * original in the watched folder must not be moved or deleted on its account. */
+        internal fun deliveredPendingNames(names: Collection<String>, inboxDir: java.io.File, unreadableDir: java.io.File): List<String> =
+            names.filter { name -> !inboxDir.resolve(name).exists() && !unreadableDir.resolve(name).exists() }
+
         fun applyPendingSyncedFilePolicies(context: Context) {
             val pending = AppPrefs.getPendingSyncedFiles(context)
             if (pending.isEmpty()) return
 
-            val delivered = pending.keys.filter { name ->
-                !ChatMailApplication.inboxDir(context).resolve(name).exists()
-            }
+            val delivered = deliveredPendingNames(
+                pending.keys,
+                ChatMailApplication.inboxDir(context),
+                ChatMailApplication.unreadableDir(context),
+            )
             if (delivered.isEmpty()) return
 
             val policy = AppPrefs.getSyncedFilePolicy(context)

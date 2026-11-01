@@ -100,3 +100,36 @@ internal fun sweepKeptCopies(processedDir: File, inboxDir: File): Int {
     }
     return removed
 }
+
+/**
+ * BUG-19: moves an export whose chat text cannot be read out of the queue into [unreadableDir]
+ * (created on demand), replacing an older file of the same name there. Like
+ * [deleteCompletedExport] it refuses anything that is not a regular, non-link file directly
+ * inside [inboxDir]. Returns false, leaving the file where it was, when it cannot move it;
+ * it never throws, so a failed move behaves exactly as the file did before (kept in the inbox).
+ */
+internal fun moveUnreadableExport(file: File, inboxDir: File, unreadableDir: File): Boolean {
+    return try {
+        val path = file.toPath()
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false
+        val parent = file.absoluteFile.parentFile ?: return false
+        if (parent.canonicalFile != inboxDir.canonicalFile) return false
+        if (unreadableDir.canonicalFile == inboxDir.canonicalFile) return false
+        unreadableDir.mkdirs()
+        val target = File(unreadableDir, file.name).toPath()
+        try {
+            Files.move(path, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+            Files.move(path, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+        true
+    } catch (_: Exception) {
+        false
+    }
+}
+
+/** BUG-19: the plain files waiting in [unreadableDir], sorted by name. A missing folder is empty. */
+fun listUnreadableFiles(unreadableDir: File): List<File> =
+    (unreadableDir.listFiles() ?: emptyArray())
+        .filter { it.isFile }
+        .sortedWith { a, b -> CodePointOrder.compare(a.name, b.name) }
