@@ -123,7 +123,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        handleIncomingIntent(intent)
+        // Only on a fresh start. A rebuild (rotation) hands the same intent back, and acting on it
+        // again would start a second copy of the same share.
+        if (savedInstanceState == null) handleIncomingIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -954,31 +956,16 @@ fun ChatMailApp(
     }
 
     fun importAndPreview(uri: Uri) {
-        val outcome = ImportManager.importUri(context, uri)
-        if (outcome == null) {
-            lastResult = "Import failed: could not read the shared/selected file."
-            return
-        }
-        refreshInbox()
-        if (outcome.alreadyQueued) {
-            lastResult = "${outcome.file.name} is already queued — remove it first (X) to re-import."
-            return
-        }
-        // preview() returns a dict; interpolating it printed the repr --
-        // "{'ok': True, 'display_name': ..., 'media_count': 15, ...}" -- straight
-        // into the user-facing result panel. preview_text() is the same call with
-        // format_preview() applied, and is what every other call site already uses.
-        val preview = ChatMailApplication.core(context)
-            .previewText(outcome.file.absolutePath, AppPrefs.getCutoffDate(context))
-        lastResult = "Imported ${outcome.file.name}\n\n$preview"
+        // The copy and the preview run in the background; the result arrives as a report below.
+        lastResult = "Importing..."
+        ImportManager.submit(context, listOf(uri), fromShare = false)
     }
 
     /** A shared export lands in the queue on Home, and the panel that says so
      * is on Home -- arriving from WhatsApp onto whichever screen was last open
      * is indistinguishable from nothing having happened, which is how it was
      * reported. Go where the result is. */
-    fun receiveSharedExport(uri: Uri) {
-        importAndPreview(uri)
+    fun goHomeAfterShare() {
         // Step 3 of first-run exists to greet exactly this arrival in place —
         // jumping to Home the moment a share lands would cut the walkthrough
         // short and land the user somewhere it never explained. Everywhere
@@ -988,6 +975,24 @@ fun ChatMailApp(
         navController.navigate("home") {
             popUpTo(tabPopTargetRoute()) { saveState = true }
             launchSingleTop = true
+        }
+    }
+
+    fun receiveSharedExport(uri: Uri) {
+        lastResult = "Importing..."
+        ImportManager.submit(context, listOf(uri), fromShare = true)
+        // Go where the result will appear now; the copy finishes in the background.
+        goHomeAfterShare()
+    }
+
+    // A finished import (share or pick), from the app-level copy. Collected here so a screen rebuilt
+    // mid-copy still gets the result.
+    val importReport by ImportManager.report.collectAsState()
+    LaunchedEffect(importReport) {
+        importReport?.let { r ->
+            refreshInbox()
+            lastResult = r.text
+            ImportManager.consume(r.id)
         }
     }
 
@@ -1009,34 +1014,16 @@ fun ChatMailApp(
      * preview; a selection gets counted honestly instead.
      */
     fun importMany(uris: List<Uri>) {
-        if (uris.size == 1) {
-            importAndPreview(uris.first())
-            return
-        }
-        var imported = 0
-        var alreadyQueued = 0
-        var failed = 0
-        uris.forEach { uri ->
-            val outcome = ImportManager.importUri(context, uri)
-            when {
-                outcome == null -> failed++
-                outcome.alreadyQueued -> alreadyQueued++
-                else -> imported++
-            }
-        }
-        refreshInbox()
-        lastResult = listOfNotNull(
-            "Imported ${plural(imported, "file")}",
-            "$alreadyQueued already queued".takeIf { alreadyQueued > 0 },
-            "${plural(failed, "file")} could not be read".takeIf { failed > 0 },
-        ).joinToString(" · ")
+        if (uris.isEmpty()) return
+        lastResult = "Importing..."
+        ImportManager.submit(context, uris, fromShare = false)
     }
 
     // OpenMultipleDocuments (not OpenDocument): the single-select contract
     // was the "only 1 file at a time" bug reported from Home testing.
     val pickFile = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris -> uris.forEach { importAndPreview(it) } }
+    ) { uris -> importMany(uris) }
 
     // ---- Backup & restore (P3) -----------------------------------------
     //
