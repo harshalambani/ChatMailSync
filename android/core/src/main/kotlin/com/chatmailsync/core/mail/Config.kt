@@ -361,6 +361,15 @@ val PROVIDER_MAX_MESSAGE_BYTES: Map<String, Long> = mapOf(
  * (zip-bomb guard). */
 const val MAX_ZIP_DECOMPRESSED_BYTES = 500L * 1_048_576L
 
+/** BUG-21: the most chat text (one .txt, or the .txt inside a zip) that is read into memory.
+ * Going over is a read failure for that export, not an out-of-memory crash. 64 MiB is about
+ * a million messages, far beyond a real chat. */
+const val MAX_CHAT_TEXT_BYTES = 64L * 1_048_576L
+
+/** BUG-21: the hard stop for one media file when the caller gives no budget of its own. Every
+ * real sync passes a budget; this only keeps a caller that does not from loading a huge file. */
+const val MAX_UNBUDGETED_MEDIA_BYTES = 64L * 1_048_576L
+
 // ---------------------------------------------------------------------------
 // Rate limiting
 // ---------------------------------------------------------------------------

@@ -372,14 +372,25 @@ fun readChatText(filepath: File): String {
                 throw ChatTextReadException("ZIP archive '${filepath.name}' contains no .txt file.")
             }
             val target = txtNames.firstOrNull { "_chat" in it.lowercase(Locale.ROOT) } ?: txtNames.first()
-            val raw = zf.getInputStream(zf.getEntry(target)).use { it.readBytes() }
+            val entry = zf.getEntry(target)
+            if (entry.size > MAX_CHAT_TEXT_BYTES) throw chatTextTooLarge(filepath)
+            val raw = zf.getInputStream(entry).use { readAtMost(it, MAX_CHAT_TEXT_BYTES) }
+                ?: throw chatTextTooLarge(filepath)
             return decodeZipText(raw)
         }
     }
     // Plain text: twin of `filepath.read_text(encoding="utf-8-sig", errors="replace")`.
-    val raw = filepath.readBytes()
+    // BUG-21: a hard stop, so a huge file is a read failure rather than an out-of-memory crash.
+    if (filepath.length() > MAX_CHAT_TEXT_BYTES) throw chatTextTooLarge(filepath)
+    val raw = filepath.inputStream().use { readAtMost(it, MAX_CHAT_TEXT_BYTES) }
+        ?: throw chatTextTooLarge(filepath)
     return decodeUtf8SigReplace(raw)
 }
+
+private fun chatTextTooLarge(filepath: File) = ChatTextReadException(
+    "Chat text in '${filepath.name}' is larger than the " +
+        "${String.format(Locale.ROOT, "%,d", MAX_CHAT_TEXT_BYTES)}-byte limit.",
+)
 
 private fun tryOpenZip(filepath: File): ZipFile? = try {
     ZipFile(filepath)
