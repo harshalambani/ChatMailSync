@@ -958,7 +958,7 @@ fun ChatMailApp(
     fun importAndPreview(uri: Uri) {
         // The copy and the preview run in the background; the result arrives as a report below.
         lastResult = "Importing..."
-        ImportManager.submit(context, listOf(uri), fromShare = false)
+        ImportManager.submit(context, listOf(uri))
     }
 
     /** A shared export lands in the queue on Home, and the panel that says so
@@ -969,8 +969,9 @@ fun ChatMailApp(
         // Step 3 of first-run exists to greet exactly this arrival in place —
         // jumping to Home the moment a share lands would cut the walkthrough
         // short and land the user somewhere it never explained. Everywhere
-        // else, go where the result is, same as before; inboxFiles (read by
-        // both Home and first-run step 3) is already refreshed above.
+        // else, go where the result is, same as before. inboxFiles (read by
+        // both Home and first-run step 3) is refreshed when the import report
+        // arrives, a moment after the background copy finishes.
         if (navController.currentDestination?.route == "first_run") return
         navController.navigate("home") {
             popUpTo(tabPopTargetRoute()) { saveState = true }
@@ -980,7 +981,7 @@ fun ChatMailApp(
 
     fun receiveSharedExport(uri: Uri) {
         lastResult = "Importing..."
-        ImportManager.submit(context, listOf(uri), fromShare = true)
+        ImportManager.submit(context, listOf(uri))
         // Go where the result will appear now; the copy finishes in the background.
         goHomeAfterShare()
     }
@@ -999,7 +1000,8 @@ fun ChatMailApp(
     registerImportCallback { uri -> receiveSharedExport(uri) }
 
     // Collect a share that reached the activity before this callback existed.
-    // In the composition, not in onCreate: importAndPreview writes state.
+    // In the composition, not in onCreate: submitting an import writes state
+    // (lastResult), which is only safe once the composition exists.
     LaunchedEffect(Unit) {
         (context as? MainActivity)?.takePendingImport()?.let { receiveSharedExport(it) }
     }
@@ -1016,7 +1018,7 @@ fun ChatMailApp(
     fun importMany(uris: List<Uri>) {
         if (uris.isEmpty()) return
         lastResult = "Importing..."
-        ImportManager.submit(context, uris, fromShare = false)
+        ImportManager.submit(context, uris)
     }
 
     // OpenMultipleDocuments (not OpenDocument): the single-select contract

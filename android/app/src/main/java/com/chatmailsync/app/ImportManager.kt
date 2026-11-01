@@ -32,7 +32,7 @@ data class ImportOutcome(val file: File, val alreadyQueued: Boolean)
 data class ImportResult(val outcome: ImportOutcome?, val message: String?)
 
 /** What the screen shows once a share or a pick has finished. [id] is new for every report. */
-data class ImportReport(val id: Long, val text: String, val fromShare: Boolean)
+data class ImportReport(val id: Long, val text: String)
 
 /** The largest export a share may copy in. The sync reads at most
  * MAX_ZIP_DECOMPRESSED_BYTES (500 MiB) out of a zip, so a bigger file could not be processed
@@ -205,7 +205,7 @@ object ImportManager {
      * main thread never waits on a file copy. Rotating the screen does not stop the copy and does
      * not start another: the work belongs to the app, and an item already being copied is skipped.
      */
-    fun submit(context: Context, uris: List<Uri>, fromShare: Boolean) {
+    fun submit(context: Context, uris: List<Uri>) {
         val app = context.applicationContext
         val fresh = uris.filter { inFlight.add(it.toString()) }
         if (fresh.isEmpty()) return
@@ -217,7 +217,7 @@ object ImportManager {
             }
             val text = if (results.size == 1) singleText(app, results.first()) else importSummary(results)
             synchronized(this@ImportManager) {
-                _report.value = ImportReport(++nextId, text, fromShare)
+                _report.value = ImportReport(++nextId, text)
             }
         }
     }
