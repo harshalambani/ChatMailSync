@@ -448,7 +448,7 @@ object HtmlRenderer {
                 "</div>"
         }
 
-        val result = extractor.resolve(filename)
+        val result = extractor.resolveWithin(filename, maxMediaBytes)
         if (result == null) {
             // Never leaks the caller's actual (possibly absolute) local
             // filesystem path -- only the export-relative `filename` the
@@ -458,20 +458,22 @@ object HtmlRenderer {
                 "</div>"
         }
 
-        val (data, mimeType) = result
+        val mimeType = result.mimeType
 
-        // One file too big for any single email.
-        if (maxMediaBytes != null && data.size.toLong() > maxMediaBytes) {
+        // One file too big for any single email. BUG-21: it was left unread.
+        val data = result.data
+        if (data == null) {
+            val limit = maxMediaBytes ?: MAX_UNBUDGETED_MEDIA_BYTES
             omissions.add(
                 MediaOmission(
                     filename = filename,
-                    sizeBytes = data.size.toLong(),
-                    limitBytes = maxMediaBytes,
+                    sizeBytes = result.sizeBytes,
+                    limitBytes = limit,
                 ),
             )
             return "<div style=\"$PLACEHOLDER\">" +
-                "$PAPERCLIP_ICON ${escapeHtml(filename)} $EM_DASH ${formatSize(data.size.toLong())}, " +
-                "too large to email (limit ${formatSize(maxMediaBytes)}). " +
+                "$PAPERCLIP_ICON ${escapeHtml(filename)} $EM_DASH ${formatSize(result.sizeBytes)}, " +
+                "too large to email (limit ${formatSize(limit)}). " +
                 "Not included; it stays in your WhatsApp export." +
                 "</div>"
         }

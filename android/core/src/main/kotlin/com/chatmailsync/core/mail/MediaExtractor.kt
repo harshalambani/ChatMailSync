@@ -2,6 +2,7 @@ package com.chatmailsync.core.mail
 
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.Locale
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
@@ -115,19 +116,45 @@ class MediaExtractor(private val sourcePath: File) : AutoCloseable {
     }
 
     /**
-     * Return `(bytes, mimeType)` for [filename], or null if not found.
-     * Lookup is case-insensitive on the basename.
+     * Return `(bytes, mimeType)` for [filename], or null if not found or over
+     * [MAX_UNBUDGETED_MEDIA_BYTES]. Lookup is case-insensitive on the basename.
      */
     fun resolve(filename: String): Pair<ByteArray, String>? {
-        val key = pathBasename(filename).lowercase(Locale.ROOT)
+        val found = resolveWithin(filename, null) ?: return null
+        val data = found.data ?: return null
+        return data to found.mimeType
+    }
 
-        val data: ByteArray = run {
+    /** BUG-21: what [resolveWithin] found. [data] is null when the file is over the budget and
+     * was left unread; [sizeBytes] is then its size (at least the budget plus one when the
+     * archive understated it). */
+    class MediaLookup(val sizeBytes: Long, val mimeType: String, val data: ByteArray?)
+
+    /**
+     * BUG-21: like [resolve], but a file over [maxBytes] (or [MAX_UNBUDGETED_MEDIA_BYTES] when
+     * null) is never loaded. The size is looked up first (the entry's declared size, or the file
+     * length) and an oversize file is left unread; anything else is read with a hard stop one
+     * byte past the limit, so an entry that understates its size cannot load more than that.
+     */
+    fun resolveWithin(filename: String, maxBytes: Long?): MediaLookup? {
+        val key = pathBasename(filename).lowercase(Locale.ROOT)
+        val limit = maxBytes ?: MAX_UNBUDGETED_MEDIA_BYTES
+        var size = -1L
+
+        val data: ByteArray? = run {
             val zf = zipFile
             if (zf != null) {
                 val entryName = zipIndex[key] ?: return null
                 try {
                     val entry = zf.getEntry(entryName) ?: return null
-                    zf.getInputStream(entry).use { it.readBytes() }
+                    size = entry.size
+                    if (size > limit) {
+                        null
+                    } else {
+                        val bytes = zf.getInputStream(entry).use { readAtMost(it, limit) }
+                        if (bytes == null) size = limit + 1 else size = bytes.size.toLong()
+                        bytes
+                    }
                 } catch (_: Exception) {
                     return null
                 }
@@ -158,7 +185,14 @@ class MediaExtractor(private val sourcePath: File) : AutoCloseable {
                     return null
                 }
                 try {
-                    found.readBytes()
+                    size = found.length()
+                    if (size > limit) {
+                        null
+                    } else {
+                        val bytes = found.inputStream().use { readAtMost(it, limit) }
+                        if (bytes == null) size = limit + 1 else size = bytes.size.toLong()
+                        bytes
+                    }
                 } catch (_: Exception) {
                     return null
                 }
@@ -166,7 +200,7 @@ class MediaExtractor(private val sourcePath: File) : AutoCloseable {
         }
 
         val mimeType = guessMimeType(filename) ?: "application/octet-stream"
-        return data to mimeType
+        return MediaLookup(sizeBytes = data?.size?.toLong() ?: size, mimeType = mimeType, data = data)
     }
 }
 
@@ -274,3 +308,23 @@ private val MIME_TYPES_BY_EXTENSION: Map<String, String> = mapOf(
     ".vcf" to "text/x-vcard",
     ".txt" to "text/plain",
 )
+
+/**
+ * BUG-21: read [input] to the end, stopping one byte past [maxBytes]. Returns null when there
+ * is more than [maxBytes] to read; the caller never holds more than maxBytes + 1 bytes.
+ */
+internal fun readAtMost(input: InputStream, maxBytes: Long): ByteArray? {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        // Never ask for more than one byte past the limit: that is the hard stop.
+        val want = minOf(buf.size.toLong(), maxBytes - total + 1).toInt()
+        val n = input.read(buf, 0, want)
+        if (n < 0) break
+        total += n
+        if (total > maxBytes) return null
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
