@@ -210,6 +210,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
 
         val alreadyImported = AppPrefs.getImportedDocIds(applicationContext)
         var importedCount = 0
+        var oversizeSkipped = 0
 
         // listFiles() only sees the watched tree's immediate children, not
         // recursing into subfolders — this is what already keeps a "move to
@@ -225,6 +226,15 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             if (!ExportFiles.looksLikeExport(doc.name ?: continue)) continue
             val docId = doc.uri.toString()
             if (docId in alreadyImported) continue
+
+            // Too big for a sync to read: skip it without opening it. Not
+            // ledgered, so a smaller re-export under the same name is still
+            // picked up. A length of 0 means the size is unknown; that goes
+            // through the bounded copy as before.
+            if (shouldSkipOversizeWatchedFile(doc.length())) {
+                oversizeSkipped++
+                continue
+            }
 
             val outcome = ImportManager.importUri(applicationContext, doc.uri)
             if (outcome != null) {
@@ -253,7 +263,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 return Result.success(
                     workDataOf(
                         KEY_IMPORTED_COUNT to 0,
-                        KEY_RESULT_TEXT to "No new files found",
+                        KEY_RESULT_TEXT to withOversizeNote("No new files found", oversizeSkipped),
                     )
                 )
             }
@@ -263,7 +273,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         return Result.success(
             workDataOf(
                 KEY_IMPORTED_COUNT to importedCount,
-                KEY_RESULT_TEXT to resultText,
+                KEY_RESULT_TEXT to withOversizeNote(resultText, oversizeSkipped),
             )
         )
     }
@@ -354,3 +364,22 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         manager.notify(NOTIFICATION_ID, notification)
     }
 }
+
+/** True only for a watched file known to be larger than the shared-export cap. A length of 0
+ * (size unknown) and a file exactly at the cap are not skipped. */
+internal fun shouldSkipOversizeWatchedFile(length: Long, maxBytes: Long = MAX_SHARED_EXPORT_BYTES): Boolean =
+    length > maxBytes
+
+/** The plain line added to a run's result when watched files were skipped for size. */
+internal fun oversizeSkipNote(count: Int, maxBytes: Long = MAX_SHARED_EXPORT_BYTES): String {
+    if (count <= 0) return ""
+    val mb = maxBytes / 1_048_576L
+    return if (count == 1) {
+        "1 file in the watched folder is larger than $mb MB, more than a sync can read, so it was skipped."
+    } else {
+        "$count files in the watched folder are larger than $mb MB, more than a sync can read, so they were skipped."
+    }
+}
+
+internal fun withOversizeNote(text: String, count: Int, maxBytes: Long = MAX_SHARED_EXPORT_BYTES): String =
+    if (count <= 0) text else text + "\n" + oversizeSkipNote(count, maxBytes)

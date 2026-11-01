@@ -441,8 +441,10 @@ _REPO = Path(__file__).resolve().parent.parent
 
 
 def test_every_android_preview_call_site_hands_over_the_app_wide_date():
-    body = (_REPO / "android/app/src/main/java/com/chatmailsync/app"
-            / "MainActivity.kt").read_text(encoding="utf-8")
+    # The share preview moved with the background copy into ImportManager.kt.
+    app_dir = _REPO / "android/app/src/main/java/com/chatmailsync/app"
+    body = (app_dir / "MainActivity.kt").read_text(encoding="utf-8") + (
+        app_dir / "ImportManager.kt").read_text(encoding="utf-8")
 
     # CUT-02: the call sites now use the Kotlin core's previewText(path, cutoff).
     calls = body.count(".previewText(")
