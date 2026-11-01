@@ -117,9 +117,20 @@ class CoreApi(
     }
 
     /** `remove_from_inbox` (android_api.py:126): `{"ok", "error"}`. A file that is not there is fine. */
-    fun removeFromInbox(name: String): Map<String, Any?> = guarded {
+    fun removeFromInbox(name: String): Map<String, Any?> = removeFrom(paths.inboxDir, name)
+
+    /** BUG-19: `[{"name", "size_bytes"}]` for the exports that could not be read, sorted by name. */
+    fun listUnreadable(): List<Map<String, Any?>> = guarded {
+        listUnreadableFiles(paths.unreadableDir)
+            .map { linkedMapOf<String, Any?>("name" to it.name, "size_bytes" to it.length()) }
+    }
+
+    /** BUG-19: removes one file from the unreadable folder; same answer shape as [removeFromInbox]. */
+    fun removeFromUnreadable(name: String): Map<String, Any?> = removeFrom(paths.unreadableDir, name)
+
+    private fun removeFrom(dir: File, name: String): Map<String, Any?> = guarded {
         val base = name.split('/').lastOrNull { it.isNotEmpty() && it != "." } ?: ""
-        val path = if (base.isEmpty()) paths.inboxDir else File(paths.inboxDir, base)
+        val path = if (base.isEmpty()) dir else File(dir, base)
         try {
             if (Files.isDirectory(path.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                 return@guarded linkedMapOf("ok" to false, "error" to clean("Is a directory: ${path.name}"))
@@ -270,6 +281,11 @@ class CoreApi(
     var lastSyncFilesHeld: Int = 0
         private set
 
+    /** BUG-19: exports the last [sync] moved to the unreadable folder (0 before any sync). */
+    @Volatile
+    var lastSyncFilesUnreadable: Int = 0
+        private set
+
     /**
      * `sync` (android_api.py:302): one full pass over the inbox. [onProgress] gets the
      * files_total / total_messages / syncing / chunk / file_done events, with the secret
@@ -296,11 +312,13 @@ class CoreApi(
         while (!syncLock.tryLock(100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
             if (externalStop?.invoke() == true) {
                 lastSyncFilesHeld = 0
+                lastSyncFilesUnreadable = 0
                 return stoppedBeforeStart()
             }
         }
         try {
             lastSyncFilesHeld = 0
+            lastSyncFilesUnreadable = 0
             return runLocked(transport, chunkSize, dryRun, chatFilter, onProgress, trigger, cutoffDate, externalStop)
         } finally {
             syncLock.unlock()
@@ -341,6 +359,7 @@ class CoreApi(
                 transport = transport,
                 inboxDir = paths.inboxDir,
                 processedDir = paths.processedDir,
+                unreadableDir = paths.unreadableDir,
                 chunkSize = chunkSize ?: ChunkSize.Day,
                 dryRun = dryRun,
                 trigger = trigger,
@@ -358,6 +377,7 @@ class CoreApi(
         publishProgress(linkedMapOf("type" to "done", "stopped" to stopped))
         // UX-02: kept out of the result map (it must match Python's keys); the app reads it here.
         lastSyncFilesHeld = stats.filesHeld
+        lastSyncFilesUnreadable = stats.filesUnreadable
         return LinkedHashMap(stats.asMap()).also { it["stopped"] = stopped }
     }
 

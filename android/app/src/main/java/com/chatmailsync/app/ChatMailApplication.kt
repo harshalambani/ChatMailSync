@@ -69,6 +69,10 @@ class ChatMailApplication : Application() {
          * old tree of its own to strand. This one does — clear it. */
         fun pythonRoot(context: Context): File = File(context.filesDir, "chatmailsync")
 
+        /** BUG-19: exports whose chat text cannot be read wait here, outside the queue, until removed. */
+        fun unreadableDir(context: Context): File =
+            File(pythonRoot(context), "data/unreadable").apply { mkdirs() }
+
         fun inboxDir(context: Context): File =
             File(pythonRoot(context), "data/inbox").apply { mkdirs() }
 

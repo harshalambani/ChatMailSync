@@ -736,9 +736,9 @@ class StateRepository(
         return withDb { db ->
             db.query(
                 """
-                SELECT sync_runs.*, chats.display_name
+                SELECT sync_runs.*, COALESCE(chats.display_name, sync_runs.chat_id) AS display_name
                 FROM sync_runs
-                JOIN chats ON chats.chat_id = sync_runs.chat_id
+                LEFT JOIN chats ON chats.chat_id = sync_runs.chat_id
                 WHERE sync_runs.started_at >= ?
                 ORDER BY sync_runs.started_at DESC, sync_runs.run_id DESC
                 """.trimIndent(),

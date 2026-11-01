@@ -39,6 +39,12 @@ class SyncManager(
     internal val appVersion: String = UNKNOWN_VERSION,
     /** BUG-05: hold an export that looks like a renamed chat until the user answers. Always on in the app. */
     internal val detectRenames: Boolean = true,
+    /**
+     * BUG-19: where an export whose chat text cannot be read is moved after its one failed run,
+     * so it stops being retried. Null (the default) keeps the file in the inbox exactly as before.
+     * A dry run never moves anything.
+     */
+    internal val unreadableDir: File? = null,
 ) {
     /** The app-wide floor; a per-chat override beats it for that chat. */
     internal val cutoffDate: String? = normaliseCutoff(cutoffDate)
@@ -244,16 +250,33 @@ class SyncManager(
         emit(mapOf("type" to "file_done", "done" to filesDone, "total" to filesTotal))
     }
 
-    private fun syncFileCore(file: File, chatId: String, displayName: String, stats: SyncStats) {
-        if (!dryRun) {
-            repo.upsertChat(chatId, displayName, file.name)
-            // BUG-05: upsert never touches the name, so a rename (or a capitals-only change)
-            // would leave the app showing the old one. Update it here.
-            val existing = repo.getChat(chatId)
-            if (existing != null && existing.displayName != displayName) {
-                repo.setChatDisplayName(chatId, displayName, file.name)
-            }
+    /** The chat record for this file: created or refreshed, and renamed when the export's name changed. */
+    private fun recordChat(file: File, chatId: String, displayName: String) {
+        repo.upsertChat(chatId, displayName, file.name)
+        // BUG-05: upsert never touches the name, so a rename (or a capitals-only change)
+        // would leave the app showing the old one. Update it here.
+        val existing = repo.getChat(chatId)
+        if (existing != null && existing.displayName != displayName) {
+            repo.setChatDisplayName(chatId, displayName, file.name)
         }
+    }
+
+    /**
+     * BUG-19: after the failed run is recorded, moves an unreadable export out of the queue.
+     * Only the read failures call this. Never in a dry run, and never throws.
+     */
+    private fun moveOutOfQueue(file: File, stats: SyncStats) {
+        val dest = unreadableDir ?: return
+        if (dryRun) return
+        if (moveUnreadableExport(file, inboxDir, dest)) stats.filesUnreadable += 1
+    }
+
+    private fun syncFileCore(file: File, chatId: String, displayName: String, stats: SyncStats) {
+        // BUG-19: with an unreadable folder in use, the chat record waits until the text has been
+        // read, so a file that never reads leaves no empty chat behind. The run row below still
+        // points at the chat id; the Sync log falls back to that id for the name.
+        val deferChat = unreadableDir != null
+        if (!dryRun && !deferChat) recordChat(file, chatId, displayName)
 
         val lastTs = baselineTs(chatId)
 
@@ -267,6 +290,9 @@ class SyncManager(
             stats.filesFailed += 1
             stats.errors.add(clean("${file.name}: parse error — ${scrubPaths(clean(raw))}"))
             if (runId != null) repo.failSyncRun(runId, clean(raw))
+            // BUG-19: decided by the error type, never by its text. Anything else (an I/O error,
+            // for instance) leaves the file where it is.
+            if (exc is ChatTextReadException) moveOutOfQueue(file, stats)
             return
         }
         val all = planned.all
@@ -284,8 +310,10 @@ class SyncManager(
             stats.filesFailed += 1
             stats.errors.add(clean("${file.name}: no messages found - kept in the inbox"))
             if (runId != null) repo.failSyncRun(runId, "no messages found in this export")
+            moveOutOfQueue(file, stats)
             return
         }
+        if (!dryRun && deferChat) recordChat(file, chatId, displayName)
 
         // D29: a renamed chat's server folder follows its new name even when nothing is sent now.
         if (!dryRun) renameFolderIfNeeded(chatId, displayName)

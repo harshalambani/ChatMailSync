@@ -53,6 +53,9 @@ data class RootPaths(val projectRoot: File) {
     val dataDir: File = File(projectRoot, "data")
     val inboxDir: File = File(dataDir, "inbox")
     val processedDir: File = File(dataDir, "processed")
+
+    /** BUG-19: exports whose chat text cannot be read wait here, outside the queue, until removed. */
+    val unreadableDir: File = File(dataDir, "unreadable")
     val stateDbPath: File = File(dataDir, "sync_state.db")
 
     /** Retained only to recognise (and clean up after) a pre-v2.0.0 Google

@@ -314,7 +314,10 @@ internal val FAQ = listOf(
         "messages (the log says \"no messages found - kept in the inbox\") or cannot be handled. " +
         "Nothing was sent from that file and it is not deleted. Check that you exported the chat " +
         "itself as a .txt or .zip, open Settings -> Advanced -> Sync log for the reason, then " +
-        "remove the kept file from the queue with its X and import a fresh export.",
+        "remove the kept file from the queue with its X and import a fresh export. When the " +
+        "chat text itself could not be read, the file is moved out of the queue to a \"Cannot " +
+        "be read\" list on Home and the Sync queue screen, and the result says so; Remove there " +
+        "clears it, and sharing a good copy with the same name queues it fresh.",
     "What notifications does the app show?" to
         "While a sync runs, a progress notification keeps it going in the background. When it " +
         "finishes, a \"Sync results\" notification says, for example, \"Sync complete - 12 " +
