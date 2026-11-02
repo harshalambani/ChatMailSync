@@ -1,0 +1,5 @@
+An export that cannot be read moves out of the queue to a Cannot be read list, with Remove.
+Removing a queued export no longer lets the watched folder move or delete the original.
+Sharing an export copies it in the background; size is capped at 600 MB.
+Too-big photos and videos are left out of the email instead of loaded.
+The failed-runs line counts only new failures. The progress percent stays on one line.

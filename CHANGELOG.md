@@ -4,6 +4,18 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## 3.0.3
+
+Released 2026-11-02 (versionCode 49). Unreadable exports, safer sharing, small fixes.
+
+- REA-01: the README has a Get it on Obtainium badge (#147).
+- UX-06: the failed-runs line on Home counts only failures since the Sync log was last opened (#148).
+- BUG-20: the progress percent stays on one line (#149).
+- BUG-19: an export whose chat text cannot be read moves out of the queue to a "Cannot be read" list on Home and the Sync queue, with Remove, instead of being retried on every sync (#150).
+- BUG-22: removing an export from the queue no longer lets the watched-folder setting move or delete the original file in the watched folder (#150).
+- BUG-21: a photo or video that is too big is left out of the email without being loaded into memory (#151).
+- Sharing an export to the app now copies it in the background, accepts content links only, and caps the size at 600 MB; a watched-folder file over the cap is skipped and said so (#152).
+
 ## 3.0.2
 
 Released 2026-10-29 (versionCode 48). Help and docs update.
