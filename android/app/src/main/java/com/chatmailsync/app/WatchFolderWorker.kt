@@ -46,6 +46,8 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         const val UNIQUE_WORK_NAME_AUTO_SYNC = "watch_folder_auto_sync"
         const val NOTIFICATION_CHANNEL_ID = "watch_folder_channel"
         const val NOTIFICATION_ID = 1002
+        /** Own id so the skip notice never replaces the other watcher notification. */
+        const val OVERSIZE_NOTIFICATION_ID = 1005
         const val KEY_IMPORTED_COUNT = "imported_count"
         const val KEY_RESULT_TEXT = "result_text"
 
@@ -211,6 +213,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         val alreadyImported = AppPrefs.getImportedDocIds(applicationContext)
         var importedCount = 0
         var oversizeSkipped = 0
+        val oversizeIdentities = mutableListOf<String>()
 
         // listFiles() only sees the watched tree's immediate children, not
         // recursing into subfolders — this is what already keeps a "move to
@@ -233,6 +236,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
             // through the bounded copy as before.
             if (shouldSkipOversizeWatchedFile(doc.length())) {
                 oversizeSkipped++
+                oversizeIdentities.add(oversizeIdentity(docId, doc.length()))
                 continue
             }
 
@@ -251,6 +255,13 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
                 }
             }
         }
+
+        // Tell the user once per set of skipped files, so a periodic run does not repeat it.
+        val notice = oversizeNoticeFor(oversizeIdentities, AppPrefs.getOversizeNoticeKey(applicationContext))
+        if (notice.key != AppPrefs.getOversizeNoticeKey(applicationContext)) {
+            AppPrefs.setOversizeNoticeKey(applicationContext, notice.key)
+        }
+        notice.text?.let { postOversizeNotice(it) }
 
         if (importedCount == 0) {
             // Nothing new this run, but inbox/ can still hold files that a
@@ -345,6 +356,29 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
         else "$lead — syncing to your mailbox…"
     }
 
+    /** One quiet notification about skipped over-cap files. Count only, no names (it shows on the
+     * lock screen). Never throws; with notifications off the post is dropped. */
+    private fun postOversizeNotice(text: String) {
+        try {
+            val manager =
+                applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(
+                NotificationChannel(NOTIFICATION_CHANNEL_ID, "Watched folder", NotificationManager.IMPORTANCE_DEFAULT)
+            )
+            if (!androidx.core.app.NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) return
+            val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("Chat Mail Sync")
+                .setContentText(text)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setAutoCancel(true)
+                .setSilent(true)
+                .build()
+            manager.notify(OVERSIZE_NOTIFICATION_ID, notification)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun notify(text: String) {
         val manager =
             applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -383,3 +417,37 @@ internal fun oversizeSkipNote(count: Int, maxBytes: Long = MAX_SHARED_EXPORT_BYT
 
 internal fun withOversizeNote(text: String, count: Int, maxBytes: Long = MAX_SHARED_EXPORT_BYTES): String =
     if (count <= 0) text else text + "\n" + oversizeSkipNote(count, maxBytes)
+
+/** What identifies a skipped file: its document id and size. Only ever hashed, never shown. */
+internal fun oversizeIdentity(docId: String, length: Long): String = docId + "|" + length
+
+/** Opaque key for a set of skipped files: SHA-256 of the sorted identities, or "" for none. */
+internal fun oversizeSetKey(identities: Collection<String>): String {
+    if (identities.isEmpty()) return ""
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    for (id in identities.sorted()) {
+        digest.update(id.toByteArray(Charsets.UTF_8))
+        digest.update(0.toByte())
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+/** The text to post and the key to store. [text] is null when nothing new should be said. */
+internal class OversizeNotice(val text: String?, val key: String)
+
+internal fun oversizeNoticeFor(
+    identities: Collection<String>,
+    storedKey: String,
+    maxBytes: Long = MAX_SHARED_EXPORT_BYTES,
+): OversizeNotice {
+    val key = oversizeSetKey(identities)
+    if (key.isEmpty() || key == storedKey) return OversizeNotice(null, key)
+    return OversizeNotice(oversizeNoticeText(identities.size, maxBytes), key)
+}
+
+/** Count only: no file or chat names. */
+internal fun oversizeNoticeText(count: Int, maxBytes: Long = MAX_SHARED_EXPORT_BYTES): String {
+    val mb = maxBytes / 1_048_576L
+    return if (count == 1) "1 export is over the $mb MB limit and was skipped."
+    else "$count exports are over the $mb MB limit and were skipped."
+}

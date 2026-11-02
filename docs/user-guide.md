@@ -718,7 +718,7 @@ first.
 
 ### Q. What notifications does the app show?
 
-**A.** While a sync runs, a progress notification keeps it going in the background. When it finishes, a "Sync results" notification says, for example, "Sync complete - 12 message(s) synced". A plain success, or a sync you stopped yourself, is quiet; a failure or a kept export alerts. If a background check holds an export for the same-chat question, "A chat is waiting for your answer" appears. None of them carries a chat name. On Android 13 or newer you may be asked to allow notifications; if you decline, syncing still works but you will not see these.
+**A.** While a sync runs, a progress notification keeps it going in the background. When it finishes, a "Sync results" notification says, for example, "Sync complete - 12 message(s) synced". A plain success, or a sync you stopped yourself, is quiet; a failure or a kept export alerts. If a background check holds an export for the same-chat question, "A chat is waiting for your answer" appears. If the watched folder holds an export over 600 MB, which a sync cannot read, a notification says how many were skipped, once until the set changes. None of them carries a chat name. On Android 13 or newer you may be asked to allow notifications; if you decline, syncing still works but you will not see these.
 
 ---
 
