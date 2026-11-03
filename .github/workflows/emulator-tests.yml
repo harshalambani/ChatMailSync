@@ -81,7 +81,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4.4.4
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
       - name: Cache the AVD
         id: avd-cache
@@ -95,7 +95,7 @@ jobs:
       # First run for a key only: boot once and save a snapshot so later runs start warm.
       - name: Create the AVD snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2.38.0
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
@@ -108,7 +108,7 @@ jobs:
 
       - name: Run the instrumented tests on the emulator
         id: emu1
-        uses: reactivecircus/android-emulator-runner@v2.38.0
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         continue-on-error: true
         with:
           api-level: ${{ matrix.api-level }}
@@ -158,7 +158,7 @@ jobs:
 
       - name: Retry the emulator step once (failure before tests start)
         if: steps.emu1.outcome == 'failure' && steps.boot.outputs.booted == 'false'
-        uses: reactivecircus/android-emulator-runner@v2.38.0
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
