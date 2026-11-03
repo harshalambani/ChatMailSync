@@ -32,6 +32,7 @@ object AppPrefs {
     private const val KEY_WATCHED_FOLDER_URI = "watched_folder_uri"
     private const val KEY_AUTO_WATCH_ENABLED = "auto_watch_enabled"
     private const val KEY_IMPORTED_DOC_IDS = "imported_doc_ids"
+    private const val KEY_OVERSIZE_NOTICE_KEY = "oversize_notice_key"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_WATCH_INTERVAL_MINUTES = "watch_interval_minutes"
     private const val KEY_SYNCED_FILE_POLICY = "synced_file_policy"
@@ -105,6 +106,15 @@ object AppPrefs {
         val current = getImportedDocIds(context)
         current.add(docId)
         prefs(context).edit().putStringSet(KEY_IMPORTED_DOC_IDS, current).apply()
+    }
+
+    /** Opaque hash of the set of over-cap watched files the user was last told about, or "" when
+     * none. Holds no file or chat names. */
+    fun getOversizeNoticeKey(context: Context): String =
+        prefs(context).getString(KEY_OVERSIZE_NOTICE_KEY, "") ?: ""
+
+    fun setOversizeNoticeKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_OVERSIZE_NOTICE_KEY, key).apply()
     }
 
     /** "system" (default, follows OS) | "light" | "dark" — a manual
