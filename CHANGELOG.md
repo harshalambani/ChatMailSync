@@ -4,6 +4,13 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## 3.0.4
+
+Released 2026-11-04 (versionCode 50). A notice for skipped oversize exports, and a sample chat on the public site.
+
+- UX-07: when the watched folder skips an export over the 600 MB limit, the app posts one quiet notification with a count only (no file or chat names). It does not repeat for the same set of files, respects the notifications setting, and Help and the user guide mention it (#154).
+- STO-09: a made-up sample chat export is published on the public site for store reviewers, with a test that guards its contents; no change to the app (#156).
+
 ## 3.0.3
 
 Released 2026-11-02 (versionCode 49). Unreadable exports, background sharing, small fixes.
