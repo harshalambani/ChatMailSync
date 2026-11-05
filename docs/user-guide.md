@@ -79,7 +79,9 @@ getting the file onto an Android phone with Chat Mail Sync installed first
 2. Tap the **⋮** menu (three dots) in the top-right.
 3. Tap **More** → **Export chat**.
 4. Choose **Include media** (to keep photos and files) or **Without media** (text
-   only — smaller, faster).
+   only — smaller, faster). Choose **Include media** the first time if you want the
+   chat's photos and files: a later export with media only brings attachments for
+   newer messages.
 5. Choose where to save or how to share the file.
 
 ### On iPhone (iOS)
@@ -87,7 +89,9 @@ getting the file onto an Android phone with Chat Mail Sync installed first
 1. Open the chat you want to back up.
 2. Tap the contact or group **name** at the top of the screen.
 3. Scroll down and tap **Export Chat**.
-4. Choose **Attach Media** or **Without Media**.
+4. Choose **Attach Media** or **Without Media**. Choose **Attach Media** the first
+   time if you want the chat's photos and files: a later export with media only
+   brings attachments for newer messages.
 5. Choose where to save (e.g. **Save to Files**) or how to share it.
 
 You'll get either a **`.txt`** file (text only) or a **`.zip`** file (text plus
@@ -265,7 +269,8 @@ FAQ** screen carries the same questions in the same order.
 
 **A.** On your phone, open the chat → the three-dot menu → **More** → **Export
 chat**, then choose **Include media** (a `.zip`) or **Without media** (a plain
-`.txt`). Section 3 has the longer version, including how to get the file onto
+`.txt`). Choose **Include media** the first time if you want the chat's photos and
+files: a later export with media only brings attachments for newer messages. Section 3 has the longer version, including how to get the file onto
 your phone. One chat at a time — WhatsApp has no multi-select export — but the app
 itself will take as many exported files at once as you have.
 
@@ -385,9 +390,13 @@ re-reads the queue.
 
 ### Q. My photos and files didn't come through.
 
-**A.** You probably exported **Without media**. Re-export the chat choosing
-**Include media** / **Attach Media** (this produces a `.zip`), then sync that
-file.
+**A.** You probably exported **Without media**, and that can't be topped up later.
+A message the app has already handled is never sent again, so a new export with
+**Include media** / **Attach Media** only brings attachments for messages newer
+than your last sync. To get the older photos and files, use **Reset (forget sync
+history)** on that chat: it tells you to delete that chat's mail from your mailbox
+first. Then export with **Include media** and sync; the whole chat is filed again.
+If you skip the delete, you get a second copy of every message.
 
 ---
 
