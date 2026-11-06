@@ -191,16 +191,19 @@ internal fun stoppedCountsText(synced: Long, note: String?): String {
     else "Stopped by you - $synced uploaded"
 }
 
+/** The run-detail label for the skipped count (UX-08: "not new", not "already there"). */
+internal const val SKIPPED_DETAIL_LABEL = "Not new, so skipped"
+
 /** The one-line summary of what a run moved. A run that uploaded nothing says
  * so in words -- "0 synced, 0 skipped" is the same information and reads as a
  * malfunction. */
-private fun runCountsText(run: SyncRunLogEntry): String = when {
+internal fun runCountsText(run: SyncRunLogEntry): String = when {
     run.status == "stopped" -> stoppedCountsText(run.messagesSynced, run.errorMessage)
     run.status == "failed" ->
         if (run.messagesSynced > 0) "${run.messagesSynced} synced before it failed"
         else "Nothing uploaded"
     run.messagesSynced == 0L && run.messagesSkipped == 0L -> "Nothing new"
-    run.messagesSkipped > 0L -> "${run.messagesSynced} synced, ${run.messagesSkipped} already there"
+    run.messagesSkipped > 0L -> "${run.messagesSynced} synced, ${run.messagesSkipped} not new"
     else -> "${run.messagesSynced} synced"
 }
 
@@ -247,7 +250,7 @@ internal fun summaryCountsText(summary: SyncSummary): String = when {
         else "Nothing uploaded"
     summary.lastMessagesSynced == 0L && summary.lastMessagesSkipped == 0L -> "Nothing new"
     summary.lastMessagesSkipped > 0L ->
-        "${summary.lastMessagesSynced} synced, ${summary.lastMessagesSkipped} already there"
+        "${summary.lastMessagesSynced} synced, ${summary.lastMessagesSkipped} not new"
     else -> "${summary.lastMessagesSynced} synced"
 }
 
@@ -667,7 +670,7 @@ fun SyncRunDetailScreen(runId: Long, onBack: () -> Unit) {
             // Named rather than left as a bare "skipped" count: skipped means
             // already in the mailbox from an earlier run, and read cold a
             // skipped count looks like something went missing.
-            DetailField("Already there, so skipped", current.messagesSkipped.toString())
+            DetailField(SKIPPED_DETAIL_LABEL, current.messagesSkipped.toString())
             // Its own line, never folded into the skipped count: skipped
             // means the mailbox already has it, held back means it was never
             // offered, and reading one as the other is how a cutoff someone
