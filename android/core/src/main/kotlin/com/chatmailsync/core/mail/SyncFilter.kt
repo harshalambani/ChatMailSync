@@ -29,17 +29,27 @@ fun effectiveCutoff(repo: StateRepository, chatId: String, appCutoff: String?): 
     repo.getChatCutoff(chatId) ?: appCutoff
 
 /**
- * Mirrors `_filter_messages`. Rules, applied in this order:
+ * Mirrors `_filter_messages`, with one deliberate difference (BUG-23). Rules, in this order:
  *  1. hash already in message_hashes -> skipped (exact duplicate);
- *  2. timestamp <= [lastSyncedTs]    -> skipped (re-export overlap);
+ *  2. timestamp <  [lastSyncedTs]    -> skipped (re-export overlap);
  *  3. timestamp <  cutoff            -> withheld (before the user's date).
  *
  * The order is load-bearing. A chat already synced to March with a January
  * cutoff must not be dragged back to January, so rule 2 runs first and the
  * later of the two always wins; a message failing both counts as skipped, not
- * withheld. Rule 2 is `<=` and rule 3 is `<` on purpose: [lastSyncedTs] names a
- * message already sent, the cutoff names an instant, and a message stamped
- * exactly at midnight of the chosen day is on the day the user asked for.
+ * withheld.
+ *
+ * BUG-23: Python's rule 2 is `<=`. [lastSyncedTs] is the time of the last message the app
+ * filed, and WhatsApp stamps to the minute, so a NEW message in that same minute (or a photo
+ * stamped exactly then) was thrown away unseen. A message exactly at the mark is now left to
+ * rule 1: if the app filed it, its hash is stored and it is skipped there; if not, it is new.
+ * That rests on every filed message having a stored hash, which holds because hashes are
+ * written in the same transaction as each delivered email and are only ever deleted together
+ * with the chat's runs (reset, delete). Pass [exactMarkIsSkipped] = true to get Python's `<=`
+ * back; [SyncManager] does that for a chat with linked (renamed) names, whose mark can come
+ * from an archived message that is stored under its old fingerprint, so the hash cannot vouch
+ * for it. Rule 3 stays `<`: the cutoff names an instant, and a message stamped exactly at
+ * midnight of the chosen day is on the day the user asked for.
  */
 fun filterMessages(
     repo: StateRepository,
@@ -47,6 +57,7 @@ fun filterMessages(
     chatId: String,
     lastSyncedTs: String?,
     appCutoff: String?,
+    exactMarkIsSkipped: Boolean = false,
 ): FilterResult {
     val cutoff = effectiveCutoff(repo, chatId, appCutoff)
     val new = mutableListOf<ParsedMessage>()
@@ -58,7 +69,9 @@ fun filterMessages(
             skipped++
             continue
         }
-        if (!lastSyncedTs.isNullOrEmpty() && msg.timestampIso <= lastSyncedTs) {
+        if (!lastSyncedTs.isNullOrEmpty() &&
+            (msg.timestampIso < lastSyncedTs || (exactMarkIsSkipped && msg.timestampIso == lastSyncedTs))
+        ) {
             skipped++
             continue
         }
