@@ -224,7 +224,12 @@ class SyncManager(
 
     private fun parseAndFilter(file: File, chatId: String, lastSyncedTs: String?): Planned {
         val all = parseFile(file, chatId).toList()
-        val f = filterMessages(repo, all, chatId, lastSyncedTs, cutoffDate)
+        // BUG-23: a message exactly at the mark goes to the hash check, except in a chat with
+        // linked names, where the mark may be an archived message under its old fingerprint.
+        val f = filterMessages(
+            repo, all, chatId, lastSyncedTs, cutoffDate,
+            exactMarkIsSkipped = repo.hasAliases(chatId),
+        )
         return Planned(all, f.newMessages, f.skipped, f.cutoff)
     }
 

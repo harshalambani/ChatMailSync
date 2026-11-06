@@ -92,6 +92,7 @@ class SyncHelpersGoldenParityTest {
 
     @Test
     fun filterRulesMatchPython() {
+        val differing = mutableSetOf<String>()
         for ((n, c) in g["filter"].asArr().items.withIndex()) {
             val repo = newRepo(tmp.newFolder("flt$n"))
             repo.upsertChat(chat, "Meera Iyer", "Meera Iyer.txt")
@@ -103,12 +104,30 @@ class SyncHelpersGoldenParityTest {
                 repo.insertMessageHashes(buildHashEntries(msgs.filterIndexed { i, _ -> i in known }, runId))
             }
             val appCutoff = normaliseCutoff(c["appCutoff"].asStringOrNull())
-            val r = filterMessages(repo, msgs, chat, c["lastSyncedTs"].asStringOrNull(), appCutoff)
+            val last = c["lastSyncedTs"].asStringOrNull()
             val name = c["name"].asString()
-            assertEquals(name, ints(c["newIdx"]), r.newMessages.map { m -> msgs.indexOfFirst { it === m } })
-            assertEquals("$name skipped", c["skipped"].asInt(), r.skipped)
-            assertEquals("$name cutoff", c["cutoff"].asInt(), r.cutoff)
+            // Python's rule (`<=` at the mark) is still reachable, and must match the golden.
+            val py = filterMessages(repo, msgs, chat, last, appCutoff, exactMarkIsSkipped = true)
+            assertEquals(name, ints(c["newIdx"]), py.newMessages.map { m -> msgs.indexOfFirst { it === m } })
+            assertEquals("$name skipped", c["skipped"].asInt(), py.skipped)
+            assertEquals("$name cutoff", c["cutoff"].asInt(), py.cutoff)
+            // The default rule is BUG-23's: a message exactly at the mark goes to the hash check.
+            val r = filterMessages(repo, msgs, chat, last, appCutoff)
+            val got = r.newMessages.map { m -> msgs.indexOfFirst { it === m } }
+            if (got != ints(c["newIdx"]) || r.skipped != c["skipped"].asInt() || r.cutoff != c["cutoff"].asInt()) {
+                differing.add(name)
+            }
         }
+        assertEquals("BUG-23 deliberate differences from Python", BUG23_DIFFERENCES, differing)
+    }
+
+    private companion object {
+        /** BUG-23: deliberate differences from Python (rule 2 is `<`, not `<=`). */
+        val BUG23_DIFFERENCES = setOf(
+            "overlap_is_less_or_equal",
+            "rule_order_overlap_beats_cutoff",
+            "overlap_and_cutoff_later_wins",
+        )
     }
 
     @Test
