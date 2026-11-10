@@ -154,7 +154,7 @@ fun ChatDetailScreen(
                     }
 
                     DetailSection("This chat")
-                    DetailField("Messages synced", c.messagesSynced.toString())
+                    DetailField("Messages synced", c.totalFiled.toString())
                     DetailField("Last sync", if (c.lastRunAt != null) formatSyncTime(c.lastRunAt) else "Never")
                     // Not "has a Gmail thread": under IMAP the stored id is the
                     // RFC 822 Message-ID we generated, which is what threads the
