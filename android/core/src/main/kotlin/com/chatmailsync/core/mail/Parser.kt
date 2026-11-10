@@ -625,6 +625,12 @@ internal fun parseTimestamp(dateStr: String, timeStr: String, formatKey: String,
 // System message filtering
 // ---------------------------------------------------------------------------
 
+/** UX-08: true if a body is a WhatsApp "media omitted" marker (a subset of [isSystemBody]). */
+fun isMediaOmittedBody(body: String): Boolean {
+    val bodyLower = cleanText(body).lowercase(Locale.ROOT)
+    return SYSTEM_BODY_PHRASES.any { "omitted" in it && it in bodyLower }
+}
+
 /**
  * Return `true` if the body of a "sender: body" line is a system
  * notification. Twin of `parser.py:_is_system_body`. Uses

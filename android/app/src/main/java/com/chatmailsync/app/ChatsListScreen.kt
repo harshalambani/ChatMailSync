@@ -77,6 +77,8 @@ data class ChatSummary(
     val gmailThreadId: String?,
     val lastRunStatus: String?,
     val messagesSynced: Long,
+    /** UX-08: everything filed for this chat across all runs; [messagesSynced] is the last run only. */
+    val totalFiled: Long,
     val lastRunAt: String?,
     val sourceFilename: String?,
 )
@@ -90,6 +92,7 @@ fun loadChatSummaries(): List<ChatSummary> {
             gmailThreadId = row.str("gmail_thread_id"),
             lastRunStatus = row.str("last_run_status"),
             messagesSynced = row.long("messages_synced") ?: 0L,
+            totalFiled = row.long("total_filed") ?: 0L,
             lastRunAt = row.str("last_run_at"),
             sourceFilename = row.str("source_filename"),
         )
@@ -104,7 +107,7 @@ private fun csvField(value: String): String = "\"${value.replace("\"", "\"\"")}\
  * sync ...". */
 fun formatFooterStats(chats: List<ChatSummary>): String {
     val totalChats = chats.size
-    val totalMsgs = chats.sumOf { it.messagesSynced }
+    val totalMsgs = chats.sumOf { it.totalFiled }
     val lastSyncSuffix = chats.mapNotNull { it.lastRunAt }.maxOrNull()?.let { raw ->
         try {
             val dt = LocalDateTime.parse(raw)
@@ -476,9 +479,9 @@ fun ChatsListScreen(
                                 // below ChatRowNarrowWidthDp rather than
                                 // wrapping onto a second line or clipping
                                 // against the status text above.
-                                if (chat.messagesSynced > 0 && showMessageCount) {
+                                if (chat.totalFiled > 0 && showMessageCount) {
                                     Text(
-                                        "${chat.messagesSynced} messages",
+                                        "${chat.totalFiled} messages",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,

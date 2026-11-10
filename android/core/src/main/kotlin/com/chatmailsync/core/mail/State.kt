@@ -707,7 +707,8 @@ class StateRepository(
                     CASE WHEN r.stopped = 1 THEN 'stopped' ELSE r.status END AS last_run_status,
                     r.last_synced_ts,
                     r.messages_synced,
-                    r.started_at        AS last_run_at
+                    r.started_at        AS last_run_at,
+                    (SELECT COUNT(*) FROM message_hashes h WHERE h.chat_id = c.chat_id) AS total_filed
                 FROM chats c
                 LEFT JOIN sync_runs r ON r.run_id = (
                     SELECT run_id FROM sync_runs
@@ -727,6 +728,7 @@ class StateRepository(
                     lastSyncedTs = row["last_synced_ts"] as String?,
                     messagesSynced = (row["messages_synced"] as Number?)?.toInt(),
                     lastRunAt = row["last_run_at"] as String?,
+                    totalFiled = (row["total_filed"] as Number).toInt(),
                 )
             }
         }
@@ -1099,6 +1101,12 @@ data class SyncSummaryRow(
     val lastSyncedTs: String?,
     val messagesSynced: Int?,
     val lastRunAt: String?,
+    /**
+     * UX-08: every message filed for this chat across all runs (rows in `message_hashes`).
+     * The same count as [StateRepository.countArchivedMessages], unlike [messagesSynced],
+     * which is only what the last run sent.
+     */
+    val totalFiled: Int = 0,
 )
 
 data class RunsSummary(

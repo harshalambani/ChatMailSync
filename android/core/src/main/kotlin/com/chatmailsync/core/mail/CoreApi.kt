@@ -7,6 +7,13 @@ import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** UX-08: preview line for an export with no photos or files and no "omitted" markers. */
+const val PREVIEW_NO_MEDIA_LINE = "No photos or files in this export."
+
+/** UX-08: preview line for an export whose text says N photos or files were left out. */
+fun previewWithoutMediaLine(n: Long): String =
+    "Exported without media: $n ${if (n == 1L) "photo or file" else "photos or files"} left out."
+
 /**
  * Kotlin port of the former Python facade `src/android_api.py`: one public function per
  * Python function, same arguments, same result shapes. The app calls this directly.
@@ -214,11 +221,33 @@ class CoreApi(
             "message_count" to messages.size,
             "participant_count" to messages.map { it.sender }.toSet().size,
             "media_count" to messages.count { !it.attachmentFilename.isNullOrEmpty() },
+            // UX-08: "media omitted" lines the parser drops; counted from the text, parse untouched.
+            "media_omitted_count" to countMediaOmittedMarkers(file),
             "first_message_ts" to messages.minOf { it.timestampIso },
             "last_message_ts" to messages.maxOf { it.timestampIso },
             "cutoff_date" to previewCutoff(chatId, cutoff),
             "error" to null,
         )
+    }
+
+    /** Count of WhatsApp "media omitted" lines in the export's text; 0 if it cannot be read. */
+    private fun countMediaOmittedMarkers(file: File): Int = try {
+        val lines = pythonSplitlines(readChatText(file))
+        val detected = detectFormat(lines.filter { pythonStrip(it).isNotEmpty() }.take(FORMAT_DETECTION_LINES))
+        if (detected == null) {
+            0
+        } else {
+            val lineRe = detected.lineRegex
+            lines.count { raw ->
+                val m = lineRe.matcher(cleanText(raw))
+                if (!(m.lookingAt() && m.matches())) return@count false
+                val content = cleanText(m.group(3))
+                val sep = content.indexOf(": ")
+                sep >= 0 && isMediaOmittedBody(content.substring(sep + 2))
+            }
+        }
+    } catch (_: Exception) {
+        0
     }
 
     /** `format_preview` (android_api.py:228): [preview]'s map as the few lines a person reads. */
@@ -243,6 +272,12 @@ class CoreApi(
         )
         if (truthy(info["media_count"])) parts.add("${info["media_count"]} media")
         lines.add(parts.joinToString(", "))
+        // UX-08: say so when there are no photos or files. Nothing here promises that a later
+        // export adds media to messages already filed: it only brings media for newer ones.
+        if (!truthy(info["media_count"])) {
+            val omitted = (info["media_omitted_count"] as Number?)?.toLong() ?: 0L
+            lines.add(if (omitted > 0L) previewWithoutMediaLine(omitted) else PREVIEW_NO_MEDIA_LINE)
+        }
 
         val first = info["first_message_ts"] as String?
         val last = info["last_message_ts"] as String?
@@ -399,6 +434,8 @@ class CoreApi(
                 "last_synced_ts" to r.lastSyncedTs,
                 "messages_synced" to r.messagesSynced,
                 "last_run_at" to r.lastRunAt,
+                // UX-08: the total filed across all runs; messages_synced stays the last run's count.
+                "total_filed" to r.totalFiled,
             )
         }
     }

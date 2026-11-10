@@ -62,6 +62,17 @@ class CoreApiGoldenParityTest {
         compareBy<Map<String, Any?>>({ -(it["msg_count"] as Number).toLong() }, { it["chat_id"] as String }, { it["sender"] as String }),
     )
 
+    /** UX-08 (deliberate difference from Python): the new status key is not in the golden. */
+    private fun pyStatus(rows: List<Map<String, Any?>>): List<Map<String, Any?>> = rows.map { it - "total_filed" }
+
+    /** UX-08: the new preview key is not in the golden. */
+    private fun pyPreview(info: Map<String, Any?>): Map<String, Any?> = info - "media_omitted_count"
+
+    /** UX-08: the new preview media lines are not in the golden. */
+    private fun pyText(text: String): String = text.split("\n")
+        .filterNot { it == PREVIEW_NO_MEDIA_LINE || it.startsWith("Exported without media:") }
+        .joinToString("\n")
+
     private fun api(root: File) = CoreApi(root, { SqliteJdbcStateDb(it.absolutePath) })
 
     @Test
@@ -102,15 +113,15 @@ class CoreApiGoldenParityTest {
         File(side, asha).writeText("no timestamps here\n")
         val sideMeera = File(side, meera).path
         val sideAsha = File(side, asha).path
-        rec("preview_meera", a.preview(sideMeera))
-        rec("preview_meera_cutoff_mid", a.preview(sideMeera, "2025-03-21"))
-        rec("preview_meera_cutoff_after", a.preview(sideMeera, "2025-04-01"))
-        rec("preview_meera_bad_cutoff", a.preview(sideMeera, "soon"))
-        rec("preview_empty_file", a.preview(sideAsha))
-        rec("preview_text_meera", a.previewText(sideMeera))
-        rec("preview_text_meera_cutoff_mid", a.previewText(sideMeera, "2025-03-21"))
-        rec("preview_text_meera_cutoff_after", a.previewText(sideMeera, "2025-04-01"))
-        rec("preview_text_empty_file", a.previewText(sideAsha))
+        rec("preview_meera", pyPreview(a.preview(sideMeera)))
+        rec("preview_meera_cutoff_mid", pyPreview(a.preview(sideMeera, "2025-03-21")))
+        rec("preview_meera_cutoff_after", pyPreview(a.preview(sideMeera, "2025-04-01")))
+        rec("preview_meera_bad_cutoff", pyPreview(a.preview(sideMeera, "soon")))
+        rec("preview_empty_file", pyPreview(a.preview(sideAsha)))
+        rec("preview_text_meera", pyText(a.previewText(sideMeera)))
+        rec("preview_text_meera_cutoff_mid", pyText(a.previewText(sideMeera, "2025-03-21")))
+        rec("preview_text_meera_cutoff_after", pyText(a.previewText(sideMeera, "2025-04-01")))
+        rec("preview_text_empty_file", pyText(a.previewText(sideAsha)))
         val base = linkedMapOf<String, Any?>(
             "ok" to true, "display_name" to "Meera Iyer", "message_count" to 1, "participant_count" to 1,
             "media_count" to 1, "first_message_ts" to "2025-03-20T09:00:00",
@@ -123,7 +134,7 @@ class CoreApiGoldenParityTest {
         rec("format_singular_media", a.formatPreview(base))
         rec(
             "format_plural_no_media",
-            a.formatPreview(base + mapOf("message_count" to 3, "participant_count" to 2, "media_count" to 0)),
+            pyText(a.formatPreview(base + mapOf("message_count" to 3, "participant_count" to 2, "media_count" to 0))),
         )
         rec("format_all_older", a.formatPreview(base + mapOf("cutoff_date" to "2025-03-21")))
         rec(
@@ -146,7 +157,7 @@ class CoreApiGoldenParityTest {
                 }
             }
         }
-        rec("status", a.status())
+        rec("status", pyStatus(a.status()))
         rec("sync_log", a.syncLog().sortedByDescending { it["run_id"] as Long })
         rec("sync_log_one_day", a.syncLog(1).sortedByDescending { it["run_id"] as Long })
         rec("sync_status", a.syncStatus())
@@ -173,7 +184,7 @@ class CoreApiGoldenParityTest {
         rec("set_cutoff_unknown_chat", a.setCutoff("new_chat", "2025-01-01"))
         rec("get_cutoff_unknown", a.getCutoff("zzz"))
         rec("list_cutoffs", a.listCutoffs())
-        rec("preview_with_chat_cutoff", a.preview(sideMeera, "2025-03-01"))
+        rec("preview_with_chat_cutoff", pyPreview(a.preview(sideMeera, "2025-03-01")))
         rec("set_cutoff_clear", a.setCutoff("meera_iyer", "   "))
         rec("list_cutoffs_after_clear", a.listCutoffs())
 
@@ -192,7 +203,7 @@ class CoreApiGoldenParityTest {
         rec("reset_nobody", a.reset("nobody"))
         rec("delete_chat_rohan", a.deleteChat("Rohan Mehta"))
         rec("delete_chat_nobody", a.deleteChat("nobody"))
-        rec("status_after_delete", a.status())
+        rec("status_after_delete", pyStatus(a.status()))
 
         File(inbox, rohan).writeText(chatText(listOf(23)))
         File(inbox, asha).writeText(chatText(listOf(23)))
@@ -230,12 +241,12 @@ class CoreApiGoldenParityTest {
         val junk = File(root, "junk.cmsbackup").also { it.writeText("this is not a zip") }
         rec("describe_backup_junk", a.describeBackup(junk.path))
         rec("import_backup_junk", a.importBackup(junk.path))
-        rec("status_before_import", a.status())
+        rec("status_before_import", pyStatus(a.status()))
 
         val b = api(root2)
         rec("import_backup_fresh_root", b.importBackup(bundle.path))
         rec("import_backup_again", b.importBackup(bundle.path))
-        rec("status_after_import", b.status())
+        rec("status_after_import", pyStatus(b.status()))
         rec("list_cutoffs_after_import", b.listCutoffs())
         rec("list_chat_senders_after_import", tieSorted(b.listChatSenders()))
 
