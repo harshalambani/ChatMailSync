@@ -393,9 +393,10 @@ re-reads the queue.
 **A.** You probably exported **Without media**, and that can't be topped up later.
 A message the app has already handled is never sent again, so a new export with
 **Include media** / **Attach Media** only brings attachments for messages newer
-than your last sync. To get the older photos and files, use **Reset (forget sync
+than your last sync. A message sent in the same minute as the last one filed
+still arrives if the app has not filed it yet. To get the older photos and files, use **Reset (forget sync
 history)** on that chat: it tells you to delete that chat's mail from your mailbox
-first. Then export with **Include media** and sync; the whole chat is filed again.
+first. Then export with **Include media** and sync; the whole chat is filed again (every message, photos included).
 If you skip the delete, you get a second copy of every message.
 
 ---

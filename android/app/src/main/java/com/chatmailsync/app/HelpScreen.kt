@@ -110,10 +110,11 @@ internal val FAQ = listOf(
     "My photos and files didn't come through." to
         "You probably exported \"Without media\", and that can't be topped up later. A message the " +
         "app has already handled is never sent again, so a new export with \"Include media\" only " +
-        "brings attachments for messages newer than your last sync. To get the older photos and " +
+        "brings attachments for messages newer than your last sync. A message sent in the same " +
+        "minute as the last one filed still arrives if the app has not filed it yet. To get the older photos and " +
         "files, use \"Reset (forget sync history)\" on that chat: it tells you to delete that " +
         "chat's mail from your mailbox first. Then export with \"Include media\" and sync; the " +
-        "whole chat is filed again. If you skip the delete, you get a second copy of every message.",
+        "whole chat is filed again (every message of the chat, photos included). If you skip the delete, you get a second copy of every message.",
     "Emoji reactions on messages didn't come through." to
         "WhatsApp keeps them, but it doesn't put them in the file it exports. Export chat writes " +
         "one line per message — a time, a sender and the text — and WhatsApp has chosen not " +
