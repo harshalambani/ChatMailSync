@@ -1,0 +1,3 @@
+A new message sent in the same minute as the last one filed is no longer left out of the next sync.
+Each chat now shows everything filed for it, not just the last run, and Home says "not new" instead of "already there".
+The import preview says when an export has no media. Help explains how to get older photos after a Without media export.

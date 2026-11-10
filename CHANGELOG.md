@@ -4,6 +4,14 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## 3.0.5
+
+Released 2026-11-10 (versionCode 51). A same-minute message fix, clearer counts, and a corrected answer about photos.
+
+- BUG-23: a new message sent in the same minute as the last one the app filed is no longer left out of the next sync. A message already filed is still skipped; a chat with linked (renamed) names keeps the earlier, stricter rule (#159).
+- UX-08: Home and the Sync log say "not new" instead of "already there" for messages skipped because they are already in the mailbox (#160). Each chat now shows everything filed for it across all runs, on the chat page, in the Chats list and in the footer total, rather than the last run only. The import preview now says "No photos or files in this export." when there is no media, or how many photos or files were left out when the export says so (#162).
+- DOC-03: Help and the user guide now say that a later export with media only brings attachments for newer messages. To get older photos and files, use Reset on that chat after deleting its mail, then export with media and sync; a note says so where the export choice is offered. A same-minute message not yet filed still arrives (#158, #161).
+
 ## 3.0.4
 
 Released 2026-11-04 (versionCode 50). A notice for skipped oversize exports, and a sample chat on the public site.
