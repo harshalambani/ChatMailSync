@@ -144,17 +144,17 @@ class Ux09PostSyncExpectationsTest {
 
     @Test
     fun `bullet split keeps wording word for word and never doubles the bullet`() {
-        val bullet = "• Searchable like any other mail"
+        val bullet = "\u2022 Searchable like any other mail"
         val (glyph, body) = splitWelcomeBullet(bullet)
-        assertEquals("• ", glyph)
+        assertEquals("\u2022 ", glyph)
         assertEquals("Searchable like any other mail", body)
         assertEquals(bullet, glyph + body)
-        assertFalse(body.contains("•"))
+        assertFalse(body.contains("\u2022"))
         WELCOME_WHAT_YOU_GET_BULLETS.forEach { b ->
             val (g, t) = splitWelcomeBullet(b)
             assertEquals(b, g + t)
-            assertFalse(t.contains("•"))
-            assertEquals(1, b.count { it == '•' })
+            assertFalse(t.contains("\u2022"))
+            assertEquals(1, b.count { it == '\u2022' })
         }
     }
 
