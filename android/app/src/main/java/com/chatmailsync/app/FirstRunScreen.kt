@@ -244,6 +244,17 @@ fun FirstRunScreen(
     }
 }
 
+/** UX-09: the welcome step's "What you get" block (heading, bullets, then the app-password line). */
+internal const val WELCOME_WHAT_YOU_GET_HEADING = "What you get"
+internal val WELCOME_WHAT_YOU_GET_BULLETS: List<String> = listOf(
+    "• A WhatsApp folder in your mailbox, with one folder for each chat",
+    "• One email per day of conversation, with photos and files if you export with media",
+    "• Searchable like any other mail, and stored by your mail provider",
+)
+internal const val WELCOME_APP_PASSWORD_LINE =
+    "Setup needs an app password from your mail provider. It takes a few minutes, " +
+        "and the app shows you where to make one."
+
 @Composable
 private fun FirstRunWelcomeStep(
     backLabel: String? = null,
@@ -283,6 +294,16 @@ private fun FirstRunWelcomeStep(
                     "server or company in between.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            // UX-09: what the archive looks like and where it goes, under the
+            // intro and above the buttons. The wording lives in the WELCOME_*
+            // constants so a unit test can read what the screen draws.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(WELCOME_WHAT_YOU_GET_HEADING, style = MaterialTheme.typography.titleSmall)
+                WELCOME_WHAT_YOU_GET_BULLETS.forEach { bullet ->
+                    Text(bullet, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            Text(WELCOME_APP_PASSWORD_LINE, style = MaterialTheme.typography.bodyMedium)
             // "Get started" stays the primary action either way -- restoring
             // is a quieter option below it, not a fork in the road.
             Button(onClick = onGetStarted, modifier = Modifier.fillMaxWidth()) {

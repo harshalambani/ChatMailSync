@@ -54,6 +54,11 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_RESULT = "result"
         /** BUG-15: true when the user's Stop ended the run, so the progress screen can say so. */
         const val KEY_STOPPED = "stopped"
+        /** UX-09: how many messages the run filed, as a number, so the progress screen
+         *  never has to parse the formatted result text. */
+        const val KEY_MESSAGES_SYNCED = "messages_synced_count"
+        /** UX-09: true when the run was a test (dry) run. Separate from the input KEY_DRY_RUN. */
+        const val KEY_RESULT_DRY_RUN = "result_dry_run"
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS_TEXT = "progress_text"
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
@@ -230,6 +235,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                             currentSecret(),
                         ),
                         KEY_STOPPED to statsResult.stopped,
+                        KEY_MESSAGES_SYNCED to statsResult.messagesSynced,
+                        KEY_RESULT_DRY_RUN to dryRun,
                     )
                 )
             } catch (e: CancellationException) {

@@ -37,6 +37,16 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlin.math.roundToInt
 
+/** UX-09: the line under the result card on a finished run. */
+internal const val SYNC_MAILBOX_HINT =
+    "Find them in your mailbox, in the WhatsApp folder: one folder per chat, named after " +
+        "the chat. On Gmail these show as labels."
+
+/** UX-09: shown only when something was actually filed, and never after a test (dry) run.
+ *  A stopped run that filed messages still shows it. */
+internal fun shouldShowMailboxHint(messagesSynced: Int, dryRun: Boolean): Boolean =
+    messagesSynced > 0 && !dryRun
+
 /**
  * The progress text with its percent at the right edge.
  *
@@ -155,6 +165,14 @@ fun SyncProgressScreen(
                             fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    // UX-09: one plain line (not a card) saying where the mail went.
+                    if (shouldShowMailboxHint(
+                            messagesSynced = workInfo.outputData.getInt(SyncWorker.KEY_MESSAGES_SYNCED, 0),
+                            dryRun = workInfo.outputData.getBoolean(SyncWorker.KEY_RESULT_DRY_RUN, false),
+                        )
+                    ) {
+                        Text(SYNC_MAILBOX_HINT, style = MaterialTheme.typography.bodyMedium)
                     }
                     Button(onClick = ::onDoneAndPrune) { Text("Done") }
                 }
