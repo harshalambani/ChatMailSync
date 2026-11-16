@@ -139,4 +139,29 @@ class Ux09PostSyncExpectationsTest {
             }
         }
     }
+
+    // --- UX-10 polish -------------------------------------------------------
+
+    @Test
+    fun `bullet split keeps wording word for word and never doubles the bullet`() {
+        val bullet = "• Searchable like any other mail"
+        val (glyph, body) = splitWelcomeBullet(bullet)
+        assertEquals("• ", glyph)
+        assertEquals("Searchable like any other mail", body)
+        assertEquals(bullet, glyph + body)
+        assertFalse(body.contains("•"))
+        WELCOME_WHAT_YOU_GET_BULLETS.forEach { b ->
+            val (g, t) = splitWelcomeBullet(b)
+            assertEquals(b, g + t)
+            assertFalse(t.contains("•"))
+            assertEquals(1, b.count { it == '•' })
+        }
+    }
+
+    @Test
+    fun `envelope line text is unchanged and the drawing keeps its description`() {
+        val line = MAILBOX_ILLUSTRATION_LINES[5]
+        assertEquals(line, mailboxEnvelopeLine(line).text)
+        assertTrue(MAILBOX_ILLUSTRATION_DESCRIPTION.isNotBlank())
+    }
 }

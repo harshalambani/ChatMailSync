@@ -246,6 +246,11 @@ fun FirstRunScreen(
 
 /** UX-09: the welcome step's "What you get" block (heading, bullets, then the app-password line). */
 internal const val WELCOME_WHAT_YOU_GET_HEADING = "What you get"
+
+/** Splits a bullet line (bullet escape, space, text) into the glyph plus its space, and the text. */
+internal fun splitWelcomeBullet(bullet: String): Pair<String, String> =
+    bullet.substring(0, 2) to bullet.substring(2)
+
 internal val WELCOME_WHAT_YOU_GET_BULLETS: List<String> = listOf(
     "\u2022 A WhatsApp folder in your mailbox, with one folder for each chat",
     "\u2022 One email per day of conversation, with photos and files if you export with media",
@@ -299,8 +304,13 @@ private fun FirstRunWelcomeStep(
             // constants so a unit test can read what the screen draws.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(WELCOME_WHAT_YOU_GET_HEADING, style = MaterialTheme.typography.titleSmall)
+                // UX-10: hanging indent, so a second line starts under the text.
                 WELCOME_WHAT_YOU_GET_BULLETS.forEach { bullet ->
-                    Text(bullet, style = MaterialTheme.typography.bodyMedium)
+                    val (glyph, body) = splitWelcomeBullet(bullet)
+                    Row {
+                        Text(glyph, style = MaterialTheme.typography.bodyMedium)
+                        Text(body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    }
                 }
             }
             Text(WELCOME_APP_PASSWORD_LINE, style = MaterialTheme.typography.bodyMedium)

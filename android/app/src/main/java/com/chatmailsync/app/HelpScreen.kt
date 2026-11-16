@@ -31,6 +31,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
@@ -458,6 +460,15 @@ internal val MAILBOX_ILLUSTRATION_LINES: List<String> = listOf(
 )
 
 /**
+ * UX-10: the envelope (text-style glyph) renders tiny in the fallback font, so the
+ * first character is drawn larger; the visible wording is unchanged.
+ */
+internal fun mailboxEnvelopeLine(line: String): AnnotatedString = buildAnnotatedString {
+    withStyle(SpanStyle(fontSize = 1.5.em)) { append(line.substring(0, 2)) }
+    append(line.substring(2))
+}
+
+/**
  * A small, unbranded mailbox drawn from theme colours so one drawing serves light
  * and dark. No provider look, logo or name.
  */
@@ -480,8 +491,9 @@ internal fun MailboxIllustration(modifier: Modifier = Modifier) {
         Text(lines[2], style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
         Text(lines[3], style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 20.dp))
         Text(lines[4], style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 20.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Text(lines[5], style = MaterialTheme.typography.bodyMedium)
+        // UX-10: outline, not outlineVariant, so the rule shows in dark mode.
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        Text(mailboxEnvelopeLine(lines[5]), style = MaterialTheme.typography.bodyMedium)
         Text(
             lines[6],
             style = MaterialTheme.typography.bodySmall,
