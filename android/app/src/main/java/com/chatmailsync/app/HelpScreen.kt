@@ -2,7 +2,14 @@
 
 package com.chatmailsync.app
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -49,6 +56,14 @@ internal val FAQ = listOf(
         "It uses IMAP APPEND, the mail command that adds a message straight into a mailbox — the " +
         "same one your mail app uses to save a draft. Nothing is sent, no sending quota is used, " +
         "and nobody else receives these emails: they only appear in your own mailbox.",
+    "Where do my chats show up in my mailbox?" to
+        "In a folder called WhatsApp, with one folder inside it for each chat, named after the " +
+        "chat. On Gmail these show as labels: a WhatsApp label with one label per chat under it. " +
+        "Each email holds one day of the conversation (Settings > Advanced > Chunk size can make " +
+        "it an hour or a week instead), and a chat's emails group into one thread in mail apps " +
+        "that group conversations. If you exported with media, photos show inside the email and " +
+        "other files come as attachments. You can search them like any other mail. If a new " +
+        "folder doesn't show yet, refresh your mail app's folder list.",
     "What can the app reach in my email account?" to
         "Nothing outside the mailbox. What you hand it is an app password, and that's a mail " +
         "credential rather than an account one — it works with the mail protocols and nothing " +
@@ -420,6 +435,63 @@ internal fun linkify(text: String): AnnotatedString = buildAnnotatedString {
 }
 
 /**
+ * UX-09: the one question that carries a drawing under its answer. Kept as a side
+ * lookup, like [FAQ_LINKS], so the FAQ entries stay plain strings for the
+ * question-for-question parity check against docs/user-guide.md.
+ */
+internal const val FAQ_MAILBOX_QUESTION = "Where do my chats show up in my mailbox?"
+
+internal fun faqHasMailboxIllustration(question: String): Boolean = question == FAQ_MAILBOX_QUESTION
+
+internal const val MAILBOX_ILLUSTRATION_DESCRIPTION =
+    "Example: a WhatsApp folder in your mailbox with one folder per chat"
+
+/** Placeholder names only; every line the drawing shows. */
+internal val MAILBOX_ILLUSTRATION_LINES: List<String> = listOf(
+    "Your mailbox",
+    "Inbox",
+    "▾ WhatsApp",
+    "▸ Meera Iyer",
+    "▸ Family Group",
+    "✉︎ Meera Iyer · 12 Nov",
+    "[photo] 14 messages",
+)
+
+/**
+ * A small, unbranded mailbox drawn from theme colours so one drawing serves light
+ * and dark. No provider look, logo or name.
+ */
+@Composable
+internal fun MailboxIllustration(modifier: Modifier = Modifier) {
+    val lines = MAILBOX_ILLUSTRATION_LINES
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .padding(12.dp)
+            .clearAndSetSemantics { contentDescription = MAILBOX_ILLUSTRATION_DESCRIPTION },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(lines[0], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(lines[1], style = MaterialTheme.typography.bodyMedium)
+        Text(lines[2], style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Text(lines[3], style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 20.dp))
+        Text(lines[4], style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 20.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text(lines[5], style = MaterialTheme.typography.bodyMedium)
+        Text(
+            lines[6],
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 20.dp),
+        )
+    }
+}
+
+/**
  * One line of the FAQ, with its "Q" or "A" tag hanging in a fixed gutter so the
  * two halves of an entry read as a pair rather than as two paragraphs.
  */
@@ -478,6 +550,9 @@ fun HelpScreen(onBack: () -> Unit, onOpenPrivacy: () -> Unit, backLabel: String 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     QaLine("Q", question, MaterialTheme.typography.titleSmall)
                     QaLine("A", answer, MaterialTheme.typography.bodyMedium)
+                    if (faqHasMailboxIllustration(question)) {
+                        MailboxIllustration(modifier = Modifier.padding(start = 20.dp))
+                    }
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
