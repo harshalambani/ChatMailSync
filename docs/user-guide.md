@@ -242,18 +242,16 @@ affects unattended checks.
 
 ## 7. Where your messages appear
 
-**If you connected with Gmail**, open Gmail and look in the labels list (left
-side). You'll find:
+Open your mail app or webmail and look for a **WhatsApp** folder. Inside it there
+is one folder per chat, named after the chat, e.g. **WhatsApp/John Doe**,
+**WhatsApp/Family Group**.
 
-- A **WhatsApp** label.
-- Under it, one label per chat, e.g. **WhatsApp/John Doe**, **WhatsApp/Family Group**.
+**On Gmail**, folders show as labels: a **WhatsApp** label in the left-hand list
+(in the Gmail app, in the menu), with one label per chat under it.
 
-**If you connected with IMAP**, open your mail app and look for a **WhatsApp**
-folder, with one subfolder per chat, in the same structure.
-
-Either way, each chat is a single **conversation thread**. Opening it shows the
-messages laid out like WhatsApp, with photos shown inline and other files
-attached for download.
+A chat's emails group into one thread in mail apps that group conversations.
+Opening one shows the messages laid out like WhatsApp, with photos shown inline
+and other files attached for download.
 
 ---
 
@@ -282,6 +280,19 @@ itself will take as many exported files at once as you have.
 a message to a mailbox (IMAP APPEND), which is the same thing your mail client
 does when it saves a draft or files a copy of an outgoing message. Your chats
 land in your own mailbox and nobody else receives anything.
+
+---
+
+### Q. Where do my chats show up in my mailbox?
+
+**A.** In a folder called WhatsApp, with one folder inside it for each chat, named
+after the chat. On Gmail these show as labels: a WhatsApp label with one label per
+chat under it. Each email holds one day of the conversation (Settings > Advanced >
+Chunk size can make it an hour or a week instead), and a chat's emails group into
+one thread in mail apps that group conversations. If you exported with media,
+photos show inside the email and other files come as attachments. You can search
+them like any other mail. If a new folder doesn't show yet, refresh your mail
+app's folder list.
 
 ---
 
