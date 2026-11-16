@@ -60,9 +60,9 @@ class Ux09PostSyncExpectationsTest {
         assertEquals("What you get", WELCOME_WHAT_YOU_GET_HEADING)
         assertEquals(
             listOf(
-                "• A WhatsApp folder in your mailbox, with one folder for each chat",
-                "• One email per day of conversation, with photos and files if you export with media",
-                "• Searchable like any other mail, and stored by your mail provider",
+                "\u2022 A WhatsApp folder in your mailbox, with one folder for each chat",
+                "\u2022 One email per day of conversation, with photos and files if you export with media",
+                "\u2022 Searchable like any other mail, and stored by your mail provider",
             ),
             WELCOME_WHAT_YOU_GET_BULLETS,
         )
@@ -110,6 +110,33 @@ class Ux09PostSyncExpectationsTest {
         assertTrue(text.contains("Family Group"))
         listOf("Gmail", "Yahoo", "Outlook", "Google").forEach {
             assertFalse("No provider name in the drawing: $it", text.contains(it))
+        }
+    }
+
+    // --- Source hygiene -----------------------------------------------------
+
+    @Test
+    fun `the UX-09 constants are plain ASCII in source`() {
+        val base = java.io.File("src/main/java/com/chatmailsync/app")
+        val checks = mapOf(
+            "FirstRunScreen.kt" to listOf("WELCOME_WHAT_YOU_GET_HEADING", "WELCOME_WHAT_YOU_GET_BULLETS", "WELCOME_APP_PASSWORD_LINE"),
+            "HelpScreen.kt" to listOf("MAILBOX_ILLUSTRATION_LINES", "MAILBOX_ILLUSTRATION_DESCRIPTION", "FAQ_MAILBOX_QUESTION"),
+            "SyncProgressScreen.kt" to listOf("SYNC_MAILBOX_HINT"),
+        )
+        for ((file, names) in checks) {
+            val lines = java.io.File(base, file).readLines()
+            for (name in names) {
+                val start = lines.indexOfFirst { it.contains("val $name") }
+                assertTrue("$name not found in $file", start >= 0)
+                // The declaration and the lines that continue it, up to the first blank line.
+                val block = lines.drop(start).takeWhile { it.isNotBlank() }
+                for (line in block) {
+                    assertTrue(
+                        "Non-ASCII character in $file ($name): $line",
+                        line.all { it.code <= 0x7F },
+                    )
+                }
+            }
         }
     }
 }

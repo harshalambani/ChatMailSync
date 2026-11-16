@@ -450,10 +450,10 @@ internal const val MAILBOX_ILLUSTRATION_DESCRIPTION =
 internal val MAILBOX_ILLUSTRATION_LINES: List<String> = listOf(
     "Your mailbox",
     "Inbox",
-    "▾ WhatsApp",
-    "▸ Meera Iyer",
-    "▸ Family Group",
-    "✉︎ Meera Iyer · 12 Nov",
+    "\u25BE WhatsApp",
+    "\u25B8 Meera Iyer",
+    "\u25B8 Family Group",
+    "\u2709\uFE0E Meera Iyer \u00B7 12 Nov",
     "[photo] 14 messages",
 )
 

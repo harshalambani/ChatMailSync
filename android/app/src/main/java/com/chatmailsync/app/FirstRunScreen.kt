@@ -247,9 +247,9 @@ fun FirstRunScreen(
 /** UX-09: the welcome step's "What you get" block (heading, bullets, then the app-password line). */
 internal const val WELCOME_WHAT_YOU_GET_HEADING = "What you get"
 internal val WELCOME_WHAT_YOU_GET_BULLETS: List<String> = listOf(
-    "• A WhatsApp folder in your mailbox, with one folder for each chat",
-    "• One email per day of conversation, with photos and files if you export with media",
-    "• Searchable like any other mail, and stored by your mail provider",
+    "\u2022 A WhatsApp folder in your mailbox, with one folder for each chat",
+    "\u2022 One email per day of conversation, with photos and files if you export with media",
+    "\u2022 Searchable like any other mail, and stored by your mail provider",
 )
 internal const val WELCOME_APP_PASSWORD_LINE =
     "Setup needs an app password from your mail provider. It takes a few minutes, " +
