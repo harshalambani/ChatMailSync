@@ -572,6 +572,18 @@ internal data class MergeCounts(
     val senders: Int = 0,
 )
 
+/**
+ * F-10: a chat's stored folder id from a bundle is kept only if it sits under
+ * the app's own parent folder and has no control character; otherwise null, so
+ * the folder is re-resolved by name on the next push.
+ */
+internal fun importableFolderId(value: Any?): String? {
+    val id = value as? String ?: return null
+    if (!id.startsWith("$LABEL_PARENT/")) return null
+    if (id.any { it.code < 0x20 || it.code == 0x7F }) return null
+    return id
+}
+
 private fun placeholders(n: Int) = List(n) { "?" }.joinToString(", ")
 
 private fun StateDb.changes(): Int = (query("SELECT changes() AS n").first()["n"] as Number).toInt()
@@ -608,7 +620,7 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
     for (row in src.query("SELECT $chatCols FROM chats")) {
         dst.exec(
             "INSERT OR IGNORE INTO chats ($chatCols) VALUES (${placeholders(CHAT_COLUMNS.size)})",
-            CHAT_COLUMNS.map { row[it] },
+            CHAT_COLUMNS.map { if (it == "gmail_label_id") importableFolderId(row[it]) else row[it] },
         )
         chatsAdded += dst.changes()
     }
