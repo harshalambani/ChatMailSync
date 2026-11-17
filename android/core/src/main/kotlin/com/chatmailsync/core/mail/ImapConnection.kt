@@ -50,5 +50,20 @@ interface ImapConnection {
     fun rename(oldWireArg: String, newWireArg: String): ImapResult =
         ImapResult("NO", listOf("RENAME not supported"))
     fun append(mailboxWireArg: String, flags: String?, internalDate: OffsetDateTime?, message: ByteArray): ImapResult
+
+    /**
+     * F-02: `EXAMINE mailbox` (read-only select), used to look for a message after an APPEND whose
+     * outcome is unknown. The default answers NO, which the caller treats as "cannot tell" -- never
+     * as "not there".
+     */
+    fun examine(mailboxWireArg: String): ImapResult =
+        ImapResult("NO", listOf("EXAMINE not supported"))
+
+    /**
+     * F-02: `UID SEARCH HEADER Message-ID "<id>"` in the currently examined mailbox. The data lines
+     * hold the matching UIDs (empty for none). The default answers NO ("cannot tell").
+     */
+    fun uidSearchMessageId(messageId: String): ImapResult =
+        ImapResult("NO", listOf("SEARCH not supported"))
     fun logout()
 }

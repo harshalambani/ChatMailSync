@@ -39,6 +39,13 @@ class ImapTransport(
     private var conn: ImapConnection? = null
     private var delimiter: String? = null
 
+    /**
+     * F-02: Message-IDs whose APPEND ended in an abort / I/O error / timeout, so nobody knows whether
+     * the server stored them. Such an id is looked up in the target folder before it is ever sent
+     * again -- including on a later [messagesInsert] call, after a failed lookup.
+     */
+    private val unconfirmed = HashSet<String>()
+
     private fun defaultConnectionFactory(): ImapConnection =
         JvmImapConnection.connect(host, port, email, password, timeoutSeconds)
 
@@ -224,19 +231,74 @@ class ImapTransport(
 
         val headers = MessageHeaders.parse(crlfBytes)
         val internalDate = internaldateFromHeaders(headers)
-        val messageId = headers["Message-ID"]?.takeIf { it.isNotEmpty() } ?: MimeBuilder.newMessageId()
+        val headerId = headers["Message-ID"]?.takeIf { it.isNotEmpty() }
+        val messageId = headerId ?: MimeBuilder.newMessageId()
+        // F-02: the id is sent in a SEARCH after an unknown outcome, so it must be safe to send.
+        if (headerId != null && !isSafeMessageId(headerId)) {
+            throw MailTransportError("Refused: the message's Message-ID is not safe to send, so nothing was sent.", 400)
+        }
+        val resultThread = threadId?.takeIf { it.isNotEmpty() } ?: messageId
 
         val flags = if (setSeen) "(\\Seen)" else null
 
-        val result = try {
-            call { it.append(wireFolder, flags, internalDate, crlfBytes) }
-        } catch (exc: Exception) {
-            throw mapException(exc, "APPEND")
+        var sends = 0
+        while (true) {
+            if (headerId != null && headerId in unconfirmed) {
+                // Throws a retryable error if the lookup itself fails; the id then stays unconfirmed.
+                val found = findByMessageId(wireFolder, headerId)
+                unconfirmed.remove(headerId)
+                if (found != null) return InsertResult(id = found, threadId = resultThread)
+            }
+            val result = try {
+                // Never `call`: a blind reconnect-and-resend of an APPEND is exactly the F-02 bug.
+                getConn().append(wireFolder, flags, internalDate, crlfBytes)
+            } catch (exc: Exception) {
+                if (!outcomeUnknown(exc)) throw mapException(exc, "APPEND")
+                conn = null
+                delimiter = null
+                if (headerId == null) {
+                    throw MailTransportError(
+                        "APPEND: the connection failed and the message has no Message-ID to check for, " +
+                            "so it was not sent again.",
+                        400,
+                    )
+                }
+                unconfirmed.add(headerId)
+                if (++sends >= 2) throw mapException(exc, "APPEND")
+                continue
+            }
+            if (headerId != null) unconfirmed.remove(headerId)
+            if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
+            val uid = extractAppendUid(result.data)
+            return InsertResult(id = uid ?: messageId, threadId = resultThread)
         }
-        if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
+    }
 
-        val uid = extractAppendUid(result.data)
-        return InsertResult(id = uid ?: messageId, threadId = threadId?.takeIf { it.isNotEmpty() } ?: messageId)
+    /** An abort, I/O error or timeout: the server may or may not have stored the message. */
+    private fun outcomeUnknown(exc: Throwable): Boolean =
+        exc is ImapAbortError || exc is SocketTimeoutException || exc is IOException
+
+    /**
+     * F-02: asks the server whether [messageId] is already in [wireFolder] (EXAMINE + UID SEARCH, both
+     * read-only). Returns its UID, or null when it is definitely not there. Any failure of the lookup
+     * itself is a retryable 503 -- "cannot tell" is never reported as "not found".
+     */
+    private fun findByMessageId(wireFolder: String, messageId: String): String? {
+        try {
+            val examined = call { it.examine(wireFolder) }
+            if (examined.status != "OK") throw MailTransportError("lookup: EXAMINE refused", 503)
+            val found = call { it.uidSearchMessageId(messageId) }
+            if (found.status != "OK") throw MailTransportError("lookup: SEARCH refused", 503)
+            val uids = found.data.filterNotNull()
+                .flatMap { it.trim().split(' ') }
+                .filter { it.isNotEmpty() && it.all { c -> c in '0'..'9' } }
+            return uids.lastOrNull()
+        } catch (exc: MailTransportError) {
+            throw exc
+        } catch (exc: Exception) {
+            val text = stripSecret(exc.message ?: exc.toString(), password)
+            throw MailTransportError("lookup after an uncertain APPEND failed: $text", 503)
+        }
     }
 }
 
@@ -261,3 +323,7 @@ fun normalizeCrlf(data: ByteArray): ByteArray {
     }
     return out.toByteArray()
 }
+
+/** F-02: a Message-ID that may be put inside a quoted SEARCH argument: printable ASCII, no quote, no backslash. */
+internal fun isSafeMessageId(id: String): Boolean =
+    id.isNotEmpty() && id.all { it.code in 0x21..0x7E && it != '"' && it != '\\' }

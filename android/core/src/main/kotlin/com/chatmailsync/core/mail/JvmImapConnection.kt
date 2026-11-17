@@ -149,6 +149,15 @@ class JvmImapConnection private constructor(
     override fun rename(oldWireArg: String, newWireArg: String): ImapResult =
         runCommand("RENAME $oldWireArg $newWireArg")
 
+    override fun examine(mailboxWireArg: String): ImapResult = runCommand("EXAMINE $mailboxWireArg")
+
+    override fun uidSearchMessageId(messageId: String): ImapResult {
+        // The id is interpolated into a command line, so it is held to the same standard as every
+        // other argument: printable ASCII, no quote, no backslash, no control character.
+        if (!isSafeMessageId(messageId)) throw ImapCommandError("refused: unsafe Message-ID in SEARCH")
+        return runCommand("UID SEARCH HEADER Message-ID \"$messageId\"", untaggedKeyword = "SEARCH")
+    }
+
     override fun append(
         mailboxWireArg: String,
         flags: String?,
