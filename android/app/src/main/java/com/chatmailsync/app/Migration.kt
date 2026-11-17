@@ -2,8 +2,11 @@ package com.chatmailsync.app
 
 import android.content.Context
 import android.net.Uri
+import com.chatmailsync.core.mail.MAX_BUNDLE_DB_BYTES
+import com.chatmailsync.core.mail.MAX_BUNDLE_MEMBER_BYTES
 import org.json.JSONObject
 import java.io.File
+import java.io.InputStream
 
 /**
  * Moving an install to a new phone.
@@ -21,6 +24,37 @@ import java.io.File
  * involves knowing what a bundle is. That keeps one implementation of the merge
  * rules for both front-ends rather than two that agree until they don't.
  */
+/**
+ * The most a picked backup may be before it is staged: the core's database
+ * member limit plus room for the other (small) members and zip overhead.
+ */
+internal const val MAX_STAGED_BACKUP_BYTES: Long =
+    MAX_BUNDLE_DB_BYTES + 8L * MAX_BUNDLE_MEMBER_BYTES
+
+/**
+ * Copy [input] to [dest], stopping as soon as more than [maxBytes] have been
+ * read. Returns false when the cap was exceeded (the partial file is deleted).
+ */
+internal fun copyBounded(input: InputStream, dest: File, maxBytes: Long): Boolean {
+    var total = 0L
+    var withinCap = true
+    dest.outputStream().use { out ->
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > maxBytes) {
+                withinCap = false
+                break
+            }
+            out.write(buf, 0, n)
+        }
+    }
+    if (!withinCap) dest.delete()
+    return withinCap
+}
+
 object Migration {
 
     /** The extension the file picker suggests; the bundle is a zip underneath. */
@@ -147,9 +181,16 @@ object Migration {
     fun importFrom(context: Context, uri: Uri): RestoreOutcome {
         val staged = File(context.cacheDir, "backup-in$SUFFIX")
         try {
+            var tooLarge = false
             context.contentResolver.openInputStream(uri)?.use { input ->
-                staged.outputStream().use { input.copyTo(it) }
+                tooLarge = !copyBounded(input, staged, MAX_STAGED_BACKUP_BYTES)
             } ?: return RestoreOutcome("That file could not be opened.", success = false)
+            if (tooLarge) {
+                return RestoreOutcome(
+                    "That file is too large to be a Chat Mail Sync backup.",
+                    success = false,
+                )
+            }
 
             val result = api(context).importBackup(staged.absolutePath)
             if (!result.flag("ok")) {
@@ -276,9 +317,11 @@ object Migration {
     fun describe(context: Context, uri: Uri): String? {
         val staged = File(context.cacheDir, "backup-peek$SUFFIX")
         try {
+            var tooLarge = false
             context.contentResolver.openInputStream(uri)?.use { input ->
-                staged.outputStream().use { input.copyTo(it) }
+                tooLarge = !copyBounded(input, staged, MAX_STAGED_BACKUP_BYTES)
             } ?: return null
+            if (tooLarge) return null
             val info = api(context).describeBackup(staged.absolutePath)
             if (!info.flag("ok")) return null
             val made = info.str("created_at").toString().take(10)
