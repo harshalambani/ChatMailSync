@@ -49,7 +49,7 @@ class RestorableSettingsTest {
         val end = source.indexOf("val RESTORABLE_SETTINGS_KEYS", start)
         assertTrue("could not find the end of applySettings in Migration.kt", end > start)
         val body = source.substring(start, end)
-        return Regex("""obj\.has\("([a-z_]+)"\)""").findAll(body).map { it.groupValues[1] }.toSet()
+        return Regex("""valid\["([a-z_]+)"\]""").findAll(body).map { it.groupValues[1] }.toSet()
     }
 
     /** Every key branch inside readRestorableSettings' `when` -- the actual

@@ -1353,6 +1353,9 @@ fun ChatMailApp(
         // it happens to also be what keeps AppPrefs and the live value in
         // sync for every other caller of onThemeModeChange.
         onThemeModeChange(restored.themeMode)
+        // F-01: a restore that points the phone at a different account clears the saved password
+        // (applySettings), so the "password saved" state must be re-read here too.
+        imapPasswordSaved = AppPrefs.hasImapPassword(context)
         // applySettings clears the saved connection verdict (the password
         // did not travel, so a stale "Connected" would be a green light on
         // a mailbox this phone cannot reach yet) -- re-derive the pill

@@ -2,8 +2,11 @@ package com.chatmailsync.app
 
 import android.content.Context
 import android.net.Uri
+import com.chatmailsync.core.mail.ChunkSize
+import com.chatmailsync.core.mail.IMAP_PROVIDERS
 import com.chatmailsync.core.mail.MAX_BUNDLE_DB_BYTES
 import com.chatmailsync.core.mail.MAX_BUNDLE_MEMBER_BYTES
+import com.chatmailsync.core.mail.retiredProviderLanding
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -54,6 +57,59 @@ internal fun copyBounded(input: InputStream, dest: File, maxBytes: Long): Boolea
     if (!withinCap) dest.delete()
     return withinCap
 }
+
+/**
+ * F-01: the restored settings that are safe to write. Each value is checked against what the app
+ * itself offers; an invalid one is simply absent from the result, so the phone keeps its own.
+ * Keys are the bundle's setting names; values are typed (String, Long, Int, Boolean).
+ */
+internal fun validateRestoredSettings(raw: Map<String, Any?>): Map<String, Any> {
+    val out = LinkedHashMap<String, Any>()
+    fun plainText(v: Any?, maxLen: Int): String? {
+        val t = (v as? String)?.trim() ?: return null
+        if (t.length > maxLen || t.any { it.code < 0x20 || it.code == 0x7F }) return null
+        return t
+    }
+
+    (raw["chunk_size"] as? String)?.trim()?.lowercase()?.let { t ->
+        // The parser falls back to "day" for anything unknown, so "day" itself is the one case to name.
+        if (t == "day" || parseChunkSize(t) != ChunkSize.Day) out["chunk_size"] = t
+    }
+    (raw["watch_interval_minutes"] as? Number)?.let {
+        out["watch_interval_minutes"] = it.toLong().coerceAtLeast(AppPrefs.MIN_WATCH_INTERVAL_MINUTES)
+    }
+    (raw["synced_file_policy"] as? String)?.let {
+        if (it in SYNCED_FILE_POLICY_LABELS.keys) out["synced_file_policy"] = it
+    }
+    (raw["theme_mode"] as? String)?.let { if (it in RESTORABLE_THEME_MODES) out["theme_mode"] = it }
+    (raw["dry_run_default"] as? Boolean)?.let { out["dry_run_default"] = it }
+    (raw["mail_backend"] as? String)?.let { if (it == AppPrefs.MAIL_BACKEND_IMAP) out["mail_backend"] = it }
+    (raw["imap_provider"] as? String)?.let { key ->
+        val landing = if (key in IMAP_PROVIDERS) key else retiredProviderLanding(key)
+        if (landing.isNotEmpty()) out["imap_provider"] = landing
+    }
+    plainText(raw["imap_host"], 255)?.let { if (it.none { c -> c.isWhitespace() }) out["imap_host"] = it }
+    val port = when (val v = raw["imap_port"]) {
+        is Int -> v.toLong()
+        is Long -> v
+        is String -> v.trim().toLongOrNull()
+        else -> null
+    }
+    if (port != null && port in 1L..65535L) out["imap_port"] = port.toInt()
+    plainText(raw["imap_email"], 254)?.let { out["imap_email"] = it }
+    return out
+}
+
+internal val RESTORABLE_THEME_MODES = setOf("system", "light", "dark")
+
+/** F-01: true when the account the phone points at after a restore differs from the one before it. */
+internal fun restoreChangesAccount(
+    oldProvider: String, oldEmail: String, oldHost: String,
+    newProvider: String, newEmail: String, newHost: String,
+): Boolean =
+    oldProvider.trim() != newProvider.trim() ||
+        !oldEmail.trim().equals(newEmail.trim(), ignoreCase = true) ||
+        !oldHost.trim().equals(newHost.trim(), ignoreCase = true)
 
 object Migration {
 
@@ -238,7 +294,7 @@ object Migration {
                 chats = chats,
                 hashes = hashes,
                 cutoffs = cutoffs,
-                appliedSettings = parseAppliedSettings(settingsJson),
+                appliedSettings = appliedSettingsFor(settingsJson),
                 passwordSaved = connected,
                 providerLabels = currentProviderLabels(context),
             )
@@ -275,6 +331,18 @@ object Migration {
      * fact a person reads meaning into, and mail_backend has no line of its
      * own in the D7/D8 settings vocabulary this reuses).
      */
+    private fun appliedSettingsFor(json: String): Map<String, Any?> {
+        val valid = try {
+            val obj = JSONObject(json)
+            val raw = HashMap<String, Any?>()
+            for (k in obj.keys()) raw[k] = obj.opt(k)
+            validateRestoredSettings(raw).keys
+        } catch (e: Exception) {
+            emptySet()
+        }
+        return parseAppliedSettings(json).filterKeys { it in valid }
+    }
+
     private fun parseAppliedSettings(json: String): Map<String, Any?> {
         val obj = try {
             JSONObject(json)
@@ -348,31 +416,36 @@ object Migration {
         } catch (e: Exception) {
             return
         }
-        if (obj.has("chunk_size")) AppPrefs.setChunkSize(context, obj.optString("chunk_size"))
-        if (obj.has("watch_interval_minutes")) {
-            // Floored at the platform minimum on the way in. WorkManager will
-            // not schedule below 15 minutes anyway, and a bundle is a file on
-            // disk that anyone can edit.
-            AppPrefs.setWatchIntervalMinutes(
-                context,
-                obj.optLong("watch_interval_minutes")
-                    .coerceAtLeast(AppPrefs.MIN_WATCH_INTERVAL_MINUTES),
+        val raw = HashMap<String, Any?>()
+        for (k in obj.keys()) raw[k] = obj.opt(k)
+        // F-01: only values that pass validation are written; anything else leaves the phone's own value.
+        val valid = validateRestoredSettings(raw)
+
+        val oldProvider = AppPrefs.getImapProvider(context)
+        val oldEmail = AppPrefs.getImapEmail(context)
+        val oldHost = AppPrefs.getImapHost(context)
+
+        (valid["chunk_size"] as? String)?.let { AppPrefs.setChunkSize(context, it) }
+        (valid["watch_interval_minutes"] as? Long)?.let { AppPrefs.setWatchIntervalMinutes(context, it) }
+        (valid["synced_file_policy"] as? String)?.let { AppPrefs.setSyncedFilePolicy(context, it) }
+        (valid["theme_mode"] as? String)?.let { AppPrefs.setThemeMode(context, it) }
+        (valid["dry_run_default"] as? Boolean)?.let { AppPrefs.setDryRunDefault(context, it) }
+        (valid["mail_backend"] as? String)?.let { AppPrefs.setMailBackend(context, it) }
+        (valid["imap_provider"] as? String)?.let { AppPrefs.setImapProvider(context, it) }
+        (valid["imap_host"] as? String)?.let { AppPrefs.setImapHost(context, it) }
+        (valid["imap_port"] as? Int)?.let { AppPrefs.setImapPort(context, it) }
+        (valid["imap_email"] as? String)?.let { AppPrefs.setImapEmail(context, it) }
+
+        // A saved password belongs to the account it was typed for. If the restore points the
+        // phone at a different provider, address or host, the password must not travel with it.
+        if (AppPrefs.hasImapPassword(context) &&
+            restoreChangesAccount(
+                oldProvider, oldEmail, oldHost,
+                AppPrefs.getImapProvider(context), AppPrefs.getImapEmail(context), AppPrefs.getImapHost(context),
             )
+        ) {
+            SecretStore.clearSecret(context, AppPrefs.getImapPasswordSecretKey())
         }
-        if (obj.has("synced_file_policy")) {
-            AppPrefs.setSyncedFilePolicy(context, obj.optString("synced_file_policy"))
-        }
-        if (obj.has("theme_mode")) AppPrefs.setThemeMode(context, obj.optString("theme_mode"))
-        if (obj.has("dry_run_default")) {
-            AppPrefs.setDryRunDefault(context, obj.optBoolean("dry_run_default"))
-        }
-        if (obj.has("mail_backend")) AppPrefs.setMailBackend(context, obj.optString("mail_backend"))
-        if (obj.has("imap_provider")) {
-            AppPrefs.setImapProvider(context, obj.optString("imap_provider"))
-        }
-        if (obj.has("imap_host")) AppPrefs.setImapHost(context, obj.optString("imap_host"))
-        if (obj.has("imap_port")) AppPrefs.setImapPort(context, obj.optInt("imap_port", 993))
-        if (obj.has("imap_email")) AppPrefs.setImapEmail(context, obj.optString("imap_email"))
         // Not restored, on purpose: the mail password stays on the old device,
         // so any saved verdict about a connection would be a green light on a
         // phone that cannot connect yet.
