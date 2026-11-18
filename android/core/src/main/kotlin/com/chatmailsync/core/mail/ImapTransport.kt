@@ -35,6 +35,12 @@ class ImapTransport(
     private val connectionFactory: (() -> ImapConnection)? = null,
     private val setSeen: Boolean = true,
     private val timeoutSeconds: Long = MAIL_SOCKET_TIMEOUT_SECONDS,
+    /**
+     * Receives one outcome-only line each time the F-02 Message-ID lookup runs: "F-02 lookup: found",
+     * "F-02 lookup: not found" or "F-02 lookup: failed (<exception class>)". Never the id, the folder,
+     * the address or any server text. No-op by default (core is plain JVM; the app wires Android Log).
+     */
+    private val lookupLog: (String) -> Unit = {},
 ) : MailTransport {
     private var conn: ImapConnection? = null
     private var delimiter: String? = null
@@ -292,10 +298,14 @@ class ImapTransport(
             val uids = found.data.filterNotNull()
                 .flatMap { it.trim().split(' ') }
                 .filter { it.isNotEmpty() && it.all { c -> c in '0'..'9' } }
-            return uids.lastOrNull()
+            val uid = uids.lastOrNull()
+            lookupLog(if (uid != null) "F-02 lookup: found" else "F-02 lookup: not found")
+            return uid
         } catch (exc: MailTransportError) {
+            lookupLog("F-02 lookup: failed (MailTransportError)")
             throw exc
         } catch (exc: Exception) {
+            lookupLog("F-02 lookup: failed (" + exc.javaClass.simpleName + ")")
             val text = stripSecret(exc.message ?: exc.toString(), password)
             throw MailTransportError("lookup after an uncertain APPEND failed: $text", 503)
         }
