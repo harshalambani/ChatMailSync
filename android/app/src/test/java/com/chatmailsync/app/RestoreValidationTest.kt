@@ -132,7 +132,7 @@ class RestoreValidationTest {
         val src = File("src/main/java/com/chatmailsync/app/Migration.kt").takeIf { it.isFile }
             ?: File("app/src/main/java/com/chatmailsync/app/Migration.kt")
         val text = src.readText()
-        val body = text.substring(text.indexOf("private fun applySettings"), text.indexOf("val RESTORABLE_SETTINGS_KEYS"))
+        val body = text.substring(text.indexOf("fun applySettings"), text.indexOf("val RESTORABLE_SETTINGS_KEYS"))
         assertTrue(body.contains("restoreChangesAccount("))
         assertTrue(body.contains("SecretStore.clearSecret(context, AppPrefs.getImapPasswordSecretKey())"))
         assertFalse("must not wipe the account fields", body.contains("clearImapSettings"))

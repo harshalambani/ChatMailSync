@@ -100,6 +100,10 @@ internal fun validateRestoredSettings(raw: Map<String, Any?>): Map<String, Any> 
     return out
 }
 
+/** D166: true when applying [restored] would switch "Delete after import" on from a phone that has it off. */
+internal fun restoreWouldEnableDelete(restored: String?, current: String): Boolean =
+    restored == "delete" && current != "delete"
+
 internal val RESTORABLE_THEME_MODES = setOf("system", "light", "dark")
 
 /** F-01: true when the account the phone points at after a restore differs from the one before it. */
@@ -266,7 +270,9 @@ object Migration {
             }
 
             val settingsJson = result.str("settings_json").toString()
-            applySettings(context, settingsJson)
+            // F-01 / D166: a backup that would switch "Delete after import" ON is not applied
+            // here; the screen asks first (see RestoreOutcome.confirmDeleteAfterImport).
+            val deleteHeld = applySettings(context, settingsJson)
 
             val chats = result.long("chats_added")?.toInt() ?: 0
             val hashes = result.long("hashes_added")?.toInt() ?: 0
@@ -294,15 +300,18 @@ object Migration {
                 chats = chats,
                 hashes = hashes,
                 cutoffs = cutoffs,
-                appliedSettings = appliedSettingsFor(settingsJson),
+                appliedSettings = appliedSettingsFor(settingsJson)
+                    .let { if (deleteHeld) it - "synced_file_policy" else it },
                 passwordSaved = connected,
                 providerLabels = currentProviderLabels(context),
+                deleteAfterImportHeld = deleteHeld,
             )
             return RestoreOutcome(
                 message = message,
                 success = true,
                 restoredLines = summary.restored,
                 notRestoredLines = summary.notRestored,
+                confirmDeleteAfterImport = deleteHeld,
             )
         } catch (e: Exception) {
             return RestoreOutcome("That backup could not be restored: ${e.message}", success = false)
@@ -410,11 +419,11 @@ object Migration {
      * generic "write whatever came in" loop would bypass all of it on data that
      * arrived from a file anyone can edit.
      */
-    private fun applySettings(context: Context, json: String) {
+    internal fun applySettings(context: Context, json: String): Boolean {
         val obj = try {
             JSONObject(json)
         } catch (e: Exception) {
-            return
+            return false
         }
         val raw = HashMap<String, Any?>()
         for (k in obj.keys()) raw[k] = obj.opt(k)
@@ -427,7 +436,11 @@ object Migration {
 
         (valid["chunk_size"] as? String)?.let { AppPrefs.setChunkSize(context, it) }
         (valid["watch_interval_minutes"] as? Long)?.let { AppPrefs.setWatchIntervalMinutes(context, it) }
-        (valid["synced_file_policy"] as? String)?.let { AppPrefs.setSyncedFilePolicy(context, it) }
+        // D166: "leave" and "move" restore as before. Switching deletion ON from anything else
+        // waits for the user's confirmation; until then the phone keeps its own policy.
+        val restoredPolicy = valid["synced_file_policy"] as? String
+        val deleteHeld = restoreWouldEnableDelete(restoredPolicy, AppPrefs.getSyncedFilePolicy(context))
+        if (restoredPolicy != null && !deleteHeld) AppPrefs.setSyncedFilePolicy(context, restoredPolicy)
         (valid["theme_mode"] as? String)?.let { AppPrefs.setThemeMode(context, it) }
         (valid["dry_run_default"] as? Boolean)?.let { AppPrefs.setDryRunDefault(context, it) }
         (valid["mail_backend"] as? String)?.let { AppPrefs.setMailBackend(context, it) }
@@ -450,6 +463,7 @@ object Migration {
         // so any saved verdict about a connection would be a green light on a
         // phone that cannot connect yet.
         AppPrefs.clearLastConnectionResult(context)
+        return deleteHeld
     }
 
     /**
@@ -576,6 +590,8 @@ data class RestoreOutcome(
     val success: Boolean,
     val restoredLines: List<String> = emptyList(),
     val notRestoredLines: List<String> = emptyList(),
+    /** D166: the backup asked for "Delete after import" and the phone did not have it on; ask first. */
+    val confirmDeleteAfterImport: Boolean = false,
 )
 
 /** The two lists [restoreSummary] builds: what a successful restore actually
@@ -619,6 +635,7 @@ internal fun restoreSummary(
     appliedSettings: Map<String, Any?>,
     passwordSaved: Boolean,
     providerLabels: Map<String, String>,
+    deleteAfterImportHeld: Boolean = false,
 ): RestoreSummaryLines {
     val restored = mutableListOf<String>()
     restored += "Chats: $chats"
@@ -662,6 +679,7 @@ internal fun restoreSummary(
     // Always -- Android's SAF folder permission is granted per-device and
     // cannot travel in a backup file regardless of what the bundle carries.
     notRestored += "Watched folder (choose it again in Settings > Advanced)"
+    if (deleteAfterImportHeld) notRestored += "Delete after import (waits for your confirmation)"
 
     return RestoreSummaryLines(restored, notRestored)
 }
