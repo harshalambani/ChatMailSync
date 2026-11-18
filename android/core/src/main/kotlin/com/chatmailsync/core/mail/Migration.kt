@@ -614,6 +614,14 @@ internal fun mergeDb(target: File, incoming: File, openDb: OpenDb): MergeCounts 
     }
 }
 
+/** F-10: the only `app_state` keys a backup may bring in (the three the app writes, plus the frozen Python key). */
+internal val IMPORTABLE_APP_STATE_KEYS: Set<String> = setOf(
+    StateRepository.SELF_SENDER_OVERRIDE,
+    StateRepository.SELF_SENDER_LEARNED,
+    StateRepository.SELF_SENDER_LEARNED_PENDING,
+    "owner_override",
+)
+
 private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
     val chatCols = CHAT_COLUMNS.joinToString(", ")
     var chatsAdded = 0
@@ -691,6 +699,9 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         emptyList()
     }
     for (row in stateRows) {
+        // F-10: a backup is user-editable input, so only the keys the app itself writes come in.
+        // "owner_override" is the key the frozen Python fixtures carry; anything else is ignored.
+        if (row["key"] !in IMPORTABLE_APP_STATE_KEYS) continue
         dst.exec("INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)", listOf(row["key"], row["value"]))
     }
 
