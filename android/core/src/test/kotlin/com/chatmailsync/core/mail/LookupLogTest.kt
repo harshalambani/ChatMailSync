@@ -68,13 +68,13 @@ class LookupLogTest {
         val fake = Fake(appendFirst, lookup, password, email)
         val t = ImapTransport(
             host = "imap.example.com", port = 993, email = email, password = password,
-            connectionFactory = { fake }, lookupLog = { lines.add(it) },
+            connectionFactory = { fake }, diagLog = { lines.add(it) },
         )
         try {
             t.messagesInsert(raw(), folder, null)
         } catch (_: MailTransportError) {
         }
-        return lines
+        return lines.filter { it.startsWith("F-02 lookup") }
     }
 
     private fun assertClean(lines: List<String>) {
@@ -119,8 +119,8 @@ class LookupLogTest {
         }
         ImapTransport(
             host = "imap.example.com", port = 993, email = email, password = password,
-            connectionFactory = { fake }, lookupLog = { lines.add(it) },
+            connectionFactory = { fake }, diagLog = { lines.add(it) },
         ).messagesInsert(raw(), folder, null)
-        assertTrue(lines.isEmpty())
+        assertTrue("no lookup line", lines.none { it.startsWith("F-02 lookup") })
     }
 }

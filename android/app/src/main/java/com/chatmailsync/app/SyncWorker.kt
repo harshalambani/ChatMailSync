@@ -302,7 +302,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 val password = SecretStore.getSecret(applicationContext, AppPrefs.getImapPasswordSecretKey())
                 ImapTransport(
                     host, port, email, password.orEmpty(),
-                    lookupLog = { android.util.Log.i("CmsImap", it) },
+                    diagLog = { android.util.Log.i("CmsImap", it) },
                 )
             }
             else -> null
