@@ -84,10 +84,12 @@ fun sizeSplitCached(
     )
     val projected = rendered.wireBytes +
         HtmlRenderer.encodedPartBytes(estimateIndexBytes(messages.size).toLong())
-    if (projected <= budget || messages.size <= 1) {
+    // BUG-24: never halve between two messages with one fingerprint; with no legal cut the
+    // piece stays whole (a server refusal is then handled where it happens).
+    val mid = splitPoint(messages)
+    if (projected <= budget || mid == null) {
         return listOf(PreparedEmail(messages, rendered))
     }
-    val mid = messages.size / 2
     return sizeSplitCached(messages.subList(0, mid), displayName, extractor, limitBytes, selfSender) +
         sizeSplitCached(messages.subList(mid, messages.size), displayName, extractor, limitBytes, selfSender)
 }
@@ -263,8 +265,9 @@ fun pushChunks(
                 val attempted = rendered.wireBytes
                 limitBytes = minOf(limitBytes, (attempted * 0.9).toLong())
 
-                val replacement: List<PreparedEmail> = if (subChunk.size > 1) {
-                    val mid = subChunk.size / 2
+                val cut = splitPoint(subChunk)
+                val replacement: List<PreparedEmail> = if (cut != null) {
+                    val mid = cut
                     sizeSplitCached(subChunk.subList(0, mid), displayName, extractor, limitBytes, selfSender) +
                         sizeSplitCached(subChunk.subList(mid, subChunk.size), displayName, extractor, limitBytes, selfSender)
                 } else {

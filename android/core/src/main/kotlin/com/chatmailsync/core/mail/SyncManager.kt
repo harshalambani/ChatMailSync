@@ -222,6 +222,17 @@ class SyncManager(
         return total
     }
 
+    /**
+     * BUG-24: for a chat with linked names, the export messages whose OLD fingerprint (before the
+     * rename relabelled a party) is already in the ledger. Only those may be skipped at the mark.
+     */
+    private fun filedUnderOldFingerprint(chatId: String, all: List<ParsedMessage>): ((ParsedMessage) -> Boolean)? {
+        if (!repo.hasAliases(chatId)) return null
+        val filed = java.util.IdentityHashMap<ParsedMessage, Boolean>()
+        for (m in matchedOldHashes(repo, chatId, all, repo.hashesForChat(chatId)).values) filed[m] = true
+        return { m -> filed.containsKey(m) }
+    }
+
     private fun parseAndFilter(file: File, chatId: String, lastSyncedTs: String?): Planned {
         val all = parseFile(file, chatId).toList()
         // BUG-23: a message exactly at the mark goes to the hash check, except in a chat with
@@ -229,6 +240,7 @@ class SyncManager(
         val f = filterMessages(
             repo, all, chatId, lastSyncedTs, cutoffDate,
             exactMarkIsSkipped = repo.hasAliases(chatId),
+            atMarkIsFiled = filedUnderOldFingerprint(chatId, all),
         )
         return Planned(all, f.newMessages, f.skipped, f.cutoff)
     }
