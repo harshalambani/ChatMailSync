@@ -48,7 +48,10 @@ fun effectiveCutoff(repo: StateRepository, chatId: String, appCutoff: String?): 
  * with the chat's runs (reset, delete). Pass [exactMarkIsSkipped] = true to get Python's `<=`
  * back; [SyncManager] does that for a chat with linked (renamed) names, whose mark can come
  * from an archived message that is stored under its old fingerprint, so the hash cannot vouch
- * for it. Rule 3 stays `<`: the cutoff names an instant, and a message stamped exactly at
+ * for it. BUG-24: with [atMarkIsFiled] given, a message exactly at the mark is skipped only
+ * when that says the ledger already holds it (under its old fingerprint); a different text in
+ * the same minute is new, so a Stop between two emails of a renamed chat no longer drops it.
+ * Rule 3 stays `<`: the cutoff names an instant, and a message stamped exactly at
  * midnight of the chosen day is on the day the user asked for.
  */
 fun filterMessages(
@@ -58,6 +61,7 @@ fun filterMessages(
     lastSyncedTs: String?,
     appCutoff: String?,
     exactMarkIsSkipped: Boolean = false,
+    atMarkIsFiled: ((ParsedMessage) -> Boolean)? = null,
 ): FilterResult {
     val cutoff = effectiveCutoff(repo, chatId, appCutoff)
     val new = mutableListOf<ParsedMessage>()
@@ -70,7 +74,10 @@ fun filterMessages(
             continue
         }
         if (!lastSyncedTs.isNullOrEmpty() &&
-            (msg.timestampIso < lastSyncedTs || (exactMarkIsSkipped && msg.timestampIso == lastSyncedTs))
+            (
+                msg.timestampIso < lastSyncedTs ||
+                    (exactMarkIsSkipped && msg.timestampIso == lastSyncedTs && (atMarkIsFiled?.invoke(msg) ?: true))
+                )
         ) {
             skipped++
             continue

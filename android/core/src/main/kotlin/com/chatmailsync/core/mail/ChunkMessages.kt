@@ -28,7 +28,17 @@ fun chunkMessages(messages: List<ParsedMessage>, chunkSize: ChunkSize = ChunkSiz
 
     if (chunkSize is ChunkSize.Count) {
         require(chunkSize.n > 0) { "chunk_size must be 'day', 'hour', 'week', or a positive int; got ${chunkSize.n}" }
-        return messages.chunked(chunkSize.n)
+        // BUG-24: a boundary never falls between two messages with one fingerprint.
+        val locked = lockedCuts(messages)
+        val out = ArrayList<List<ParsedMessage>>()
+        var start = 0
+        while (start < messages.size) {
+            var end = minOf(start + chunkSize.n, messages.size)
+            while (end < messages.size && locked[end]) end++
+            out.add(messages.subList(start, end))
+            start = end
+        }
+        return out
     }
 
     fun bucket(ts: java.time.LocalDateTime): List<Int> = when (chunkSize) {
@@ -57,4 +67,37 @@ fun chunkMessages(messages: List<ParsedMessage>, chunkSize: ChunkSize = ChunkSiz
     }
     if (currentChunk.isNotEmpty()) chunks.add(currentChunk)
     return chunks
+}
+
+/**
+ * BUG-24: `result[i]` is true when a split between message i-1 and message i is forbidden because
+ * both sides hold a message with the same fingerprint (same chat, minute, sender and text).
+ * The ledger keeps ONE row per fingerprint, so two such copies must travel in the same email: if
+ * they were split and the run ended after the first email, the second copy would look filed.
+ * Index 0 is never a cut. Nothing here changes a fingerprint or the ledger.
+ */
+internal fun lockedCuts(messages: List<ParsedMessage>): BooleanArray {
+    val locked = BooleanArray(messages.size + 1)
+    val first = HashMap<String, Int>()
+    for ((i, m) in messages.withIndex()) {
+        val h = computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body)
+        val f = first.putIfAbsent(h, i)
+        if (f != null) for (c in (f + 1)..i) locked[c] = true
+    }
+    return locked
+}
+
+/**
+ * BUG-24: where to halve [messages]: the allowed cut nearest the middle (the middle itself when
+ * no fingerprint repeats, exactly as before), or null when every cut would separate two copies.
+ */
+internal fun splitPoint(messages: List<ParsedMessage>): Int? {
+    if (messages.size < 2) return null
+    val locked = lockedCuts(messages)
+    val mid = messages.size / 2
+    for (d in 0..messages.size) {
+        if (mid - d >= 1 && !locked[mid - d]) return mid - d
+        if (mid + d <= messages.size - 1 && !locked[mid + d]) return mid + d
+    }
+    return null
 }
