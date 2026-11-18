@@ -309,7 +309,13 @@ class CoreApi(
      */
     fun requestStop() {
         stopFlag.set(true)
+        // BUG-26: also cut an upload that is in progress, from this (the stopping) thread.
+        activeTransport?.abort()
     }
+
+    /** BUG-26: the transport of the run in progress, so [requestStop] can cut its live connection. */
+    @Volatile
+    private var activeTransport: MailTransport? = null
 
     /** UX-02: exports the last [sync] held for a "same chat?" answer (0 before any sync). */
     @Volatile
@@ -406,7 +412,12 @@ class CoreApi(
                 appVersion = appVersion,
             )
         }
-        val stats = guarded { mgr.run(chatFilter) }
+        activeTransport = transport
+        val stats = try {
+            guarded { mgr.run(chatFilter) }
+        } finally {
+            activeTransport = null
+        }
         val stopped = shouldStop()
         // `stopped` travels with the event so the final headline says "Stopped", not "Done".
         publishProgress(linkedMapOf("type" to "done", "stopped" to stopped))

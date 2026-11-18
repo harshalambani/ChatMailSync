@@ -17,10 +17,27 @@ import java.io.IOException
 /** What [insertWithBackoff] waits with. Tests inject one that records instead of sleeping. */
 fun interface Sleeper {
     fun sleep(seconds: Double)
+
+    /**
+     * BUG-26: waits, but ends early once [shouldStop] says yes. The default just waits (tests record the
+     * requested seconds); [SystemSleeper] checks in short slices.
+     */
+    fun sleep(seconds: Double, shouldStop: () -> Boolean) = sleep(seconds)
 }
 
-/** The real sleeper. */
-val SystemSleeper = Sleeper { seconds -> Thread.sleep((seconds * 1000.0).toLong()) }
+/** The real sleeper. Its stop-aware wait wakes within a quarter of a second of Stop. */
+object SystemSleeper : Sleeper {
+    override fun sleep(seconds: Double) = Thread.sleep((seconds * 1000.0).toLong())
+
+    override fun sleep(seconds: Double, shouldStop: () -> Boolean) {
+        var remainingMs = (seconds * 1000.0).toLong()
+        while (remainingMs > 0 && !shouldStop()) {
+            val slice = minOf(remainingMs, 250L)
+            Thread.sleep(slice)
+            remainingMs -= slice
+        }
+    }
+}
 
 /** Outcome of pushing one email. Mirrors `PushResult`. */
 class PushResult(
@@ -127,7 +144,7 @@ fun prepareEmails(
     return result
 }
 
-private val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
+internal val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
 
 /**
  * Mirrors `_insert_with_backoff`: insert with exponential backoff on 429 / 5xx
@@ -143,22 +160,25 @@ fun insertWithBackoff(
     folder: String,
     threadId: String?,
     sleeper: Sleeper = SystemSleeper,
+    shouldStop: () -> Boolean = { false },
 ): ImapTransport.InsertResult {
     var delay = BACKOFF_BASE_DELAY
     var attempt = 1
     while (true) {
+        // BUG-26: Stop is honoured before every attempt and the waits below end early on it.
+        if (shouldStop()) throw StopRequestedException()
         try {
             val response = transport.messagesInsert(raw, folder, threadId)
-            sleeper.sleep(API_CALL_DELAY_SECONDS)
+            sleeper.sleep(API_CALL_DELAY_SECONDS, shouldStop)
             return response
         } catch (exc: MailTransportError) {
             val retry = exc.status in RETRYABLE_STATUSES && attempt < BACKOFF_MAX_ATTEMPTS
             if (!retry) throw exc
-            sleeper.sleep(delay)
+            sleeper.sleep(delay, shouldStop)
             delay *= 2
         } catch (exc: IOException) {
             if (attempt >= BACKOFF_MAX_ATTEMPTS) throw exc
-            sleeper.sleep(delay)
+            sleeper.sleep(delay, shouldStop)
             delay *= 2
         }
         attempt++
@@ -289,7 +309,12 @@ fun pushChunks(
             pendingUploads?.record(pendingChatId, newMid, subChunk.map { messageHashOf(it) })
 
             val response = try {
-                insertWithBackoff(transport, raw, labelId, currentThread, sleeper)
+                insertWithBackoff(transport, raw, labelId, currentThread, sleeper, shouldStop)
+            } catch (exc: StopRequestedException) {
+                // BUG-26: Stop cut this email off (or was seen between two attempts). Not a failure:
+                // the push ends here with what was delivered, and the run reports "stopped".
+                shouldStop()
+                break
             } catch (exc: Exception) {
                 if (!isTooLarge(exc)) throw exc
                 // A size refusal means nothing was stored: nothing is pending for this email.

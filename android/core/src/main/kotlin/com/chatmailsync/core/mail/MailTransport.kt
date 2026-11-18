@@ -51,6 +51,12 @@ interface MailTransport {
      */
     fun lookupStored(messageId: String, folder: String): Boolean = false
 
+    /**
+     * BUG-26: Stop was pressed. Cuts any upload in progress from this (the stopping) thread; the call
+     * that was blocked then ends with [StopRequestedException]. The default does nothing.
+     */
+    fun abort() {}
+
     /** Files [rawMessageBytes] under [folder]. A refusal throws [MailTransportError]. */
     fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String? = null): ImapTransport.InsertResult
 

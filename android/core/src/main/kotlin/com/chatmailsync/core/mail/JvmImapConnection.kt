@@ -56,6 +56,15 @@ class JvmImapConnection private constructor(
 
     private fun readLine(): String = reader.readLine()
 
+    /** BUG-26: closing the socket from another thread makes a blocked read or write fail at once. */
+    override fun abort() {
+        try {
+            socket.close()
+        } catch (_: IOException) {
+            // already closed
+        }
+    }
+
     /** Runs one tagged command, collecting untagged response lines, and returns the final status. */
     private fun runCommand(
         commandLine: String,

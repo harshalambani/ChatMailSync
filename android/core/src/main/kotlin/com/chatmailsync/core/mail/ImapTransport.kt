@@ -3,6 +3,9 @@ package com.chatmailsync.core.mail
 import java.io.IOException
 import java.net.SocketTimeoutException
 
+/** BUG-26: the most times one email bytes are uploaded in one run, however many retry loops there are. */
+const val MAX_UPLOADS_PER_EMAIL = 2
+
 /** Mirrors `_sanitise_label_name`: strips characters the label scheme doesn't allow. */
 fun sanitiseLabelName(name: String): String {
     var n = name.trim()
@@ -42,7 +45,15 @@ class ImapTransport(
      */
     private val diagLog: (String) -> Unit = {},
 ) : MailTransport {
+    @Volatile
     private var conn: ImapConnection? = null
+
+    /** BUG-26: set by [abort] from the stopping thread; read by the thread that is uploading. */
+    @Volatile
+    private var aborted = false
+
+    /** BUG-26: how many times each email's bytes went on the wire in this run (key: its Message-ID). */
+    private val uploads = HashMap<String, Int>()
     private var delimiter: String? = null
 
     /**
@@ -99,6 +110,12 @@ class ImapTransport(
             if (value.isNotEmpty() && value.all { it.isDigit() }) return value.toLongOrNull() ?: Long.MAX_VALUE
         }
         return null
+    }
+
+    /** BUG-26: Stop was pressed. Cuts the live connection so a blocked upload ends at once. */
+    override fun abort() {
+        aborted = true
+        conn?.abort()
     }
 
     fun close() {
@@ -256,21 +273,40 @@ class ImapTransport(
 
         val flags = if (setSeen) "(\\Seen)" else null
 
-        var sends = 0
+        val uploadKey = headerId ?: ("bytes:" + java.util.Arrays.hashCode(crlfBytes))
         while (true) {
+            if (aborted) throw StopRequestedException()
             if (headerId != null && headerId in unconfirmed) {
                 // Throws a retryable error if the lookup itself fails; the id then stays unconfirmed.
                 val found = findByMessageId(wireFolder, headerId)
                 unconfirmed.remove(headerId)
                 if (found != null) return InsertResult(id = found, threadId = resultThread)
             }
+            // BUG-26: at most MAX_UPLOADS_PER_EMAIL uploads of one email bytes per run, counted across this
+            // loop and insertWithBackoff. The lookup above is not an upload and is not counted.
+            if ((uploads[uploadKey] ?: 0) >= MAX_UPLOADS_PER_EMAIL) throw uploadCapError()
+            val connection = try {
+                getConn()
+            } catch (exc: Exception) {
+                if (aborted) throw StopRequestedException()
+                throw mapException(exc, "APPEND") // connecting sent no bytes; insertWithBackoff may retry it
+            }
+            val count = (uploads[uploadKey] ?: 0) + 1
+            uploads[uploadKey] = count
             val startedNs = System.nanoTime()
             val result = try {
                 // Never `call`: a blind reconnect-and-resend of an APPEND is exactly the F-02 bug.
-                getConn().append(wireFolder, flags, internalDate, crlfBytes)
+                connection.append(wireFolder, flags, internalDate, crlfBytes)
             } catch (exc: Exception) {
                 logAppend(crlfBytes.size, startedNs, exc.javaClass.simpleName, null, wireFolder, folder, headerId)
-                if (!outcomeUnknown(exc)) throw mapException(exc, "APPEND")
+                if (aborted) {
+                    // Stop cut the upload off: nobody knows whether the server kept it.
+                    conn = null
+                    delimiter = null
+                    if (headerId != null) unconfirmed.add(headerId)
+                    throw StopRequestedException()
+                }
+                if (!outcomeUnknown(exc)) throw capIfRetryable(mapException(exc, "APPEND"), count)
                 conn = null
                 delimiter = null
                 if (headerId == null) {
@@ -281,12 +317,12 @@ class ImapTransport(
                     )
                 }
                 unconfirmed.add(headerId)
-                if (++sends >= 2) throw mapException(exc, "APPEND")
+                if (count >= MAX_UPLOADS_PER_EMAIL) throw uploadCapError()
                 continue
             }
             logAppend(crlfBytes.size, startedNs, result.status, result.data, wireFolder, folder, headerId)
             if (headerId != null) unconfirmed.remove(headerId)
-            if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
+            if (result.status != "OK") throw capIfRetryable(mapResponse(result.status, result.data, "APPEND"), count)
             val uid = extractAppendUid(result.data)
             return InsertResult(id = uid ?: messageId, threadId = resultThread)
         }
@@ -314,6 +350,15 @@ class ImapTransport(
 
     private fun folderLeaf(wireFolder: String): String = wireFolder.substringAfterLast('/').substringAfterLast('.')
 
+    private fun uploadCapError() = MailTransportError(
+        "Uploading this email kept failing, so it was not sent again. Nothing more was sent for this chat.",
+        400,
+    )
+
+    /** BUG-26: a failure that backoff would retry becomes final once the email has used its uploads. */
+    private fun capIfRetryable(exc: MailTransportError, uploadsSoFar: Int): MailTransportError =
+        if (exc.status in RETRYABLE_STATUSES && uploadsSoFar >= MAX_UPLOADS_PER_EMAIL) uploadCapError() else exc
+
     /** An abort, I/O error or timeout: the server may or may not have stored the message. */
     private fun outcomeUnknown(exc: Throwable): Boolean =
         exc is ImapAbortError || exc is SocketTimeoutException || exc is IOException
@@ -336,9 +381,11 @@ class ImapTransport(
             diagLog(if (uid != null) "F-02 lookup: found" else "F-02 lookup: not found")
             return uid
         } catch (exc: MailTransportError) {
+            if (aborted) throw StopRequestedException()
             diagLog("F-02 lookup: failed (MailTransportError)")
             throw exc
         } catch (exc: Exception) {
+            if (aborted) throw StopRequestedException()
             diagLog("F-02 lookup: failed (" + exc.javaClass.simpleName + ")")
             val text = stripSecret(exc.message ?: exc.toString(), password)
             throw MailTransportError("lookup after an uncertain APPEND failed: $text", 503)
