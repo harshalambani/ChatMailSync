@@ -224,8 +224,10 @@ class AppendIdempotencyTest {
             insertWithBackoff(transport(s), raw(), folder, null, sleeper = { })
             fail("expected the retry loop to give up")
         } catch (exc: MailTransportError) {
-            assertEquals(503, exc.status)
+            // BUG-26: two uploads at most per email per run, then a final (non-retryable) error.
+            assertEquals(400, exc.status)
         }
+        assertEquals("BUG-26: never more than two uploads of one email", 2, s.appends())
         assertEquals(0, s.stored.size)
         // Now the server recovers: still exactly one copy in the end.
         s.appendScript.clear()

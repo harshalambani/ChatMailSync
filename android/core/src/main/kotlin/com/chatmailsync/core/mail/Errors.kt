@@ -15,6 +15,12 @@ class MessageTooLargeError(message: String) : MailTransportError(message, 413)
 /** Thrown by a fake/real IMAP connection to mirror `imaplib.IMAP4.error`. */
 class ImapCommandError(message: String) : Exception(message)
 
+/**
+ * BUG-26: the user's Stop ended the work in progress (the live connection was cut, or Stop was seen
+ * between two attempts). It is not a failure and not retryable: the run ends as stopped.
+ */
+class StopRequestedException : RuntimeException("stopped")
+
 /** Thrown by a fake/real IMAP connection to mirror `imaplib.IMAP4.abort`. */
 class ImapAbortError(message: String) : Exception(message)
 

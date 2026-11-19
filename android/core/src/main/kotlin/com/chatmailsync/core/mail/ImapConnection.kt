@@ -66,4 +66,10 @@ interface ImapConnection {
     fun uidSearchMessageId(messageId: String): ImapResult =
         ImapResult("NO", listOf("SEARCH not supported"))
     fun logout()
+
+    /**
+     * BUG-26: cuts the live connection from ANOTHER thread (the one handling Stop), so a command that
+     * is blocked on the wire ends at once with an I/O error. Must be safe to call at any time.
+     */
+    fun abort() {}
 }

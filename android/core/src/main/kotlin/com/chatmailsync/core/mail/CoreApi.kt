@@ -309,7 +309,25 @@ class CoreApi(
      */
     fun requestStop() {
         stopFlag.set(true)
+        // BUG-26 / D182: also cut an upload that is in progress. Closing a TLS socket writes to the
+        // network, and this is called on the UI thread (Android refuses network I/O there), so the
+        // cut runs on its own short-lived daemon thread. The flag above is already set, so the
+        // run ends as stopped either way.
+        val transport = activeTransport ?: return
+        val cutter = Thread({
+            try {
+                transport.abort()
+            } catch (_: Throwable) {
+                // a connection that is already gone is exactly what Stop wants
+            }
+        }, "cms-abort")
+        cutter.isDaemon = true
+        cutter.start()
     }
+
+    /** BUG-26: the transport of the run in progress, so [requestStop] can cut its live connection. */
+    @Volatile
+    private var activeTransport: MailTransport? = null
 
     /** UX-02: exports the last [sync] held for a "same chat?" answer (0 before any sync). */
     @Volatile
@@ -406,7 +424,12 @@ class CoreApi(
                 appVersion = appVersion,
             )
         }
-        val stats = guarded { mgr.run(chatFilter) }
+        activeTransport = transport
+        val stats = try {
+            guarded { mgr.run(chatFilter) }
+        } finally {
+            activeTransport = null
+        }
         val stopped = shouldStop()
         // `stopped` travels with the event so the final headline says "Stopped", not "Done".
         publishProgress(linkedMapOf("type" to "done", "stopped" to stopped))
