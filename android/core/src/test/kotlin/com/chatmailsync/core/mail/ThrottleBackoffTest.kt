@@ -150,7 +150,9 @@ class ThrottleBackoffTest {
         val t = FakeMailTransport()
         t.insertOutcomes.addAll(List(10) { throttle() })
         try {
-            insertWithBackoff(t, raw, "WhatsApp/x", null, clock, shouldStop = { true })
+            // Stop arrives once the first (refused) attempt is made; BUG-26 already refuses to start an
+            // attempt when Stop was set before it, which is its own exception.
+            insertWithBackoff(t, raw, "WhatsApp/x", null, clock, shouldStop = { t.insertAttempts >= 1 })
             fail("should have been stopped")
         } catch (_: ThrottleWaitStopped) {
         }
