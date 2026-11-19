@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 // behaviour, and the two platforms must not say different things about it.
 
 internal const val PRIVACY_LAST_UPDATED =
-    "Last updated: October 21, 2026 - revised for version 2.9.0."
+    "Last updated: November 18, 2026 - revised for version 3.0.6."
 
 internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
     "Summary" to listOf(
@@ -59,7 +59,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "you can revoke at any time without changing your real password.",
         "\u2022 That app password is stored only on your own device and is sent only to the " +
             "IMAP server you named. It is encrypted at rest with the Android Keystore, inside the " +
-            "app's own private storage. Android's own backup can carry the encrypted copy to a " +
+            "app's own private storage. A phone-to-phone transfer can carry the encrypted copy to a " +
             "new phone (see the section on backups below), but the key that opens it never " +
             "leaves the phone it was made on, so the copy cannot be read anywhere else and you " +
             "enter the password again on the new phone.",
@@ -123,14 +123,13 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "not deleted by that.",
     ),
     "Backups, and moving to a new device" to listOf(
-        "Android's own backup. The app allows Android to back up two things: the database " +
-            "described above and the app's preferences. Android sends them to your Google " +
-            "account's device backup, if you have that turned on, and carries them across in a " +
-            "phone-to-phone transfer. The exports, media and the Keystore key are not " +
+        "Phone-to-phone transfer. The app allows Android to carry two things to a new phone: the database " +
+            "described above and the app's preferences. Android carries them across in a " +
+            "phone-to-phone transfer. The app does not allow Android's cloud backup to upload " +
+            "anything to your Google account. The exports, media and the Keystore key are not " +
             "included. The preferences include the encrypted app password, but the key that " +
             "opens it never leaves the phone it was made on, so on a new phone the copy cannot " +
-            "be read and the app asks for the password once. This backup is controlled in your " +
-            "phone's own settings, where you can switch it off.",
+            "be read and the app asks for the password once.",
         "The backup file you write yourself. A new phone with no copy of that database would " +
             "re-send your entire history, so the app can also write a backup file for you to " +
             "carry across. The app writes this file only when you ask it to, and only to the place you " +
@@ -166,7 +165,7 @@ internal val PRIVACY_POLICY: List<Pair<String, List<String>>> = listOf(
             "message hashes), used purely to avoid re-sending the same message, and it keeps " +
             "your export file only until its sync is finished. The database contains neither " +
             "message text nor attachments. It leaves your device only in a backup you " +
-            "export yourself, or in Android's own backup and device transfer described above.",
+            "export yourself, or in a phone-to-phone transfer described above.",
         "\u2022 You control access and can revoke it instantly. An app password is issued by " +
             "your provider for one application and can be revoked there at any time, without " +
             "changing your real password (see the next section).",

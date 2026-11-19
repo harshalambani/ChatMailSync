@@ -44,12 +44,12 @@ class RestorableSettingsTest {
      *  set of prefs a restore JSON can change, read off the source rather
      *  than assumed. */
     private fun applySettingsKeys(source: String): Set<String> {
-        val start = source.indexOf("private fun applySettings")
+        val start = source.indexOf("fun applySettings")
         assertTrue("applySettings not found in Migration.kt", start >= 0)
         val end = source.indexOf("val RESTORABLE_SETTINGS_KEYS", start)
         assertTrue("could not find the end of applySettings in Migration.kt", end > start)
         val body = source.substring(start, end)
-        return Regex("""obj\.has\("([a-z_]+)"\)""").findAll(body).map { it.groupValues[1] }.toSet()
+        return Regex("""valid\["([a-z_]+)"\]""").findAll(body).map { it.groupValues[1] }.toSet()
     }
 
     /** Every key branch inside readRestorableSettings' `when` -- the actual

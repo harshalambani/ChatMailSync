@@ -31,18 +31,28 @@
   takes after a factory-reset-protection event. The user enters the password
   once, and it is the only thing they have to re-enter.
 
-  What a restore therefore exposes to whoever holds the backup: chat display
+  Cloud backup is switched off on purpose (F-04): nothing is uploaded to the
+  user's Google account. The allow-list below applies to device-to-device
+  transfer only.
+
+  What a transfer therefore exposes to whoever holds the backup: chat display
   names, one-way message hashes, run history, the mail address, the IMAP host
-  and the watched-folder path. Not message text, and not the password. On
-  modern devices Auto Backup is end-to-end encrypted with a key derived from
-  the lock-screen secret, so Google cannot read it either.
--->
+  and the watched-folder path. Not message text, and not the password. -->
 <data-extraction-rules>
+    <!-- Cloud backup carries NOTHING. An empty <cloud-backup> would mean "back up
+         everything", and exclude-only rules also mean "everything except these",
+         so every domain is excluded outright. Only a phone-to-phone transfer
+         (below) carries the dedup record. -->
     <cloud-backup>
-        <include domain="file" path="chatmailsync/data/sync_state.db" />
-        <include domain="sharedpref" path="chatmailsync_prefs.xml" />
-        <exclude domain="file" path="chatmailsync/data/sync_state.db-wal" />
-        <exclude domain="file" path="chatmailsync/data/sync_state.db-shm" />
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
     </cloud-backup>
     <!-- Smart Switch and the other cable/Wi-Fi device-to-device transfers.
          Same set: nothing here is worth carrying that is not worth backing

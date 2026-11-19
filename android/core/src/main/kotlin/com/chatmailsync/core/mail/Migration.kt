@@ -572,6 +572,18 @@ internal data class MergeCounts(
     val senders: Int = 0,
 )
 
+/**
+ * F-10: a chat's stored folder id from a bundle is kept only if it sits under
+ * the app's own parent folder and has no control character; otherwise null, so
+ * the folder is re-resolved by name on the next push.
+ */
+internal fun importableFolderId(value: Any?): String? {
+    val id = value as? String ?: return null
+    if (!id.startsWith("$LABEL_PARENT/")) return null
+    if (id.any { it.code < 0x20 || it.code == 0x7F }) return null
+    return id
+}
+
 private fun placeholders(n: Int) = List(n) { "?" }.joinToString(", ")
 
 private fun StateDb.changes(): Int = (query("SELECT changes() AS n").first()["n"] as Number).toInt()
@@ -602,13 +614,21 @@ internal fun mergeDb(target: File, incoming: File, openDb: OpenDb): MergeCounts 
     }
 }
 
+/** F-10: the only `app_state` keys a backup may bring in (the three the app writes, plus the frozen Python key). */
+internal val IMPORTABLE_APP_STATE_KEYS: Set<String> = setOf(
+    StateRepository.SELF_SENDER_OVERRIDE,
+    StateRepository.SELF_SENDER_LEARNED,
+    StateRepository.SELF_SENDER_LEARNED_PENDING,
+    "owner_override",
+)
+
 private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
     val chatCols = CHAT_COLUMNS.joinToString(", ")
     var chatsAdded = 0
     for (row in src.query("SELECT $chatCols FROM chats")) {
         dst.exec(
             "INSERT OR IGNORE INTO chats ($chatCols) VALUES (${placeholders(CHAT_COLUMNS.size)})",
-            CHAT_COLUMNS.map { row[it] },
+            CHAT_COLUMNS.map { if (it == "gmail_label_id") importableFolderId(row[it]) else row[it] },
         )
         chatsAdded += dst.changes()
     }
@@ -679,6 +699,9 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         emptyList()
     }
     for (row in stateRows) {
+        // F-10: a backup is user-editable input, so only the keys the app itself writes come in.
+        // "owner_override" is the key the frozen Python fixtures carry; anything else is ignored.
+        if (row["key"] !in IMPORTABLE_APP_STATE_KEYS) continue
         dst.exec("INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)", listOf(row["key"], row["value"]))
     }
 

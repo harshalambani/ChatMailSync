@@ -1085,6 +1085,10 @@ fun ChatMailApp(
         }
     }
 
+    // D166: set after a restore whose backup would switch "Delete after import" on; nothing is
+    // switched until the user taps Switch on. The phone's own policy stands meanwhile.
+    var confirmDeleteAfterImport by remember { mutableStateOf(false) }
+
     val restoreBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -1112,6 +1116,7 @@ fun ChatMailApp(
                     migrationSuccess = outcome.success
                     migrationRestoredLines = outcome.restoredLines
                     migrationNotRestoredLines = outcome.notRestoredLines
+                    confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
                     migrationBusy = false
                     refreshInbox()
                     // See reloadRestoredSettingsState below: this is what
@@ -1247,6 +1252,31 @@ fun ChatMailApp(
         AppPrefs.setSyncedFilePolicy(context, policy)
     }
 
+    if (confirmDeleteAfterImport) {
+        AlertDialog(
+            // Back and a tap outside both mean "Keep as is": the safe answer.
+            onDismissRequest = { confirmDeleteAfterImport = false },
+            title = { Text("Delete export files after import?") },
+            text = {
+                Text(
+                    "The backup you restored had \"Delete after import\" switched on. With it on, each " +
+                        "export file is deleted from this phone once its chat has been mailed.\n\n" +
+                        "This phone is set to \"${SYNCED_FILE_POLICY_LABELS[AppPrefs.getSyncedFilePolicy(context)] ?: AppPrefs.getSyncedFilePolicy(context)}\" " +
+                        "and stays that way unless you switch it on here. You can change it any time in Settings > Advanced.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    setSyncedFilePolicy("delete")
+                    confirmDeleteAfterImport = false
+                }) { Text("Switch on") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteAfterImport = false }) { Text("Keep as is") }
+            },
+        )
+    }
+
     fun clearWatchedFolder() {
         setAutoWatch(false)
         AppPrefs.setWatchedFolderUri(context, null)
@@ -1353,6 +1383,9 @@ fun ChatMailApp(
         // it happens to also be what keeps AppPrefs and the live value in
         // sync for every other caller of onThemeModeChange.
         onThemeModeChange(restored.themeMode)
+        // F-01: a restore that points the phone at a different account clears the saved password
+        // (applySettings), so the "password saved" state must be re-read here too.
+        imapPasswordSaved = AppPrefs.hasImapPassword(context)
         // applySettings clears the saved connection verdict (the password
         // did not travel, so a stale "Connected" would be a green light on
         // a mailbox this phone cannot reach yet) -- re-derive the pill

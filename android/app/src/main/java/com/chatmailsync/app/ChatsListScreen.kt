@@ -101,7 +101,21 @@ fun loadChatSummaries(): List<ChatSummary> {
 
 /** RFC 4180-style: wrap in quotes, double any internal quotes — a display
  * name containing `"` would otherwise silently corrupt the CSV. */
-private fun csvField(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+internal fun csvField(value: String): String {
+    // A spreadsheet runs a cell that starts with = + - @ TAB or CR as a formula
+    // (F-09); a leading ' makes it plain text.
+    val safe = if (value.isNotEmpty() && value[0] in CSV_FORMULA_TRIGGERS) "'$value" else value
+    return "\"${safe.replace("\"", "\"\"")}\""
+}
+
+private val CSV_FORMULA_TRIGGERS = charArrayOf('=', '+', '-', '@', '\t', '\r')
+
+/** Removes regular files left in [dir] by earlier exports, except [keep]. */
+internal fun removeStaleExports(dir: File, keep: File?) {
+    dir.listFiles()?.forEach { f ->
+        if (f.isFile && f != keep) runCatching { f.delete() }
+    }
+}
 
 /** The Chats tab's footer stats label — "N chats · M messages synced · last
  * sync ...". */
@@ -235,6 +249,7 @@ fun ChatsListScreen(
     fun exportCsv() {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
         val file = File(dir, "chat_mail_sync_chats.csv")
+        removeStaleExports(dir, keep = null)
         file.writeText(buildString {
             appendLine("chat_id,display_name,status,messages_synced,last_run_at,source_file")
             chats.forEach { c ->

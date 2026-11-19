@@ -207,11 +207,15 @@ fun pushChunks(
     onAccepted: OnAccepted? = null,
     /** CUT-02: stamped into the traceability index of every email; "unknown" only when none is given. */
     appVersion: String = UNKNOWN_VERSION,
+    /** D185: remembers messages whose upload outcome was never learned, across runs. */
+    pendingUploads: PendingUploads? = null,
+    pendingChatId: String = "",
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
     var currentThread = threadId
     var limitBytes = transport.maxMessageBytes
+    val lookedUp = mutableMapOf<String, Boolean>()
 
     val extractor = if (sourcePath != null) MediaExtractor(sourcePath) else null
     try {
@@ -230,6 +234,33 @@ fun pushChunks(
             if (!dryRun && shouldStop()) break
             val subChunk = worklist[i].messages
             val rendered = worklist[i].rendered
+            // D185: an earlier run may have uploaded some of these messages without learning the outcome,
+            // packed into different emails. Ask the server about each old id (once), then send only the rest.
+            if (pendingUploads != null && !dryRun) {
+                val hashes = subChunk.map { messageHashOf(it) }
+                val olds = pendingUploads.idsFor(pendingChatId, hashes)
+                if (olds.isNotEmpty()) {
+                    val storedHashes = mutableSetOf<String>()
+                    for (old in olds) {
+                        val found = lookedUp.getOrPut(old) { transport.lookupStored(old, labelId) }
+                        if (found) storedHashes += pendingUploads.hashesFor(pendingChatId, old) else pendingUploads.clear(old)
+                    }
+                    if (storedHashes.isNotEmpty()) {
+                        val stored = subChunk.filter { messageHashOf(it) in storedHashes }
+                        val rest = subChunk.filter { messageHashOf(it) !in storedHashes }
+                        msgsDone += stored.size
+                        // Recorded as delivered without any send; then nothing is pending for them.
+                        onChunk?.invoke(i + 1, totalEmails, msgsDone, totalMsgs, stored)
+                        pendingUploads.clearHashes(pendingChatId, stored.map { messageHashOf(it) })
+                        worklist.removeAt(i)
+                        if (rest.isNotEmpty()) {
+                            worklist.addAll(i, prepareEmails(listOf(rest), displayName, extractor, limitBytes, selfSender))
+                        }
+                        totalEmails = worklist.size
+                        continue
+                    }
+                }
+            }
             val newMid = MimeBuilder.newMessageId()
             val inReplyTo = currentAnchor
 
@@ -255,10 +286,14 @@ fun pushChunks(
                 appVersion = appVersion,
             )
 
+            pendingUploads?.record(pendingChatId, newMid, subChunk.map { messageHashOf(it) })
+
             val response = try {
                 insertWithBackoff(transport, raw, labelId, currentThread, sleeper)
             } catch (exc: Exception) {
                 if (!isTooLarge(exc)) throw exc
+                // A size refusal means nothing was stored: nothing is pending for this email.
+                pendingUploads?.clear(newMid)
 
                 // Measured as our own projection (wireBytes), the same unit
                 // the budget uses; never the length of the encoded message.
@@ -305,6 +340,7 @@ fun pushChunks(
                 continue
             }
 
+            pendingUploads?.clear(newMid)
             msgsDone += subChunk.size
             val accepted = PushResult(newMid, response.id, response.threadId, rendered.omissions)
             results.add(accepted)
@@ -320,6 +356,23 @@ fun pushChunks(
     }
     return results
 }
+
+/**
+ * D185: where an upload whose outcome is not yet known is remembered across runs, one row per message.
+ * Message-IDs and content hashes only.
+ */
+interface PendingUploads {
+    /** The distinct old Message-IDs under which any of [hashes] was uploaded without a confirmed outcome. */
+    fun idsFor(chatId: String, hashes: Collection<String>): List<String>
+    /** Every message hash that was in the email uploaded as [messageId]. */
+    fun hashesFor(chatId: String, messageId: String): Set<String>
+    fun record(chatId: String, messageId: String, hashes: Collection<String>)
+    fun clear(messageId: String)
+    fun clearHashes(chatId: String, hashes: Collection<String>)
+}
+
+internal fun messageHashOf(m: ParsedMessage): String =
+    computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body)
 
 /** The three values [pushChat] hands back for the caller to persist. */
 data class PushChatResult(
@@ -356,6 +409,9 @@ fun pushChat(
     onFolderRenamed: ((Boolean) -> Unit)? = null,
     /** BUG-05: false when the stored folder cannot be trusted to be this chat's (shared legacy record). */
     allowFolderRename: Boolean = true,
+    /** D177: see [pushChunks]. */
+    pendingUploads: PendingUploads? = null,
+    pendingChatId: String = "",
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -382,6 +438,8 @@ fun pushChat(
         selfSender = selfSender,
         sleeper = sleeper,
         appVersion = appVersion,
+        pendingUploads = pendingUploads,
+        pendingChatId = pendingChatId,
         shouldStop = {
             val stop = shouldStop()
             if (stop) stopped = true

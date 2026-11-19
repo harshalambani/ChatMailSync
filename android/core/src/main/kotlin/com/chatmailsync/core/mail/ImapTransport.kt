@@ -35,9 +35,22 @@ class ImapTransport(
     private val connectionFactory: (() -> ImapConnection)? = null,
     private val setSeen: Boolean = true,
     private val timeoutSeconds: Long = MAIL_SOCKET_TIMEOUT_SECONDS,
+    /**
+     * Receives one outcome-only line each time the F-02 Message-ID lookup runs: "F-02 lookup: found",
+     * "F-02 lookup: not found" or "F-02 lookup: failed (<exception class>)". Never the id, the folder,
+     * the address or any server text. No-op by default (core is plain JVM; the app wires Android Log).
+     */
+    private val diagLog: (String) -> Unit = {},
 ) : MailTransport {
     private var conn: ImapConnection? = null
     private var delimiter: String? = null
+
+    /**
+     * F-02: Message-IDs whose APPEND ended in an abort / I/O error / timeout, so nobody knows whether
+     * the server stored them. Such an id is looked up in the target folder before it is ever sent
+     * again -- including on a later [messagesInsert] call, after a failed lookup.
+     */
+    private val unconfirmed = HashSet<String>()
 
     private fun defaultConnectionFactory(): ImapConnection =
         JvmImapConnection.connect(host, port, email, password, timeoutSeconds)
@@ -218,25 +231,118 @@ class ImapTransport(
     data class InsertResult(val id: String, val threadId: String)
 
     /** Mirrors `messages_insert`. [folder] is the canonical '/'-delimited label/folder name. */
+    override fun markPossiblySent(messageId: String) {
+        unconfirmed.add(messageId)
+    }
+
+    override fun lookupStored(messageId: String, folder: String): Boolean {
+        if (!isSafeMessageId(messageId)) return false
+        return findByMessageId(mailboxToWire(folder), messageId) != null
+    }
+
     override fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String?): InsertResult {
         val crlfBytes = normalizeCrlf(rawMessageBytes)
         val wireFolder = mailboxToWire(folder)
 
         val headers = MessageHeaders.parse(crlfBytes)
         val internalDate = internaldateFromHeaders(headers)
-        val messageId = headers["Message-ID"]?.takeIf { it.isNotEmpty() } ?: MimeBuilder.newMessageId()
+        val headerId = headers["Message-ID"]?.takeIf { it.isNotEmpty() }
+        val messageId = headerId ?: MimeBuilder.newMessageId()
+        // F-02: the id is sent in a SEARCH after an unknown outcome, so it must be safe to send.
+        if (headerId != null && !isSafeMessageId(headerId)) {
+            throw MailTransportError("Refused: the message's Message-ID is not safe to send, so nothing was sent.", 400)
+        }
+        val resultThread = threadId?.takeIf { it.isNotEmpty() } ?: messageId
 
         val flags = if (setSeen) "(\\Seen)" else null
 
-        val result = try {
-            call { it.append(wireFolder, flags, internalDate, crlfBytes) }
-        } catch (exc: Exception) {
-            throw mapException(exc, "APPEND")
+        var sends = 0
+        while (true) {
+            if (headerId != null && headerId in unconfirmed) {
+                // Throws a retryable error if the lookup itself fails; the id then stays unconfirmed.
+                val found = findByMessageId(wireFolder, headerId)
+                unconfirmed.remove(headerId)
+                if (found != null) return InsertResult(id = found, threadId = resultThread)
+            }
+            val startedNs = System.nanoTime()
+            val result = try {
+                // Never `call`: a blind reconnect-and-resend of an APPEND is exactly the F-02 bug.
+                getConn().append(wireFolder, flags, internalDate, crlfBytes)
+            } catch (exc: Exception) {
+                logAppend(crlfBytes.size, startedNs, exc.javaClass.simpleName, null, wireFolder, folder, headerId)
+                if (!outcomeUnknown(exc)) throw mapException(exc, "APPEND")
+                conn = null
+                delimiter = null
+                if (headerId == null) {
+                    throw MailTransportError(
+                        "APPEND: the connection failed and the message has no Message-ID to check for, " +
+                            "so it was not sent again.",
+                        400,
+                    )
+                }
+                unconfirmed.add(headerId)
+                if (++sends >= 2) throw mapException(exc, "APPEND")
+                continue
+            }
+            logAppend(crlfBytes.size, startedNs, result.status, result.data, wireFolder, folder, headerId)
+            if (headerId != null) unconfirmed.remove(headerId)
+            if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
+            val uid = extractAppendUid(result.data)
+            return InsertResult(id = uid ?: messageId, threadId = resultThread)
         }
-        if (result.status != "OK") throw mapResponse(result.status, result.data, "APPEND")
+    }
 
-        val uid = extractAppendUid(result.data)
-        return InsertResult(id = uid ?: messageId, threadId = threadId?.takeIf { it.isNotEmpty() } ?: messageId)
+    /**
+     * D180 diagnostics: one line per APPEND with the size, the seconds taken, the outcome (OK / NO / BAD /
+     * an exception class) and the server's tagged reply text, scrubbed. The text has the password, the
+     * address, the user, the folder and the Message-ID removed, anything address-shaped removed, and is
+     * cut to about 200 characters. Never the message bytes.
+     */
+    private fun logAppend(
+        bytes: Int, startedNs: Long, outcome: String, data: List<String?>?, wireFolder: String, folder: String, messageId: String?,
+    ) {
+        val seconds = (System.nanoTime() - startedNs) / 100_000_000L / 10.0
+        var text = data?.filterNotNull()?.joinToString(" ").orEmpty()
+        text = stripSecret(text, password)
+        for (secret in listOf(email, email.substringBefore('@'), folder, wireFolder, folderLeaf(folder), folderLeaf(wireFolder), messageId.orEmpty())) {
+            if (secret.length >= 3) text = text.replace(secret, "***", ignoreCase = true)
+        }
+        text = text.replace(Regex("\\S+@\\S+"), "***").replace(Regex("[\\u0000-\\u001f]"), " ").trim()
+        if (text.length > 200) text = text.substring(0, 200)
+        diagLog("APPEND: " + bytes + " bytes, " + seconds + " s, " + outcome + (if (text.isEmpty()) "" else ": $text"))
+    }
+
+    private fun folderLeaf(wireFolder: String): String = wireFolder.substringAfterLast('/').substringAfterLast('.')
+
+    /** An abort, I/O error or timeout: the server may or may not have stored the message. */
+    private fun outcomeUnknown(exc: Throwable): Boolean =
+        exc is ImapAbortError || exc is SocketTimeoutException || exc is IOException
+
+    /**
+     * F-02: asks the server whether [messageId] is already in [wireFolder] (EXAMINE + UID SEARCH, both
+     * read-only). Returns its UID, or null when it is definitely not there. Any failure of the lookup
+     * itself is a retryable 503 -- "cannot tell" is never reported as "not found".
+     */
+    private fun findByMessageId(wireFolder: String, messageId: String): String? {
+        try {
+            val examined = call { it.examine(wireFolder) }
+            if (examined.status != "OK") throw MailTransportError("lookup: EXAMINE refused", 503)
+            val found = call { it.uidSearchMessageId(messageId) }
+            if (found.status != "OK") throw MailTransportError("lookup: SEARCH refused", 503)
+            val uids = found.data.filterNotNull()
+                .flatMap { it.trim().split(' ') }
+                .filter { it.isNotEmpty() && it.all { c -> c in '0'..'9' } }
+            val uid = uids.lastOrNull()
+            diagLog(if (uid != null) "F-02 lookup: found" else "F-02 lookup: not found")
+            return uid
+        } catch (exc: MailTransportError) {
+            diagLog("F-02 lookup: failed (MailTransportError)")
+            throw exc
+        } catch (exc: Exception) {
+            diagLog("F-02 lookup: failed (" + exc.javaClass.simpleName + ")")
+            val text = stripSecret(exc.message ?: exc.toString(), password)
+            throw MailTransportError("lookup after an uncertain APPEND failed: $text", 503)
+        }
     }
 }
 
@@ -261,3 +367,7 @@ fun normalizeCrlf(data: ByteArray): ByteArray {
     }
     return out.toByteArray()
 }
+
+/** F-02: a Message-ID that may be put inside a quoted SEARCH argument: printable ASCII, no quote, no backslash. */
+internal fun isSafeMessageId(id: String): Boolean =
+    id.isNotEmpty() && id.all { it.code in 0x21..0x7E && it != '"' && it != '\\' }

@@ -1,0 +1,137 @@
+package com.chatmailsync.core.mail
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
+
+/** F-10: a bundle's folder ids and app_state keys are not trusted blindly. */
+class MigrationTrustTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    private val openDb: OpenDb = { f -> SqliteJdbcStateDb(f.absolutePath) }
+
+    private fun freshDb(name: String, dir: File): File {
+        val f = File(dir, name)
+        StateRepository { openDb(f) }.initDb()
+        return f
+    }
+
+    private fun exec(db: File, sql: String, args: List<Any?> = emptyList()) =
+        openDb(db).use { it.exec(sql, args) }
+
+    private fun merged(seed: (File) -> Unit): File {
+        val dir = tmp.newFolder()
+        val incoming = freshDb("incoming.db", dir)
+        val target = freshDb("target.db", dir)
+        seed(incoming)
+        mergeDb(target, incoming, openDb)
+        return target
+    }
+
+    private fun chat(db: File, id: String, label: String?) = exec(
+        db,
+        "INSERT INTO chats (chat_id, display_name, gmail_label_id, source_filename, created_at, updated_at) " +
+            "VALUES (?, ?, ?, 'a.txt', '2026-10-01T09:00:00', '2026-10-01T09:00:00')",
+        listOf(id, id, label),
+    )
+
+    private fun labelOf(db: File, id: String): String? =
+        openDb(db).use { it.query("SELECT gmail_label_id AS l FROM chats WHERE chat_id = ?", listOf(id)).single()["l"] as String? }
+
+    @Test
+    fun `a folder id under the app's parent folder is kept`() {
+        val target = merged { chat(it, "c1", "WhatsApp/Meera Iyer") }
+        assertEquals("WhatsApp/Meera Iyer", labelOf(target, "c1"))
+    }
+
+    @Test
+    fun `a folder id outside the parent folder is imported as null`() {
+        val target = merged {
+            chat(it, "c1", "INBOX")
+            chat(it, "c2", "Other/Meera")
+            chat(it, "c3", "WhatsApp")
+            chat(it, "c4", "whatsapp/lower")
+            chat(it, "c5", "")
+        }
+        for (id in listOf("c1", "c2", "c3", "c4", "c5")) assertNull(id, labelOf(target, id))
+    }
+
+    @Test
+    fun `a folder id with a control character is imported as null`() {
+        val target = merged {
+            chat(it, "c1", "WhatsApp/a\r\nb")
+            chat(it, "c2", "WhatsApp/a\u0000b")
+            chat(it, "c3", "WhatsApp/a\u007Fb")
+        }
+        for (id in listOf("c1", "c2", "c3")) assertNull(id, labelOf(target, id))
+    }
+
+    @Test
+    fun `a null folder id stays null and the chat row itself is still imported`() {
+        val target = merged { chat(it, "c1", null) }
+        assertNull(labelOf(target, "c1"))
+        val n = openDb(target).use { it.query("SELECT COUNT(*) AS n FROM chats").single()["n"] as Number }
+        assertEquals(1, n.toInt())
+    }
+
+    private fun state(db: File, key: String, value: String) =
+        exec(db, "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)", listOf(key, value))
+
+    private fun stateOf(db: File): Map<String, String> =
+        openDb(db).use { d ->
+            d.query("SELECT key, value FROM app_state").associate { it["key"] as String to it["value"] as String }
+        }
+
+    @Test
+    fun `the three keys the app writes and owner_override are imported`() {
+        val keys = listOf("self_sender_override", "self_sender_learned", "self_sender_learned_pending", "owner_override")
+        val target = merged { db -> keys.forEach { state(db, it, "Meera Iyer") } }
+        assertEquals(keys.toSet(), stateOf(target).keys)
+    }
+
+    @Test
+    fun `an unknown app_state key is dropped`() {
+        val target = merged { db ->
+            state(db, "injected_setting", "x")
+            state(db, "self_sender_learned", "Meera Iyer")
+        }
+        assertEquals(mapOf("self_sender_learned" to "Meera Iyer"), stateOf(target))
+    }
+
+    @Test
+    fun `near-miss key names are dropped`() {
+        val target = merged { db ->
+            for (k in listOf(
+                "self_sender_overrid", "self_sender_override2", "Self_Sender_Override", " self_sender_override",
+                "self_sender_override ", "self_sender", "owner_override_", "OWNER_OVERRIDE", "self_sender_learned_pending\u0000",
+            )) state(db, k, "x")
+        }
+        assertEquals(emptyMap<String, String>(), stateOf(target))
+    }
+
+    @Test
+    fun `this device's own value for an allowed key still stands`() {
+        val dir = tmp.newFolder()
+        val incoming = freshDb("incoming.db", dir)
+        val target = freshDb("target.db", dir)
+        state(incoming, "self_sender_override", "Rohan Mehta")
+        state(target, "self_sender_override", "Meera Iyer")
+        mergeDb(target, incoming, openDb)
+        assertEquals("Meera Iyer", stateOf(target)["self_sender_override"])
+    }
+
+    @Test
+    fun `a bundle with a bad key and a bad folder id imports the rest and drops both`() {
+        val target = merged { db ->
+            chat(db, "c1", "INBOX")
+            state(db, "injected_setting", "x")
+            state(db, "owner_override", "Meera Iyer")
+        }
+        assertNull(labelOf(target, "c1"))
+        assertEquals(mapOf("owner_override" to "Meera Iyer"), stateOf(target))
+    }
+}
