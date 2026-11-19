@@ -19,9 +19,22 @@ def test_pillow_is_declared_for_render_icons():
     assert "pillow" in _declared((ROOT / "requirements-dev.txt").read_text(encoding="utf-8"))
 
 
-def test_pillow_has_a_pinned_minimum():
+def test_pillow_has_a_pinned_version():
     text = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
-    assert re.search(r"(?im)^pillow>=\d+\.\d+", text)
+    assert re.search(r"(?im)^pillow==\d+\.\d+", text)
+
+
+def test_every_dev_requirement_is_pinned_exactly():
+    # SEC-11: an unpinned dev tool is a supply-chain door; Dependabot bumps the pins.
+    for line in (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            assert re.match(r"^[A-Za-z0-9_.-]+==\d+(\.\d+)*$", line), line
+
+
+def test_the_pin_check_can_fail():
+    # Negative: a range is not a pin.
+    assert not re.match(r"^[A-Za-z0-9_.-]+==\d+(\.\d+)*$", "pytest>=8.0.0")
 
 
 def test_dev_requirements_header_is_not_stale():
