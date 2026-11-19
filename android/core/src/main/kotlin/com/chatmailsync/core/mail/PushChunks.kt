@@ -205,6 +205,9 @@ fun pushChunks(
     onAccepted: OnAccepted? = null,
     /** CUT-02: stamped into the traceability index of every email; "unknown" only when none is given. */
     appVersion: String = UNKNOWN_VERSION,
+    /** D177: remembers emails whose upload outcome was never learned, across runs. */
+    pendingUploads: PendingUploads? = null,
+    pendingChatId: String = "",
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
@@ -228,7 +231,11 @@ fun pushChunks(
             if (!dryRun && shouldStop()) break
             val subChunk = worklist[i].messages
             val rendered = worklist[i].rendered
-            val newMid = MimeBuilder.newMessageId()
+            // D177: the same messages get the same Message-ID as an earlier run that never learned
+            // whether the server kept them, so the transport can look it up instead of re-sending.
+            val contentKey = if (pendingUploads != null && !dryRun) pendingContentKey(subChunk) else null
+            val reusedMid = if (contentKey != null) pendingUploads!!.idFor(pendingChatId, contentKey) else null
+            val newMid = reusedMid ?: MimeBuilder.newMessageId()
             val inReplyTo = currentAnchor
 
             if (dryRun) {
@@ -253,10 +260,15 @@ fun pushChunks(
                 appVersion = appVersion,
             )
 
+            if (reusedMid != null) transport.markPossiblySent(reusedMid)
+            if (contentKey != null) pendingUploads!!.record(pendingChatId, contentKey, newMid)
+
             val response = try {
                 insertWithBackoff(transport, raw, labelId, currentThread, sleeper)
             } catch (exc: Exception) {
                 if (!isTooLarge(exc)) throw exc
+                // A size refusal means nothing was stored: nothing is pending for this email.
+                pendingUploads?.clear(newMid)
 
                 // Measured as our own projection (wireBytes), the same unit
                 // the budget uses; never the length of the encoded message.
@@ -302,6 +314,7 @@ fun pushChunks(
                 continue
             }
 
+            pendingUploads?.clear(newMid)
             msgsDone += subChunk.size
             val accepted = PushResult(newMid, response.id, response.threadId, rendered.omissions)
             results.add(accepted)
@@ -316,6 +329,26 @@ fun pushChunks(
         extractor?.close()
     }
     return results
+}
+
+/**
+ * D177: where an upload whose outcome is not yet known is remembered across runs. Message-IDs and
+ * content hashes only.
+ */
+interface PendingUploads {
+    fun idFor(chatId: String, contentKey: String): String?
+    fun record(chatId: String, contentKey: String, messageId: String)
+    fun clear(messageId: String)
+}
+
+/** D177: a stable key for "these messages in one email" (their own hashes, so no text is kept). */
+internal fun pendingContentKey(messages: List<ParsedMessage>): String {
+    val md = java.security.MessageDigest.getInstance("SHA-256")
+    for (m in messages) {
+        md.update(computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body).toByteArray(Charsets.UTF_8))
+        md.update(0)
+    }
+    return md.digest().joinToString("") { "%02x".format(it) }
 }
 
 /** The three values [pushChat] hands back for the caller to persist. */
@@ -353,6 +386,9 @@ fun pushChat(
     onFolderRenamed: ((Boolean) -> Unit)? = null,
     /** BUG-05: false when the stored folder cannot be trusted to be this chat's (shared legacy record). */
     allowFolderRename: Boolean = true,
+    /** D177: see [pushChunks]. */
+    pendingUploads: PendingUploads? = null,
+    pendingChatId: String = "",
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -379,6 +415,8 @@ fun pushChat(
         selfSender = selfSender,
         sleeper = sleeper,
         appVersion = appVersion,
+        pendingUploads = pendingUploads,
+        pendingChatId = pendingChatId,
         shouldStop = {
             val stop = shouldStop()
             if (stop) stopped = true

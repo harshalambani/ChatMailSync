@@ -231,6 +231,10 @@ class ImapTransport(
     data class InsertResult(val id: String, val threadId: String)
 
     /** Mirrors `messages_insert`. [folder] is the canonical '/'-delimited label/folder name. */
+    override fun markPossiblySent(messageId: String) {
+        unconfirmed.add(messageId)
+    }
+
     override fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String?): InsertResult {
         val crlfBytes = normalizeCrlf(rawMessageBytes)
         val wireFolder = mailboxToWire(folder)

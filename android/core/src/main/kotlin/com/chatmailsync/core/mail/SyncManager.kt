@@ -393,6 +393,8 @@ class SyncManager(
                 appVersion = appVersion,
                 onFolderRenamed = { ok -> emit(mapOf("type" to "folder_renamed", "ok" to ok)) },
                 allowFolderRename = chatId != LEGACY_CHAT_ID,
+                pendingUploads = repo,
+                pendingChatId = chatId,
             )
             results = pushed.results
             labelId = pushed.labelId

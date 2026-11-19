@@ -36,7 +36,7 @@ class StateRepository(
      * so that `openDb` stays the trailing lambda: `StateRepository { openIt() }`. */
     private val clock: () -> String = { now() },
     private val openDb: () -> StateDb,
-) {
+) : PendingUploads {
 
     // -----------------------------------------------------------------
     // Schema DDL -- verbatim copy of state.py's `_DDL` (SQL text and table/
@@ -121,6 +121,18 @@ class StateRepository(
                 old_id      TEXT NOT NULL,
                 declined_at TEXT NOT NULL,
                 PRIMARY KEY (new_id, old_id)
+            );
+
+            -- D177 (Kotlin only): an email whose upload outcome was not learned (cut connection, timeout,
+            -- Stop mid-upload). [content_key] identifies the messages in it, so the next run builds the
+            -- same email with the SAME Message-ID and asks the server before sending it again. Message-IDs
+            -- and hashes only. Created by IF NOT EXISTS: no ALTER, so nothing new runs on every open.
+            CREATE TABLE IF NOT EXISTS pending_uploads (
+                chat_id     TEXT NOT NULL,
+                content_key TEXT NOT NULL,
+                message_id  TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                PRIMARY KEY (chat_id, content_key)
             );
 
             CREATE INDEX IF NOT EXISTS idx_message_hashes_chat  ON message_hashes(chat_id);
@@ -358,6 +370,37 @@ class StateRepository(
                 listOf(chatId, displayName, gmailThreadId, gmailLabelId, anchorMessageId, sourceFilename, now, now),
             )
         }
+    }
+
+    /** D177: the Message-ID an earlier run used for this same set of messages, or null. */
+    override fun idFor(chatId: String, contentKey: String): String? = withDb { db ->
+        db.query(
+            "SELECT message_id FROM pending_uploads WHERE chat_id = ? AND content_key = ?",
+            listOf(chatId, contentKey),
+        ).firstOrNull()?.get("message_id")?.toString()
+    }
+
+    /** D177: written BEFORE the upload starts, so a kill or cut connection leaves it behind. */
+    override fun record(chatId: String, contentKey: String, messageId: String) {
+        withDb { db ->
+            // Rows older than a month can never match a live retry; drop them as we go.
+            db.exec("DELETE FROM pending_uploads WHERE recorded_at < ?", listOf(pendingCutoff()))
+            db.exec(
+                "INSERT OR REPLACE INTO pending_uploads (chat_id, content_key, message_id, recorded_at) VALUES (?, ?, ?, ?)",
+                listOf(chatId, contentKey, messageId, clock()),
+            )
+        }
+    }
+
+    /** D177: the email is confirmed on the server, or was refused outright: nothing is pending. */
+    override fun clear(messageId: String) {
+        withDb { db -> db.exec("DELETE FROM pending_uploads WHERE message_id = ?", listOf(messageId)) }
+    }
+
+    private fun pendingCutoff(): String = try {
+        java.time.LocalDateTime.parse(clock().take(19)).minusDays(30).toString()
+    } catch (_: java.time.format.DateTimeParseException) {
+        "" // an unparseable clock: prune nothing
     }
 
     fun updateChatGmailIds(
