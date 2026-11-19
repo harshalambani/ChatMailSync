@@ -45,10 +45,30 @@ fun isSizeRejection(text: String): Boolean {
     return SIZE_REJECTION_MARKERS.any { it in upper }
 }
 
+/** SEC-10: the status a provider throttle reply maps to; [insertWithBackoff] waits 30, 60, 120 s on it. */
+const val THROTTLE_STATUS = 429
+
+private val THROTTLE_WORD = Regex("""\b(RATE|LIMIT)\b""")
+
+/**
+ * SEC-10: true when an IMAP reply says the provider is slowing this client down: THROTTLED, a
+ * [LIMIT] code, a rate limit, or "Too many simultaneous connections". A size refusal and a full
+ * mailbox are NOT throttles (waiting cannot fix them), and "limit" next to SIZE / LARGE / BIG is a
+ * size message. Whole words only, so "accurate" or "separate" never match RATE.
+ */
+fun isThrottleReply(text: String): Boolean {
+    val upper = text.uppercase()
+    if (isSizeRejection(upper) || "QUOTA" in upper) return false
+    if ("THROTTL" in upper || "TOO MANY SIMULTANEOUS" in upper || "TOO MANY CONNECTIONS" in upper) return true
+    if ("SIZE" in upper || "LARGE" in upper || "BIG" in upper) return false
+    return THROTTLE_WORD.containsMatchIn(upper)
+}
+
 /** Mirrors `_status_for_imap_text`: maps IMAP response text to an HTTP-style status. */
 fun statusForImapText(text: String): Int {
     val upper = text.uppercase()
     if (isSizeRejection(upper)) return 413
+    if (isThrottleReply(upper)) return THROTTLE_STATUS
     if (listOf("SERVERBUG", "UNAVAILABLE", "INUSE").any { it in upper }) return 503
     if ("OVERQUOTA" in upper) return 403
     if (listOf("AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "PERMISSIONDENIED").any { it in upper }) return 401

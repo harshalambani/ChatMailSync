@@ -214,7 +214,7 @@ class PushChunksTest {
     fun aTransientFailureIsRetriedWithDoublingDelays() {
         val s = RecordingSleeper()
         val t = FakeMailTransport()
-        t.insertOutcomes.addAll(listOf(err(503), err(429), null))
+        t.insertOutcomes.addAll(listOf(err(503), err(502), null))
         val r = insertWithBackoff(t, "Message-ID: <a@b>\n\nx\n".toByteArray(), "WhatsApp/x", null, s)
         assertNotNull(r)
         assertEquals(3, t.insertAttempts)

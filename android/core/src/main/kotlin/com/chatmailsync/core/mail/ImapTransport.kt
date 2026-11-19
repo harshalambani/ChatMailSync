@@ -371,9 +371,9 @@ class ImapTransport(
     private fun findByMessageId(wireFolder: String, messageId: String): String? {
         try {
             val examined = call { it.examine(wireFolder) }
-            if (examined.status != "OK") throw MailTransportError("lookup: EXAMINE refused", 503)
+            if (examined.status != "OK") throw lookupRefused("EXAMINE", examined.data)
             val found = call { it.uidSearchMessageId(messageId) }
-            if (found.status != "OK") throw MailTransportError("lookup: SEARCH refused", 503)
+            if (found.status != "OK") throw lookupRefused("SEARCH", found.data)
             val uids = found.data.filterNotNull()
                 .flatMap { it.trim().split(' ') }
                 .filter { it.isNotEmpty() && it.all { c -> c in '0'..'9' } }
@@ -388,8 +388,17 @@ class ImapTransport(
             if (aborted) throw StopRequestedException()
             diagLog("F-02 lookup: failed (" + exc.javaClass.simpleName + ")")
             val text = stripSecret(exc.message ?: exc.toString(), password)
-            throw MailTransportError("lookup after an uncertain APPEND failed: $text", 503)
+            throw MailTransportError(
+                "lookup after an uncertain APPEND failed: $text",
+                if (isThrottleReply(text)) THROTTLE_STATUS else 503,
+            )
         }
+    }
+
+    /** SEC-10: a refused lookup is a throttle (wait 30 s and more) when the server says so, else a plain 503. */
+    private fun lookupRefused(command: String, data: List<String?>): MailTransportError {
+        val throttled = isThrottleReply(stripSecret(joinImapResponse(data), password))
+        return MailTransportError("lookup: $command refused", if (throttled) THROTTLE_STATUS else 503)
     }
 }
 

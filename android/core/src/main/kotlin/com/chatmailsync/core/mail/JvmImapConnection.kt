@@ -346,7 +346,8 @@ class JvmImapConnection private constructor(
                             "IMAP login failed for $email @ $host:$port \u2014 " +
                                 "${loginFailureHint(host, email)} Server said: " +
                                 stripSecret(rest, password),
-                            401,
+                            // SEC-10: a throttle reply on LOGIN is "wait", not "wrong password".
+                            if (isThrottleReply(rest)) THROTTLE_STATUS else 401,
                         )
                     }
                     break
