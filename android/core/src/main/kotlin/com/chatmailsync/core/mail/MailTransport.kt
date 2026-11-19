@@ -57,6 +57,12 @@ interface MailTransport {
      */
     fun abort() {}
 
+    /**
+     * UX-11: told (bytes sent so far, bytes in this email) while the next [messagesInsert] uploads.
+     * Only bytes really written count. null switches it off. The default ignores it.
+     */
+    fun setUploadListener(listener: ((sent: Long, total: Long) -> Unit)?) {}
+
     /** Files [rawMessageBytes] under [folder]. A refusal throws [MailTransportError]. */
     fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String? = null): ImapTransport.InsertResult
 

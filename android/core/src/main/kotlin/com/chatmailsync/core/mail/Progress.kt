@@ -91,12 +91,18 @@ class ProgressState(
     /** Milestone log, oldest first. Excludes per-chunk ticks by design —
      * those fire many times per file and would read as noise, not a log. */
     val milestones: MutableList<String> = mutableListOf(),
+    /** UX-11 (Kotlin only, no Python twin): "Sending email 3 of 3: 7 / 17 MB" while an email uploads, else "". */
+    var upload: String = "",
 ) {
 
     /** headline and detail as the single line the app has always shown
      * ("Syncing: Alice — 128 / 500 messages"). */
     val line: String
-        get() = if (detail.isNotEmpty()) "$headline — $detail" else headline
+        get() {
+            val main = if (detail.isNotEmpty()) "$headline — $detail" else headline
+            // UX-11: the MB line is a second line, only while an email is uploading.
+            return if (upload.isNotEmpty()) "$main\n$upload" else main
+        }
 
     /**
      * Rounded percentage, or -1 when the fraction is unknown.
@@ -156,8 +162,11 @@ class ProgressTracker {
         var milestone: String? = null
 
         when (etype) {
+            "upload" -> feedUpload(event)
+
             "files_total" -> {
                 val n = intOf(event["n"])
+                st.upload = ""
                 st.phase = PHASE_SCANNING
                 st.headline = if (n == 0) "Inbox is empty" else "Found $n file(s)…"
                 st.detail = ""
@@ -166,6 +175,7 @@ class ProgressTracker {
 
             "syncing" -> {
                 val name = pyStr(event, "name")
+                st.upload = ""
                 st.phase = PHASE_SYNCING
                 st.chat = name
                 st.headline = "Syncing: $name"
@@ -183,6 +193,7 @@ class ProgressTracker {
                 // inbox holds a single file -- and only jumping at the very
                 // end.
                 val name = pyStr(event, "name")
+                st.upload = "" // the email has landed
                 st.phase = PHASE_SYNCING
                 st.chat = name
                 st.headline = "Syncing: $name"
@@ -193,6 +204,7 @@ class ProgressTracker {
             "file_done" -> {
                 val done = intOf(event["done"])
                 val total = intOf(event["total"])
+                st.upload = ""
                 st.headline = "$done / $total files"
                 st.detail = ""
                 // Coarser than "chunk" and only used where chunk data does
@@ -202,6 +214,7 @@ class ProgressTracker {
             }
 
             "done" -> {
+                st.upload = ""
                 st.phase = PHASE_DONE
                 st.chat = ""
                 st.fraction = 1.0
@@ -210,6 +223,7 @@ class ProgressTracker {
             }
 
             "error" -> {
+                st.upload = ""
                 st.phase = PHASE_FAILED
                 st.chat = ""
                 st.detail = ""
@@ -224,6 +238,33 @@ class ProgressTracker {
             }
         }
         return milestone
+    }
+
+    /**
+     * UX-11: an email is uploading. The MB line shows bytes written; the bar moves inside the email in
+     * proportion to the email's share of messages, never backwards (see [advance]) and never past the
+     * value the bar reaches once the email is confirmed. total <= 0 ends the line (landed, failed or cut).
+     * Bytes that were not written are never counted: the event carries only what the socket took.
+     */
+    private fun feedUpload(event: ProgressEvent) {
+        val st = state
+        val total = longOf(event["total"])
+        if (total <= 0L) {
+            st.upload = ""
+            return
+        }
+        val sent = longOf(event["sent"]).coerceIn(0L, total)
+        val email = intOf(event["email"])
+        val emails = intOf(event["total_emails"])
+        st.upload = "Sending email $email of $emails: ${sent / MB_BYTES} / ${maxOf(1L, (total + MB_BYTES - 1) / MB_BYTES)} MB"
+        val globalTotal = intOf(event["global_total"])
+        if (globalTotal <= 0) return
+        val before = intOf(event["global_before"])
+        val share = intOf(event["email_msgs"])
+        val confirmed = (before + share).toDouble() / globalTotal.toDouble()
+        val inside = (before + share.toDouble() * sent.toDouble() / total.toDouble()) / globalTotal.toDouble()
+        val fraction = minOf(inside, confirmed, 1.0)
+        if (fraction > st.fraction) st.fraction = fraction
     }
 
     /**
@@ -244,6 +285,35 @@ class ProgressTracker {
             state.fraction = minOf(fraction, 1.0)
         }
     }
+}
+
+/** UX-11: one MB in the upload line (decimal, so 17 MB reads as the file manager would show it). */
+internal const val MB_BYTES = 1_000_000L
+
+/** UX-11: lets at most one upload update through per [minIntervalNanos] (4 a second by default). */
+class UploadThrottle(
+    private val minIntervalNanos: Long = 250_000_000L,
+    private val clock: () -> Long = System::nanoTime,
+) {
+    private var last = Long.MIN_VALUE
+
+    fun allow(): Boolean {
+        val now = clock()
+        if (last != Long.MIN_VALUE && now - last < minIntervalNanos) return false
+        last = now
+        return true
+    }
+
+    fun reset() {
+        last = Long.MIN_VALUE
+    }
+}
+
+internal fun longOf(value: Any?): Long = when (value) {
+    is Long -> value
+    is Number -> value.toLong()
+    is String -> value.trim().toLongOrNull() ?: 0L
+    else -> intOf(value).toLong()
 }
 
 /**
