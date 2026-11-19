@@ -309,8 +309,20 @@ class CoreApi(
      */
     fun requestStop() {
         stopFlag.set(true)
-        // BUG-26: also cut an upload that is in progress, from this (the stopping) thread.
-        activeTransport?.abort()
+        // BUG-26 / D182: also cut an upload that is in progress. Closing a TLS socket writes to the
+        // network, and this is called on the UI thread (Android refuses network I/O there), so the
+        // cut runs on its own short-lived daemon thread. The flag above is already set, so the
+        // run ends as stopped either way.
+        val transport = activeTransport ?: return
+        val cutter = Thread({
+            try {
+                transport.abort()
+            } catch (_: Throwable) {
+                // a connection that is already gone is exactly what Stop wants
+            }
+        }, "cms-abort")
+        cutter.isDaemon = true
+        cutter.start()
     }
 
     /** BUG-26: the transport of the run in progress, so [requestStop] can cut its live connection. */
