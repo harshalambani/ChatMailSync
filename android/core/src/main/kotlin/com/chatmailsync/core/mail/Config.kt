@@ -386,5 +386,8 @@ const val API_CALL_DELAY_SECONDS = 0.1
 /** Exponential backoff base delay (seconds) on 429 / 5xx. */
 const val BACKOFF_BASE_DELAY = 1.0
 
+/** SEC-10: waits (seconds) before each retry after a provider throttle reply; then the chat fails. */
+val THROTTLE_BACKOFF_SECONDS = listOf(30.0, 60.0, 120.0)
+
 /** Exponential backoff maximum attempts on 429 / 5xx. */
 const val BACKOFF_MAX_ATTEMPTS = 5

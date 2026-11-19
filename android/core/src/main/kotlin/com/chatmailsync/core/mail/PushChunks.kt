@@ -23,7 +23,29 @@ fun interface Sleeper {
      * requested seconds); [SystemSleeper] checks in short slices.
      */
     fun sleep(seconds: Double, shouldStop: () -> Boolean) = sleep(seconds)
+
+    /**
+     * SEC-10: a wait that Stop can end. Sleeps in slices of [STOP_POLL_SECONDS], asking [shouldStop]
+     * before each; returns true when the full time passed, false when stopped. Built on [sleep], so a
+     * fake-clock sleeper in a test drives it without any real wait.
+     */
+    fun waitUnlessStopped(seconds: Double, shouldStop: () -> Boolean): Boolean {
+        var left = seconds
+        while (left > 0.0) {
+            if (shouldStop()) return false
+            val slice = if (left < STOP_POLL_SECONDS) left else STOP_POLL_SECONDS
+            sleep(slice)
+            left -= slice
+        }
+        return !shouldStop()
+    }
 }
+
+/** How often a throttle backoff looks at Stop. */
+const val STOP_POLL_SECONDS = 0.25
+
+/** SEC-10: Stop arrived while waiting out a provider throttle; nothing more was sent. Ends the push quietly. */
+class ThrottleWaitStopped : Exception("Stopped while waiting for the mail provider to allow uploads again.")
 
 /** The real sleeper. Its stop-aware wait wakes within a quarter of a second of Stop. */
 object SystemSleeper : Sleeper {
@@ -144,15 +166,21 @@ fun prepareEmails(
     return result
 }
 
-internal val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
+internal val RETRYABLE_STATUSES = setOf(500, 502, 503, 504)
 
 /**
- * Mirrors `_insert_with_backoff`: insert with exponential backoff on 429 / 5xx
+ * Mirrors `_insert_with_backoff`: insert with exponential backoff on 5xx
  * and on network errors. Delays are [BACKOFF_BASE_DELAY], doubling each time,
  * at most [BACKOFF_MAX_ATTEMPTS] attempts. Any other [MailTransportError] (a
- * 4xx other than 429, including a 413 size refusal) is thrown at once: a
+ * 4xx other than a throttle, including a 413 size refusal) is thrown at once: a
  * retry cannot fix it, and the size case is the caller's cue to split.
  * A pause of [API_CALL_DELAY_SECONDS] follows every success.
+ *
+ * SEC-10: a provider throttle reply ([THROTTLE_STATUS]) is waited out on its own schedule,
+ * [THROTTLE_BACKOFF_SECONDS] (30, 60, 120 s), then the chat fails loudly. The wait looks at
+ * [shouldStop] every [STOP_POLL_SECONDS]; on Stop it throws [ThrottleWaitStopped] and sends nothing
+ * more. Each retry goes back through the transport, which looks up an upload of unknown outcome
+ * (F-02) before it would send again.
  */
 fun insertWithBackoff(
     transport: MailTransport,
@@ -164,6 +192,7 @@ fun insertWithBackoff(
 ): ImapTransport.InsertResult {
     var delay = BACKOFF_BASE_DELAY
     var attempt = 1
+    var throttled = 0
     while (true) {
         // BUG-26: Stop is honoured before every attempt and the waits below end early on it.
         if (shouldStop()) throw StopRequestedException()
@@ -172,6 +201,23 @@ fun insertWithBackoff(
             sleeper.sleep(API_CALL_DELAY_SECONDS, shouldStop)
             return response
         } catch (exc: MailTransportError) {
+            if (exc.status == THROTTLE_STATUS) {
+                if (throttled >= THROTTLE_BACKOFF_SECONDS.size) {
+                    // Fresh text on purpose: the server's own words (and anything it echoed) stay out.
+                    throw MailTransportError(
+                        "The mail provider kept refusing new uploads (it is limiting how fast this " +
+                            "account can send), even after waiting " +
+                            THROTTLE_BACKOFF_SECONDS.joinToString(", ") { it.toInt().toString() } +
+                            " seconds. Nothing was lost; sync again in a few minutes and it continues from here.",
+                        THROTTLE_STATUS,
+                    )
+                }
+                if (!sleeper.waitUnlessStopped(THROTTLE_BACKOFF_SECONDS[throttled], shouldStop)) {
+                    throw ThrottleWaitStopped()
+                }
+                throttled++
+                continue
+            }
             val retry = exc.status in RETRYABLE_STATUSES && attempt < BACKOFF_MAX_ATTEMPTS
             if (!retry) throw exc
             sleeper.sleep(delay, shouldStop)
@@ -314,6 +360,10 @@ fun pushChunks(
                 // BUG-26: Stop cut this email off (or was seen between two attempts). Not a failure:
                 // the push ends here with what was delivered, and the run reports "stopped".
                 shouldStop()
+                break
+            } catch (_: ThrottleWaitStopped) {
+                // SEC-10: Stop arrived during a throttle wait. Nothing more is sent; the email's pending
+                // row stays, so the next run looks it up before sending it.
                 break
             } catch (exc: Exception) {
                 if (!isTooLarge(exc)) throw exc
