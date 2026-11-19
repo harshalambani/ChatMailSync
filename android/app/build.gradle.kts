@@ -200,7 +200,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
-    implementation("androidx.navigation:navigation-compose:2.9.0")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation("androidx.documentfile:documentfile:1.0.1")
 
     implementation(project(":core"))
