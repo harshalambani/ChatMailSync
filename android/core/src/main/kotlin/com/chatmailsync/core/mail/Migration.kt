@@ -336,7 +336,12 @@ fun exportBundle(
             if (db.exists()) {
                 val snapshot = File(scratch, BUNDLE_DB_NAME)
                 snapshotBundleDb(db, snapshot, openDb)
-                put(BUNDLE_DB_NAME, snapshot.readBytes())
+                // F-11: stream the snapshot into the zip, never the whole file in memory.
+                val e = ZipEntry(BUNDLE_DB_NAME)
+                e.time = zipTimeMillis
+                zip.putNextEntry(e)
+                streamFileTo(zip, snapshot)
+                zip.closeEntry()
             }
         }
         dest.absoluteFile.parentFile?.mkdirs()
@@ -753,4 +758,16 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         }
     }
     return MergeCounts(chatsAdded, runsAdded, hashesAdded, cutoffsAdded, sendersAdded)
+}
+
+/** F-11: copies [file] to [out] in [chunkBytes] pieces, so no write is ever larger than one chunk. */
+internal fun streamFileTo(out: OutputStream, file: File, chunkBytes: Int = 64 * 1024) {
+    val buffer = ByteArray(chunkBytes)
+    file.inputStream().use { input ->
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            out.write(buffer, 0, n)
+        }
+    }
 }

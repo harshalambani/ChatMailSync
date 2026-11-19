@@ -77,11 +77,14 @@ class JvmImapConnection private constructor(
         val literals = mutableMapOf<Int, String>()
         var literalBytes = 0L
         var lines = 0
+        var literalSent = false
         while (true) {
             val line = readLine()
             if (++lines > MAX_UNTAGGED_LINES) throw tooManyLines()
             if (line.startsWith("+")) {
-                if (literal != null) {
+                // F-15: the literal goes on the wire once. A second "+" never re-sends it.
+                if (literal != null && !literalSent) {
+                    literalSent = true
                     try {
                         output.write(literal)
                         output.write(CRLF)
@@ -330,7 +333,17 @@ class JvmImapConnection private constructor(
 
             // A PREAUTH greeting means the session is already authenticated;
             // sending LOGIN would only earn a BAD.
-            if (greetingWord == "PREAUTH") return JvmImapConnection(socket, input, output, capabilities)
+            // F-14: a PREAUTH greeting skips LOGIN, so it is only honoured for a host that is not a
+            // known provider. Gmail, Yahoo and the other presets always authenticate.
+            if (greetingWord == "PREAUTH") {
+                if (IMAP_PROVIDERS.values.any { it.host != null && it.host.equals(host, ignoreCase = true) }) {
+                    throw MailTransportError(
+                        "$host:$port sent a pre-authenticated greeting, which a known mail provider never does. Connection refused.",
+                        503,
+                    )
+                }
+                return JvmImapConnection(socket, input, output, capabilities)
+            }
 
             val loginTag = nextTag()
             writeLine("$loginTag LOGIN ${ImapUtf7.quoteMailbox(email)} ${ImapUtf7.quoteMailbox(password)}")
