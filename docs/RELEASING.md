@@ -42,6 +42,22 @@ Read these before anything else. Neither is recoverable.
 - [ ] FAQ parity still holds - `tests/test_faq_parity.py` covers
       `docs/user-guide.md` and `HelpScreen.kt`.
 
+## After a Gradle dependency bump
+
+`android/gradle/verification-metadata.xml` holds a sha256 for every artifact
+Gradle resolves, and the build fails on any artifact it does not list. After a
+bump (or a Dependabot Gradle PR), regenerate it from the `android` folder:
+
+```
+cd android
+./gradlew.bat --write-verification-metadata sha256 assembleDebug assembleRelease :app:testDebugUnitTest :core:test :app:assembleDebugAndroidTest
+./gradlew.bat --write-verification-metadata sha256 :app:lintDebug :app:lintRelease -x :app:generateDebugAndroidTestLintModel
+```
+
+Review the diff: only the bumped artifacts should change. Windows writes only
+the Windows `aapt2` jar, so if `aapt2` changed, add the `-linux.jar` entry by
+hand from the `.sha256` file next to it on Google Maven (dl.google.com).
+
 ## Build
 
 - [ ] `cd android && ./gradlew.bat :app:assembleRelease --console=plain`
