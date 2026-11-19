@@ -86,7 +86,7 @@ class StopThenResumeTest {
     )
 
     private fun pending(s: Setup) =
-        SyncRunSupport.rows(s.db, "SELECT message_id FROM pending_uploads", listOf("message_id"))
+        SyncRunSupport.rows(s.db, "SELECT DISTINCT message_id FROM pending_messages", listOf("message_id"))
 
     /** Run 1: Stop pressed during the upload. Returns the stats of that run. */
     private fun stoppedRun(s: Setup, server: Server): SyncStats {
