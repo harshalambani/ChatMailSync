@@ -235,6 +235,11 @@ class ImapTransport(
         unconfirmed.add(messageId)
     }
 
+    override fun lookupStored(messageId: String, folder: String): Boolean {
+        if (!isSafeMessageId(messageId)) return false
+        return findByMessageId(mailboxToWire(folder), messageId) != null
+    }
+
     override fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String?): InsertResult {
         val crlfBytes = normalizeCrlf(rawMessageBytes)
         val wireFolder = mailboxToWire(folder)
