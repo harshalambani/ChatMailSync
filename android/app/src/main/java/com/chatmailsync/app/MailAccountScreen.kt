@@ -158,6 +158,17 @@ internal fun buildAppPasswordPrompt(providerKey: String, providerLabel: String, 
 }
 
 /**
+ * F-17: the web-search link for the same question. A custom host name is private to the user, so it is
+ * never put in a search URL (the clipboard copy still names it). For a custom provider the search is
+ * generic; a preset provider's name is public and stays.
+ */
+internal fun buildAppPasswordSearchUrl(providerKey: String, providerLabel: String, host: String): String {
+    val searchHost = if (providerKey == "custom") "" else host
+    val prompt = buildAppPasswordPrompt(providerKey, providerLabel, searchHost)
+    return "https://www.google.com/search?q=" + URLEncoder.encode(prompt, "UTF-8")
+}
+
+/**
  * Everything this app knows about getting an app password out of one provider.
  *
  * Extracted so the two places that teach it -- the collapsed section on this
@@ -241,9 +252,7 @@ internal fun AppPasswordHelpBody(providerKey: String, providerLabel: String, hos
             ) { Text("Copy question") }
             TextButton(
                 onClick = {
-                    val prompt = buildAppPasswordPrompt(providerKey, providerLabel, host)
-                    val encoded = URLEncoder.encode(prompt, "UTF-8")
-                    openUrl(context, "https://www.google.com/search?q=$encoded")
+                    openUrl(context, buildAppPasswordSearchUrl(providerKey, providerLabel, host))
                 },
             ) { Text("Search for steps") }
         }
