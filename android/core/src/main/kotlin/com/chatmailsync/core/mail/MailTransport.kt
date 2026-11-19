@@ -44,6 +44,13 @@ interface MailTransport {
      */
     fun markPossiblySent(messageId: String) {}
 
+    /**
+     * D185: is a message with this Message-ID already stored under [folder]? Asked once per remembered
+     * old id before any of its messages is sent again. A failed lookup throws; it is never "not found".
+     * The default says no.
+     */
+    fun lookupStored(messageId: String, folder: String): Boolean = false
+
     /** Files [rawMessageBytes] under [folder]. A refusal throws [MailTransportError]. */
     fun messagesInsert(rawMessageBytes: ByteArray, folder: String, threadId: String? = null): ImapTransport.InsertResult
 

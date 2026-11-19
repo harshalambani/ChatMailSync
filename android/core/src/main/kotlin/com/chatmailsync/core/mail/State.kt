@@ -135,6 +135,18 @@ class StateRepository(
                 PRIMARY KEY (chat_id, content_key)
             );
 
+            -- D185 (Kotlin only): one row per MESSAGE of an email whose upload outcome was not learned,
+            -- with the Message-ID it was uploaded under. Hashes and ids only, no text. The next run asks
+            -- the server for each old id, however the messages are packed into emails by then.
+            -- The older pending_uploads above is no longer written and stays only so an upgraded file is unchanged.
+            CREATE TABLE IF NOT EXISTS pending_messages (
+                chat_id      TEXT NOT NULL,
+                message_id   TEXT NOT NULL,
+                message_hash TEXT NOT NULL,
+                recorded_at  TEXT NOT NULL,
+                PRIMARY KEY (chat_id, message_id, message_hash)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_message_hashes_chat  ON message_hashes(chat_id);
             CREATE INDEX IF NOT EXISTS idx_sync_runs_chat       ON sync_runs(chat_id);
             CREATE INDEX IF NOT EXISTS idx_sync_runs_status     ON sync_runs(status);
@@ -372,29 +384,53 @@ class StateRepository(
         }
     }
 
-    /** D177: the Message-ID an earlier run used for this same set of messages, or null. */
-    override fun idFor(chatId: String, contentKey: String): String? = withDb { db ->
-        db.query(
-            "SELECT message_id FROM pending_uploads WHERE chat_id = ? AND content_key = ?",
-            listOf(chatId, contentKey),
-        ).firstOrNull()?.get("message_id")?.toString()
+    /** D185: the distinct old Message-IDs under which any of [hashes] was uploaded without a confirmed outcome. */
+    override fun idsFor(chatId: String, hashes: Collection<String>): List<String> = withDb { db ->
+        val out = linkedSetOf<String>()
+        for (h in hashes) {
+            db.query(
+                "SELECT DISTINCT message_id FROM pending_messages WHERE chat_id = ? AND message_hash = ?",
+                listOf(chatId, h),
+            ).forEach { row -> row["message_id"]?.toString()?.let { out.add(it) } }
+        }
+        out.toList()
     }
 
-    /** D177: written BEFORE the upload starts, so a kill or cut connection leaves it behind. */
-    override fun record(chatId: String, contentKey: String, messageId: String) {
+    /** D185: every message hash that was in the email uploaded as [messageId]. */
+    override fun hashesFor(chatId: String, messageId: String): Set<String> = withDb { db ->
+        db.query(
+            "SELECT message_hash FROM pending_messages WHERE chat_id = ? AND message_id = ?",
+            listOf(chatId, messageId),
+        ).mapNotNull { it["message_hash"]?.toString() }.toSet()
+    }
+
+    /** D185: written BEFORE the upload starts, so a kill or cut connection leaves it behind. */
+    override fun record(chatId: String, messageId: String, hashes: Collection<String>) {
         withDb { db ->
             // Rows older than a month can never match a live retry; drop them as we go.
-            db.exec("DELETE FROM pending_uploads WHERE recorded_at < ?", listOf(pendingCutoff()))
-            db.exec(
-                "INSERT OR REPLACE INTO pending_uploads (chat_id, content_key, message_id, recorded_at) VALUES (?, ?, ?, ?)",
-                listOf(chatId, contentKey, messageId, clock()),
-            )
+            db.exec("DELETE FROM pending_messages WHERE recorded_at < ?", listOf(pendingCutoff()))
+            val at = clock()
+            for (h in hashes) {
+                db.exec(
+                    "INSERT OR REPLACE INTO pending_messages (chat_id, message_id, message_hash, recorded_at) VALUES (?, ?, ?, ?)",
+                    listOf(chatId, messageId, h, at),
+                )
+            }
         }
     }
 
-    /** D177: the email is confirmed on the server, or was refused outright: nothing is pending. */
+    /** D185: the email is confirmed on the server, was refused outright, or was looked up and is not there. */
     override fun clear(messageId: String) {
-        withDb { db -> db.exec("DELETE FROM pending_uploads WHERE message_id = ?", listOf(messageId)) }
+        withDb { db -> db.exec("DELETE FROM pending_messages WHERE message_id = ?", listOf(messageId)) }
+    }
+
+    /** D185: these messages are known to be stored, so no id needs to be asked about them again. */
+    override fun clearHashes(chatId: String, hashes: Collection<String>) {
+        withDb { db ->
+            for (h in hashes) {
+                db.exec("DELETE FROM pending_messages WHERE chat_id = ? AND message_hash = ?", listOf(chatId, h))
+            }
+        }
     }
 
     private fun pendingCutoff(): String = try {

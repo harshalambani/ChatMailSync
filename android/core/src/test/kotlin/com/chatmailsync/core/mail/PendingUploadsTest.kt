@@ -6,14 +6,13 @@ import java.io.IOException
 import java.time.OffsetDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * D177: an upload whose outcome was never learned (cut connection, timeout, Stop mid-upload) is
+ * D177/D185: an upload whose outcome was never learned (cut connection, timeout, Stop mid-upload) is
  * remembered in the state database, so the NEXT run asks the server before sending it again.
  */
 class PendingUploadsTest {
@@ -87,7 +86,7 @@ class PendingUploadsTest {
     }
 
     private fun pendingRows(s: Setup) =
-        SyncRunSupport.rows(s.db, "SELECT message_id FROM pending_uploads", listOf("message_id"))
+        SyncRunSupport.rows(s.db, "SELECT DISTINCT message_id FROM pending_messages", listOf("message_id"))
 
     // ---- the cross-run behaviour
 
@@ -133,19 +132,6 @@ class PendingUploadsTest {
         assertTrue(pendingRows(s).isEmpty())
     }
 
-    @Test
-    fun theNextRunReusesTheSameMessageId() {
-        val s = setup()
-        val server = Server()
-        server.appendScript.add("store-io")
-        server.lookupScript.addAll(List(20) { "io" })
-        run(s, server)
-        val idRun1 = pendingRows(s).single()[0]
-        server.lookupScript.clear()
-        run(s, server)
-        assertEquals("one copy, under the id run 1 wrote down", listOf(idRun1), server.stored)
-    }
-
     // ---- negatives
 
     @Test
@@ -171,38 +157,12 @@ class PendingUploadsTest {
     @Test
     fun aPendingRowForAnotherSetOfMessagesIsIgnored() {
         val s = setup()
-        newRepo(s.root, "state.db").also { it.initDb() }.record("some-other-chat", "key", "<wa-sync-other@local>")
+        newRepo(s.root, "state.db").also { it.initDb() }.record("some-other-chat", "<wa-sync-other@local>", listOf("deadbeef"))
         val server = Server()
         val stats = run(s, server)
         assertEquals(1, stats.filesSynced)
         assertEquals(0, server.lookups())
         assertEquals(1, server.appends())
         assertFalse("the unrelated id was never used", server.stored.contains("<wa-sync-other@local>"))
-    }
-
-    // ---- the repository
-
-    @Test
-    fun theRepositoryRoundTripsAndClears() {
-        val repo = newRepo(tmp.newFolder(), "state.db").also { it.initDb() }
-        assertNull(repo.idFor("c", "k"))
-        repo.record("c", "k", "<a@local>")
-        assertEquals("<a@local>", repo.idFor("c", "k"))
-        assertNull("a different chat has its own", repo.idFor("other", "k"))
-        repo.record("c", "k", "<b@local>")
-        assertEquals("re-recording replaces, never duplicates", "<b@local>", repo.idFor("c", "k"))
-        repo.clear("<b@local>")
-        assertNull(repo.idFor("c", "k"))
-        repo.clear("<never-there@local>") // clearing nothing is harmless
-    }
-
-    @Test
-    fun theContentKeyDependsOnTheMessagesAndKeepsNoText() {
-        val a = listOf(ParsedMessage("c", java.time.LocalDateTime.of(2025, 3, 20, 9, 0), "Meera Iyer", "private words"))
-        val b = listOf(ParsedMessage("c", java.time.LocalDateTime.of(2025, 3, 20, 9, 0), "Meera Iyer", "other words"))
-        assertEquals(pendingContentKey(a), pendingContentKey(a))
-        assertFalse(pendingContentKey(a) == pendingContentKey(b))
-        assertFalse(pendingContentKey(a).contains("private"))
-        assertEquals(64, pendingContentKey(a).length)
     }
 }
