@@ -1,0 +1,6 @@
+The same email is no longer sent over and over after a connection problem, and Stop now cancels an upload safely.
+An upload whose result was never confirmed is checked on the server before anything is sent again.
+While an email uploads, a second line shows how many MB have gone and the bar keeps moving.
+The app waits and retries when your mail provider says it is limiting connections.
+Repeated messages in the same minute stay together.
+Security hardening.

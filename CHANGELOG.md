@@ -4,6 +4,22 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## 3.0.6
+
+Released 2026-11-19 (versionCode 52). Safer uploads: no repeated sending, Stop works, and a live MB line.
+
+- BUG-26: one email is no longer uploaded again and again after a failure. At most two uploads per email per run, and Stop now cuts an upload in progress and ends the run as stopped, not failed (#171).
+- D185: an upload whose result was never learned is remembered per message and checked on the server in the next run before anything is sent again (#174).
+- BUG-24: two messages with the same text in the same minute are never split across emails (#168).
+- UX-11: while an email uploads, a second line shows "Sending email 3 of 3: 7 / 17 MB" in the app and the notification, and the progress bar moves within the email (#184).
+- BUG-25: the app no longer repeats its database migrations on every progress check, which also stops the log spam (#182).
+- SEC-09: audit fixes. An upload that was cut off is looked up before it is sent again. A backup that would switch Delete after import on asks you first. Restored settings are checked. Spreadsheet formulas in the Chats CSV export are neutralised. A backup file picked for restore is size-capped. The app is excluded from cloud backup, and the privacy text says so (#169).
+- SEC-10: when the mail provider says it is limiting connections, the app waits 30, 60 and 120 seconds and then stops with a clear message; Stop ends the wait at once (#173).
+- SEC-11: build dependencies are checksum-verified, dev packages are pinned, and Dependabot is on (#172).
+- SEC-12: a test proves a certificate for the wrong host name is refused (#170).
+- SEC-13: the backup export no longer loads the whole database into memory. A server that greets as already signed in is refused for the built-in providers. A message is sent to the server once per request. A custom server name is no longer put in the app-password help search link (#183).
+- STO-10: made-up sample exports for the F-Droid reviewer (#167).
+
 ## 3.0.5
 
 Released 2026-11-10 (versionCode 51). A same-minute message fix, clearer counts, and a corrected answer about photos.
