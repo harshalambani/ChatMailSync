@@ -88,9 +88,22 @@ class CoreApi(
     /** Opens (and brings up to date) the state store; twin of `init_db(config.STATE_DB_PATH)`. */
     private fun ready(): StateRepository {
         paths.dataDir.mkdirs()
-        repo.initDb()
+        // BUG-25: the migrations run once per database file, not once per call. The app's 250 ms
+        // progress poll reaches this through getSelfSender, and every re-run made SQLite log a
+        // "duplicate column" error for each ALTER TABLE that had already been applied. A file
+        // that has gone (a wiped data folder) is brought up again on the next call.
+        synchronized(initLock) {
+            if (!paths.stateDbPath.exists()) initialised = false
+            if (!initialised) {
+                repo.initDb()
+                initialised = true
+            }
+        }
         return repo
     }
+
+    private val initLock = Any()
+    private var initialised = false
 
     // ------------------------------------------------------------------
     // Progress (android_api.py:86-100)
