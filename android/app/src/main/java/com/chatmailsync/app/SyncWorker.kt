@@ -358,6 +358,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Chat Mail Sync")
             .setContentText(text)
+            // UX-11: the MB line is the second line of the same text.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setOngoing(true)
             .setContentIntent(openAppIntent())

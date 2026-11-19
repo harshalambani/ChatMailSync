@@ -52,6 +52,12 @@ interface ImapConnection {
     fun append(mailboxWireArg: String, flags: String?, internalDate: OffsetDateTime?, message: ByteArray): ImapResult
 
     /**
+     * UX-11: told the running total of literal bytes written, after every piece of the next APPEND.
+     * Only bytes actually handed to the socket are counted. The default ignores it.
+     */
+    fun setUploadListener(listener: ((Long) -> Unit)?) {}
+
+    /**
      * F-02: `EXAMINE mailbox` (read-only select), used to look for a message after an APPEND whose
      * outcome is unknown. The default answers NO, which the caller treats as "cannot tell" -- never
      * as "not there".

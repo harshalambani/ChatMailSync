@@ -91,6 +91,23 @@ typealias OnAccepted = (PushResult, String) -> Unit
 typealias OnChunk = (Int, Int, Int, Int, List<ParsedMessage>) -> Unit
 
 /**
+ * UX-11: where one email's upload stands. [emailNumber] of [totalEmails] (1-based), [msgsBefore] messages
+ * already confirmed, [emailMsgs] messages in this email, [sent] of [total] bytes written. Only bytes that
+ * were really written are counted.
+ */
+class UploadProgress(
+    val emailNumber: Int,
+    val totalEmails: Int,
+    val msgsBefore: Int,
+    val emailMsgs: Int,
+    val sent: Long,
+    val total: Long,
+)
+
+/** UX-11: called while an email uploads, and once with [UploadProgress.total] = 0 when it is over (landed or not). */
+typealias OnUpload = (UploadProgress) -> Unit
+
+/**
  * Mirrors `_size_split_cached`: recursively halve [messages] until each piece
  * fits [limitBytes] on the wire.
  *
@@ -276,6 +293,8 @@ fun pushChunks(
     /** D185: remembers messages whose upload outcome was never learned, across runs. */
     pendingUploads: PendingUploads? = null,
     pendingChatId: String = "",
+    /** UX-11: see [OnUpload]. */
+    onUpload: OnUpload? = null,
 ): List<PushResult> {
     val results = mutableListOf<PushResult>()
     var currentAnchor = anchorMessageId
@@ -354,8 +373,28 @@ fun pushChunks(
 
             pendingUploads?.record(pendingChatId, newMid, subChunk.map { messageHashOf(it) })
 
+            val emailNumber = i + 1
+            val emailTotal = totalEmails
+            val before = msgsDone
+            val emailMsgCount = subChunk.size
+            var uploadReported = false
+            if (onUpload != null) {
+                transport.setUploadListener { sent, total ->
+                    uploadReported = true
+                    onUpload(UploadProgress(emailNumber, emailTotal, before, emailMsgCount, sent, total))
+                }
+            }
             val response = try {
-                insertWithBackoff(transport, raw, labelId, currentThread, sleeper, shouldStop)
+                try {
+                    insertWithBackoff(transport, raw, labelId, currentThread, sleeper, shouldStop)
+                } finally {
+                    // UX-11: however this email ended (landed, failed, cut by Stop), its MB line is over.
+                    // Only when bytes were reported, so a run that never wrote a byte emits nothing extra.
+                    if (onUpload != null) {
+                        transport.setUploadListener(null)
+                        if (uploadReported) onUpload(UploadProgress(emailNumber, emailTotal, before, emailMsgCount, 0, 0))
+                    }
+                }
             } catch (exc: StopRequestedException) {
                 // BUG-26: Stop cut this email off (or was seen between two attempts). Not a failure:
                 // the push ends here with what was delivered, and the run reports "stopped".
@@ -487,6 +526,8 @@ fun pushChat(
     /** D177: see [pushChunks]. */
     pendingUploads: PendingUploads? = null,
     pendingChatId: String = "",
+    /** UX-11: see [OnUpload]. */
+    onUpload: OnUpload? = null,
 ): PushChatResult {
     if (messages.isEmpty()) return PushChatResult(emptyList(), labelId ?: "", threadId ?: "")
 
@@ -515,6 +556,7 @@ fun pushChat(
         appVersion = appVersion,
         pendingUploads = pendingUploads,
         pendingChatId = pendingChatId,
+        onUpload = onUpload,
         shouldStop = {
             val stop = shouldStop()
             if (stop) stopped = true

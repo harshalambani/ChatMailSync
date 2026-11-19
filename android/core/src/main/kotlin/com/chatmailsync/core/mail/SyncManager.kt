@@ -407,6 +407,7 @@ class SyncManager(
                 allowFolderRename = chatId != LEGACY_CHAT_ID,
                 pendingUploads = repo,
                 pendingChatId = chatId,
+                onUpload = { u -> onUploadProgress(displayName, u) },
             )
             results = pushed.results
             labelId = pushed.labelId
@@ -471,6 +472,30 @@ class SyncManager(
             if (label != stored) repo.updateChatGmailIds(chatId, null, label, null)
         } catch (_: Exception) {
         }
+    }
+
+    private val uploadThrottle = UploadThrottle()
+
+    /** UX-11: one throttled "upload" event per tick while an email goes out; the end signal always passes. */
+    private fun onUploadProgress(displayName: String, u: UploadProgress) {
+        if (u.total > 0L) {
+            if (!uploadThrottle.allow()) return
+        } else {
+            uploadThrottle.reset()
+        }
+        emit(
+            mapOf(
+                "type" to "upload",
+                "name" to displayName,
+                "email" to u.emailNumber,
+                "total_emails" to u.totalEmails,
+                "email_msgs" to u.emailMsgs,
+                "sent" to u.sent,
+                "total" to u.total,
+                "global_before" to priorMsgsDone + u.msgsBefore,
+                "global_total" to totalNewMessages,
+            ),
+        )
     }
 
     private fun onChunkProgress(displayName: String, chunk: Int, totalChunks: Int, msgsDone: Int, totalMsgs: Int) {

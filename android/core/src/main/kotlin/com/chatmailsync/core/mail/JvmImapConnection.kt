@@ -37,6 +37,13 @@ class JvmImapConnection private constructor(
 
     private val reader = ImapLineReader(input)
 
+    @Volatile
+    private var uploadListener: ((Long) -> Unit)? = null
+
+    override fun setUploadListener(listener: ((Long) -> Unit)?) {
+        uploadListener = listener
+    }
+
     private var tagCounter = 0
 
     private fun nextTag(): String {
@@ -86,7 +93,15 @@ class JvmImapConnection private constructor(
                 if (literal != null && !literalSent) {
                     literalSent = true
                     try {
-                        output.write(literal)
+                        // UX-11: written in pieces so the running byte count is true to what left.
+                        val listener = uploadListener
+                        var off = 0
+                        while (off < literal.size) {
+                            val n = minOf(UPLOAD_PIECE_BYTES, literal.size - off)
+                            output.write(literal, off, n)
+                            off += n
+                            listener?.invoke(off.toLong())
+                        }
                         output.write(CRLF)
                         output.flush()
                     } catch (exc: IOException) {
@@ -215,6 +230,7 @@ class JvmImapConnection private constructor(
             TlsHostCheck.handshake(plain, host, port)
         }
 
+        private const val UPLOAD_PIECE_BYTES = 32 * 1024
         private val LITERAL_TAIL = Regex("""\{(\d+)\}$""")
         private val CRLF = byteArrayOf('\r'.code.toByte(), '\n'.code.toByte())
         private val INTERNALDATE_FORMAT: DateTimeFormatter =

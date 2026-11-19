@@ -54,6 +54,13 @@ class ImapTransport(
 
     /** BUG-26: how many times each email's bytes went on the wire in this run (key: its Message-ID). */
     private val uploads = HashMap<String, Int>()
+
+    @Volatile
+    private var uploadListener: ((Long, Long) -> Unit)? = null
+
+    override fun setUploadListener(listener: ((sent: Long, total: Long) -> Unit)?) {
+        uploadListener = listener
+    }
     private var delimiter: String? = null
 
     /**
@@ -296,7 +303,13 @@ class ImapTransport(
             val startedNs = System.nanoTime()
             val result = try {
                 // Never `call`: a blind reconnect-and-resend of an APPEND is exactly the F-02 bug.
-                connection.append(wireFolder, flags, internalDate, crlfBytes)
+                val total = crlfBytes.size.toLong()
+                connection.setUploadListener(uploadListener?.let { l -> { sent: Long -> l(sent, total) } })
+                try {
+                    connection.append(wireFolder, flags, internalDate, crlfBytes)
+                } finally {
+                    connection.setUploadListener(null)
+                }
             } catch (exc: Exception) {
                 logAppend(crlfBytes.size, startedNs, exc.javaClass.simpleName, null, wireFolder, folder, headerId)
                 if (aborted) {
