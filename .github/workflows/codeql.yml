@@ -69,11 +69,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Accept SDK licences and install platform 36
+      - name: Accept SDK licences and install platform 37
         if: matrix.language == 'java-kotlin'
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
 
       - name: Set up Gradle
         if: matrix.language == 'java-kotlin'
