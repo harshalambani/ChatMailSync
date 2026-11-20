@@ -19,7 +19,7 @@ Released 2026-11-19 (versionCode 52). Safer uploads: no repeated sending, Stop w
 - SEC-12: a test proves a certificate for the wrong host name is refused (#170).
 - SEC-13: the backup export no longer loads the whole database into memory. A server that greets as already signed in is refused for the built-in providers. A message is sent to the server once per request. A custom server name is no longer put in the app-password help search link (#183).
 - SEC-17: build and library updates from Dependabot: Gradle 9.9.1, Robolectric 4.18 (#187).
-- SEC-19: navigation-compose 2.10.2 and lifecycle 2.11, built against Android API level 37 (#PR).
+- SEC-19: navigation-compose 2.10.2 and lifecycle 2.11, built against Android API level 37 (#189).
 - STO-10: made-up sample exports for the F-Droid reviewer (#167).
 
 ## 3.0.5
