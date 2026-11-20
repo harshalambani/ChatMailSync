@@ -213,7 +213,7 @@ dependencies {
     // cases :core uses for its JDBC double against the real adapter. It is used for that and
     // nothing else; the Context-free tests stay plain JUnit.
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("androidx.test:core:1.6.1")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
