@@ -4,10 +4,10 @@ package com.chatmailsync.app
  * The app-wide cutoff date, as text: reading it, and saying it out loud.
  *
  * The cutoff is a floor -- "never send me anything from before this date" --
- * and it is stored as a bare "YYYY-MM-DD" day in [AppPrefs]. Python owns what
- * it *means*: src/state.py's normalise_cutoff turns the day into local
+ * and it is stored as a bare "YYYY-MM-DD" day in [AppPrefs]. The core owns what
+ * it *means*: its normaliseCutoff turns the day into local
  * midnight and SyncManager compares message timestamps against that. Nothing
- * here duplicates that rule; this is the Kotlin side of deciding whether what
+ * here duplicates that rule; this is the app side of deciding whether what
  * the user typed can be read at all, and turning it into a sentence a person
  * would say.
  *

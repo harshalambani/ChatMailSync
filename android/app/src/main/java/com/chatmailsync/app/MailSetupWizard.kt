@@ -275,7 +275,7 @@ fun MailSetupWizardScreen(
                     }
                     // D4: for a known provider the server settings are a fact
                     // to be told, not a question to be asked -- they are right
-                    // in the Python preset table and getting them wrong is a
+                    // in the core's preset table and getting them wrong is a
                     // failure the user cannot diagnose. Only "Other (IMAP)"
                     // gets real fields, and those are on step 3 with the rest
                     // of what has to be typed.

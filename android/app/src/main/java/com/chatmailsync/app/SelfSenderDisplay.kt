@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.dp
  */
 enum class SelfSenderSource { LEARNED, UNKNOWN, OVERRIDE }
 
-/** Parses the raw `source` string the Python core returns. Anything not
+/** Parses the raw `source` string the core returns. Anything not
  *  recognised falls to [SelfSenderSource.UNKNOWN] rather than throwing --
- *  the honest state to show if the two sides of the bridge ever disagree. */
+ *  the honest state to show if the app and the core ever disagree. */
 fun selfSenderSourceOf(source: String?): SelfSenderSource = when (source) {
     "learned" -> SelfSenderSource.LEARNED
     "override" -> SelfSenderSource.OVERRIDE

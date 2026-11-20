@@ -21,11 +21,11 @@ import java.io.InputStream
  * mailbox is the record of which messages have already been sent. That record,
  * plus the handful of preferences worth retyping, is what crosses.
  *
- * Kotlin owns the file and Python owns the contents. SAF hands us a content://
- * URI, which Python cannot open, so the shape below is always the same: copy
- * between the URI and a cache file, and let src/migration.py do everything that
+ * The app owns the file and the core owns the contents. SAF hands us a content://
+ * URI, which the core cannot open, so the shape below is always the same: copy
+ * between the URI and a cache file, and let the core's Migration do everything that
  * involves knowing what a bundle is. That keeps one implementation of the merge
- * rules for both front-ends rather than two that agree until they don't.
+ * rules rather than two that agree until they don't.
  */
 /**
  * The most a picked backup may be before it is staged: the core's database
@@ -135,7 +135,7 @@ object Migration {
     /**
      * The preferences worth carrying, as the JSON string the bridge takes.
      *
-     * Read this list against [migration._PORTABLE_SETTINGS] on the Python side:
+     * Read this list against the core Migration's portable-settings list:
      * that is the allow-list, and anything not on it is dropped there even if it
      * is offered here. The password is not offered here either -- it lives in
      * the Keystore, sealed to *this* device, and a portable copy of it would be
@@ -320,8 +320,8 @@ object Migration {
         }
     }
 
-    /** Provider key -> display label, read fresh from the Python side (the
-     *  same config.IMAP_PROVIDERS table MainActivity's own provider picker
+    /** Provider key -> display label, read fresh from the core (the
+     *  same IMAP provider table MainActivity's own provider picker
      *  reads), for [restoreSummary]'s "Mail account" line. */
     private fun currentProviderLabels(context: Context): Map<String, String> =
         api(context).imapProviders().associate { entry ->
@@ -604,7 +604,7 @@ internal data class RestoreSummaryLines(val restored: List<String>, val notResto
  * restore screen (batch 7b: "and some confirmation - that what all got
  * restored").
  *
- * Pure -- no Context, no Python -- so every combination of what a bundle did
+ * Pure -- no Context, no core call -- so every combination of what a bundle did
  * and did not carry is a plain JUnit test rather than something only a
  * manual restore-and-look would catch. [appliedSettings] mirrors exactly
  * what [Migration.applySettings] wrote (see [Migration.parseAppliedSettings]
@@ -619,8 +619,8 @@ internal data class RestoreSummaryLines(val restored: List<String>, val notResto
  * spelling ("system", "delete", "day") in place of the words Settings/
  * Advanced already uses for it.
  *
- * [providerLabels] is passed in rather than read here (there is no Python
- * bridge to call from a pure function) -- [Migration.currentProviderLabels]
+ * [providerLabels] is passed in rather than read here (there is no core
+ * to call from a pure function) -- [Migration.currentProviderLabels]
  * is what a real restore supplies; tests supply a small fake map instead.
  *
  * `imap_host` is deliberately never read from [appliedSettings]: it is
