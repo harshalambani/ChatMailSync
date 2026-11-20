@@ -63,7 +63,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_PROGRESS_TEXT = "progress_text"
         const val KEY_PROGRESS_FRACTION = "progress_fraction"
         /** The same fraction as a whole number, or -1 when there is no honest
-         * one yet. Rounded in src/progress.py rather than here so the
+         * one yet. Rounded in the core's ProgressTracker rather than here so the
          * collapsed sync bar and the full progress screen can never disagree
          * by a percentage point. */
         const val KEY_PROGRESS_PERCENT = "progress_percent"
@@ -168,7 +168,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                 // What comes back is the whole state of the run so far, not
                 // the events since the last look, so a slow tick can't drop
                 // anything: the status line, the monotonic fraction and the
-                // milestone log are all derived in src/progress.py. Kotlin's
+                // milestone log are all derived in the core's ProgressTracker. The app's
                 // job here is to move those three strings onto the
                 // notification and into WorkManager's Data — not to decide
                 // what they say.
@@ -526,7 +526,7 @@ private data class SyncStatsResult(
                 (result[key] as? List<*>)?.map { it.toString() } ?: emptyList()
 
             val errors = stringsOf("errors")
-            // Older Python side, or a dry run, simply has no such key -- and
+            // A dry run, or a result from an older build, simply has no such key -- and
             // stringsOf answers with an empty list rather than throwing, so an
             // app paired with a build that predates media_omitted still works.
             val mediaOmitted = stringsOf("media_omitted")
@@ -631,7 +631,7 @@ internal fun scrubSecret(text: String, secret: String?): String = stripSecret(te
 
 /**
  * The saved chunk-size text ("day", "hour", "week", or a message count) as the core's type.
- * Anything unknown falls back to a day, the default the Python core used.
+ * Anything unknown falls back to a day, the core's default.
  */
 internal fun parseChunkSize(text: String?): ChunkSize = when (text?.trim()?.lowercase()) {
     "hour" -> ChunkSize.Hour

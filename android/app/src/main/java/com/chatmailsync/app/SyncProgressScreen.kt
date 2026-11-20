@@ -100,7 +100,7 @@ fun SyncProgressScreen(
         .value
         .firstOrNull()
     // Local only — request_stop() is fire-and-forget on the core side
-    // (src/android_api.py sets a threading.Event the in-flight sync polls
+    // (the core's stop flag is one the in-flight sync polls
     // between files). This just tracks that a request was made so the
     // button doesn't look like it did nothing while the current file
     // finishes.
@@ -194,7 +194,7 @@ fun SyncProgressScreen(
                 }
                 else -> {
                     val fraction = workInfo.progress.getFloat(SyncWorker.KEY_PROGRESS_FRACTION, -1f)
-                    // Rounded on the Python side and carried here, so this
+                    // Rounded in the core and carried here, so this
                     // screen and the collapsed bar can never differ by a
                     // point on the same run.
                     val percent = workInfo.progress.getInt(SyncWorker.KEY_PROGRESS_PERCENT, -1)

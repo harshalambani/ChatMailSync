@@ -48,7 +48,7 @@ import java.util.Calendar
 /** Mirrors android_api.imap_providers(), itself a mirror of
  * src/config.py's IMAP_PROVIDERS — [host] is "" for "custom" (no preset).
  * Kept top-level here (not private) because MainActivity.kt also
- * instantiates/populates it when loading the provider list from Python. */
+ * instantiates/populates it when loading the provider list from the core. */
 data class ImapProviderInfo(val key: String, val label: String, val host: String, val port: Int)
 
 /** Whether the Host/Port fields are shown at all. They only carry meaning

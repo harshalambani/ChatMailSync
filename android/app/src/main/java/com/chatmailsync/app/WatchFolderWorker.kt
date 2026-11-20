@@ -95,7 +95,7 @@ class WatchFolderWorker(appContext: Context, params: WorkerParameters) :
          * success or failure — reconciles AppPrefs' pending_synced_files ledger
          * against what's actually still sitting in inbox/. A pending entry
          * whose file is no longer in inbox/ was moved to processed/ by
-         * sync_manager.py, which only ever does that on confirmed delivery or
+         * the core's SyncManager, which only ever does that on confirmed delivery or
          * a dedup-skip (never on a parse failure) — so "gone from inbox/" is
          * the same ground truth already relied on elsewhere as "delivered",
          * not a new invented signal. Only once that's true do we act on

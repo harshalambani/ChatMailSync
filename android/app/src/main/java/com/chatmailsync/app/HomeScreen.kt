@@ -61,7 +61,7 @@ internal fun displayNameFor(filename: String): String {
 
 // internal, not private: exercised directly by a plain unit test rather than
 // a Compose test, since it is the whole decision behind the one-time Home
-// banner -- null (nothing learned yet) and blank (Python state cleared to
+// banner -- null (nothing learned yet) and blank (the saved state cleared to
 // empty rather than to null) must both suppress the card.
 internal fun shouldShowSelfSenderBanner(pendingName: String?): Boolean =
     !pendingName.isNullOrBlank()
@@ -101,7 +101,7 @@ private fun BackgroundHealthCard(issue: BackgroundIssue, onAction: () -> Unit) {
  * One-time card telling the owner the app has worked out their name from a
  * one-to-one export. Shown on Home only, never as a dialog or a snackbar --
  * this is good news, not an interruption, and it is gone the moment either
- * button is pressed rather than waiting for the next Python round-trip.
+ * button is pressed rather than waiting for the next progress refresh.
  *
  * Deliberately an ordinary surface card: [SelfSenderSource.color] and the Me
  * strip's palette exist to distinguish "override" from "learned" from

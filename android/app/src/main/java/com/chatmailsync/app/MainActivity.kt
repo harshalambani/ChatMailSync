@@ -465,7 +465,7 @@ internal fun tabPopTargetRoute(): String = "home"
  * as the android app" was about. The bar is the way back: it says what is
  * happening, how far along, and reopens the full view on tap.
  *
- * The text and the fraction are rendered by src/progress.py and carried here
+ * The text and the fraction are rendered by the core's ProgressTracker and carried here
  * verbatim, so this bar, the full progress screen and the notification all
  * say the same words. */
 @Composable
@@ -1047,7 +1047,7 @@ fun ChatMailApp(
     // and conflating them means asking someone to "choose" a file that does not
     // exist yet. The work itself is off the main thread -- it opens SQLite
     // databases and walks every row of the ledger -- on the same Thread/Handler
-    // pattern the rest of this file uses for Python calls.
+    // pattern the rest of this file uses for core calls.
     var migrationBusy by remember { mutableStateOf(false) }
     var migrationStatus by remember { mutableStateOf<String?>(null) }
     // Batch 7b: alongside the existing one-line migrationStatus message --
@@ -1584,7 +1584,7 @@ fun ChatMailApp(
 
     // One sync at a time, full stop — a manual Home sync, a watched-folder
     // check/auto-sync, and the periodic scheduled watcher all ultimately
-    // push through the same shared Python SyncManager/state DB, so letting
+    // push through the same shared core SyncManager/state DB, so letting
     // two run concurrently risks interleaved writes to sync_runs. Both
     // Home's and Settings' sync buttons disable off this same flag, whichever
     // of the three is the one actually in flight.

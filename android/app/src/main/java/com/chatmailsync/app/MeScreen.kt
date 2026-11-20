@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MeScreen(
     display: SelfSenderDisplay,
-    // Python-owned wording from android_api.get_self_sender()["detail"] --
+    // Core-owned wording from CoreApi.getSelfSender()["detail"] --
     // this screen shows it verbatim rather than writing its own explanation,
     // so the two front-ends never say this two different ways.
     detail: String,
