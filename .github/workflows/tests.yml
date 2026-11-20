@@ -122,10 +122,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Accept SDK licences and install platform 36
+      - name: Accept SDK licences and install platform 37
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
