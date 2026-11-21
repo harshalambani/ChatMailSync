@@ -1136,7 +1136,7 @@ fun ChatMailApp(
     // inbox until the user answers. Matching reads stored fingerprints only (never text).
     var linkQuestions by remember { mutableStateOf(listOf<Map<String, Any?>>()) }
     var linkTick by remember { mutableStateOf(0) }
-    var linkSnoozed by remember { mutableStateOf(setOf<String>()) }
+    var linkSnoozed by androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
     LaunchedEffect(inboxFiles, linkTick) {
         linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {

@@ -1,5 +1,6 @@
 package com.chatmailsync.app
 
+import androidx.compose.runtime.saveable.Saver
 import java.io.File
 
 /**
@@ -24,6 +25,17 @@ internal fun pickOpenQuestion(questions: List<Map<String, Any?>>, snoozed: Set<S
 
 /** "Ask me later" (or Back): hides only this pair. */
 internal fun snoozePair(snoozed: Set<String>, key: String): Set<String> = snoozed + key
+
+/**
+ * UX-12: keeps the snoozed pairs across a rotation (the activity is recreated, so a plain `remember`
+ * forgot them and the question came straight back). Only the pair keys are saved, and a key is two
+ * chat ids ("new|old"), never a chat name. A cold start has no saved state, so the snooze ends then,
+ * as designed.
+ */
+internal val LinkSnoozeSaver: Saver<Set<String>, ArrayList<String>> = Saver(
+    save = { ArrayList(it) },
+    restore = { it.toSet() },
+)
 
 /** Reopening from the Home row: clears the snooze of every pair asked about this file. */
 internal fun reopenFor(snoozed: Set<String>, questions: List<Map<String, Any?>>, fileName: String): Set<String> {
