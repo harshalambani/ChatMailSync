@@ -453,8 +453,11 @@ class ImapTransport(
         } else {
             wireFolder
         }
+        // LIST first: it re-learns the hierarchy delimiter (a reconnect clears it), and the canonical name
+        // below must use the delimiter LIST just reported, or an existing folder could read as missing.
+        val listed = labelsList()
         val canonical = mailboxFromWire(bare)
-        return labelsList().none { it.name.equals(canonical, ignoreCase = true) }
+        return listed.none { it.name.equals(canonical, ignoreCase = true) }
     }
 
     /** SEC-10: a refused lookup is a throttle (wait 30 s and more) when the server says so, else a plain 503. */

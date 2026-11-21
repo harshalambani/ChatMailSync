@@ -32,6 +32,8 @@ class MissingFolderTest {
         override val capabilities: List<String> = emptyList()
         var folderExists = false
         var listFails = false
+        var delim = "/"
+        var abortFirstExamine = false
         var examineReply: ImapResult? = null // null = derive from folderExists
         var examineThrows: Throwable? = null
         val appendReplies = ArrayDeque<ImapResult>()
@@ -41,8 +43,8 @@ class MissingFolderTest {
 
         override fun list(reference: String, pattern: String): ImapResult {
             if (listFails) return ImapResult("NO", listOf("busy"))
-            val lines = mutableListOf("(\\HasNoChildren) \"/\" \"INBOX\"")
-            if (folderExists) lines.add("(\\HasNoChildren) \"/\" \"WhatsApp/Meera Iyer\"")
+            val lines = mutableListOf("(\\HasNoChildren) \"$delim\" \"INBOX\"")
+            if (folderExists) lines.add("(\\HasNoChildren) \"$delim\" \"WhatsApp${delim}Meera Iyer\"")
             return ImapResult("OK", lines)
         }
         override fun create(mailboxWireArg: String): ImapResult {
@@ -60,6 +62,10 @@ class MissingFolderTest {
             return ImapResult("OK", listOf("Completed"))
         }
         override fun examine(mailboxWireArg: String): ImapResult {
+            if (abortFirstExamine) {
+                abortFirstExamine = false
+                throw ImapAbortError("dropped")
+            }
             examineThrows?.let { throw it }
             examineReply?.let { return it }
             return if (folderExists) ImapResult("OK", listOf("0 EXISTS")) else ImapResult("NO", listOf("Mailbox does not exist"))
@@ -283,6 +289,26 @@ class MissingFolderTest {
             fail("expected an error")
         } catch (e: MailTransportError) {
             assertFalse(e.definiteRefusal)
+        }
+    }
+
+    // Negative: after a reconnect the transport forgets the folder delimiter. On a server whose delimiter
+    // is not "/" (here "."), an existing folder must still read as "cannot tell", never "not found" --
+    // otherwise a stored email could be sent again.
+    @Test
+    fun aReconnectOnADotDelimiterServerDoesNotMakeAnExistingFolderLookMissing() {
+        val s = Server()
+        s.delim = "."
+        s.folderExists = true
+        val t = transport(s)
+        t.labelsList() // learns the "." delimiter, as an earlier step of a real run does
+        s.abortFirstExamine = true // the lookup's first EXAMINE drops: call() reconnects and clears the delimiter
+        s.examineReply = ImapResult("NO", listOf("EXAMINE failed"))
+        try {
+            t.lookupStored("<old@x>", folder)
+            fail("expected cannot-tell, not 'not found'")
+        } catch (e: MailTransportError) {
+            assertEquals(503, e.status)
         }
     }
 }
