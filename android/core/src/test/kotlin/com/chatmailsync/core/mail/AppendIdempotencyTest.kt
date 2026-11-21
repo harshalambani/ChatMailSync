@@ -40,8 +40,12 @@ class AppendIdempotencyTest {
             connections++
             return object : ImapConnection {
                 override val capabilities: List<String> = emptyList()
+                // BUG-28: the folder exists on this server, so a refused EXAMINE is "cannot tell".
                 override fun list(reference: String, pattern: String) =
-                    ImapResult("OK", listOf("(\\HasNoChildren) \"/\" \"INBOX\""))
+                    ImapResult(
+                        "OK",
+                        listOf("(\\HasNoChildren) \"/\" \"INBOX\"", "(\\HasNoChildren) \"/\" \"WhatsApp/Meera Iyer\""),
+                    )
                 override fun create(mailboxWireArg: String) = ImapResult("OK", listOf("Completed"))
                 override fun subscribe(mailboxWireArg: String) = ImapResult("OK", listOf("Completed"))
                 override fun append(
@@ -313,7 +317,7 @@ class AppendIdempotencyTest {
                 }
             },
         )
-        assertEquals(listOf("INBOX"), t.labelsList().map { it.name })
+        assertEquals(listOf("INBOX", "WhatsApp/Meera Iyer"), t.labelsList().map { it.name })
         assertEquals(2, calls)
     }
 

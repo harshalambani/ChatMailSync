@@ -281,6 +281,8 @@ class ImapTransport(
         val flags = if (setSeen) "(\\Seen)" else null
 
         val uploadKey = headerId ?: ("bytes:" + java.util.Arrays.hashCode(crlfBytes))
+        // BUG-28: a missing folder is created and the upload retried, once per call, never in a loop.
+        var createTried = false
         while (true) {
             if (aborted) throw StopRequestedException()
             if (headerId != null && headerId in unconfirmed) {
@@ -335,7 +337,23 @@ class ImapTransport(
             }
             logAppend(crlfBytes.size, startedNs, result.status, result.data, wireFolder, folder, headerId)
             if (headerId != null) unconfirmed.remove(headerId)
-            if (result.status != "OK") throw capIfRetryable(mapResponse(result.status, result.data, "APPEND"), count)
+            if (result.status != "OK") {
+                if (!createTried && isMissingFolderReply(joinImapResponse(result.data))) {
+                    // BUG-28: [TRYCREATE] says nothing was stored because the folder is gone. CREATE it
+                    // once and send again; a CREATE that fails ends the email with that refusal.
+                    createTried = true
+                    try {
+                        labelsCreate(folder)
+                    } catch (_: MailTransportError) {
+                        throw definite(mapResponse(result.status, result.data, "APPEND"))
+                    }
+                    diagLog("APPEND: folder missing, created once and retrying")
+                    continue
+                }
+                val refusal = mapResponse(result.status, result.data, "APPEND")
+                // A NO or BAD reply is a definite refusal: the email was not stored.
+                throw definite(capIfRetryable(refusal, count))
+            }
             val uid = extractAppendUid(result.data)
             return InsertResult(id = uid ?: messageId, threadId = resultThread)
         }
@@ -372,6 +390,10 @@ class ImapTransport(
     private fun capIfRetryable(exc: MailTransportError, uploadsSoFar: Int): MailTransportError =
         if (exc.status in RETRYABLE_STATUSES && uploadsSoFar >= MAX_UPLOADS_PER_EMAIL) uploadCapError() else exc
 
+    /** BUG-28: the same error, marked as a definite server refusal (nothing was stored). */
+    private fun definite(exc: MailTransportError): MailTransportError =
+        if (exc is MessageTooLargeError) exc else MailTransportError(exc.message ?: "", exc.status, definiteRefusal = true)
+
     /** An abort, I/O error or timeout: the server may or may not have stored the message. */
     private fun outcomeUnknown(exc: Throwable): Boolean =
         exc is ImapAbortError || exc is SocketTimeoutException || exc is IOException
@@ -384,7 +406,15 @@ class ImapTransport(
     private fun findByMessageId(wireFolder: String, messageId: String): String? {
         try {
             val examined = call { it.examine(wireFolder) }
-            if (examined.status != "OK") throw lookupRefused("EXAMINE", examined.data)
+            if (examined.status != "OK") {
+                // BUG-28: a folder that is not on the server holds no such email: "not found", never
+                // "cannot tell". Any other refusal (a throttle, a server error) is still "cannot tell".
+                if (folderIsMissing(wireFolder, examined.data)) {
+                    diagLog("F-02 lookup: not found")
+                    return null
+                }
+                throw lookupRefused("EXAMINE", examined.data)
+            }
             val found = call { it.uidSearchMessageId(messageId) }
             if (found.status != "OK") throw lookupRefused("SEARCH", found.data)
             val uids = found.data.filterNotNull()
@@ -406,6 +436,28 @@ class ImapTransport(
                 if (isThrottleReply(text)) THROTTLE_STATUS else 503,
             )
         }
+    }
+
+    /**
+     * BUG-28: whether a refused EXAMINE means the folder does not exist. The reply text says so, or the
+     * folder is absent from LIST. A throttle never counts, and a LIST that itself fails leaves it unknown
+     * (the lookup error then stands, so nothing is re-sent).
+     */
+    private fun folderIsMissing(wireFolder: String, data: List<String?>): Boolean {
+        val text = stripSecret(joinImapResponse(data), password)
+        if (isThrottleReply(text)) return false
+        if (isMissingFolderReply(text)) return true
+        // The wire form may be a quoted string; LIST names come back unquoted.
+        val bare = if (wireFolder.length >= 2 && wireFolder.startsWith("\"") && wireFolder.endsWith("\"")) {
+            wireFolder.substring(1, wireFolder.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+        } else {
+            wireFolder
+        }
+        // LIST first: it re-learns the hierarchy delimiter (a reconnect clears it), and the canonical name
+        // below must use the delimiter LIST just reported, or an existing folder could read as missing.
+        val listed = labelsList()
+        val canonical = mailboxFromWire(bare)
+        return listed.none { it.name.equals(canonical, ignoreCase = true) }
     }
 
     /** SEC-10: a refused lookup is a throttle (wait 30 s and more) when the server says so, else a plain 503. */
@@ -440,3 +492,10 @@ fun normalizeCrlf(data: ByteArray): ByteArray {
 /** F-02: a Message-ID that may be put inside a quoted SEARCH argument: printable ASCII, no quote, no backslash. */
 internal fun isSafeMessageId(id: String): Boolean =
     id.isNotEmpty() && id.all { it.code in 0x21..0x7E && it != '"' && it != '\\' }
+
+/** BUG-28: a server reply that says the folder does not exist (RFC 3501 [TRYCREATE], RFC 5530 [NONEXISTENT]). */
+fun isMissingFolderReply(text: String): Boolean {
+    val upper = text.uppercase()
+    return "TRYCREATE" in upper || "NONEXISTENT" in upper ||
+        "DOESN'T EXIST" in upper || "DOES NOT EXIST" in upper || "NO SUCH MAILBOX" in upper
+}
