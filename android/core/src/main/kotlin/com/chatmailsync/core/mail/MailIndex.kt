@@ -23,9 +23,14 @@ private const val ESTIMATED_BYTES_PER_ENTRY = 256
 /** Mirrors `estimate_index_bytes`: a conservative upper bound on the attached index size for N messages. */
 fun estimateIndexBytes(messageCount: Int): Int = 512 + ESTIMATED_BYTES_PER_ENTRY * messageCount
 
-/** Mirrors `src.state.compute_message_hash`. */
-fun computeMessageHash(chatId: String, timestampIso: String, sender: String, body: String): String {
-    val raw = "$chatId\u0000$timestampIso\u0000$sender\u0000$body"
+/**
+ * Mirrors `src.state.compute_message_hash`. BUG-24: [occurrence] 1 (the default) is EXACTLY the
+ * original fingerprint; the k-th identical copy (k >= 2) is SHA256(original text + NUL + k), so
+ * every copy gets its own ledger row.
+ */
+fun computeMessageHash(chatId: String, timestampIso: String, sender: String, body: String, occurrence: Int = 1): String {
+    var raw = "$chatId\u0000$timestampIso\u0000$sender\u0000$body"
+    if (occurrence >= 2) raw += "\u0000$occurrence"
     val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
     return digest.joinToString("") { "%02x".format(it) }
 }
@@ -69,7 +74,7 @@ fun buildIndex(
             n = idx + 1,
             ts = msg.timestampIso,
             sender = msg.sender,
-            hash = computeMessageHash(msg.chatId, msg.timestampIso, msg.sender, msg.body),
+            hash = computeMessageHash(msg.chatId, msg.timestampIso, msg.sender, msg.body, msg.occurrence),
         )
     }
     return MailIndex(

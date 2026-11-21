@@ -50,6 +50,9 @@ class StateRepository(
         // silently ignores the second there, and [withDb] always runs inside one, so they
         // never took effect here. They are now [StateDb.configure], run outside any
         // transaction (WAL on; foreign keys stay OFF by parity -- see [StateDb.configure]).
+        /** BUG-24: the app_state key that holds the moment identical copies began to be numbered. */
+        const val OCCURRENCE_SINCE_KEY = "occurrence_hash_since"
+
         internal val DDL: String = """
             CREATE TABLE IF NOT EXISTS chats (
                 chat_id           TEXT PRIMARY KEY,
@@ -189,8 +192,8 @@ class StateRepository(
 
         /** Twin of `state.py:compute_message_hash`, reusing the single
          * implementation in `MailIndex.kt` -- see this class's doc comment. */
-        fun computeMessageHash(chatId: String, timestampIso: String, sender: String, body: String): String =
-            com.chatmailsync.core.mail.computeMessageHash(chatId, timestampIso, sender, body)
+        fun computeMessageHash(chatId: String, timestampIso: String, sender: String, body: String, occurrence: Int = 1): String =
+            com.chatmailsync.core.mail.computeMessageHash(chatId, timestampIso, sender, body, occurrence)
     }
 
     // -----------------------------------------------------------------
@@ -561,6 +564,18 @@ class StateRepository(
     // Sync run helpers
     // -----------------------------------------------------------------
 
+    /**
+     * BUG-24: the moment identical copies began to get their own fingerprint. Written once, just before
+     * the first run this code starts, and never moved: a run that started before it filed identical
+     * copies as ONE row, and [isMessageFiled] reads such a row as covering all its copies. Until it is
+     * written, every row in the ledger is such a row. [SyncManager] calls this before it starts any run.
+     */
+    fun markOccurrenceSince() {
+        withDb { db ->
+            db.exec("INSERT OR IGNORE INTO app_state (key, value) VALUES (?, ?)", listOf(OCCURRENCE_SINCE_KEY, clock()))
+        }
+    }
+
     fun startSyncRun(chatId: String, trigger: String = "manual"): Long =
         withDb { db ->
             db.exec(
@@ -686,6 +701,50 @@ class StateRepository(
 
     fun hashExists(msgHash: String): Boolean =
         withDb { db -> db.query("SELECT 1 FROM message_hashes WHERE hash = ?", listOf(msgHash)).isNotEmpty() }
+
+    /**
+     * BUG-24: is [m] already filed? Its own fingerprint is in the ledger, or it is the 2nd or later
+     * copy of a text whose FIRST copy was filed by a run that started before [OCCURRENCE_SINCE_KEY]:
+     * before that moment identical copies shared one row, so that row stands for all of them. A first
+     * copy filed after the moment says nothing about later copies; they are filed on their own.
+     */
+    fun isMessageFiled(m: ParsedMessage): Boolean {
+        if (hashExists(computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body, m.occurrence))) return true
+        if (m.occurrence < 2) return false
+        return isLegacyRow(computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body, 1))
+    }
+
+    /**
+     * True when the ledger row [hash] was filed by a run that started before the switch, or when that
+     * cannot be told (no switch recorded, or the row's run is gone): the answer then protects against a
+     * second send. False when there is no such row, or it is newer than the switch.
+     */
+    fun isLegacyRow(hash: String): Boolean = withDb { db ->
+        val since = db.query("SELECT value FROM app_state WHERE key = ?", listOf(OCCURRENCE_SINCE_KEY))
+            .firstOrNull()?.get("value") as String?
+        val rows = db.query(
+            "SELECT r.started_at AS started_at FROM message_hashes h " +
+                "LEFT JOIN sync_runs r ON r.run_id = h.run_id WHERE h.hash = ?",
+            listOf(hash),
+        )
+        if (rows.isEmpty()) return@withDb false
+        val started = rows.first()["started_at"] as String?
+        since == null || started == null || started < since
+    }
+
+    /**
+     * D185 and BUG-24: an unconfirmed upload recorded before the switch put identical copies in one
+     * email under ONE hash, so if the server has it, every copy of that text is in it.
+     */
+    override fun isLegacyPending(chatId: String, messageId: String): Boolean = withDb { db ->
+        val since = db.query("SELECT value FROM app_state WHERE key = ?", listOf(OCCURRENCE_SINCE_KEY))
+            .firstOrNull()?.get("value") as String?
+        val at = db.query(
+            "SELECT MIN(recorded_at) AS at FROM pending_messages WHERE chat_id = ? AND message_id = ?",
+            listOf(chatId, messageId),
+        ).firstOrNull()?.get("at") as String?
+        since == null || at == null || at < since
+    }
 
     data class HashEntry(val hash: String, val chatId: String, val messageTs: String, val runId: Long)
 
@@ -1005,15 +1064,41 @@ class StateRepository(
                 listOf(newChatId, displayName, carriedLabel, sourceFilename, now, now),
             )
             val newest = entries.maxOf { it.messageTs }
-            db.exec(
-                "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, messages_parsed, " +
-                    "messages_synced, messages_skipped, messages_cutoff, stopped, error_message, started_at, completed_at) " +
-                    "VALUES (?, 'complete', 'manual', ?, NULL, ?, ?, 0, 0, 0, NULL, ?, ?)",
-                listOf(newChatId, newest, entries.size, entries.size, now, now),
-            )
-            val runId = db.lastInsertRowId()
+            // BUG-24: a row filed before copies were numbered keeps that fact when it moves: it goes under
+            // a run stamped with the OLD run's start, never "now", or the move would make an old pair look
+            // newly filed and its second copy would be sent again.
+            val since = db.query("SELECT value FROM app_state WHERE key = ?", listOf(OCCURRENCE_SINCE_KEY))
+                .firstOrNull()?.get("value") as String?
+            val oldStart = HashMap<String, String?>()
+            for (e in entries) {
+                val r = db.query(
+                    "SELECT r.started_at AS started_at FROM message_hashes h LEFT JOIN sync_runs r ON r.run_id = h.run_id " +
+                        "WHERE h.hash = ? AND h.chat_id = ?",
+                    listOf(e.oldHash, legacyId),
+                ).firstOrNull() ?: continue
+                oldStart[e.oldHash] = r["started_at"] as String?
+            }
+            fun isOldRow(e: AdoptEntry): Boolean =
+                e.oldHash in oldStart && (since == null || oldStart[e.oldHash] == null || oldStart[e.oldHash]!! < since)
+            val oldRows = entries.filter { isOldRow(it) }
+            fun newRun(count: Int, startedAt: String): Long {
+                db.exec(
+                    "INSERT INTO sync_runs (chat_id, status, trigger, last_synced_ts, last_synced_hash, messages_parsed, " +
+                        "messages_synced, messages_skipped, messages_cutoff, stopped, error_message, started_at, completed_at) " +
+                        "VALUES (?, 'complete', 'manual', ?, NULL, ?, ?, 0, 0, 0, NULL, ?, ?)",
+                    listOf(newChatId, newest, count, count, startedAt, now),
+                )
+                return db.lastInsertRowId()
+            }
+            val freshRun = if (oldRows.size < entries.size) newRun(entries.size - oldRows.size, now) else -1L
+            val oldRun = if (oldRows.isNotEmpty()) {
+                newRun(oldRows.size, oldRows.mapNotNull { oldStart[it.oldHash] }.minOrNull() ?: "1970-01-01T00:00:00")
+            } else {
+                -1L
+            }
             var moved = 0
             for (e in entries) {
+                val runId = if (isOldRow(e)) oldRun else freshRun
                 val exists = db.query("SELECT 1 FROM message_hashes WHERE hash = ?", listOf(e.newHash)).isNotEmpty()
                 if (exists) continue
                 db.exec(

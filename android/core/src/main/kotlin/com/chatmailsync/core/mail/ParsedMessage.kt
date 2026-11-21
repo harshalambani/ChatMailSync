@@ -17,6 +17,12 @@ data class ParsedMessage(
     val sender: String,
     val body: String,
     val attachmentFilename: String? = null,
+    /**
+     * BUG-24: which identical copy this is. Within one chat, minute, sender and text the first copy
+     * in the file is 1, the next 2, and so on; set by [parseFile] from the whole file. Copy 1 keeps
+     * today's fingerprint exactly, so nothing already filed is sent again.
+     */
+    val occurrence: Int = 1,
 ) {
     /** Mirrors `timestamp.isoformat(timespec="seconds")` in Python. */
     val timestampIso: String = timestamp.format(TIMESTAMP_ISO_FORMAT)

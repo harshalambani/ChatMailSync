@@ -229,7 +229,16 @@ class SyncManager(
     private fun filedUnderOldFingerprint(chatId: String, all: List<ParsedMessage>): ((ParsedMessage) -> Boolean)? {
         if (!repo.hasAliases(chatId)) return null
         val filed = java.util.IdentityHashMap<ParsedMessage, Boolean>()
-        for (m in matchedOldHashes(repo, chatId, all, repo.hashesForChat(chatId)).values) filed[m] = true
+        for ((oldHash, m) in matchedOldHashes(repo, chatId, all, repo.hashesForChat(chatId))) {
+            filed[m] = true
+            // BUG-24: an old pair filed before copies were numbered is ONE row under the first copy's
+            // old fingerprint; the later copies of that text are filed with it.
+            if (m.occurrence == 1 && repo.isLegacyRow(oldHash)) {
+                for (c in all) {
+                    if (c.occurrence >= 2 && c.timestampIso == m.timestampIso && c.sender == m.sender && c.body == m.body) filed[c] = true
+                }
+            }
+        }
         return { m -> filed.containsKey(m) }
     }
 
@@ -298,7 +307,10 @@ class SyncManager(
         val lastTs = baselineTs(chatId)
 
         var runId: Long? = null
-        if (!dryRun) runId = repo.startSyncRun(chatId, trigger)
+        if (!dryRun) {
+            repo.markOccurrenceSince() // BUG-24: before the first run that numbers copies
+            runId = repo.startSyncRun(chatId, trigger)
+        }
 
         val planned = try {
             prescanCache.remove(file.path) ?: parseAndFilter(file, chatId, lastTs)
@@ -444,7 +456,7 @@ class SyncManager(
         }
 
         val last = new.last()
-        val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body)
+        val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body, last.occurrence)
         repo.completeSyncRun(rid, last.timestampIso, lastHash, all.size, new.size, nSkipped, nCutoff)
         // BUG-11: pushed counts were added per email; only the zero-count rows for
         // senders with nothing new are ensured here (INSERT OR IGNORE).

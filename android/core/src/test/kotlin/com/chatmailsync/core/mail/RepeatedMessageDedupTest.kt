@@ -8,7 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -26,8 +25,8 @@ import org.junit.rules.TemporaryFolder
  * are never split across emails (size split, server size refusal, message-count chunks), and a
  * renamed chat no longer skips a DIFFERENT text stamped in the mark's minute. Each scenario
  * asserts that both copies reach the mailbox, once, and never twice. The one scenario option A
- * cannot close (an export taken inside the repeated minute) stays @Ignore'd with its
- * `currentBehaviour...` pin. Synthetic messages, placeholder names only.
+ * could not close (an export taken inside the repeated minute) is closed since: each identical copy
+ * has its own fingerprint (the first keeps the old one). Synthetic messages, placeholder names only.
  */
 class RepeatedMessageDedupTest {
 
@@ -46,7 +45,17 @@ class RepeatedMessageDedupTest {
     private val filler = "lorem ipsum dolor ".repeat(330)
 
     /** The fingerprint both copies of the repeated line share. */
-    private fun repeatedHash(chat: String = chatId) = computeMessageHash(chat, minuteIso, rohan, repeated)
+    private fun repeatedHash(chat: String = chatId, copy: Int = 1) = computeMessageHash(chat, minuteIso, rohan, repeated, copy)
+
+    /** Both numbered copies of the repeated line (BUG-24: each copy has its own fingerprint). */
+    private fun repeatedHashes() = listOf(repeatedHash(copy = 1), repeatedHash(copy = 2))
+
+    /** How many copies of the repeated line reached the mailbox, whichever copy number they carry. */
+    private fun Mailbox.rep(): Int = repeatedHashes().sumOf { copies(it) }
+
+    /** Copies of the repeated line per stored email, in order. */
+    private fun Mailbox.repPerEmail(): List<Int> =
+        repeatedHashes().map { copiesPerEmail(it) }.let { per -> per[0].indices.map { i -> per.sumOf { it[i] } } }
 
     private fun line(time: String, who: String, text: String, day: String = "14/03/25") = "$day, $time - $who: $text"
 
@@ -109,11 +118,11 @@ class RepeatedMessageDedupTest {
         }
     }
 
-    private inner class Env(val maxBytes: Long = DEFAULT_MAX_MESSAGE_BYTES) {
+    private inner class Env(val maxBytes: Long = DEFAULT_MAX_MESSAGE_BYTES, clock: () -> String = { SyncTestSupport.FROZEN_NOW }) {
         val root: File = tmp.newFolder()
         val inbox = File(root, "inbox").also { it.mkdirs() }
         val processed = File(root, "processed")
-        val repo = newRepo(root)
+        val repo = newRepo(root, clock = clock)
         val mailbox = Mailbox(maxBytes)
 
         /** Stop (the user's Cancel) once this many emails are stored. Null = never. */
@@ -152,7 +161,7 @@ class RepeatedMessageDedupTest {
         e.write(splitDay)
         e.interrupt()
         assertEquals("precondition: exactly one email went before the interruption", 1, e.mailbox.emails.size)
-        assertEquals("precondition: the copies were not split, the first email holds neither", listOf(0), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals("precondition: the copies were not split, the first email holds neither", listOf(0), e.mailbox.repPerEmail())
         assertTrue("precondition: the export waits for the next run", e.exportStillQueued())
         return e
     }
@@ -231,7 +240,7 @@ class RepeatedMessageDedupTest {
         e.write(splitDay)
         val stats = e.sync()
         assertEquals("the fixture really is split in two", 2, e.mailbox.emails.size)
-        assertEquals("both copies in the same email", listOf(0, 2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals("both copies in the same email", listOf(0, 2), e.mailbox.repPerEmail())
         assertEquals(4, stats.messagesSynced)
         assertFalse(e.exportStillQueued())
 
@@ -240,7 +249,7 @@ class RepeatedMessageDedupTest {
         val again = e.sync()
         assertEquals(0, again.messagesSynced)
         assertEquals(2, e.mailbox.emails.size)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
     }
 
     @Test
@@ -266,8 +275,9 @@ class RepeatedMessageDedupTest {
         val export = listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated), line(minute, rohan, repeated))
         e.write(export)
         e.sync()
-        // The stored fingerprint is exactly the old formula's value, one row for the pair.
+        // The first copy's fingerprint is exactly the old formula's value; the second has its own row.
         assertEquals(1, e.hashRows(computeMessageHash(chatId, minuteIso, rohan, repeated)))
+        assertEquals(1, e.hashRows(repeatedHash(copy = 2)))
         assertEquals(1, e.mailbox.emails.size)
         // An already-archived chat re-exported (and re-exported once more) is never re-sent.
         repeat(2) {
@@ -286,7 +296,7 @@ class RepeatedMessageDedupTest {
         e.write(export)
         val first = e.sync()
         assertEquals(1, e.mailbox.emails.size)
-        assertEquals("both copies in the one email", 2, e.mailbox.copies(repeatedHash()))
+        assertEquals("both copies in the one email", 2, e.mailbox.rep())
         assertEquals(3, first.messagesSynced)
 
         e.write(export)
@@ -294,7 +304,7 @@ class RepeatedMessageDedupTest {
         assertEquals("NEGATIVE: nothing mailed twice", 1, e.mailbox.emails.size)
         assertEquals(0, second.messagesSynced)
         assertEquals(3, second.messagesSkipped)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
     }
 
     // ---- interrupted after the first email: user Stop --------------------------------------
@@ -303,8 +313,8 @@ class RepeatedMessageDedupTest {
     fun stopBetweenSplitEmailsThenNextRunBothCopiesAreArchivedOnce() {
         val e = interruptedSplitDay(byStop)
         val stats = resume(e)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
-        assertEquals("NEGATIVE: both copies in the one email, none re-sent", listOf(0, 2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
+        assertEquals("NEGATIVE: both copies in the one email, none re-sent", listOf(0, 2), e.mailbox.repPerEmail())
         assertEquals(3, stats.messagesSynced)
         assertFalse(e.exportStillQueued())
         // NEGATIVE: a re-export mails nothing again.
@@ -319,8 +329,8 @@ class RepeatedMessageDedupTest {
     fun failureBetweenSplitEmailsThenNextRunBothCopiesAreArchivedOnce() {
         val e = interruptedSplitDay(byFailure)
         val stats = resume(e)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
-        assertEquals(listOf(0, 2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
+        assertEquals(listOf(0, 2), e.mailbox.repPerEmail())
         assertEquals(3, stats.messagesSynced)
         assertEquals(0, stats.filesFailed)
         assertFalse(e.exportStillQueued())
@@ -335,8 +345,8 @@ class RepeatedMessageDedupTest {
         val stats = resume(e)
         assertEquals("recovery finished the run", 1, stats.chatsRecovered)
         assertEquals(0, e.repo.getPendingRuns().size)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
-        assertEquals(listOf(0, 2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
+        assertEquals(listOf(0, 2), e.mailbox.repPerEmail())
         assertFalse(e.exportStillQueued())
     }
 
@@ -351,7 +361,7 @@ class RepeatedMessageDedupTest {
         e.stopWhenStored = 1
         e.sync()
         assertEquals("precondition: one half went", 1, e.mailbox.emails.size)
-        assertEquals("precondition: the halves were cut around the repeat", 0, e.mailbox.copies(repeatedHash()))
+        assertEquals("precondition: the halves were cut around the repeat", 0, e.mailbox.rep())
         e.mailbox.refuseTooLargeAttempt = null
         return e
     }
@@ -360,8 +370,8 @@ class RepeatedMessageDedupTest {
     fun sizeRefusalSplitThenStopBothCopiesAreArchivedOnce() {
         val e = refusedThenStopped()
         resume(e)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
-        assertEquals("NEGATIVE: neither copy is split or re-sent", listOf(0, 2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
+        assertEquals("NEGATIVE: neither copy is split or re-sent", listOf(0, 2), e.mailbox.repPerEmail())
     }
 
     // ---- a message-count chunk (restored numeric setting) ------------------------------------
@@ -373,7 +383,7 @@ class RepeatedMessageDedupTest {
         e.write(countChunked)
         e.stopWhenStored = 1
         e.sync(ChunkSize.Count(2))
-        assertEquals("precondition: the chunk grew to keep both copies together", listOf(2), e.mailbox.copiesPerEmail(repeatedHash()))
+        assertEquals("precondition: the chunk grew to keep both copies together", listOf(2), e.mailbox.repPerEmail())
         return e
     }
 
@@ -383,7 +393,7 @@ class RepeatedMessageDedupTest {
         e.stopWhenStored = null
         val stats = e.sync(ChunkSize.Count(2))
         assertEquals("NEGATIVE: nothing is mailed twice", 1, e.mailbox.emails.size)
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
         assertEquals(0, stats.messagesSynced)
         assertFalse(e.exportStillQueued())
     }
@@ -395,44 +405,43 @@ class RepeatedMessageDedupTest {
         val e = Env()
         e.write(listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated)))
         e.sync()
-        assertEquals("precondition", 1, e.mailbox.copies(repeatedHash()))
+        assertEquals("precondition", 1, e.mailbox.rep())
         assertFalse(e.exportStillQueued())
         e.write(listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated), line(minute, rohan, repeated)))
         return e
     }
 
-    @Ignore("BUG-24 / D167 = A: stays open. An export taken between the two copies files one fingerprint, so the next export's second copy is skipped; only an occurrence index closes it and that is a ledger format change A excludes.")
     @Test
     fun exportTakenMidMinuteThenNextExportBothCopiesAreArchived() {
         val e = exportedMidMinute()
-        e.sync()
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
-    }
-
-    @Test
-    fun currentBehaviourExportTakenMidMinuteLosesTheSecondCopy() {
-        val e = exportedMidMinute()
         val stats = e.sync()
-        assertEquals("CURRENT: no second email", 1, e.mailbox.emails.size)
-        assertEquals("CURRENT: the 2nd copy is never mailed", 1, e.mailbox.copies(repeatedHash()))
-        assertEquals(0, stats.messagesSynced)
-        assertEquals(3, stats.messagesSkipped)
+        assertEquals("the later identical message is mailed", 2, e.mailbox.rep())
+        assertEquals("one copy each, not the same copy twice", listOf(1, 1), repeatedHashes().map { e.mailbox.copies(it) })
+        assertEquals(1, stats.messagesSynced)
+        assertEquals(2, stats.messagesSkipped)
+        assertEquals(2, e.mailbox.emails.size)
+        assertFalse(e.exportStillQueued())
+        // NEGATIVE: the same export again mails nothing, and each copy has its own ledger row.
+        e.write(listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated), line(minute, rohan, repeated)))
+        assertEquals(0, e.sync().messagesSynced)
+        assertEquals(2, e.mailbox.emails.size)
+        assertEquals(listOf(1, 1), repeatedHashes().map { e.hashRows(it) })
     }
 
     // ---- (d) two copies in one email: one stored row --------------------------------------
 
     @Test
-    fun currentBehaviourTwoCopiesInOneEmailAreStoredAsOneFingerprintRow() {
+    fun twoCopiesInOneEmailAreStoredAsTwoFingerprintRows() {
         val e = Env()
         e.write(listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated), line(minute, rohan, repeated)))
         val stats = e.sync()
-        assertEquals(2, e.mailbox.copies(repeatedHash()))
+        assertEquals(2, e.mailbox.rep())
         assertEquals("the run reports three sent", 3, stats.messagesSynced)
         assertEquals(3, e.repo.getRecentRuns(days = 36500).single().messagesSynced)
-        // INSERT OR IGNORE on the primary key: the second copy adds no row.
-        assertEquals(1, e.hashRows(repeatedHash()))
-        assertEquals("CURRENT: the filed count is one short of what was mailed", 2, e.repo.countArchivedMessages(chatId))
-        assertEquals(2, e.repo.getSyncSummary().single().totalFiled)
+        // B1: each copy has its own row, so the filed total matches what was mailed.
+        assertEquals(listOf(1, 1), repeatedHashes().map { e.hashRows(it) })
+        assertEquals(3, e.repo.countArchivedMessages(chatId))
+        assertEquals(3, e.repo.getSyncSummary().single().totalFiled)
     }
 
     // ---- (e) a chat with linked names: the time rule after a stop -------------------------
@@ -491,6 +500,146 @@ class RepeatedMessageDedupTest {
         assertEquals(before, e.mailbox.emails.size)
         assertEquals(1, e.mailbox.copies(linkedHash(e, "first reply")))
         assertEquals(1, e.mailbox.copies(linkedHash(e, "second reply")))
+    }
+
+    // ---- BUG-24 A1: numbered copies, the old fingerprint kept, old pairs not re-sent -----------
+
+    private fun sha256Hex(text: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun aSingleMessageKeepsItsOldFingerprintByteForByte() {
+        val old = "$chatId\u0000$minuteIso\u0000$rohan\u0000$repeated"
+        assertEquals(sha256Hex(old), computeMessageHash(chatId, minuteIso, rohan, repeated))
+        assertEquals("the first copy IS the old fingerprint", sha256Hex(old), repeatedHash(copy = 1))
+        // Copy k >= 2 is SHA256(old text + NUL + k): its own row, never the first copy's.
+        assertEquals(sha256Hex(old + "\u0000" + "2"), repeatedHash(copy = 2))
+        assertEquals(sha256Hex(old + "\u0000" + "3"), repeatedHash(copy = 3))
+        assertFalse(repeatedHash(copy = 2) == repeatedHash(copy = 1))
+        // End to end: a message that is NOT repeated lands in the ledger under exactly the old value.
+        val e = Env()
+        e.write(listOf(line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated)))
+        e.sync()
+        assertEquals(1, e.hashRows(sha256Hex("$chatId\u0000" + "2025-03-14T10:09:00\u0000$meera\u0000Shall we go?")))
+        assertEquals(1, e.hashRows(sha256Hex(old)))
+        assertEquals("NEGATIVE: no numbered row appears for a single copy", 0, e.hashRows(repeatedHash(copy = 2)))
+    }
+
+    @Test
+    fun theParserNumbersCopiesFromTheWholeFileInOrder() {
+        val f = tmp.newFile("WhatsApp Chat with Meera Iyer.txt")
+        f.writeText(
+            listOf(
+                line("10:09", meera, "Shall we go?"), line(minute, rohan, repeated), line(minute, rohan, repeated),
+                line(minute, meera, repeated), line(minute, rohan, repeated), line("10:11", rohan, repeated),
+            ).joinToString("\n") + "\n",
+        )
+        val got = parseFile(f, chatId).toList().map { it.sender to it.occurrence }
+        assertEquals(
+            listOf(meera to 1, rohan to 1, rohan to 2, meera to 1, rohan to 3, rohan to 1),
+            got,
+        )
+    }
+
+    private val tOld = "2025-03-01T09:00:00"
+    private val tSwitch = "2025-03-10T09:00:00"
+    private val tNow = "2025-03-14T11:00:00"
+
+    /** A ledger as the OLD code left it: one run before the switch, ONE row for the pair, mark at the pair's minute. */
+    private fun oldPairLedger(): Env {
+        var now = tOld
+        val e = Env(clock = { now })
+        e.repo.upsertChat(chatId, meera, fileName)
+        val run = e.repo.startSyncRun(chatId)
+        e.repo.insertMessageHashes(listOf(StateRepository.HashEntry(repeatedHash(), chatId, minuteIso, run)))
+        e.repo.completeSyncRun(run, minuteIso, repeatedHash(), 2, 2, 0, 0)
+        e.repo.setAppState(StateRepository.OCCURRENCE_SINCE_KEY, tSwitch)
+        now = tNow
+        return e
+    }
+
+    @Test
+    fun aPairFiledBeforeTheSwitchIsNotSentAgainAfterTheUpgrade() {
+        val e = oldPairLedger()
+        e.write(
+            listOf(
+                line(minute, rohan, repeated), line(minute, rohan, repeated), line(minute, rohan, "sure"),
+                line("10:20", meera, "later"),
+            ),
+        )
+        val stats = e.sync()
+        assertEquals("NEGATIVE: the second copy of the old pair is not mailed", 0, e.mailbox.rep())
+        assertEquals("a different text in the same minute IS new, and so is the later message", 2, stats.messagesSynced)
+        assertEquals(0, e.hashRows(repeatedHash(copy = 2)))
+        assertEquals(1, e.mailbox.emails.size)
+        // And again: nothing is mailed twice.
+        e.write(
+            listOf(
+                line(minute, rohan, repeated), line(minute, rohan, repeated), line(minute, rohan, "sure"),
+                line("10:20", meera, "later"),
+            ),
+        )
+        assertEquals(0, e.sync().messagesSynced)
+        assertEquals(1, e.mailbox.emails.size)
+    }
+
+    @Test
+    fun aFirstCopyFiledAfterTheSwitchDoesNotHideALaterCopy() {
+        // NEGATIVE of the guard above: the row is newer than the switch, so it covers only itself.
+        var now = tSwitch
+        val e = Env(clock = { now })
+        e.write(listOf(line(minute, rohan, repeated)))
+        e.sync()
+        now = tNow
+        e.write(listOf(line(minute, rohan, repeated), line(minute, rohan, repeated)))
+        val stats = e.sync()
+        assertEquals(1, stats.messagesSynced)
+        assertEquals(listOf(1, 1), repeatedHashes().map { e.mailbox.copies(it) })
+    }
+
+    @Test
+    fun aStopBetweenCopiesAfterTheSwitchSendsTheRemainingCopyExactlyOnce() {
+        // Copy 1 filed by a run of the new code, copy 2 not: the next run sends copy 2 once, never twice.
+        val e = Env()
+        e.write(listOf(line(minute, rohan, repeated)))
+        e.sync()
+        e.write(listOf(line(minute, rohan, repeated), line(minute, rohan, repeated)))
+        assertEquals(1, e.sync().messagesSynced)
+        e.write(listOf(line(minute, rohan, repeated), line(minute, rohan, repeated)))
+        assertEquals("NEGATIVE: a third run mails nothing", 0, e.sync().messagesSynced)
+        assertEquals(2, e.mailbox.rep())
+    }
+
+    @Test
+    fun aRenamedChatDoesNotResendTheSecondCopyOfAnOldPair() {
+        val number = "+91 90000 00001"
+        var now = tOld
+        val e = Env(clock = { now })
+        val oldChat = extractChatInfo("WhatsApp Chat with $number.txt").chatId
+        fun history(other: String) = (1..5).map {
+            line("09:00", if (it % 2 == 0) meera else other, "message $it", day = "%02d/03/25".format(it))
+        }
+        val pairDay = "14/03/25"
+        val oldRows = (1..5).map {
+            msg(oldChat, "2025-03-0${it}T09:00:00", if (it % 2 == 0) meera else number, "message $it")
+        } + msg(oldChat, minuteIso, number, repeated)
+        e.repo.upsertChat(oldChat, number, "WhatsApp Chat with $number.txt")
+        val run = e.repo.startSyncRun(oldChat)
+        e.repo.insertMessageHashes(
+            oldRows.map { StateRepository.HashEntry(computeMessageHash(oldChat, it.timestampIso, it.sender, it.body), oldChat, it.timestampIso, run) },
+        )
+        e.repo.completeSyncRun(run, minuteIso, null, oldRows.size, oldRows.size, 0, 0)
+        e.repo.recordChatSenders(oldChat, mapOf(number to 4, meera to 2))
+        e.repo.setAppState(StateRepository.OCCURRENCE_SINCE_KEY, tSwitch)
+        now = tNow
+
+        e.write(history(rohan) + line(minute, rohan, repeated, day = pairDay) + line(minute, rohan, repeated, day = pairDay), fileName)
+        val p = scanLinkProposals(e.repo, e.inbox).single()
+        applyLink(e.repo, p, File(e.inbox, p.fileName))
+        val stats = e.sync()
+        assertEquals("NEGATIVE: the 2nd copy of the old pair is not mailed under the new name", 0, stats.messagesSynced)
+        assertEquals(0, e.mailbox.emails.size)
     }
 
     private companion object {

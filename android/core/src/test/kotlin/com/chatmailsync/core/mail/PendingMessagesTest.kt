@@ -203,4 +203,37 @@ class PendingMessagesTest {
         assertEquals(64, v.length)
         assertFalse(v.contains("one"))
     }
+
+    // ---- BUG-24: copies of one text -------------------------------------------------------
+
+    private val tOld = "2025-03-01T09:00:00"
+    private val tSwitch = "2025-03-10T09:00:00"
+    private val tNow = "2025-03-14T11:00:00"
+    private val twin1 = msg(chat, "2025-03-20T09:20:00", "Rohan Mehta", "ok")
+    private val twin2 = twin1.copy(occurrence = 2)
+
+    @Test
+    fun anUnconfirmedEmailRecordedBeforeTheSwitchCoversEveryCopyOfAText() {
+        // The old code recorded the pair under ONE hash. The server has that email: the second copy is in it.
+        var now = tOld
+        val (r, path) = repo { now }; val t = Fake()
+        r.record(chat, "<old1@x>", listOf(messageHashOf(twin1))); t.stored.add("<old1@x>")
+        r.setAppState(StateRepository.OCCURRENCE_SINCE_KEY, tSwitch)
+        now = tNow
+        val delivered = push(t, r, listOf(listOf(twin1, twin2)))
+        assertEquals("NEGATIVE: the second copy is not sent again", 0, t.appends)
+        assertEquals(listOf(twin1, twin2), delivered)
+        assertEquals(0, rowCount(path))
+    }
+
+    @Test
+    fun anUnconfirmedEmailRecordedAfterTheSwitchCoversOnlyTheCopyItNamed() {
+        var now = tNow
+        val (r, _) = repo { now }; val t = Fake()
+        r.setAppState(StateRepository.OCCURRENCE_SINCE_KEY, tSwitch)
+        r.record(chat, "<new1@x>", listOf(messageHashOf(twin1))); t.stored.add("<new1@x>")
+        val delivered = push(t, r, listOf(listOf(twin1, twin2)))
+        assertEquals("copy 1 is stored, copy 2 goes out once", 1, t.appends)
+        assertEquals(listOf(twin1, twin2), delivered)
+    }
 }

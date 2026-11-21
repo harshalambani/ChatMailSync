@@ -72,9 +72,10 @@ fun chunkMessages(messages: List<ParsedMessage>, chunkSize: ChunkSize = ChunkSiz
 /**
  * BUG-24: `result[i]` is true when a split between message i-1 and message i is forbidden because
  * both sides hold a message with the same fingerprint (same chat, minute, sender and text).
- * The ledger keeps ONE row per fingerprint, so two such copies must travel in the same email: if
- * they were split and the run ended after the first email, the second copy would look filed.
- * Index 0 is never a cut. Nothing here changes a fingerprint or the ledger.
+ * Since copies are numbered each has its own ledger row, so a split could no longer lose one; the
+ * rule stays because identical copies are one fact to the reader and a ledger filed by the older
+ * code holds a pair as one row (see [StateRepository.isMessageFiled]). Copies are matched on the
+ * text alone, deliberately without the copy number. Index 0 is never a cut.
  */
 internal fun lockedCuts(messages: List<ParsedMessage>): BooleanArray {
     val locked = BooleanArray(messages.size + 1)

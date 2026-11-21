@@ -68,8 +68,7 @@ fun filterMessages(
     var skipped = 0
     var nCutoff = 0
     for (msg in messages) {
-        val h = StateRepository.computeMessageHash(msg.chatId, msg.timestampIso, msg.sender, msg.body)
-        if (repo.hashExists(h)) {
+        if (repo.isMessageFiled(msg)) {
             skipped++
             continue
         }
@@ -159,7 +158,7 @@ fun recordChatSendersFor(
 fun buildHashEntries(messages: List<ParsedMessage>, runId: Long): List<StateRepository.HashEntry> =
     messages.map {
         StateRepository.HashEntry(
-            hash = StateRepository.computeMessageHash(it.chatId, it.timestampIso, it.sender, it.body),
+            hash = StateRepository.computeMessageHash(it.chatId, it.timestampIso, it.sender, it.body, it.occurrence),
             chatId = it.chatId,
             messageTs = it.timestampIso,
             runId = runId,
