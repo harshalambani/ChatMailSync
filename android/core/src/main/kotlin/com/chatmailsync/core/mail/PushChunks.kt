@@ -405,7 +405,12 @@ fun pushChunks(
                 // row stays, so the next run looks it up before sending it.
                 break
             } catch (exc: Exception) {
-                if (!isTooLarge(exc)) throw exc
+                if (!isTooLarge(exc)) {
+                    // BUG-28: a definite NO stored nothing, so no row stays to be looked up next run.
+                    // An unknown outcome (dropped connection, failed lookup) keeps its row.
+                    if (exc is MailTransportError && exc.definiteRefusal) pendingUploads?.clear(newMid)
+                    throw exc
+                }
                 // A size refusal means nothing was stored: nothing is pending for this email.
                 pendingUploads?.clear(newMid)
 

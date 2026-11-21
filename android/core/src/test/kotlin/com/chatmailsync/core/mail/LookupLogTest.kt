@@ -28,7 +28,9 @@ class LookupLogTest {
         var appended = 0
         var stored = false
         override val capabilities: List<String> = emptyList()
-        override fun list(reference: String, pattern: String) = ImapResult("OK", listOf("INBOX"))
+        // BUG-28: the folder exists on this server, so a refused EXAMINE is "cannot tell".
+        override fun list(reference: String, pattern: String) =
+            ImapResult("OK", listOf("(\\HasNoChildren) \"/\" \"INBOX\"", "(\\HasNoChildren) \"/\" \"WhatsApp/Tara Menon\""))
         override fun create(mailboxWireArg: String) = ImapResult("OK", listOf("Completed"))
         override fun subscribe(mailboxWireArg: String) = ImapResult("OK", listOf("Completed"))
         override fun append(mailboxWireArg: String, flags: String?, internalDate: OffsetDateTime?, message: ByteArray): ImapResult {

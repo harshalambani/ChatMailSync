@@ -8,6 +8,12 @@ package com.chatmailsync.core.mail
 open class MailTransportError(
     message: String,
     val status: Int? = null,
+    /**
+     * BUG-28: true only when the server answered an APPEND with a definite NO, so nothing of that email
+     * was stored. The caller may then clear the email's pending row. Never set for a dropped
+     * connection, a timeout, a failed lookup or a Stop, where the outcome is unknown.
+     */
+    val definiteRefusal: Boolean = false,
 ) : Exception(message)
 
 class MessageTooLargeError(message: String) : MailTransportError(message, 413)
