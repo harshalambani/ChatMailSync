@@ -136,6 +136,27 @@ fun parseFile(
     chatId: String,
     dateOrder: String? = null,
     log: ParserLog = NoOpParserLog,
+): Sequence<ParsedMessage> = parseFileRaw(filepath, chatId, dateOrder, log).withOccurrences()
+
+/**
+ * BUG-24: numbers identical copies. Within one chat, timestamp, sender and text the first copy in
+ * the file keeps [ParsedMessage.occurrence] 1, the next gets 2, and so on. The number comes from the
+ * WHOLE file, in file order, so it does not depend on which messages a run later filters out, chunks
+ * or resumes. Every path that fingerprints a message reads the number from the message itself.
+ */
+internal fun Sequence<ParsedMessage>.withOccurrences(): Sequence<ParsedMessage> {
+    val seen = HashMap<String, Int>()
+    return map { m ->
+        val k = seen.merge("${m.chatId}\u0000${m.timestampIso}\u0000${m.sender}\u0000${m.body}", 1, Int::plus)!!
+        if (k == 1) m else m.copy(occurrence = k)
+    }
+}
+
+private fun parseFileRaw(
+    filepath: File,
+    chatId: String,
+    dateOrder: String?,
+    log: ParserLog,
 ): Sequence<ParsedMessage> = sequence {
     val text = readChatText(filepath)
     val lines = pythonSplitlines(text)

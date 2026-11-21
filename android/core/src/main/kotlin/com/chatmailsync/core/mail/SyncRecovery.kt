@@ -56,8 +56,8 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
     val remaining = ArrayList<ParsedMessage>()
     var nCutoff = 0
     for (msg in allMessages) {
-        val h = StateRepository.computeMessageHash(msg.chatId, msg.timestampIso, msg.sender, msg.body)
-        if (h in alreadyPushed || repo.hashExists(h)) continue
+        val h = StateRepository.computeMessageHash(msg.chatId, msg.timestampIso, msg.sender, msg.body, msg.occurrence)
+        if (h in alreadyPushed || repo.isMessageFiled(msg)) continue
         if (cutoff != null && cutoff.isNotEmpty() && msg.timestampIso < cutoff) {
             nCutoff += 1
             continue
@@ -151,7 +151,7 @@ private fun SyncManager.recoverRun(run: SyncRun, stats: SyncStats): Boolean {
 
     val totalSynced = priorSynced + remaining.size
     val last = remaining.last()
-    val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body)
+    val lastHash = StateRepository.computeMessageHash(last.chatId, last.timestampIso, last.sender, last.body, last.occurrence)
     repo.completeSyncRun(
         runId,
         last.timestampIso,

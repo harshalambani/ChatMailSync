@@ -326,13 +326,26 @@ fun pushChunks(
                 val olds = pendingUploads.idsFor(pendingChatId, hashes)
                 if (olds.isNotEmpty()) {
                     val storedHashes = mutableSetOf<String>()
+                    val legacyStored = mutableSetOf<String>()
                     for (old in olds) {
                         val found = lookedUp.getOrPut(old) { transport.lookupStored(old, labelId) }
-                        if (found) storedHashes += pendingUploads.hashesFor(pendingChatId, old) else pendingUploads.clear(old)
+                        if (found) {
+                            val inOld = pendingUploads.hashesFor(pendingChatId, old)
+                            storedHashes += inOld
+                            if (pendingUploads.isLegacyPending(pendingChatId, old)) legacyStored += inOld
+                        } else {
+                            pendingUploads.clear(old)
+                        }
                     }
                     if (storedHashes.isNotEmpty()) {
-                        val stored = subChunk.filter { messageHashOf(it) in storedHashes }
-                        val rest = subChunk.filter { messageHashOf(it) !in storedHashes }
+                        // BUG-24: an email recorded before copies were numbered holds every copy of a
+                        // text under its first copy's hash, so the later copies are in it too.
+                        fun inStoredEmail(m: ParsedMessage): Boolean =
+                            messageHashOf(m) in storedHashes ||
+                                (m.occurrence >= 2 &&
+                                    computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body, 1) in legacyStored)
+                        val stored = subChunk.filter { inStoredEmail(it) }
+                        val rest = subChunk.filter { !inStoredEmail(it) }
                         msgsDone += stored.size
                         // Recorded as delivered without any send; then nothing is pending for them.
                         onChunk?.invoke(i + 1, totalEmails, msgsDone, totalMsgs, stored)
@@ -488,10 +501,12 @@ interface PendingUploads {
     fun record(chatId: String, messageId: String, hashes: Collection<String>)
     fun clear(messageId: String)
     fun clearHashes(chatId: String, hashes: Collection<String>)
+    /** BUG-24: true when the email recorded as [messageId] predates numbered copies, so its one hash stands for every copy. */
+    fun isLegacyPending(chatId: String, messageId: String): Boolean = false
 }
 
 internal fun messageHashOf(m: ParsedMessage): String =
-    computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body)
+    computeMessageHash(m.chatId, m.timestampIso, m.sender, m.body, m.occurrence)
 
 /** The three values [pushChat] hands back for the caller to persist. */
 data class PushChatResult(

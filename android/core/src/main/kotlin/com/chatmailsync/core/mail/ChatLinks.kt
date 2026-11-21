@@ -93,7 +93,7 @@ internal fun matchedOldHashes(
 ): Map<String, ParsedMessage> {
     val out = LinkedHashMap<String, ParsedMessage>()
     for (m in messages) {
-        val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, m.sender, m.body)
+        val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, m.sender, m.body, m.occurrence)
         if (h in stored) out.putIfAbsent(h, m)
     }
     val oldLabels = repo.listChatSenders(oldChatId).map { it.sender }.toSet()
@@ -107,7 +107,7 @@ internal fun matchedOldHashes(
             val hits = LinkedHashMap<String, ParsedMessage>()
             for (m in messages) {
                 if (m.sender != label) continue
-                val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, old, m.body)
+                val h = StateRepository.computeMessageHash(oldChatId, m.timestampIso, old, m.body, m.occurrence)
                 if (h in stored) hits.putIfAbsent(h, m)
             }
             if (hits.size > best.size) best = hits
@@ -151,7 +151,7 @@ fun applyLink(repo: StateRepository, proposal: LinkProposal, file: File): Int {
             for (m in parsed) {
                 val old = matches.entries.firstOrNull { it.value === m }?.key ?: continue
                 if (!seen.add(old)) continue
-                val new = StateRepository.computeMessageHash(proposal.newChatId, m.timestampIso, m.sender, m.body)
+                val new = StateRepository.computeMessageHash(proposal.newChatId, m.timestampIso, m.sender, m.body, m.occurrence)
                 entries.add(StateRepository.AdoptEntry(old, new, m.timestampIso))
             }
             repo.adoptFromLegacy(

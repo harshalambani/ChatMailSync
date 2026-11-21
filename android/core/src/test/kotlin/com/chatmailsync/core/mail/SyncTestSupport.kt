@@ -15,10 +15,10 @@ internal object SyncTestSupport {
     }
 
     /** A real repository over a fresh SQLite file under [dir], clock frozen. */
-    fun newRepo(dir: File, fileName: String = "state.db"): StateRepository {
+    fun newRepo(dir: File, fileName: String = "state.db", clock: () -> String = { FROZEN_NOW }): StateRepository {
         dir.mkdirs()
         val path = File(dir, fileName).absolutePath
-        val repo = StateRepository(clock = { FROZEN_NOW }) { SqliteJdbcStateDb(path) }
+        val repo = StateRepository(clock = clock) { SqliteJdbcStateDb(path) }
         repo.initDb()
         return repo
     }
