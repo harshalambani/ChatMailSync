@@ -1,0 +1,3 @@
+A chat whose mail folder is missing on the server now recovers: the app creates the folder and sends the email again.
+"Ask me later" on "Is this the same chat?" is now remembered when you turn the phone.
+Identical messages in the same minute are all kept, even when an export is taken part-way through that minute.

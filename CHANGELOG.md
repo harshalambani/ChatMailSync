@@ -4,6 +4,16 @@ This file was started with the 2.2.0 release. Earlier releases are described
 by their own commits and tags (`git log`, `git tag -l`) and by the per-release
 notes in `fastlane/metadata/android/en-US/changelogs/`.
 
+## 3.0.7
+
+Released 2026-11-22 (versionCode 53). Three small fixes: a missing mail folder recovers, "Ask me later" survives a rotation, and a mid-minute export no longer drops a repeated message.
+
+- BUG-28: a chat whose mail folder was missing on the server failed every run and never recovered. The app now creates the folder once and sends the email again; a definite refusal clears the email's pending upload record (#197).
+- UX-12: "Ask me later" on "Is this the same chat?" is no longer forgotten when the phone is turned (#198).
+- BUG-24: messages with the same text in the same minute and from the same sender each get their own fingerprint, so an export taken inside a repeated minute no longer drops the later one. Anything already filed is not sent again (#199).
+- SEC-18: a test now runs the real backup export over a large database and checks it writes in small pieces. Nothing changes for users (#202).
+- KT-13: a smoke test opens every screen, rotation tests cover the screens that keep state, and the pure helpers moved out of MainActivity.kt unchanged. Nothing changes for users (#200, #201).
+
 ## 3.0.6
 
 Released 2026-11-19 (versionCode 52). Safer uploads: no repeated sending, Stop works, and a live MB line.
