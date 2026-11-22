@@ -65,7 +65,8 @@ internal val FAQ = listOf(
         "it an hour or a week instead), and a chat's emails group into one thread in mail apps " +
         "that group conversations. If you exported with media, photos show inside the email and " +
         "other files come as attachments. You can search them like any other mail. If a new " +
-        "folder doesn't show yet, refresh your mail app's folder list.",
+        "folder doesn't show yet, refresh your mail app's folder list. If a chat's folder is " +
+        "missing, for example because you deleted it, the next sync creates it again.",
     "What can the app reach in my email account?" to
         "Nothing outside the mailbox. What you hand it is an app password, and that's a mail " +
         "credential rather than an account one — it works with the mail protocols and nothing " +
@@ -321,7 +322,7 @@ internal val FAQ = listOf(
         "nothing already archived is sent again, and the mailbox folder is renamed to the new " +
         "name. \"No, keep separate\": it is kept as a separate chat, its whole history is mailed " +
         "again, and you are not asked about that pair again. \"Ask me later\", or the Back button, " +
-        "leaves it waiting; tapping outside the box does nothing. If the answer cannot be saved " +
+        "leaves it waiting. It stays hidden if you turn the phone, and comes back the next time you open the app. Tapping outside the box does nothing. If the answer cannot be saved " +
         "you will see \"Couldn't save your answer. Please try again.\" and can answer again. A held " +
         "export is not synced until you answer.",
     "What does \"Cancel sync\" do?" to

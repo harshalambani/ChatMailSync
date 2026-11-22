@@ -244,7 +244,7 @@ affects unattended checks.
 
 Open your mail app or webmail and look for a **WhatsApp** folder. Inside it there
 is one folder per chat, named after the chat, e.g. **WhatsApp/John Doe**,
-**WhatsApp/Family Group**.
+**WhatsApp/Family Group**. If a chat's folder is missing, for example because you deleted it, the next sync creates it again.
 
 **On Gmail**, folders show as labels: a **WhatsApp** label in the left-hand list
 (in the Gmail app, in the menu), with one label per chat under it.
@@ -292,7 +292,7 @@ Chunk size can make it an hour or a week instead), and a chat's emails group int
 one thread in mail apps that group conversations. If you exported with media,
 photos show inside the email and other files come as attachments. You can search
 them like any other mail. If a new folder doesn't show yet, refresh your mail
-app's folder list.
+app's folder list. If a chat's folder is missing, for example because you deleted it, the next sync creates it again.
 
 ---
 
@@ -721,7 +721,7 @@ first.
 
 ### Q. A chat is waiting for my answer. What is "Is this the same chat?"
 
-**A.** When you share an export whose chat looks like one you already archived under another name, the app holds the file in the queue and asks "Is this the same chat?" instead of mailing everything a second time by mistake. Home marks the held file "Waiting for your answer" with an "Answer now" button, and a background check posts a notification titled "A chat is waiting for your answer". "Yes, same chat": it carries on as that chat, nothing already archived is sent again, and the mailbox folder is renamed to the new name. "No, keep separate": it is kept as a separate chat, its whole history is mailed again, and you are not asked about that pair again. "Ask me later", or the Back button, leaves it waiting; tapping outside the box does nothing. If the answer cannot be saved you will see "Couldn't save your answer. Please try again." and can answer again. A held export is not synced until you answer.
+**A.** When you share an export whose chat looks like one you already archived under another name, the app holds the file in the queue and asks "Is this the same chat?" instead of mailing everything a second time by mistake. Home marks the held file "Waiting for your answer" with an "Answer now" button, and a background check posts a notification titled "A chat is waiting for your answer". "Yes, same chat": it carries on as that chat, nothing already archived is sent again, and the mailbox folder is renamed to the new name. "No, keep separate": it is kept as a separate chat, its whole history is mailed again, and you are not asked about that pair again. "Ask me later", or the Back button, leaves it waiting. It stays hidden if you turn the phone, and comes back the next time you open the app. Tapping outside the box does nothing. If the answer cannot be saved you will see "Couldn't save your answer. Please try again." and can answer again. A held export is not synced until you answer.
 
 ---
 
