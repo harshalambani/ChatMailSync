@@ -308,6 +308,7 @@ fun exportBundle(
     createdAt: String = StateRepository.now(),
     zipTimeMillis: Long = System.currentTimeMillis(),
     tempDir: File? = null,
+    onEntryWrite: ((entry: String, len: Int) -> Unit)? = null,
 ): ExportResult {
     val db = bundleDbPath(root)
     val counts = countBundleRows(db, openDb)
@@ -324,11 +325,17 @@ fun exportBundle(
     try {
         val built = File(scratch, "bundle.zip")
         ZipOutputStream(built.outputStream().buffered()).use { zip ->
+            // SEC-18: with no observer (every real caller) sink IS zip, so nothing changes. A test passes
+            // onEntryWrite to see the size of every write that reaches the zip, and so prove it streams.
+            var currentEntry = ""
+            val sink: OutputStream =
+                if (onEntryWrite == null) zip else EntryWriteTap(zip, onEntryWrite) { currentEntry }
             fun put(name: String, bytes: ByteArray) {
                 val e = ZipEntry(name)
                 e.time = zipTimeMillis
                 zip.putNextEntry(e)
-                zip.write(bytes)
+                currentEntry = name
+                sink.write(bytes)
                 zip.closeEntry()
             }
             put(MANIFEST_NAME, dumpBundleJson(manifest).toByteArray(Charsets.UTF_8))
@@ -340,7 +347,8 @@ fun exportBundle(
                 val e = ZipEntry(BUNDLE_DB_NAME)
                 e.time = zipTimeMillis
                 zip.putNextEntry(e)
-                streamFileTo(zip, snapshot)
+                currentEntry = BUNDLE_DB_NAME
+                streamFileTo(sink, snapshot)
                 zip.closeEntry()
             }
         }
@@ -758,6 +766,25 @@ private fun mergeRows(src: StateDb, dst: StateDb): MergeCounts {
         }
     }
     return MergeCounts(chatsAdded, runsAdded, hashesAdded, cutoffsAdded, sendersAdded)
+}
+
+/** SEC-18: passes every write through to [target] and reports its length and the current entry name. */
+private class EntryWriteTap(
+    private val target: OutputStream,
+    private val report: (entry: String, len: Int) -> Unit,
+    private val entry: () -> String,
+) : OutputStream() {
+    override fun write(b: Int) {
+        target.write(b)
+        report(entry(), 1)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        target.write(b, off, len)
+        report(entry(), len)
+    }
+
+    override fun flush() = target.flush()
 }
 
 /** F-11: copies [file] to [out] in [chunkBytes] pieces, so no write is ever larger than one chunk. */

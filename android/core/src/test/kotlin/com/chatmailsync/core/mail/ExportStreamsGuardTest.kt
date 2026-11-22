@@ -23,13 +23,13 @@ class ExportStreamsGuardTest {
         }
         val block = source.substring(start, end)
         val out = mutableListOf<String>()
-        if (!block.contains("streamFileTo(zip, snapshot)")) {
-            out += "The export no longer calls streamFileTo(zip, snapshot). Stream the database snapshot into the zip entry."
+        if (!block.contains("streamFileTo(sink, snapshot)")) {
+            out += "The export no longer calls streamFileTo(sink, snapshot). Stream the database snapshot into the zip entry."
         }
         for (line in block.lines()) {
             if (wholeFileReads.containsMatchIn(line)) {
                 out += "Whole-file read in the export block: '${line.trim()}'. Do not read a database file into memory " +
-                    "(F-11); use streamFileTo(zip, snapshot)."
+                    "(F-11); use streamFileTo(sink, snapshot)."
             }
         }
         return out
@@ -45,7 +45,7 @@ class ExportStreamsGuardTest {
     @Test
     fun aWholeFileReadOfTheSnapshotIsCaught() {
         val real = migrationSource().readText()
-        val streamed = "streamFileTo(zip, snapshot)"
+        val streamed = "streamFileTo(sink, snapshot)"
         val putBack = real.replace(streamed, "put(BUNDLE_DB_NAME, snapshot.readBytes())")
         assertTrue(problems(putBack).isNotEmpty())
         val variant = real.replace(streamed, "zip.write(java.nio.file.Files.readAllBytes(snapshot.toPath()))")
