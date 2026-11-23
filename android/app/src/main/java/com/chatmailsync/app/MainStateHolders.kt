@@ -28,3 +28,12 @@ internal class MailAccountState(context: Context) {
     var imapProviders by mutableStateOf(listOf<ImapProviderInfo>())
     var stagePlan by mutableStateOf(listOf<WizardStage>())
 }
+
+/** Who "me" is in the exports: the per-file detail, the manual override, where the name came from, and the Home banner. */
+internal class SelfSenderState {
+    var selfSenderDetail by mutableStateOf("")
+    var selfSenderOverride by mutableStateOf("")
+    var selfSenderSource by mutableStateOf<String?>(null)
+    var selfSenderName by mutableStateOf<String?>(null)
+    var pendingSelfSenderBannerName by mutableStateOf<String?>(null)
+}

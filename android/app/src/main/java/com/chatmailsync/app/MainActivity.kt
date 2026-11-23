@@ -571,23 +571,20 @@ fun ChatMailApp(
     // shared state database, not in preferences, because every part of the
     // app that touches an export needs to reach the same answer -- a
     // disagreement would archive one export two different ways.
-    var selfSenderDetail by remember { mutableStateOf("") }
-    var selfSenderOverride by remember { mutableStateOf("") }
+    val selfSender = remember { SelfSenderState() }
     // The masthead Me row's own inputs: the raw source ("learned" /
     // "unknown" / "override") and the resolved name, fed through
     // selfSenderDisplay() rather than the detail text above, which is worded
     // for the Me screen, not a 48dp row.
-    var selfSenderSource by remember { mutableStateOf<String?>(null) }
-    var selfSenderName by remember { mutableStateOf<String?>(null) }
 
     fun applySelfSender(described: Map<String, Any?>) {
-        selfSenderDetail = described.str("detail").toString()
+        selfSender.selfSenderDetail = described.str("detail").toString()
         // The stored override, deliberately not the resolved name: filling the
         // box with a name the app worked out would turn it into an override
         // the moment anything else on the screen was touched.
-        selfSenderOverride = described.str("override") ?: ""
-        selfSenderSource = described.str("source")
-        selfSenderName = described.str("name")
+        selfSender.selfSenderOverride = described.str("override") ?: ""
+        selfSender.selfSenderSource = described.str("source")
+        selfSender.selfSenderName = described.str("name")
     }
 
     fun refreshSelfSender() {
@@ -599,15 +596,14 @@ fun ChatMailApp(
     // the masthead's ongoing answer to "who is me", re-read on every screen
     // entry, while this is a single announcement that must survive exactly
     // until the user dismisses it and never come back on its own.
-    var pendingSelfSenderBannerName by remember { mutableStateOf<String?>(null) }
 
     fun refreshSelfSenderBanner() {
-        pendingSelfSenderBannerName = ChatMailApplication.core(context).getPendingSelfSenderBanner()
+        selfSender.pendingSelfSenderBannerName = ChatMailApplication.core(context).getPendingSelfSenderBanner()
     }
 
     fun dismissSelfSenderBanner() {
         ChatMailApplication.core(context).clearSelfSenderBanner()
-        pendingSelfSenderBannerName = null
+        selfSender.pendingSelfSenderBannerName = null
     }
 
     fun setSelfSender(name: String) {
@@ -1259,7 +1255,7 @@ fun ChatMailApp(
     val liveSelfStamp = syncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
     val liveAutoSelfStamp = autoSyncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
     LaunchedEffect(liveSelfStamp, liveAutoSelfStamp) {
-        val shown = selfSenderStamp(selfSenderSource, selfSenderName)
+        val shown = selfSenderStamp(selfSender.selfSenderSource, selfSender.selfSenderName)
         if (shouldRefreshSelfSender(liveSelfStamp, shown) ||
             shouldRefreshSelfSender(liveAutoSelfStamp, shown)
         ) {
@@ -1520,7 +1516,7 @@ fun ChatMailApp(
                 val lastBackupAt = remember(migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
-                val homeMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+                val homeMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
                 HomeScreen(
                     accountLabel = homeAccountLabel,
                     backendReady = homeBackendReady,
@@ -1570,12 +1566,12 @@ fun ChatMailApp(
                     onOpenBackup = { navController.navigate("backupRestore") },
                     meLabel = homeMeDisplay.label,
                     meColor = homeMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
+                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
                     onMeClick = { navController.navigate("me") },
                     lastBackupAt = lastBackupAt,
                     cutoffDate = cutoffDate,
                     onOpenSettings = { navController.navigate("settings") },
-                    pendingSelfSenderBannerName = pendingSelfSenderBannerName,
+                    pendingSelfSenderBannerName = selfSender.pendingSelfSenderBannerName,
                     onSelfSenderBannerOk = { dismissSelfSenderBanner() },
                     onSelfSenderBannerNotMe = {
                         dismissSelfSenderBanner()
@@ -1606,7 +1602,7 @@ fun ChatMailApp(
                 // lives here too, and a background sync may have learned
                 // a name while Chats sat on the back stack.
                 LaunchedEffect(Unit) { refreshSelfSender() }
-                val chatsMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+                val chatsMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
                 ChatsListScreen(
                     onOpenChat = { chatId -> navController.navigate("chat/$chatId") },
                     // The empty state offers the import directly rather than
@@ -1616,7 +1612,7 @@ fun ChatMailApp(
                     onImportChat = { pickFile.launch(arrayOf("*/*")) },
                     meLabel = chatsMeDisplay.label,
                     meColor = chatsMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
+                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
                     onMeClick = { navController.navigate("me") },
                 )
             }
@@ -1628,8 +1624,8 @@ fun ChatMailApp(
                     onDeleted = { navController.popBackStack() },
                     onSyncThisChat = { startRealSync(chatFilter = chatId) },
                     syncInProgress = anySyncRunning,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
+                    selfSenderSource = selfSender.selfSenderSource,
+                    selfSenderName = selfSender.selfSenderName,
                     onOpenMe = { navController.navigate("me") },
                 )
             }
@@ -1660,8 +1656,8 @@ fun ChatMailApp(
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     lastBackupAt = lastBackupAt,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
+                    selfSenderSource = selfSender.selfSenderSource,
+                    selfSenderName = selfSender.selfSenderName,
                     onOpenMe = { navController.navigate("me") },
                 )
             }
@@ -1797,10 +1793,10 @@ fun ChatMailApp(
                 var meSenders by remember { mutableStateOf(listOf<String>()) }
                 LaunchedEffect(Unit) { meSenders = listChatSenders() }
                 MeScreen(
-                    display = selfSenderDisplay(selfSenderSource, selfSenderName),
-                    detail = selfSenderDetail,
+                    display = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName),
+                    detail = selfSender.selfSenderDetail,
                     senders = meSenders,
-                    override = selfSenderOverride,
+                    override = selfSender.selfSenderOverride,
                     onPick = { setSelfSender(it) },
                     onSave = { setSelfSender(it) },
                     onClear = { setSelfSender("") },
