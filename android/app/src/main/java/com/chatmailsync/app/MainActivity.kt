@@ -240,13 +240,8 @@ fun ChatMailApp(
     // ---- Legacy Google sign-in notice (v2.0.0) ----------------------
     // Google sign-in was removed in v2.0.0. Someone who had it gets one
     // explanation, once -- see AppPrefs.isLegacyOauthUser.
-    var showOauthRemovedNotice by remember {
-        mutableStateOf(
-            AppPrefs.isLegacyOauthUser(context) &&
-                !AppPrefs.wasOauthRemovedNoticeShown(context)
-        )
-    }
-    if (showOauthRemovedNotice) {
+    val startup = remember { StartupState(context) }
+    if (startup.showOauthRemovedNotice) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Google sign-in has been removed") },
@@ -266,7 +261,7 @@ fun ChatMailApp(
                 TextButton(onClick = {
                     AppPrefs.setOauthRemovedNoticeShown(context, true)
                     AppPrefs.setConnectedAccountEmail(context, null)
-                    showOauthRemovedNotice = false
+                    startup.showOauthRemovedNotice = false
                 }) { Text("OK") }
             },
         )
@@ -329,15 +324,14 @@ fun ChatMailApp(
     // computed, so a mid-flow process death reopens on first_run rather than
     // skipping back to Home — the flag is only ever written once the flow is
     // actually finished (Set up later / Turn on / Not now).
-    var firstRunDone by remember { mutableStateOf(AppPrefs.isFirstRunDone(context)) }
     // An upgrader who already has a working mailbox from before this release
     // existed must never see the welcome screen — back-fill the flag for
     // them on launch so a later reinstall-free re-check (e.g. after
     // forgetting the password) doesn't retroactively show it either.
     LaunchedEffect(Unit) {
-        if (!firstRunDone && hasMailAccount) {
+        if (!startup.firstRunDone && hasMailAccount) {
             AppPrefs.setFirstRunDone(context, true)
-            firstRunDone = true
+            startup.firstRunDone = true
         }
     }
     // Computed once, from the values read at launch, not the possibly-just-
@@ -1418,9 +1412,9 @@ fun ChatMailApp(
                 val cameFrom = navController.previousBackStackEntry?.destination?.route
                 val finishTarget = firstRunFinishTarget(cameFrom)
                 fun finishFirstRun() {
-                    if (!firstRunDone) {
+                    if (!startup.firstRunDone) {
                         AppPrefs.setFirstRunDone(context, true)
-                        firstRunDone = true
+                        startup.firstRunDone = true
                     }
                     // Clears first_run off the back stack rather than merely
                     // pushing the target on top of it, so the hardware/
@@ -1459,7 +1453,7 @@ fun ChatMailApp(
                     // no second copy of the restore flow -- so a success here
                     // also runs reloadRestoredSettingsState below, the same
                     // as it would from Settings.
-                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, mail.imapPasswordSaved),
+                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, startup.firstRunDone, mail.imapPasswordSaved),
                     migrationBusy = backup.migrationBusy,
                     migrationStatus = backup.migrationStatus,
                     migrationSuccess = backup.migrationSuccess,

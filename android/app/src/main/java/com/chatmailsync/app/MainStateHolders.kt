@@ -57,3 +57,12 @@ internal class WatchState(context: Context) {
     var syncedFilePolicy by mutableStateOf(AppPrefs.getSyncedFilePolicy(context))
     var backgroundIssues by mutableStateOf(emptyList<BackgroundIssue>())
 }
+
+/** What the app decides at start: whether to explain the removed Google sign-in, and whether first run is done. */
+internal class StartupState(context: Context) {
+    var showOauthRemovedNotice by mutableStateOf(
+        AppPrefs.isLegacyOauthUser(context) &&
+            !AppPrefs.wasOauthRemovedNoticeShown(context)
+    )
+    var firstRunDone by mutableStateOf(AppPrefs.isFirstRunDone(context))
+}
