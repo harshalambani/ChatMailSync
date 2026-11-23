@@ -249,9 +249,21 @@ is one folder per chat, named after the chat, e.g. **WhatsApp/John Doe**,
 **On Gmail**, folders show as labels: a **WhatsApp** label in the left-hand list
 (in the Gmail app, in the menu), with one label per chat under it.
 
+![Gmail labels list: a WhatsApp label with one label per chat under it](images/user-guide/mailbox-labels.png)
+
+*The labels list in Gmail on the web, with the account address hidden.*
+
 A chat's emails group into one thread in mail apps that group conversations.
 Opening one shows the messages laid out like WhatsApp, with photos shown inline
 and other files attached for download.
+
+![One archived chat email, laid out like WhatsApp with an attached index file](images/user-guide/mailbox-chat-email.png)
+
+*One archived chat email in Gmail on the web, with the account address hidden.*
+
+![The emails inside one chat label, one per day of the conversation](images/user-guide/mailbox-chat-thread.png)
+
+*The emails under one chat's label in Gmail on the web, with the account address hidden.*
 
 ---
 
