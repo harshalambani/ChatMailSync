@@ -12,6 +12,7 @@ Released 2026-11-22 (versionCode 53). Three small fixes: a missing mail folder r
 - UX-12: "Ask me later" on "Is this the same chat?" is no longer forgotten when the phone is turned (#198).
 - BUG-24: messages with the same text in the same minute and from the same sender each get their own fingerprint, so an export taken inside a repeated minute no longer drops the later one. Anything already filed is not sent again (#199).
 - Help: two answers now say that "Ask me later" survives turning the phone and that a missing chat folder is created again.
+- Help: the answer on where chats show up no longer says a chat's emails always group into one thread; Gmail, for example, lists each day separately.
 - SEC-18: a test now runs the real backup export over a large database and checks it writes in small pieces. Nothing changes for users (#202).
 - KT-13: a smoke test opens every screen, rotation tests cover the screens that keep state, and the pure helpers moved out of MainActivity.kt unchanged. Nothing changes for users (#200, #201).
 

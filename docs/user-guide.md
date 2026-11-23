@@ -253,7 +253,9 @@ is one folder per chat, named after the chat, e.g. **WhatsApp/John Doe**,
 
 *The labels list in Gmail on the web, with the account address hidden.*
 
-A chat's emails group into one thread in mail apps that group conversations.
+Each email holds one day of the chat (or the chunk size you chose), filed under the
+chat's folder. Whether your mail app shows them as one thread depends on the app:
+Gmail, for example, lists each day separately.
 Opening one shows the messages laid out like WhatsApp, with photos shown inline
 and other files attached for download.
 
@@ -300,8 +302,9 @@ land in your own mailbox and nobody else receives anything.
 **A.** In a folder called WhatsApp, with one folder inside it for each chat, named
 after the chat. On Gmail these show as labels: a WhatsApp label with one label per
 chat under it. Each email holds one day of the conversation (Settings > Advanced >
-Chunk size can make it an hour or a week instead), and a chat's emails group into
-one thread in mail apps that group conversations. If you exported with media,
+Chunk size can make it an hour or a week instead). Whether your mail app shows a
+chat's emails as one thread depends on the app: Gmail, for example, lists each day
+separately. If you exported with media,
 photos show inside the email and other files come as attachments. You can search
 them like any other mail. If a new folder doesn't show yet, refresh your mail
 app's folder list. If a chat's folder is missing, for example because you deleted it, the next sync creates it again.
