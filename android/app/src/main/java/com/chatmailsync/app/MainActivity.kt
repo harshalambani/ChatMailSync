@@ -809,7 +809,7 @@ fun ChatMailApp(
     // ---- BUG-05: "is this the same chat under a new name?" ------------
     // An export that looks like an already archived chat under another name is held in the
     // inbox until the user answers. Matching reads stored fingerprints only (never text).
-    val linkSnoozedState = androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
+    val linkSnoozedState = remember { mutableStateOf(setOf<String>()) }
     val link = remember { LinkState(linkSnoozedState) }
     LaunchedEffect(inbox.inboxFiles, link.linkTick) {
         link.linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
