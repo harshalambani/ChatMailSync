@@ -66,3 +66,10 @@ internal class StartupState(context: Context) {
     )
     var firstRunDone by mutableStateOf(AppPrefs.isFirstRunDone(context))
 }
+
+/** The inbox listing and the last result line. Import and sync both write lastResult; Home reads it. */
+internal class InboxState {
+    var inboxFiles by mutableStateOf(listOf<Pair<String, Long>>())
+    var unreadableFiles by mutableStateOf(listOf<Pair<String, Long>>())
+    var lastResult by mutableStateOf("Nothing run yet.")
+}

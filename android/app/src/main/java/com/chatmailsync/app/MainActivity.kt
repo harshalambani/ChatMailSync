@@ -621,18 +621,16 @@ fun ChatMailApp(
     }
 
     // ---- Inbox + import (Phase A2) -----------------------------------
-    var inboxFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
+    val inbox = remember { InboxState() }
     // BUG-19: exports whose chat text could not be read; they wait here, outside the queue.
-    var unreadableFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
-    var lastResult by remember { mutableStateOf("Nothing run yet.") }
 
     fun refreshInbox() {
-        inboxFiles = ChatMailApplication.core(context).listInbox().map { entry ->
+        inbox.inboxFiles = ChatMailApplication.core(context).listInbox().map { entry ->
             val name = entry.str("name").toString()
             val size = entry.long("size_bytes") ?: 0L
             name to size
         }
-        unreadableFiles = ChatMailApplication.core(context).listUnreadable().map { entry ->
+        inbox.unreadableFiles = ChatMailApplication.core(context).listUnreadable().map { entry ->
             entry.str("name").toString() to (entry.long("size_bytes") ?: 0L)
         }
     }
@@ -653,7 +651,7 @@ fun ChatMailApp(
 
     fun importAndPreview(uri: Uri) {
         // The copy and the preview run in the background; the result arrives as a report below.
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, listOf(uri))
     }
 
@@ -676,7 +674,7 @@ fun ChatMailApp(
     }
 
     fun receiveSharedExport(uri: Uri) {
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, listOf(uri))
         // Go where the result will appear now; the copy finishes in the background.
         goHomeAfterShare()
@@ -688,7 +686,7 @@ fun ChatMailApp(
     LaunchedEffect(importReport) {
         importReport?.let { r ->
             refreshInbox()
-            lastResult = r.text
+            inbox.lastResult = r.text
             ImportManager.consume(r.id)
         }
     }
@@ -713,7 +711,7 @@ fun ChatMailApp(
      */
     fun importMany(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, uris)
     }
 
@@ -814,7 +812,7 @@ fun ChatMailApp(
     var linkQuestions by remember { mutableStateOf(listOf<Map<String, Any?>>()) }
     var linkTick by remember { mutableStateOf(0) }
     var linkSnoozed by androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
-    LaunchedEffect(inboxFiles, linkTick) {
+    LaunchedEffect(inbox.inboxFiles, linkTick) {
         linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 ChatMailApplication.core(context).linkProposals()
@@ -1081,7 +1079,7 @@ fun ChatMailApp(
         // SyncWorker reads host/email from AppPrefs and the password from
         // SecretStore itself, same as the watched-folder auto-sync path.
         if (!mail.imapPasswordSaved) {
-            lastResult = "Save your IMAP app password in Settings > Mail account first."
+            inbox.lastResult = "Save your IMAP app password in Settings > Mail account first."
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -1157,7 +1155,7 @@ fun ChatMailApp(
                 // "Test run" everywhere else on both platforms; "Dry-run" was the one
                 // place the developer word leaked into the user-facing panel.
                 val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
-                lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
+                inbox.lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
                 linkTick++
                 // A one-to-one export just synced may be exactly what taught
@@ -1168,7 +1166,7 @@ fun ChatMailApp(
                 refreshSelfSenderBanner()
             }
             WorkInfo.State.FAILED -> {
-                lastResult = "Sync failed:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
+                inbox.lastResult = "Sync failed:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
             }
             else -> {}
         }
@@ -1222,7 +1220,7 @@ fun ChatMailApp(
     // ever finished (or whether it succeeded).
     LaunchedEffect(autoSyncWorkInfo?.state) {
         if (autoSyncResultText != null) {
-            lastResult = autoSyncResultText
+            inbox.lastResult = autoSyncResultText
             refreshInbox()
             linkTick++
             refreshSelfSender()
@@ -1435,7 +1433,7 @@ fun ChatMailApp(
                     initialProvider = mail.imapProvider,
                     initialEmail = mail.imapEmail,
                     onConnect = ::connectWithStages,
-                    queuedChatCount = inboxFiles.size,
+                    queuedChatCount = inbox.inboxFiles.size,
                     onDoTestRun = { runDryRunSync() },
                     watchedFolderUri = watch.watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
@@ -1517,7 +1515,7 @@ fun ChatMailApp(
                             navController.navigate("mailWizard")
                         }
                     },
-                    inboxFiles = inboxFiles,
+                    inboxFiles = inbox.inboxFiles,
                     waitingNames = waitingNames,
                     onReopenQuestion = { name -> linkSnoozed = reopenFor(linkSnoozed, linkQuestions, name) },
                     // Goes to our own picker, not the system one. The system
@@ -1531,12 +1529,12 @@ fun ChatMailApp(
                             .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
-                    unreadableFiles = unreadableFiles,
+                    unreadableFiles = inbox.unreadableFiles,
                     onRemoveUnreadable = { name -> removeUnreadableFile(name) },
                     dryRunDefault = dryRunDefault,
                     onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
-                    lastResult = lastResult,
+                    lastResult = inbox.lastResult,
                     syncInProgress = anySyncRunning,
                     backgroundIssues = watch.backgroundIssues,
                     onBackgroundIssueAction = { issue ->
@@ -1568,14 +1566,14 @@ fun ChatMailApp(
                 // may have gone stale while the app was away.
                 LaunchedEffect(Unit) { refreshInbox() }
                 QueueScreen(
-                    files = inboxFiles,
+                    files = inbox.inboxFiles,
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
                             .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },
-                    unreadableFiles = unreadableFiles,
+                    unreadableFiles = inbox.unreadableFiles,
                     onRemoveUnreadable = { name -> removeUnreadableFile(name) },
                     onImportPick = { navController.navigate("importPicker") },
                     onBack = { navController.popBackStack() },
@@ -1725,7 +1723,7 @@ fun ChatMailApp(
                     // inbox directory, and ImportManager keys on the leaf name
                     // too, so this marks exactly what a second import would
                     // refuse.
-                    queuedNames = inboxFiles.map { it.first }.toSet(),
+                    queuedNames = inbox.inboxFiles.map { it.first }.toSet(),
                     onChooseFolder = { folderPicker.launch(null) },
                     onPickFromAnywhere = { pickFile.launch(arrayOf("*/*")) },
                     onImport = { uris ->
