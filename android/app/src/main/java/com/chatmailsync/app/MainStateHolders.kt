@@ -1,6 +1,7 @@
 package com.chatmailsync.app
 
 import android.content.Context
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -80,4 +81,19 @@ internal class SyncSettingsState(context: Context) {
     var cutoffDate by mutableStateOf(AppPrefs.getCutoffDate(context))
     var dryRunDefault by mutableStateOf(AppPrefs.isDryRunDefault(context))
     var lastSyncWasDryRun by mutableStateOf(false)
+}
+
+/**
+ * The "same chat?" questions. [snoozedState] is the MutableState that MainActivity's own `rememberSaveable`
+ * (with LinkSnoozeSaver) returned: it is the one value here that survives a rotation, so it is handed in and
+ * never copied. [linkSnoozed] reads and writes straight through to it.
+ */
+internal class LinkState(private val snoozedState: MutableState<Set<String>>) {
+    var linkQuestions by mutableStateOf(listOf<Map<String, Any?>>())
+    var linkTick by mutableStateOf(0)
+    var linkSnoozed: Set<String>
+        get() = snoozedState.value
+        set(value) {
+            snoozedState.value = value
+        }
 }

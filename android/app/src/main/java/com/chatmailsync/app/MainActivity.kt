@@ -809,11 +809,10 @@ fun ChatMailApp(
     // ---- BUG-05: "is this the same chat under a new name?" ------------
     // An export that looks like an already archived chat under another name is held in the
     // inbox until the user answers. Matching reads stored fingerprints only (never text).
-    var linkQuestions by remember { mutableStateOf(listOf<Map<String, Any?>>()) }
-    var linkTick by remember { mutableStateOf(0) }
-    var linkSnoozed by androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
-    LaunchedEffect(inbox.inboxFiles, linkTick) {
-        linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val linkSnoozedState = androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
+    val link = remember { LinkState(linkSnoozedState) }
+    LaunchedEffect(inbox.inboxFiles, link.linkTick) {
+        link.linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 ChatMailApplication.core(context).linkProposals()
             } catch (_: Exception) {
@@ -821,8 +820,8 @@ fun ChatMailApp(
             }
         }
     }
-    val openLinkQuestion = pickOpenQuestion(linkQuestions, linkSnoozed)
-    val waitingNames = waitingFiles(linkQuestions)
+    val openLinkQuestion = pickOpenQuestion(link.linkQuestions, link.linkSnoozed)
+    val waitingNames = waitingFiles(link.linkQuestions)
     if (openLinkQuestion != null) {
         val qNew = openLinkQuestion["new_chat_id"] as String
         val qOld = openLinkQuestion["old_chat_id"] as String
@@ -835,7 +834,7 @@ fun ChatMailApp(
         AlertDialog(
             // BUG-18: Back acts like "Ask me later"; a tap outside does nothing, so a stray tap
             // (e.g. on the tab bar) can no longer hide the question.
-            onDismissRequest = { linkSnoozed = snoozePair(linkSnoozed, qKey) },
+            onDismissRequest = { link.linkSnoozed = snoozePair(link.linkSnoozed, qKey) },
             properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
             title = { Text("Is this the same chat?") },
             text = {
@@ -863,14 +862,14 @@ fun ChatMailApp(
                         )
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
                             if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
-                            linkTick++
+                            link.linkTick++
                         }
                     }.start()
                 }) { Text("Yes, same chat") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { linkSnoozed = snoozePair(linkSnoozed, qKey) }) { Text("Ask me later") }
+                    TextButton(onClick = { link.linkSnoozed = snoozePair(link.linkSnoozed, qKey) }) { Text("Ask me later") }
                     TextButton(onClick = {
                         Thread {
                             val ok = saveLinkAnswer(
@@ -879,7 +878,7 @@ fun ChatMailApp(
                             )
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
-                                linkTick++
+                                link.linkTick++
                             }
                         }.start()
                     }) { Text("No, keep separate") }
@@ -1154,7 +1153,7 @@ fun ChatMailApp(
                 val label = if (syncCfg.lastSyncWasDryRun) "Test run result" else "Sync result"
                 inbox.lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
-                linkTick++
+                link.linkTick++
                 // A one-to-one export just synced may be exactly what taught
                 // the app the owner's name: re-read the masthead answer (the
                 // live progress stamp below usually got there first) and the
@@ -1219,7 +1218,7 @@ fun ChatMailApp(
         if (autoSyncResultText != null) {
             inbox.lastResult = autoSyncResultText
             refreshInbox()
-            linkTick++
+            link.linkTick++
             refreshSelfSender()
             refreshSelfSenderBanner()
         }
@@ -1514,7 +1513,7 @@ fun ChatMailApp(
                     },
                     inboxFiles = inbox.inboxFiles,
                     waitingNames = waitingNames,
-                    onReopenQuestion = { name -> linkSnoozed = reopenFor(linkSnoozed, linkQuestions, name) },
+                    onReopenQuestion = { name -> link.linkSnoozed = reopenFor(link.linkSnoozed, link.linkQuestions, name) },
                     // Goes to our own picker, not the system one. The system
                     // picker is still reachable from inside it, one clearly
                     // secondary button down, for files outside the granted
