@@ -104,7 +104,8 @@ jobs:
   # alongside tests/test_config.py) -- a parity rule that only one platform
   # actually checks is a comment, not a rule.
   #
-  # Plain JVM unit tests -- no emulator, no Robolectric.
+  # JVM unit tests -- no emulator. Three classes use Robolectric, which downloads
+  # its android-all jar on first use (cached below).
   android-unit-tests:
     name: Android unit tests (Kotlin)
     runs-on: ubuntu-latest
@@ -129,6 +130,24 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+
+      # Robolectric 4.18 (MavenDependencyResolver.getLocalRepositoryDir) keeps the
+      # android-all jar it downloads in the local Maven repository: -Dmaven.repo.local,
+      # else localRepository in ~/.m2/settings.xml, else ~/.m2/repository. Neither is
+      # set here, so it is ~/.m2/repository. Cache only the org/robolectric part. The key
+      # changes with the Robolectric version (app/build.gradle.kts) and the SDK
+      # (robolectric.properties), so either change downloads a fresh jar. A cache miss
+      # still works: Robolectric downloads the jar itself, as before.
+      - name: Cache Robolectric android-all jar
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('android/app/build.gradle.kts', 'android/app/src/test/resources/robolectric.properties') }}
+
+      - name: Show Robolectric jars before the tests
+        run: |
+          find ~/.m2/repository/org/robolectric -name '*.jar' -ls 2>/dev/null || true
+          echo "listing done"
 
       - name: Run Kotlin unit tests
         working-directory: android
