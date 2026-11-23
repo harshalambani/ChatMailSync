@@ -62,8 +62,9 @@ internal val FAQ = listOf(
         "In a folder called WhatsApp, with one folder inside it for each chat, named after the " +
         "chat. On Gmail these show as labels: a WhatsApp label with one label per chat under it. " +
         "Each email holds one day of the conversation (Settings > Advanced > Chunk size can make " +
-        "it an hour or a week instead), and a chat's emails group into one thread in mail apps " +
-        "that group conversations. If you exported with media, photos show inside the email and " +
+        "it an hour or a week instead). Whether your mail app shows a chat's emails as one thread " +
+        "depends on the app: Gmail, for example, lists each day separately. If you exported " +
+        "with media, photos show inside the email and " +
         "other files come as attachments. You can search them like any other mail. If a new " +
         "folder doesn't show yet, refresh your mail app's folder list. If a chat's folder is " +
         "missing, for example because you deleted it, the next sync creates it again.",
