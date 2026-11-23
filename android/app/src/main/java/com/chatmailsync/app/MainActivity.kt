@@ -770,7 +770,7 @@ fun ChatMailApp(
 
     // D166: set after a restore whose backup would switch "Delete after import" on; nothing is
     // switched until the user taps Switch on. The phone's own policy stands meanwhile.
-    var confirmDeleteAfterImport by remember { mutableStateOf(false) }
+    val watch = remember { WatchState(context) }
 
     val restoreBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -799,7 +799,7 @@ fun ChatMailApp(
                     backup.migrationSuccess = outcome.success
                     backup.migrationRestoredLines = outcome.restoredLines
                     backup.migrationNotRestoredLines = outcome.notRestoredLines
-                    confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
+                    watch.confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
                     backup.migrationBusy = false
                     refreshInbox()
                     // See reloadRestoredSettingsState below: this is what
@@ -897,10 +897,6 @@ fun ChatMailApp(
     }
 
     // ---- Watched folder (Home feedback: auto-detect new export files) --
-    var watchedFolderUri by remember { mutableStateOf(AppPrefs.getWatchedFolderUri(context)) }
-    var autoWatchEnabled by remember { mutableStateOf(AppPrefs.isAutoWatchEnabled(context)) }
-    var watchIntervalMinutes by remember { mutableStateOf(AppPrefs.getWatchIntervalMinutes(context)) }
-    var syncedFilePolicy by remember { mutableStateOf(AppPrefs.getSyncedFilePolicy(context)) }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -914,31 +910,31 @@ fun ChatMailApp(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             AppPrefs.setWatchedFolderUri(context, uri.toString())
-            watchedFolderUri = uri.toString()
+            watch.watchedFolderUri = uri.toString()
         }
     }
 
     fun setAutoWatch(enabled: Boolean) {
-        autoWatchEnabled = enabled
+        watch.autoWatchEnabled = enabled
         AppPrefs.setAutoWatchEnabled(context, enabled)
-        if (enabled) WatchFolderWorker.enqueue(context, watchIntervalMinutes) else WatchFolderWorker.cancel(context)
+        if (enabled) WatchFolderWorker.enqueue(context, watch.watchIntervalMinutes) else WatchFolderWorker.cancel(context)
     }
 
     fun setWatchInterval(minutes: Long) {
-        watchIntervalMinutes = minutes
+        watch.watchIntervalMinutes = minutes
         AppPrefs.setWatchIntervalMinutes(context, minutes)
-        if (autoWatchEnabled) WatchFolderWorker.enqueue(context, minutes)
+        if (watch.autoWatchEnabled) WatchFolderWorker.enqueue(context, minutes)
     }
 
     fun setSyncedFilePolicy(policy: String) {
-        syncedFilePolicy = policy
+        watch.syncedFilePolicy = policy
         AppPrefs.setSyncedFilePolicy(context, policy)
     }
 
-    if (confirmDeleteAfterImport) {
+    if (watch.confirmDeleteAfterImport) {
         AlertDialog(
             // Back and a tap outside both mean "Keep as is": the safe answer.
-            onDismissRequest = { confirmDeleteAfterImport = false },
+            onDismissRequest = { watch.confirmDeleteAfterImport = false },
             title = { Text("Delete export files after import?") },
             text = {
                 Text(
@@ -951,11 +947,11 @@ fun ChatMailApp(
             confirmButton = {
                 TextButton(onClick = {
                     setSyncedFilePolicy("delete")
-                    confirmDeleteAfterImport = false
+                    watch.confirmDeleteAfterImport = false
                 }) { Text("Switch on") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDeleteAfterImport = false }) { Text("Keep as is") }
+                TextButton(onClick = { watch.confirmDeleteAfterImport = false }) { Text("Keep as is") }
             },
         )
     }
@@ -963,7 +959,7 @@ fun ChatMailApp(
     fun clearWatchedFolder() {
         setAutoWatch(false)
         AppPrefs.setWatchedFolderUri(context, null)
-        watchedFolderUri = null
+        watch.watchedFolderUri = null
     }
 
     // One scan at launch. The periodic worker's first run is up to a whole
@@ -975,7 +971,7 @@ fun ChatMailApp(
     // once per process. ON_RESUME would re-run it every time the user came
     // back from another app, which is a scan nobody asked for.
     LaunchedEffect(Unit) {
-        if (shouldScanAtLaunch(autoWatchEnabled, watchedFolderUri)) {
+        if (shouldScanAtLaunch(watch.autoWatchEnabled, watch.watchedFolderUri)) {
             WatchFolderWorker.enqueueOnce(context)
         }
     }
@@ -992,11 +988,10 @@ fun ChatMailApp(
     // lifecycle-runtime-compose, which this module does not depend on, and one
     // DisposableEffect is not worth a new dependency.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var backgroundIssues by remember { mutableStateOf(emptyList<BackgroundIssue>()) }
-    DisposableEffect(lifecycleOwner, autoWatchEnabled) {
+    DisposableEffect(lifecycleOwner, watch.autoWatchEnabled) {
         fun recompute() {
-            backgroundIssues = backgroundHealthIssues(
-                autoWatchOn = autoWatchEnabled,
+            watch.backgroundIssues = backgroundHealthIssues(
+                autoWatchOn = watch.autoWatchEnabled,
                 batteryExempt = isBatteryExempt(context),
                 notificationsAllowed = notificationsAllowed(context),
             )
@@ -1057,8 +1052,8 @@ fun ChatMailApp(
         mail.imapPort = restored.imapPort
         mail.imapEmail = restored.imapEmail
         chunkSize = restored.chunkSize
-        watchIntervalMinutes = restored.watchIntervalMinutes
-        syncedFilePolicy = restored.syncedFilePolicy
+        watch.watchIntervalMinutes = restored.watchIntervalMinutes
+        watch.syncedFilePolicy = restored.syncedFilePolicy
         dryRunDefault = restored.dryRunDefault
         // Goes through the same setter onCreate wires up, not a direct
         // assignment -- themeMode itself lives one composable up (over
@@ -1448,9 +1443,9 @@ fun ChatMailApp(
                     onConnect = ::connectWithStages,
                     queuedChatCount = inboxFiles.size,
                     onDoTestRun = { runDryRunSync() },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
-                    watchIntervalMinutes = watchIntervalMinutes,
+                    watchIntervalMinutes = watch.watchIntervalMinutes,
                     onWatchIntervalChange = { setWatchInterval(it) },
                     onTurnOn = {
                         setAutoWatch(true)
@@ -1549,7 +1544,7 @@ fun ChatMailApp(
                     onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
                     lastResult = lastResult,
                     syncInProgress = anySyncRunning,
-                    backgroundIssues = backgroundIssues,
+                    backgroundIssues = watch.backgroundIssues,
                     onBackgroundIssueAction = { issue ->
                         // Null only below API 23, where there is no battery
                         // exemption to grant and the issue is never raised in
@@ -1698,16 +1693,16 @@ fun ChatMailApp(
                     // to send "Turn on"/"Set up later"/"Not now" back here
                     // instead of to Home.
                     onRunSetupAgain = { navController.navigate("first_run") },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
                     onClearFolder = { clearWatchedFolder() },
-                    autoWatchEnabled = autoWatchEnabled,
+                    autoWatchEnabled = watch.autoWatchEnabled,
                     onAutoWatchChange = { setAutoWatch(it) },
-                    watchIntervalMinutes = watchIntervalMinutes,
+                    watchIntervalMinutes = watch.watchIntervalMinutes,
                     onWatchIntervalChange = { setWatchInterval(it) },
                     onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
                     syncInProgress = anySyncRunning,
-                    syncedFilePolicy = syncedFilePolicy,
+                    syncedFilePolicy = watch.syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
                     cutoffDate = cutoffDate,
                     onCutoffDateChange = {
@@ -1731,7 +1726,7 @@ fun ChatMailApp(
                 LaunchedEffect(Unit) { refreshInbox() }
                 ImportPickerScreen(
                     onBack = { navController.popBackStack() },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     // Names, not uris: what is already queued is a file in our
                     // inbox directory, and ImportManager keys on the leaf name
                     // too, so this marks exactly what a second import would

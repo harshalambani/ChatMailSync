@@ -47,3 +47,13 @@ internal class BackupState {
     var migrationNotRestoredLines by mutableStateOf<List<String>>(emptyList())
     var restoreGeneration by mutableStateOf(0)
 }
+
+/** The watched folder, auto-watch and its interval, the synced-file policy, the background-health issues and the "Delete after import" confirmation that policy raises. */
+internal class WatchState(context: Context) {
+    var confirmDeleteAfterImport by mutableStateOf(false)
+    var watchedFolderUri by mutableStateOf(AppPrefs.getWatchedFolderUri(context))
+    var autoWatchEnabled by mutableStateOf(AppPrefs.isAutoWatchEnabled(context))
+    var watchIntervalMinutes by mutableStateOf(AppPrefs.getWatchIntervalMinutes(context))
+    var syncedFilePolicy by mutableStateOf(AppPrefs.getSyncedFilePolicy(context))
+    var backgroundIssues by mutableStateOf(emptyList<BackgroundIssue>())
+}

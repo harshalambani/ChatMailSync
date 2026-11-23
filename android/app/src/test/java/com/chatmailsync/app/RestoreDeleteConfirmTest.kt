@@ -98,7 +98,7 @@ class RestoreDeleteConfirmTest {
     fun `the screen only writes delete from the confirm button`() {
         val main = (File("src/main/java/com/chatmailsync/app/MainActivity.kt").takeIf { it.isFile }
             ?: File("app/src/main/java/com/chatmailsync/app/MainActivity.kt")).readText()
-        val dialog = main.substring(main.indexOf("if (confirmDeleteAfterImport) {"))
+        val dialog = main.substring(main.indexOf("if (watch.confirmDeleteAfterImport) {"))
             .substringBefore("fun clearWatchedFolder")
         assertEquals(1, Regex("""setSyncedFilePolicy\("delete"\)""").findAll(dialog).count())
         val confirm = dialog.substringAfter("confirmButton = {").substringBefore("dismissButton = {")
