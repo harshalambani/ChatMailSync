@@ -1019,9 +1019,7 @@ fun ChatMailApp(
     // false on every process death, and WatchFolderWorker's auto-sync
     // couldn't see the user's choice at all since it runs in a separate
     // process-less Worker with no access to this Compose state.
-    var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
-    var cutoffDate by remember { mutableStateOf(AppPrefs.getCutoffDate(context)) }
-    var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
+    val syncCfg = remember { SyncSettingsState(context) }
 
     // ---- Reload after a restore (batch 7 follow-up) ---------------------
     // Every var below is re-read from AppPrefs on every restore attempt
@@ -1043,10 +1041,10 @@ fun ChatMailApp(
         mail.imapHost = restored.imapHost
         mail.imapPort = restored.imapPort
         mail.imapEmail = restored.imapEmail
-        chunkSize = restored.chunkSize
+        syncCfg.chunkSize = restored.chunkSize
         watch.watchIntervalMinutes = restored.watchIntervalMinutes
         watch.syncedFilePolicy = restored.syncedFilePolicy
-        dryRunDefault = restored.dryRunDefault
+        syncCfg.dryRunDefault = restored.dryRunDefault
         // Goes through the same setter onCreate wires up, not a direct
         // assignment -- themeMode itself lives one composable up (over
         // ChatMailApp), so this is the only way to reach it from here, and
@@ -1068,7 +1066,6 @@ fun ChatMailApp(
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
     val workManager = remember { WorkManager.getInstance(context) }
-    var lastSyncWasDryRun by remember { mutableStateOf(false) }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -1092,7 +1089,7 @@ fun ChatMailApp(
             .setInputData(
                 Data.Builder()
                     .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, syncCfg.chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
                     .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
                     .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_IMAP)
@@ -1106,7 +1103,7 @@ fun ChatMailApp(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
             .build()
-        lastSyncWasDryRun = false
+        syncCfg.lastSyncWasDryRun = false
         AppPrefs.stopMark(context).clearForFreshSync()
         workManager.enqueueUniqueWork(
             SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
@@ -1122,12 +1119,12 @@ fun ChatMailApp(
     // through SyncWorker instead (dry_run=true, no access token needed),
     // same as a real sync.
     fun runDryRunSync() {
-        lastSyncWasDryRun = true
+        syncCfg.lastSyncWasDryRun = true
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(
                 Data.Builder()
                     .putBoolean(SyncWorker.KEY_DRY_RUN, true)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, syncCfg.chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
                     .putString(SyncWorker.KEY_MAIL_BACKEND, mail.mailBackend)
                     .build()
@@ -1154,7 +1151,7 @@ fun ChatMailApp(
             WorkInfo.State.SUCCEEDED -> {
                 // "Test run" everywhere else on both platforms; "Dry-run" was the one
                 // place the developer word leaked into the user-facing panel.
-                val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
+                val label = if (syncCfg.lastSyncWasDryRun) "Test run result" else "Sync result"
                 inbox.lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
                 linkTick++
@@ -1531,9 +1528,9 @@ fun ChatMailApp(
                     onRemoveFile = { name -> removeInboxFile(name) },
                     unreadableFiles = inbox.unreadableFiles,
                     onRemoveUnreadable = { name -> removeUnreadableFile(name) },
-                    dryRunDefault = dryRunDefault,
-                    onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
-                    onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
+                    dryRunDefault = syncCfg.dryRunDefault,
+                    onDryRunDefaultChange = { syncCfg.dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
+                    onSyncNow = { if (syncCfg.dryRunDefault) runDryRunSync() else startRealSync() },
                     lastResult = inbox.lastResult,
                     syncInProgress = anySyncRunning,
                     backgroundIssues = watch.backgroundIssues,
@@ -1551,7 +1548,7 @@ fun ChatMailApp(
                     meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
                     onMeClick = { navController.navigate("me") },
                     lastBackupAt = lastBackupAt,
-                    cutoffDate = cutoffDate,
+                    cutoffDate = syncCfg.cutoffDate,
                     onOpenSettings = { navController.navigate("settings") },
                     pendingSelfSenderBannerName = selfSender.pendingSelfSenderBannerName,
                     onSelfSenderBannerOk = { dismissSelfSenderBanner() },
@@ -1696,18 +1693,18 @@ fun ChatMailApp(
                     syncInProgress = anySyncRunning,
                     syncedFilePolicy = watch.syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
-                    cutoffDate = cutoffDate,
+                    cutoffDate = syncCfg.cutoffDate,
                     onCutoffDateChange = {
-                        cutoffDate = it
+                        syncCfg.cutoffDate = it
                         AppPrefs.setCutoffDate(context, it)
                     },
-                    dryRunDefault = dryRunDefault,
+                    dryRunDefault = syncCfg.dryRunDefault,
                     onDryRunDefaultChange = {
-                        dryRunDefault = it
+                        syncCfg.dryRunDefault = it
                         AppPrefs.setDryRunDefault(context, it)
                     },
-                    chunkSize = chunkSize,
-                    onChunkSizeChange = { chunkSize = it; AppPrefs.setChunkSize(context, it) },
+                    chunkSize = syncCfg.chunkSize,
+                    onChunkSizeChange = { syncCfg.chunkSize = it; AppPrefs.setChunkSize(context, it) },
                     onTestConnection = ::testImapConnection,
                 )
             }

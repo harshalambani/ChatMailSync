@@ -73,3 +73,11 @@ internal class InboxState {
     var unreadableFiles by mutableStateOf(listOf<Pair<String, Long>>())
     var lastResult by mutableStateOf("Nothing run yet.")
 }
+
+/** The sync options Home and Advanced settings share, and whether the last run was a dry run. */
+internal class SyncSettingsState(context: Context) {
+    var chunkSize by mutableStateOf(AppPrefs.getChunkSize(context))
+    var cutoffDate by mutableStateOf(AppPrefs.getCutoffDate(context))
+    var dryRunDefault by mutableStateOf(AppPrefs.isDryRunDefault(context))
+    var lastSyncWasDryRun by mutableStateOf(false)
+}
