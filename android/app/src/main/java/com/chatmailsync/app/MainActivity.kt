@@ -279,24 +279,17 @@ fun ChatMailApp(
     // force a real login via labels_list(), persist only on success"
     // contract. imapPasswordSaved never reflects the password itself, only
     // whether SecretStore currently holds one.
-    var mailBackend by remember { mutableStateOf(AppPrefs.resolveMailBackend(context)) }
-    var imapProvider by remember { mutableStateOf(AppPrefs.getImapProvider(context)) }
-    var imapHost by remember { mutableStateOf(AppPrefs.getImapHost(context)) }
-    var imapPort by remember { mutableStateOf(AppPrefs.getImapPort(context)) }
-    var imapEmail by remember { mutableStateOf(AppPrefs.getImapEmail(context)) }
-    var imapPasswordSaved by remember { mutableStateOf(AppPrefs.hasImapPassword(context)) }
-    var imapProviders by remember { mutableStateOf(listOf<ImapProviderInfo>()) }
+    val mail = remember { MailAccountState(context) }
     // The five connection stages, in order, so the wizard's last step can draw
     // the whole list greyed out before the check starts rather than growing it
     // a line at a time. Read from the Kotlin core rather than hardcoded here,
     // so Kotlin never drifts from the source of truth.
-    var stagePlan by remember { mutableStateOf(listOf<WizardStage>()) }
 
     // Reads the core's IMAP provider table once per composition —
     // the shared preset table (host/port per provider), so Android never
     // duplicates that data in Kotlin.
     LaunchedEffect(Unit) {
-        imapProviders = ChatMailApplication.core(context).imapProviders().map { entry ->
+        mail.imapProviders = ChatMailApplication.core(context).imapProviders().map { entry ->
             ImapProviderInfo(
                 key = entry.str("key").toString(),
                 label = entry.str("label").toString(),
@@ -313,19 +306,19 @@ fun ChatMailApp(
         // some other provider's host in front of the user without saying so.
         // The saved host is never touched either: only the user knows what it
         // should be.
-        val landing = retiredProviderLanding(imapProvider)
-        if (landing.isNotEmpty() && landing != imapProvider) {
-            imapProvider = landing
+        val landing = retiredProviderLanding(mail.imapProvider)
+        if (landing.isNotEmpty() && landing != mail.imapProvider) {
+            mail.imapProvider = landing
             AppPrefs.setImapProvider(context, landing)
         }
-        stagePlan = connectionStagePlan().map { entry ->
+        mail.stagePlan = connectionStagePlan().map { entry ->
             WizardStage(name = entry.name, label = entry.label)
         }
     }
 
     // Whether there is an account to speak of at all: with IMAP the only
     // backend, that is exactly "a password is in the keystore".
-    val hasMailAccount = imapPasswordSaved
+    val hasMailAccount = mail.imapPasswordSaved
 
     // The banner's status dot. Recomputed whenever the account situation
     // changes; the pass/fail half of it is written by the two places that
@@ -356,11 +349,11 @@ fun ChatMailApp(
     }
 
     fun onImapProviderChange(provider: String) {
-        imapProvider = provider
+        mail.imapProvider = provider
         if (provider != "custom") {
-            imapProviders.firstOrNull { it.key == provider }?.let {
-                imapHost = it.host
-                imapPort = it.port
+            mail.imapProviders.firstOrNull { it.key == provider }?.let {
+                mail.imapHost = it.host
+                mail.imapPort = it.port
             }
         }
     }
@@ -384,7 +377,7 @@ fun ChatMailApp(
         onResult: (Boolean, String) -> Unit,
     ) {
         val effectiveHost = if (provider == "custom") host else
-            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+            (mail.imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
         if (provider == "custom" && effectiveHost.isBlank()) {
             onResult(false, "Enter a host for a custom IMAP server.")
             return
@@ -421,11 +414,11 @@ fun ChatMailApp(
                     AppPrefs.setImapPort(context, port)
                     AppPrefs.setImapEmail(context, email)
                     SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), effectivePassword)
-                    imapProvider = provider
-                    imapHost = effectiveHost
-                    imapPort = port
-                    imapEmail = email
-                    imapPasswordSaved = true
+                    mail.imapProvider = provider
+                    mail.imapHost = effectiveHost
+                    mail.imapPort = port
+                    mail.imapEmail = email
+                    mail.imapPasswordSaved = true
                     onResult(true, "Connected — settings saved.")
                 } else {
                     onResult(false, text)
@@ -467,7 +460,7 @@ fun ChatMailApp(
         onResult: (Boolean, String) -> Unit,
     ) {
         val effectiveHost = if (provider == "custom") host else
-            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+            (mail.imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
         if (effectiveHost.isBlank()) {
             onResult(false, "Enter a host for a custom IMAP server.")
             return
@@ -495,17 +488,17 @@ fun ChatMailApp(
                     // otherwise someone who ran it while still on the old Gmail
                     // path would end up with a saved password nothing uses.
                     AppPrefs.setMailBackend(context, AppPrefs.MAIL_BACKEND_IMAP)
-                    mailBackend = AppPrefs.MAIL_BACKEND_IMAP
+                    mail.mailBackend = AppPrefs.MAIL_BACKEND_IMAP
                     AppPrefs.setImapProvider(context, provider)
                     AppPrefs.setImapHost(context, effectiveHost)
                     AppPrefs.setImapPort(context, port)
                     AppPrefs.setImapEmail(context, email)
                     SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), normalizedPassword)
-                    imapProvider = provider
-                    imapHost = effectiveHost
-                    imapPort = port
-                    imapEmail = email
-                    imapPasswordSaved = true
+                    mail.imapProvider = provider
+                    mail.imapHost = effectiveHost
+                    mail.imapPort = port
+                    mail.imapEmail = email
+                    mail.imapPasswordSaved = true
                 }
                 onResult(connected, text)
             },
@@ -529,11 +522,11 @@ fun ChatMailApp(
         AppPrefs.clearImapSettings(context)
         // The verdict was about the credentials just thrown away.
         ConnectionState.forget(context)
-        imapPasswordSaved = false
-        imapProvider = "gmail"
-        imapHost = ""
-        imapPort = 993
-        imapEmail = ""
+        mail.imapPasswordSaved = false
+        mail.imapProvider = "gmail"
+        mail.imapHost = ""
+        mail.imapPort = 993
+        mail.imapEmail = ""
     }
 
     /**
@@ -542,7 +535,7 @@ fun ChatMailApp(
      * the five-stage check and its result formatting to keep in sync.
      */
     fun testImapConnection(onResult: (String) -> Unit) {
-        if (!imapPasswordSaved) {
+        if (!mail.imapPasswordSaved) {
             onResult("Save an IMAP app password first.")
             return
         }
@@ -1067,11 +1060,11 @@ fun ChatMailApp(
     // phone's own choices, and the password never leaves the old device).
     fun reloadRestoredSettingsState() {
         val restored = Migration.readRestorableSettings(context)
-        mailBackend = restored.mailBackend
-        imapProvider = restored.imapProvider
-        imapHost = restored.imapHost
-        imapPort = restored.imapPort
-        imapEmail = restored.imapEmail
+        mail.mailBackend = restored.mailBackend
+        mail.imapProvider = restored.imapProvider
+        mail.imapHost = restored.imapHost
+        mail.imapPort = restored.imapPort
+        mail.imapEmail = restored.imapEmail
         chunkSize = restored.chunkSize
         watchIntervalMinutes = restored.watchIntervalMinutes
         syncedFilePolicy = restored.syncedFilePolicy
@@ -1084,12 +1077,12 @@ fun ChatMailApp(
         onThemeModeChange(restored.themeMode)
         // F-01: a restore that points the phone at a different account clears the saved password
         // (applySettings), so the "password saved" state must be re-read here too.
-        imapPasswordSaved = AppPrefs.hasImapPassword(context)
+        mail.imapPasswordSaved = AppPrefs.hasImapPassword(context)
         // applySettings clears the saved connection verdict (the password
         // did not travel, so a stale "Connected" would be a green light on
         // a mailbox this phone cannot reach yet) -- re-derive the pill
         // rather than leave it showing whatever it said before the restore.
-        ConnectionState.refresh(context, imapPasswordSaved)
+        ConnectionState.refresh(context, mail.imapPasswordSaved)
     }
     LaunchedEffect(restoreGeneration) {
         if (restoreGeneration > 0) reloadRestoredSettingsState()
@@ -1107,7 +1100,7 @@ fun ChatMailApp(
     fun startRealSync(chatFilter: String? = null) {
         // SyncWorker reads host/email from AppPrefs and the password from
         // SecretStore itself, same as the watched-folder auto-sync path.
-        if (!imapPasswordSaved) {
+        if (!mail.imapPasswordSaved) {
             lastResult = "Save your IMAP app password in Settings > Mail account first."
             return
         }
@@ -1158,7 +1151,7 @@ fun ChatMailApp(
                     .putBoolean(SyncWorker.KEY_DRY_RUN, true)
                     .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
-                    .putString(SyncWorker.KEY_MAIL_BACKEND, mailBackend)
+                    .putString(SyncWorker.KEY_MAIL_BACKEND, mail.mailBackend)
                     .build()
             )
             .build()
@@ -1457,10 +1450,10 @@ fun ChatMailApp(
                     // it came from; a fresh install (no previous entry) none.
                     backLabel = welcomeBackLabel(cameFrom),
                     onBack = { navController.popBackStack() },
-                    imapProviders = imapProviders,
-                    stagePlan = stagePlan,
-                    initialProvider = imapProvider,
-                    initialEmail = imapEmail,
+                    imapProviders = mail.imapProviders,
+                    stagePlan = mail.stagePlan,
+                    initialProvider = mail.imapProvider,
+                    initialEmail = mail.imapEmail,
                     onConnect = ::connectWithStages,
                     queuedChatCount = inboxFiles.size,
                     onDoTestRun = { runDryRunSync() },
@@ -1473,14 +1466,14 @@ fun ChatMailApp(
                         finishFirstRun()
                     },
                     onNotNow = { finishFirstRun() },
-                    hasExistingMailbox = imapPasswordSaved,
+                    hasExistingMailbox = mail.imapPasswordSaved,
                     // Batch 7 follow-up: restore-on-first-run. Reuses the
                     // exact restoreBackup launcher and migrationBusy/
                     // migrationStatus state Backup & restore itself uses --
                     // no second copy of the restore flow -- so a success here
                     // also runs reloadRestoredSettingsState below, the same
                     // as it would from Settings.
-                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, imapPasswordSaved),
+                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, mail.imapPasswordSaved),
                     migrationBusy = migrationBusy,
                     migrationStatus = migrationStatus,
                     migrationSuccess = migrationSuccess,
@@ -1517,8 +1510,8 @@ fun ChatMailApp(
                 LaunchedEffect(Unit) { refreshSelfSenderBanner() }
                 // The pair HomeScreen's connection chip and Sync-now gating
                 // are driven by.
-                val homeAccountLabel = imapEmail.ifBlank { null }
-                val homeBackendReady = imapPasswordSaved && imapHost.isNotBlank()
+                val homeAccountLabel = mail.imapEmail.ifBlank { null }
+                val homeBackendReady = mail.imapPasswordSaved && mail.imapHost.isNotBlank()
                 val homeConnectActionLabel = if (homeBackendReady) "Change" else "Set up"
                 // Re-read on entry (remember is recreated when this
                 // destination is re-composed after navigation) and whenever a
@@ -1650,7 +1643,7 @@ fun ChatMailApp(
                 // it would need to compute this itself now that the account
                 // UI lives on its own screen.
                 val mailAccountSummary =
-                    if (imapPasswordSaved) imapEmail else "Not connected"
+                    if (mail.imapPasswordSaved) mail.imapEmail else "Not connected"
                 // Re-read on entry and whenever the shared migration state
                 // moves -- same "walking Settings -> save -> Home clears the
                 // line" reasoning Home's own lastBackupAt carries, now that
@@ -1780,16 +1773,16 @@ fun ChatMailApp(
                     // Advanced settings' Mail server section so there is one
                     // copy of this logic, not two that can drift apart.
                     onTestConnection = ::testImapConnection,
-                    imapProviders = imapProviders,
-                    imapProvider = imapProvider,
+                    imapProviders = mail.imapProviders,
+                    imapProvider = mail.imapProvider,
                     onImapProviderChange = ::onImapProviderChange,
-                    imapHost = imapHost,
-                    onImapHostChange = { imapHost = it },
-                    imapPort = imapPort,
-                    onImapPortChange = { imapPort = it },
-                    imapEmail = imapEmail,
-                    onImapEmailChange = { imapEmail = it },
-                    imapPasswordSaved = imapPasswordSaved,
+                    imapHost = mail.imapHost,
+                    onImapHostChange = { mail.imapHost = it },
+                    imapPort = mail.imapPort,
+                    onImapPortChange = { mail.imapPort = it },
+                    imapEmail = mail.imapEmail,
+                    onImapEmailChange = { mail.imapEmail = it },
+                    imapPasswordSaved = mail.imapPasswordSaved,
                     onSaveImapSettings = ::saveImapSettings,
                     onForgetImapPassword = ::forgetImapPassword,
                     onRunWizard = { navController.navigate("mailWizard") },
@@ -1823,12 +1816,12 @@ fun ChatMailApp(
                     // re-run -- rather than adding another screen to back out
                     // of after the job is done.
                     onDone = { navController.popBackStack() },
-                    imapProviders = imapProviders,
-                    stagePlan = stagePlan,
-                    initialProvider = imapProvider,
-                    initialEmail = imapEmail,
+                    imapProviders = mail.imapProviders,
+                    stagePlan = mail.stagePlan,
+                    initialProvider = mail.imapProvider,
+                    initialEmail = mail.imapEmail,
                     onConnect = ::connectWithStages,
-                    hasExistingMailbox = imapPasswordSaved,
+                    hasExistingMailbox = mail.imapPasswordSaved,
                     onKeepCurrentMailbox = { navController.popBackStack() },
                 )
             }
