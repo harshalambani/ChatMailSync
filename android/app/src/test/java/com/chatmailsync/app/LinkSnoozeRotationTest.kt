@@ -71,7 +71,12 @@ class LinkSnoozeRotationTest {
     @Test
     fun theScreenKeepsTheSnoozeInSavedState() {
         val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val declaration = src.lines().filter { it.contains("val linkSnoozedState =") }
+        assertEquals("one linkSnoozedState declaration", 1, declaration.size)
+        assertTrue(
+            "a plain remember forgets the snooze on rotation",
+            declaration.single().contains("rememberSaveable(stateSaver = LinkSnoozeSaver)"),
+        )
         assertTrue(src.contains("rememberSaveable(stateSaver = LinkSnoozeSaver)"))
-        assertFalse("a plain remember forgets the snooze on rotation", src.contains("var linkSnoozed by remember {"))
     }
 }
