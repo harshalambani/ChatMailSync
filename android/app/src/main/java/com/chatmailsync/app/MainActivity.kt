@@ -736,38 +736,33 @@ fun ChatMailApp(
     // exist yet. The work itself is off the main thread -- it opens SQLite
     // databases and walks every row of the ledger -- on the same Thread/Handler
     // pattern the rest of this file uses for core calls.
-    var migrationBusy by remember { mutableStateOf(false) }
-    var migrationStatus by remember { mutableStateOf<String?>(null) }
+    val backup = remember { BackupState() }
     // Batch 7b: alongside the existing one-line migrationStatus message --
     // null until a restore attempt actually completes (a save, or nothing
     // attempted yet, leaves this null too; see restoreOutcomeIsSuccess).
-    var migrationSuccess by remember { mutableStateOf<Boolean?>(null) }
     // The restore-confirmation detail lines (Migration.restoreSummary),
     // empty for every non-restore state and for a failed/already-imported
     // restore alike -- an empty list already draws nothing, so callers never
     // branch on success to decide whether to show them.
-    var migrationRestoredLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    var migrationNotRestoredLines by remember { mutableStateOf<List<String>>(emptyList()) }
     // Bumped after every restore attempt completes (success, failure or
     // already-imported alike) to trigger reloadRestoredSettingsState below
     // -- a plain Int rather than keying off migrationStatus itself, because
     // a save's status message changes too and has nothing to reload.
-    var restoreGeneration by remember { mutableStateOf(0) }
 
     val saveBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(Migration.MIME_TYPE),
     ) { uri ->
         if (uri != null) {
-            migrationBusy = true
-            migrationStatus = "Saving..."
-            migrationSuccess = null
-            migrationRestoredLines = emptyList()
-            migrationNotRestoredLines = emptyList()
+            backup.migrationBusy = true
+            backup.migrationStatus = "Saving..."
+            backup.migrationSuccess = null
+            backup.migrationRestoredLines = emptyList()
+            backup.migrationNotRestoredLines = emptyList()
             Thread {
                 val message = Migration.exportTo(context, uri)
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    migrationStatus = message
-                    migrationBusy = false
+                    backup.migrationStatus = message
+                    backup.migrationBusy = false
                 }
             }.start()
         }
@@ -781,11 +776,11 @@ fun ChatMailApp(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            migrationBusy = true
-            migrationStatus = "Reading..."
-            migrationSuccess = null
-            migrationRestoredLines = emptyList()
-            migrationNotRestoredLines = emptyList()
+            backup.migrationBusy = true
+            backup.migrationStatus = "Reading..."
+            backup.migrationSuccess = null
+            backup.migrationRestoredLines = emptyList()
+            backup.migrationNotRestoredLines = emptyList()
             Thread {
                 // Described before it is merged, so the line the user reads
                 // names the backup they picked and not only the outcome --
@@ -795,23 +790,23 @@ fun ChatMailApp(
                 val described = Migration.describe(context, uri)
                 if (described != null) {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        migrationStatus = "$described - restoring..."
+                        backup.migrationStatus = "$described - restoring..."
                     }
                 }
                 val outcome = Migration.importFrom(context, uri)
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    migrationStatus = outcome.message
-                    migrationSuccess = outcome.success
-                    migrationRestoredLines = outcome.restoredLines
-                    migrationNotRestoredLines = outcome.notRestoredLines
+                    backup.migrationStatus = outcome.message
+                    backup.migrationSuccess = outcome.success
+                    backup.migrationRestoredLines = outcome.restoredLines
+                    backup.migrationNotRestoredLines = outcome.notRestoredLines
                     confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
-                    migrationBusy = false
+                    backup.migrationBusy = false
                     refreshInbox()
                     // See reloadRestoredSettingsState below: this is what
                     // tells the mail-account/settings state, held in
                     // remember blocks read once, that a restore may have
                     // just changed what AppPrefs holds underneath them.
-                    restoreGeneration++
+                    backup.restoreGeneration++
                 }
             }.start()
         }
@@ -1080,8 +1075,8 @@ fun ChatMailApp(
         // rather than leave it showing whatever it said before the restore.
         ConnectionState.refresh(context, mail.imapPasswordSaved)
     }
-    LaunchedEffect(restoreGeneration) {
-        if (restoreGeneration > 0) reloadRestoredSettingsState()
+    LaunchedEffect(backup.restoreGeneration) {
+        if (backup.restoreGeneration > 0) reloadRestoredSettingsState()
     }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
@@ -1470,19 +1465,19 @@ fun ChatMailApp(
                     // also runs reloadRestoredSettingsState below, the same
                     // as it would from Settings.
                     offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, mail.imapPasswordSaved),
-                    migrationBusy = migrationBusy,
-                    migrationStatus = migrationStatus,
-                    migrationSuccess = migrationSuccess,
-                    migrationRestoredLines = migrationRestoredLines,
-                    migrationNotRestoredLines = migrationNotRestoredLines,
+                    migrationBusy = backup.migrationBusy,
+                    migrationStatus = backup.migrationStatus,
+                    migrationSuccess = backup.migrationSuccess,
+                    migrationRestoredLines = backup.migrationRestoredLines,
+                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
                     onRestoreFromBackup = {
                         // Clears any earlier attempt's message before a new
                         // pick, the same as re-opening the picker would from
                         // Backup & restore.
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         restoreBackup.launch(arrayOf("*/*"))
                     },
                 )
@@ -1513,7 +1508,7 @@ fun ChatMailApp(
                 // destination is re-composed after navigation) and whenever a
                 // save reports back, so walking Settings -> save -> Home
                 // clears the line rather than leaving it lying.
-                val lastBackupAt = remember(migrationStatus) {
+                val lastBackupAt = remember(backup.migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
                 val homeMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
@@ -1644,7 +1639,7 @@ fun ChatMailApp(
                 // moves -- same "walking Settings -> save -> Home clears the
                 // line" reasoning Home's own lastBackupAt carries, now that
                 // the row here is a pill rather than the buttons themselves.
-                val lastBackupAt = remember(migrationStatus) {
+                val lastBackupAt = remember(backup.migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
                 SettingsScreen(
@@ -1667,28 +1662,28 @@ fun ChatMailApp(
                     onBack = { navController.popBackStack() },
                     backLabel = backLabelForRoute(from),
                     onSaveBackup = {
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         saveBackup.launch(Migration.suggestedFileName())
                     },
                     onRestoreBackup = {
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         // Every type, not our own: a bundle that has been round
                         // -tripped through Drive or Gmail can come back typed as
                         // something else entirely, and a filter that hides the
                         // file the user came to pick is worse than no filter.
                         restoreBackup.launch(arrayOf("*/*"))
                     },
-                    migrationBusy = migrationBusy,
-                    migrationStatus = migrationStatus,
-                    migrationSuccess = migrationSuccess,
-                    migrationRestoredLines = migrationRestoredLines,
-                    migrationNotRestoredLines = migrationNotRestoredLines,
+                    migrationBusy = backup.migrationBusy,
+                    migrationStatus = backup.migrationStatus,
+                    migrationSuccess = backup.migrationSuccess,
+                    migrationRestoredLines = backup.migrationRestoredLines,
+                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
                 )
             }
             composable("advancedSettings") {

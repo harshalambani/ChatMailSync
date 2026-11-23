@@ -37,3 +37,13 @@ internal class SelfSenderState {
     var selfSenderName by mutableStateOf<String?>(null)
     var pendingSelfSenderBannerName by mutableStateOf<String?>(null)
 }
+
+/** Backup and restore: the busy flag, the outcome shown to the user, the two result lists, and the restore generation. */
+internal class BackupState {
+    var migrationBusy by mutableStateOf(false)
+    var migrationStatus by mutableStateOf<String?>(null)
+    var migrationSuccess by mutableStateOf<Boolean?>(null)
+    var migrationRestoredLines by mutableStateOf<List<String>>(emptyList())
+    var migrationNotRestoredLines by mutableStateOf<List<String>>(emptyList())
+    var restoreGeneration by mutableStateOf(0)
+}
