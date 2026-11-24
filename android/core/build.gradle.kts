@@ -81,6 +81,11 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // QA-04: the test JVM keeps its temp files (java.io.tmpdir) in this module's build
+    // folder, so a test run leaves nothing in the OS temp folder.
+    val jvmTmp = layout.buildDirectory.dir("tmp/jvm-tests")
+    systemProperty("java.io.tmpdir", jvmTmp.get().asFile.absolutePath)
+    doFirst { jvmTmp.get().asFile.mkdirs() }
 }
 
 // A runnable jar bundling the `harness` and `main` classes, with a
