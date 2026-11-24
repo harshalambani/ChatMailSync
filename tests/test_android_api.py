@@ -442,9 +442,12 @@ _REPO = Path(__file__).resolve().parent.parent
 
 def test_every_android_preview_call_site_hands_over_the_app_wide_date():
     # The share preview moved with the background copy into ImportManager.kt.
+    # KT-13 step 4: the Home and Queue previews now live in the per-tab route
+    # builders (Nav*.kt) beside MainActivity.kt, so read those too.
     app_dir = _REPO / "android/app/src/main/java/com/chatmailsync/app"
-    body = (app_dir / "MainActivity.kt").read_text(encoding="utf-8") + (
-        app_dir / "ImportManager.kt").read_text(encoding="utf-8")
+    body = (app_dir / "MainActivity.kt").read_text(encoding="utf-8") + "".join(
+        f.read_text(encoding="utf-8") for f in sorted(app_dir.glob("Nav*.kt"))
+    ) + (app_dir / "ImportManager.kt").read_text(encoding="utf-8")
 
     # CUT-02: the call sites now use the Kotlin core's previewText(path, cutoff).
     calls = body.count(".previewText(")
