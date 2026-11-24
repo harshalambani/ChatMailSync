@@ -93,20 +93,26 @@ android {
         buildConfig = true
     }
 
-    // Opts out of AGP's Play-specific dependency metadata block: an
-    // encrypted blob of the resolved dependency graph, embedded in the APK
-    // signing block so only Google can decrypt and read it for Play
-    // Console. This app isn't distributed through Play, and F-Droid asks
-    // apps to drop the block since no one outside Google can inspect it —
-    // dropping it removes that ask on every channel with no functional
-    // effect.
     testOptions {
         unitTests {
             // Robolectric needs the merged manifest/resources on the test classpath.
             isIncludeAndroidResources = true
+            // QA-04: every local test JVM keeps its temp files (java.io.tmpdir) in this
+            // module's build folder, so a test run leaves nothing in the OS temp folder.
+            val jvmTmp = project.layout.buildDirectory.dir("tmp/jvm-tests")
+            all { test ->
+                test.systemProperty("java.io.tmpdir", jvmTmp.get().asFile.absolutePath)
+                test.doFirst { jvmTmp.get().asFile.mkdirs() }
+            }
         }
     }
 
+    // Opts out of AGP's Play-specific dependency metadata block: an
+    // encrypted blob of the resolved dependency graph, embedded in the APK
+    // signing block so only Google can decrypt and read it. The app is on
+    // Google Play and the other stores; F-Droid asks apps to drop the block
+    // since no one outside Google can inspect it. Dropping it has no
+    // functional effect on any channel.
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
