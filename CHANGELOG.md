@@ -6,7 +6,7 @@ notes in `fastlane/metadata/android/en-US/changelogs/`.
 
 ## 3.0.7
 
-Released 2026-11-22 (versionCode 53). Three small fixes: a missing mail folder recovers, "Ask me later" survives a rotation, and a mid-minute export no longer drops a repeated message.
+Released 2026-11-24 (versionCode 53). Three small fixes: a missing mail folder recovers, "Ask me later" survives a rotation, and a mid-minute export no longer drops a repeated message.
 
 - BUG-28: a chat whose mail folder was missing on the server failed every run and never recovered. The app now creates the folder once and sends the email again; a definite refusal clears the email's pending upload record (#197).
 - UX-12: "Ask me later" on "Is this the same chat?" is no longer forgotten when the phone is turned (#198).
@@ -14,7 +14,7 @@ Released 2026-11-22 (versionCode 53). Three small fixes: a missing mail folder r
 - Help: two answers now say that "Ask me later" survives turning the phone and that a missing chat folder is created again.
 - Help: the answer on where chats show up no longer says a chat's emails always group into one thread; Gmail, for example, lists each day separately.
 - SEC-18: a test now runs the real backup export over a large database and checks it writes in small pieces. Nothing changes for users (#202).
-- KT-13: a smoke test opens every screen, rotation tests cover the screens that keep state, and the pure helpers moved out of MainActivity.kt unchanged. Nothing changes for users (#200, #201).
+- KT-13: a smoke test opens every screen, rotation tests cover the screens that keep state, the pure helpers moved out of MainActivity.kt unchanged, its screen state is grouped into plain holders, and each tab's routes are in their own file. Nothing changes for users (#200, #201, #208, #210).
 
 ## 3.0.6
 
