@@ -26,7 +26,7 @@ class LinkQuestionsTest {
         val dialog = src.substringAfter("val isLegacy").substringBefore("Is this the same chat?")
         assertTrue(dialog.contains("dismissOnClickOutside = false"))
         // Back is the only dismiss path and it is a snooze of that pair, not a decline or a confirm.
-        assertTrue(dialog.contains("onDismissRequest = { linkSnoozed = snoozePair(linkSnoozed, qKey) }"))
+        assertTrue(dialog.contains("onDismissRequest = { link.linkSnoozed = snoozePair(link.linkSnoozed, qKey) }"))
         // With nothing snoozed (a tap outside changes nothing) the question is still there.
         assertEquals(a, pickOpenQuestion(listOf(a, b), emptySet()))
     }
@@ -96,6 +96,6 @@ class LinkQuestionsTest {
     @Test
     fun everySyncEndRechecksForQuestions() {
         val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
-        assertEquals(2, Regex("""refreshInbox\(\)\s*\n\s*linkTick\+\+""").findAll(src.replace("\r\n", "\n")).count())
+        assertEquals(2, Regex("""refreshInbox\(\)\s*\n\s*link\.linkTick\+\+""").findAll(src.replace("\r\n", "\n")).count())
     }
 }

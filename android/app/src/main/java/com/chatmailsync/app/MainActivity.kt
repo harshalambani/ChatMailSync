@@ -240,13 +240,8 @@ fun ChatMailApp(
     // ---- Legacy Google sign-in notice (v2.0.0) ----------------------
     // Google sign-in was removed in v2.0.0. Someone who had it gets one
     // explanation, once -- see AppPrefs.isLegacyOauthUser.
-    var showOauthRemovedNotice by remember {
-        mutableStateOf(
-            AppPrefs.isLegacyOauthUser(context) &&
-                !AppPrefs.wasOauthRemovedNoticeShown(context)
-        )
-    }
-    if (showOauthRemovedNotice) {
+    val startup = remember { StartupState(context) }
+    if (startup.showOauthRemovedNotice) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Google sign-in has been removed") },
@@ -266,7 +261,7 @@ fun ChatMailApp(
                 TextButton(onClick = {
                     AppPrefs.setOauthRemovedNoticeShown(context, true)
                     AppPrefs.setConnectedAccountEmail(context, null)
-                    showOauthRemovedNotice = false
+                    startup.showOauthRemovedNotice = false
                 }) { Text("OK") }
             },
         )
@@ -279,24 +274,17 @@ fun ChatMailApp(
     // force a real login via labels_list(), persist only on success"
     // contract. imapPasswordSaved never reflects the password itself, only
     // whether SecretStore currently holds one.
-    var mailBackend by remember { mutableStateOf(AppPrefs.resolveMailBackend(context)) }
-    var imapProvider by remember { mutableStateOf(AppPrefs.getImapProvider(context)) }
-    var imapHost by remember { mutableStateOf(AppPrefs.getImapHost(context)) }
-    var imapPort by remember { mutableStateOf(AppPrefs.getImapPort(context)) }
-    var imapEmail by remember { mutableStateOf(AppPrefs.getImapEmail(context)) }
-    var imapPasswordSaved by remember { mutableStateOf(AppPrefs.hasImapPassword(context)) }
-    var imapProviders by remember { mutableStateOf(listOf<ImapProviderInfo>()) }
+    val mail = remember { MailAccountState(context) }
     // The five connection stages, in order, so the wizard's last step can draw
     // the whole list greyed out before the check starts rather than growing it
     // a line at a time. Read from the Kotlin core rather than hardcoded here,
     // so Kotlin never drifts from the source of truth.
-    var stagePlan by remember { mutableStateOf(listOf<WizardStage>()) }
 
     // Reads the core's IMAP provider table once per composition —
     // the shared preset table (host/port per provider), so Android never
     // duplicates that data in Kotlin.
     LaunchedEffect(Unit) {
-        imapProviders = ChatMailApplication.core(context).imapProviders().map { entry ->
+        mail.imapProviders = ChatMailApplication.core(context).imapProviders().map { entry ->
             ImapProviderInfo(
                 key = entry.str("key").toString(),
                 label = entry.str("label").toString(),
@@ -313,19 +301,19 @@ fun ChatMailApp(
         // some other provider's host in front of the user without saying so.
         // The saved host is never touched either: only the user knows what it
         // should be.
-        val landing = retiredProviderLanding(imapProvider)
-        if (landing.isNotEmpty() && landing != imapProvider) {
-            imapProvider = landing
+        val landing = retiredProviderLanding(mail.imapProvider)
+        if (landing.isNotEmpty() && landing != mail.imapProvider) {
+            mail.imapProvider = landing
             AppPrefs.setImapProvider(context, landing)
         }
-        stagePlan = connectionStagePlan().map { entry ->
+        mail.stagePlan = connectionStagePlan().map { entry ->
             WizardStage(name = entry.name, label = entry.label)
         }
     }
 
     // Whether there is an account to speak of at all: with IMAP the only
     // backend, that is exactly "a password is in the keystore".
-    val hasMailAccount = imapPasswordSaved
+    val hasMailAccount = mail.imapPasswordSaved
 
     // The banner's status dot. Recomputed whenever the account situation
     // changes; the pass/fail half of it is written by the two places that
@@ -336,15 +324,14 @@ fun ChatMailApp(
     // computed, so a mid-flow process death reopens on first_run rather than
     // skipping back to Home — the flag is only ever written once the flow is
     // actually finished (Set up later / Turn on / Not now).
-    var firstRunDone by remember { mutableStateOf(AppPrefs.isFirstRunDone(context)) }
     // An upgrader who already has a working mailbox from before this release
     // existed must never see the welcome screen — back-fill the flag for
     // them on launch so a later reinstall-free re-check (e.g. after
     // forgetting the password) doesn't retroactively show it either.
     LaunchedEffect(Unit) {
-        if (!firstRunDone && hasMailAccount) {
+        if (!startup.firstRunDone && hasMailAccount) {
             AppPrefs.setFirstRunDone(context, true)
-            firstRunDone = true
+            startup.firstRunDone = true
         }
     }
     // Computed once, from the values read at launch, not the possibly-just-
@@ -356,11 +343,11 @@ fun ChatMailApp(
     }
 
     fun onImapProviderChange(provider: String) {
-        imapProvider = provider
+        mail.imapProvider = provider
         if (provider != "custom") {
-            imapProviders.firstOrNull { it.key == provider }?.let {
-                imapHost = it.host
-                imapPort = it.port
+            mail.imapProviders.firstOrNull { it.key == provider }?.let {
+                mail.imapHost = it.host
+                mail.imapPort = it.port
             }
         }
     }
@@ -384,7 +371,7 @@ fun ChatMailApp(
         onResult: (Boolean, String) -> Unit,
     ) {
         val effectiveHost = if (provider == "custom") host else
-            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+            (mail.imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
         if (provider == "custom" && effectiveHost.isBlank()) {
             onResult(false, "Enter a host for a custom IMAP server.")
             return
@@ -421,11 +408,11 @@ fun ChatMailApp(
                     AppPrefs.setImapPort(context, port)
                     AppPrefs.setImapEmail(context, email)
                     SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), effectivePassword)
-                    imapProvider = provider
-                    imapHost = effectiveHost
-                    imapPort = port
-                    imapEmail = email
-                    imapPasswordSaved = true
+                    mail.imapProvider = provider
+                    mail.imapHost = effectiveHost
+                    mail.imapPort = port
+                    mail.imapEmail = email
+                    mail.imapPasswordSaved = true
                     onResult(true, "Connected — settings saved.")
                 } else {
                     onResult(false, text)
@@ -467,7 +454,7 @@ fun ChatMailApp(
         onResult: (Boolean, String) -> Unit,
     ) {
         val effectiveHost = if (provider == "custom") host else
-            (imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
+            (mail.imapProviders.firstOrNull { it.key == provider }?.host?.takeIf { it.isNotBlank() } ?: host)
         if (effectiveHost.isBlank()) {
             onResult(false, "Enter a host for a custom IMAP server.")
             return
@@ -495,17 +482,17 @@ fun ChatMailApp(
                     // otherwise someone who ran it while still on the old Gmail
                     // path would end up with a saved password nothing uses.
                     AppPrefs.setMailBackend(context, AppPrefs.MAIL_BACKEND_IMAP)
-                    mailBackend = AppPrefs.MAIL_BACKEND_IMAP
+                    mail.mailBackend = AppPrefs.MAIL_BACKEND_IMAP
                     AppPrefs.setImapProvider(context, provider)
                     AppPrefs.setImapHost(context, effectiveHost)
                     AppPrefs.setImapPort(context, port)
                     AppPrefs.setImapEmail(context, email)
                     SecretStore.putSecret(context, AppPrefs.getImapPasswordSecretKey(), normalizedPassword)
-                    imapProvider = provider
-                    imapHost = effectiveHost
-                    imapPort = port
-                    imapEmail = email
-                    imapPasswordSaved = true
+                    mail.imapProvider = provider
+                    mail.imapHost = effectiveHost
+                    mail.imapPort = port
+                    mail.imapEmail = email
+                    mail.imapPasswordSaved = true
                 }
                 onResult(connected, text)
             },
@@ -529,11 +516,11 @@ fun ChatMailApp(
         AppPrefs.clearImapSettings(context)
         // The verdict was about the credentials just thrown away.
         ConnectionState.forget(context)
-        imapPasswordSaved = false
-        imapProvider = "gmail"
-        imapHost = ""
-        imapPort = 993
-        imapEmail = ""
+        mail.imapPasswordSaved = false
+        mail.imapProvider = "gmail"
+        mail.imapHost = ""
+        mail.imapPort = 993
+        mail.imapEmail = ""
     }
 
     /**
@@ -542,7 +529,7 @@ fun ChatMailApp(
      * the five-stage check and its result formatting to keep in sync.
      */
     fun testImapConnection(onResult: (String) -> Unit) {
-        if (!imapPasswordSaved) {
+        if (!mail.imapPasswordSaved) {
             onResult("Save an IMAP app password first.")
             return
         }
@@ -578,23 +565,20 @@ fun ChatMailApp(
     // shared state database, not in preferences, because every part of the
     // app that touches an export needs to reach the same answer -- a
     // disagreement would archive one export two different ways.
-    var selfSenderDetail by remember { mutableStateOf("") }
-    var selfSenderOverride by remember { mutableStateOf("") }
+    val selfSender = remember { SelfSenderState() }
     // The masthead Me row's own inputs: the raw source ("learned" /
     // "unknown" / "override") and the resolved name, fed through
     // selfSenderDisplay() rather than the detail text above, which is worded
     // for the Me screen, not a 48dp row.
-    var selfSenderSource by remember { mutableStateOf<String?>(null) }
-    var selfSenderName by remember { mutableStateOf<String?>(null) }
 
     fun applySelfSender(described: Map<String, Any?>) {
-        selfSenderDetail = described.str("detail").toString()
+        selfSender.selfSenderDetail = described.str("detail").toString()
         // The stored override, deliberately not the resolved name: filling the
         // box with a name the app worked out would turn it into an override
         // the moment anything else on the screen was touched.
-        selfSenderOverride = described.str("override") ?: ""
-        selfSenderSource = described.str("source")
-        selfSenderName = described.str("name")
+        selfSender.selfSenderOverride = described.str("override") ?: ""
+        selfSender.selfSenderSource = described.str("source")
+        selfSender.selfSenderName = described.str("name")
     }
 
     fun refreshSelfSender() {
@@ -606,15 +590,14 @@ fun ChatMailApp(
     // the masthead's ongoing answer to "who is me", re-read on every screen
     // entry, while this is a single announcement that must survive exactly
     // until the user dismisses it and never come back on its own.
-    var pendingSelfSenderBannerName by remember { mutableStateOf<String?>(null) }
 
     fun refreshSelfSenderBanner() {
-        pendingSelfSenderBannerName = ChatMailApplication.core(context).getPendingSelfSenderBanner()
+        selfSender.pendingSelfSenderBannerName = ChatMailApplication.core(context).getPendingSelfSenderBanner()
     }
 
     fun dismissSelfSenderBanner() {
         ChatMailApplication.core(context).clearSelfSenderBanner()
-        pendingSelfSenderBannerName = null
+        selfSender.pendingSelfSenderBannerName = null
     }
 
     fun setSelfSender(name: String) {
@@ -638,18 +621,16 @@ fun ChatMailApp(
     }
 
     // ---- Inbox + import (Phase A2) -----------------------------------
-    var inboxFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
+    val inbox = remember { InboxState() }
     // BUG-19: exports whose chat text could not be read; they wait here, outside the queue.
-    var unreadableFiles by remember { mutableStateOf(listOf<Pair<String, Long>>()) }
-    var lastResult by remember { mutableStateOf("Nothing run yet.") }
 
     fun refreshInbox() {
-        inboxFiles = ChatMailApplication.core(context).listInbox().map { entry ->
+        inbox.inboxFiles = ChatMailApplication.core(context).listInbox().map { entry ->
             val name = entry.str("name").toString()
             val size = entry.long("size_bytes") ?: 0L
             name to size
         }
-        unreadableFiles = ChatMailApplication.core(context).listUnreadable().map { entry ->
+        inbox.unreadableFiles = ChatMailApplication.core(context).listUnreadable().map { entry ->
             entry.str("name").toString() to (entry.long("size_bytes") ?: 0L)
         }
     }
@@ -670,7 +651,7 @@ fun ChatMailApp(
 
     fun importAndPreview(uri: Uri) {
         // The copy and the preview run in the background; the result arrives as a report below.
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, listOf(uri))
     }
 
@@ -693,7 +674,7 @@ fun ChatMailApp(
     }
 
     fun receiveSharedExport(uri: Uri) {
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, listOf(uri))
         // Go where the result will appear now; the copy finishes in the background.
         goHomeAfterShare()
@@ -705,7 +686,7 @@ fun ChatMailApp(
     LaunchedEffect(importReport) {
         importReport?.let { r ->
             refreshInbox()
-            lastResult = r.text
+            inbox.lastResult = r.text
             ImportManager.consume(r.id)
         }
     }
@@ -730,7 +711,7 @@ fun ChatMailApp(
      */
     fun importMany(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        lastResult = "Importing..."
+        inbox.lastResult = "Importing..."
         ImportManager.submit(context, uris)
     }
 
@@ -747,38 +728,33 @@ fun ChatMailApp(
     // exist yet. The work itself is off the main thread -- it opens SQLite
     // databases and walks every row of the ledger -- on the same Thread/Handler
     // pattern the rest of this file uses for core calls.
-    var migrationBusy by remember { mutableStateOf(false) }
-    var migrationStatus by remember { mutableStateOf<String?>(null) }
+    val backup = remember { BackupState() }
     // Batch 7b: alongside the existing one-line migrationStatus message --
     // null until a restore attempt actually completes (a save, or nothing
     // attempted yet, leaves this null too; see restoreOutcomeIsSuccess).
-    var migrationSuccess by remember { mutableStateOf<Boolean?>(null) }
     // The restore-confirmation detail lines (Migration.restoreSummary),
     // empty for every non-restore state and for a failed/already-imported
     // restore alike -- an empty list already draws nothing, so callers never
     // branch on success to decide whether to show them.
-    var migrationRestoredLines by remember { mutableStateOf<List<String>>(emptyList()) }
-    var migrationNotRestoredLines by remember { mutableStateOf<List<String>>(emptyList()) }
     // Bumped after every restore attempt completes (success, failure or
     // already-imported alike) to trigger reloadRestoredSettingsState below
     // -- a plain Int rather than keying off migrationStatus itself, because
     // a save's status message changes too and has nothing to reload.
-    var restoreGeneration by remember { mutableStateOf(0) }
 
     val saveBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(Migration.MIME_TYPE),
     ) { uri ->
         if (uri != null) {
-            migrationBusy = true
-            migrationStatus = "Saving..."
-            migrationSuccess = null
-            migrationRestoredLines = emptyList()
-            migrationNotRestoredLines = emptyList()
+            backup.migrationBusy = true
+            backup.migrationStatus = "Saving..."
+            backup.migrationSuccess = null
+            backup.migrationRestoredLines = emptyList()
+            backup.migrationNotRestoredLines = emptyList()
             Thread {
                 val message = Migration.exportTo(context, uri)
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    migrationStatus = message
-                    migrationBusy = false
+                    backup.migrationStatus = message
+                    backup.migrationBusy = false
                 }
             }.start()
         }
@@ -786,17 +762,17 @@ fun ChatMailApp(
 
     // D166: set after a restore whose backup would switch "Delete after import" on; nothing is
     // switched until the user taps Switch on. The phone's own policy stands meanwhile.
-    var confirmDeleteAfterImport by remember { mutableStateOf(false) }
+    val watch = remember { WatchState(context) }
 
     val restoreBackup = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            migrationBusy = true
-            migrationStatus = "Reading..."
-            migrationSuccess = null
-            migrationRestoredLines = emptyList()
-            migrationNotRestoredLines = emptyList()
+            backup.migrationBusy = true
+            backup.migrationStatus = "Reading..."
+            backup.migrationSuccess = null
+            backup.migrationRestoredLines = emptyList()
+            backup.migrationNotRestoredLines = emptyList()
             Thread {
                 // Described before it is merged, so the line the user reads
                 // names the backup they picked and not only the outcome --
@@ -806,23 +782,23 @@ fun ChatMailApp(
                 val described = Migration.describe(context, uri)
                 if (described != null) {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        migrationStatus = "$described - restoring..."
+                        backup.migrationStatus = "$described - restoring..."
                     }
                 }
                 val outcome = Migration.importFrom(context, uri)
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    migrationStatus = outcome.message
-                    migrationSuccess = outcome.success
-                    migrationRestoredLines = outcome.restoredLines
-                    migrationNotRestoredLines = outcome.notRestoredLines
-                    confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
-                    migrationBusy = false
+                    backup.migrationStatus = outcome.message
+                    backup.migrationSuccess = outcome.success
+                    backup.migrationRestoredLines = outcome.restoredLines
+                    backup.migrationNotRestoredLines = outcome.notRestoredLines
+                    watch.confirmDeleteAfterImport = outcome.confirmDeleteAfterImport
+                    backup.migrationBusy = false
                     refreshInbox()
                     // See reloadRestoredSettingsState below: this is what
                     // tells the mail-account/settings state, held in
                     // remember blocks read once, that a restore may have
                     // just changed what AppPrefs holds underneath them.
-                    restoreGeneration++
+                    backup.restoreGeneration++
                 }
             }.start()
         }
@@ -833,11 +809,10 @@ fun ChatMailApp(
     // ---- BUG-05: "is this the same chat under a new name?" ------------
     // An export that looks like an already archived chat under another name is held in the
     // inbox until the user answers. Matching reads stored fingerprints only (never text).
-    var linkQuestions by remember { mutableStateOf(listOf<Map<String, Any?>>()) }
-    var linkTick by remember { mutableStateOf(0) }
-    var linkSnoozed by androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
-    LaunchedEffect(inboxFiles, linkTick) {
-        linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val linkSnoozedState = androidx.compose.runtime.saveable.rememberSaveable(stateSaver = LinkSnoozeSaver) { mutableStateOf(setOf<String>()) }
+    val link = remember { LinkState(linkSnoozedState) }
+    LaunchedEffect(inbox.inboxFiles, link.linkTick) {
+        link.linkQuestions = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 ChatMailApplication.core(context).linkProposals()
             } catch (_: Exception) {
@@ -845,8 +820,8 @@ fun ChatMailApp(
             }
         }
     }
-    val openLinkQuestion = pickOpenQuestion(linkQuestions, linkSnoozed)
-    val waitingNames = waitingFiles(linkQuestions)
+    val openLinkQuestion = pickOpenQuestion(link.linkQuestions, link.linkSnoozed)
+    val waitingNames = waitingFiles(link.linkQuestions)
     if (openLinkQuestion != null) {
         val qNew = openLinkQuestion["new_chat_id"] as String
         val qOld = openLinkQuestion["old_chat_id"] as String
@@ -859,7 +834,7 @@ fun ChatMailApp(
         AlertDialog(
             // BUG-18: Back acts like "Ask me later"; a tap outside does nothing, so a stray tap
             // (e.g. on the tab bar) can no longer hide the question.
-            onDismissRequest = { linkSnoozed = snoozePair(linkSnoozed, qKey) },
+            onDismissRequest = { link.linkSnoozed = snoozePair(link.linkSnoozed, qKey) },
             properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
             title = { Text("Is this the same chat?") },
             text = {
@@ -887,14 +862,14 @@ fun ChatMailApp(
                         )
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
                             if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
-                            linkTick++
+                            link.linkTick++
                         }
                     }.start()
                 }) { Text("Yes, same chat") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { linkSnoozed = snoozePair(linkSnoozed, qKey) }) { Text("Ask me later") }
+                    TextButton(onClick = { link.linkSnoozed = snoozePair(link.linkSnoozed, qKey) }) { Text("Ask me later") }
                     TextButton(onClick = {
                         Thread {
                             val ok = saveLinkAnswer(
@@ -903,7 +878,7 @@ fun ChatMailApp(
                             )
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 if (!ok) android.widget.Toast.makeText(context, LINK_ANSWER_FAILED_TEXT, android.widget.Toast.LENGTH_LONG).show()
-                                linkTick++
+                                link.linkTick++
                             }
                         }.start()
                     }) { Text("No, keep separate") }
@@ -913,10 +888,6 @@ fun ChatMailApp(
     }
 
     // ---- Watched folder (Home feedback: auto-detect new export files) --
-    var watchedFolderUri by remember { mutableStateOf(AppPrefs.getWatchedFolderUri(context)) }
-    var autoWatchEnabled by remember { mutableStateOf(AppPrefs.isAutoWatchEnabled(context)) }
-    var watchIntervalMinutes by remember { mutableStateOf(AppPrefs.getWatchIntervalMinutes(context)) }
-    var syncedFilePolicy by remember { mutableStateOf(AppPrefs.getSyncedFilePolicy(context)) }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -930,31 +901,31 @@ fun ChatMailApp(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
             AppPrefs.setWatchedFolderUri(context, uri.toString())
-            watchedFolderUri = uri.toString()
+            watch.watchedFolderUri = uri.toString()
         }
     }
 
     fun setAutoWatch(enabled: Boolean) {
-        autoWatchEnabled = enabled
+        watch.autoWatchEnabled = enabled
         AppPrefs.setAutoWatchEnabled(context, enabled)
-        if (enabled) WatchFolderWorker.enqueue(context, watchIntervalMinutes) else WatchFolderWorker.cancel(context)
+        if (enabled) WatchFolderWorker.enqueue(context, watch.watchIntervalMinutes) else WatchFolderWorker.cancel(context)
     }
 
     fun setWatchInterval(minutes: Long) {
-        watchIntervalMinutes = minutes
+        watch.watchIntervalMinutes = minutes
         AppPrefs.setWatchIntervalMinutes(context, minutes)
-        if (autoWatchEnabled) WatchFolderWorker.enqueue(context, minutes)
+        if (watch.autoWatchEnabled) WatchFolderWorker.enqueue(context, minutes)
     }
 
     fun setSyncedFilePolicy(policy: String) {
-        syncedFilePolicy = policy
+        watch.syncedFilePolicy = policy
         AppPrefs.setSyncedFilePolicy(context, policy)
     }
 
-    if (confirmDeleteAfterImport) {
+    if (watch.confirmDeleteAfterImport) {
         AlertDialog(
             // Back and a tap outside both mean "Keep as is": the safe answer.
-            onDismissRequest = { confirmDeleteAfterImport = false },
+            onDismissRequest = { watch.confirmDeleteAfterImport = false },
             title = { Text("Delete export files after import?") },
             text = {
                 Text(
@@ -967,11 +938,11 @@ fun ChatMailApp(
             confirmButton = {
                 TextButton(onClick = {
                     setSyncedFilePolicy("delete")
-                    confirmDeleteAfterImport = false
+                    watch.confirmDeleteAfterImport = false
                 }) { Text("Switch on") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDeleteAfterImport = false }) { Text("Keep as is") }
+                TextButton(onClick = { watch.confirmDeleteAfterImport = false }) { Text("Keep as is") }
             },
         )
     }
@@ -979,7 +950,7 @@ fun ChatMailApp(
     fun clearWatchedFolder() {
         setAutoWatch(false)
         AppPrefs.setWatchedFolderUri(context, null)
-        watchedFolderUri = null
+        watch.watchedFolderUri = null
     }
 
     // One scan at launch. The periodic worker's first run is up to a whole
@@ -991,7 +962,7 @@ fun ChatMailApp(
     // once per process. ON_RESUME would re-run it every time the user came
     // back from another app, which is a scan nobody asked for.
     LaunchedEffect(Unit) {
-        if (shouldScanAtLaunch(autoWatchEnabled, watchedFolderUri)) {
+        if (shouldScanAtLaunch(watch.autoWatchEnabled, watch.watchedFolderUri)) {
             WatchFolderWorker.enqueueOnce(context)
         }
     }
@@ -1008,11 +979,10 @@ fun ChatMailApp(
     // lifecycle-runtime-compose, which this module does not depend on, and one
     // DisposableEffect is not worth a new dependency.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var backgroundIssues by remember { mutableStateOf(emptyList<BackgroundIssue>()) }
-    DisposableEffect(lifecycleOwner, autoWatchEnabled) {
+    DisposableEffect(lifecycleOwner, watch.autoWatchEnabled) {
         fun recompute() {
-            backgroundIssues = backgroundHealthIssues(
-                autoWatchOn = autoWatchEnabled,
+            watch.backgroundIssues = backgroundHealthIssues(
+                autoWatchOn = watch.autoWatchEnabled,
                 batteryExempt = isBatteryExempt(context),
                 notificationsAllowed = notificationsAllowed(context),
             )
@@ -1048,9 +1018,7 @@ fun ChatMailApp(
     // false on every process death, and WatchFolderWorker's auto-sync
     // couldn't see the user's choice at all since it runs in a separate
     // process-less Worker with no access to this Compose state.
-    var chunkSize by remember { mutableStateOf(AppPrefs.getChunkSize(context)) }
-    var cutoffDate by remember { mutableStateOf(AppPrefs.getCutoffDate(context)) }
-    var dryRunDefault by remember { mutableStateOf(AppPrefs.isDryRunDefault(context)) }
+    val syncCfg = remember { SyncSettingsState(context) }
 
     // ---- Reload after a restore (batch 7 follow-up) ---------------------
     // Every var below is re-read from AppPrefs on every restore attempt
@@ -1067,15 +1035,15 @@ fun ChatMailApp(
     // phone's own choices, and the password never leaves the old device).
     fun reloadRestoredSettingsState() {
         val restored = Migration.readRestorableSettings(context)
-        mailBackend = restored.mailBackend
-        imapProvider = restored.imapProvider
-        imapHost = restored.imapHost
-        imapPort = restored.imapPort
-        imapEmail = restored.imapEmail
-        chunkSize = restored.chunkSize
-        watchIntervalMinutes = restored.watchIntervalMinutes
-        syncedFilePolicy = restored.syncedFilePolicy
-        dryRunDefault = restored.dryRunDefault
+        mail.mailBackend = restored.mailBackend
+        mail.imapProvider = restored.imapProvider
+        mail.imapHost = restored.imapHost
+        mail.imapPort = restored.imapPort
+        mail.imapEmail = restored.imapEmail
+        syncCfg.chunkSize = restored.chunkSize
+        watch.watchIntervalMinutes = restored.watchIntervalMinutes
+        watch.syncedFilePolicy = restored.syncedFilePolicy
+        syncCfg.dryRunDefault = restored.dryRunDefault
         // Goes through the same setter onCreate wires up, not a direct
         // assignment -- themeMode itself lives one composable up (over
         // ChatMailApp), so this is the only way to reach it from here, and
@@ -1084,20 +1052,19 @@ fun ChatMailApp(
         onThemeModeChange(restored.themeMode)
         // F-01: a restore that points the phone at a different account clears the saved password
         // (applySettings), so the "password saved" state must be re-read here too.
-        imapPasswordSaved = AppPrefs.hasImapPassword(context)
+        mail.imapPasswordSaved = AppPrefs.hasImapPassword(context)
         // applySettings clears the saved connection verdict (the password
         // did not travel, so a stale "Connected" would be a green light on
         // a mailbox this phone cannot reach yet) -- re-derive the pill
         // rather than leave it showing whatever it said before the restore.
-        ConnectionState.refresh(context, imapPasswordSaved)
+        ConnectionState.refresh(context, mail.imapPasswordSaved)
     }
-    LaunchedEffect(restoreGeneration) {
-        if (restoreGeneration > 0) reloadRestoredSettingsState()
+    LaunchedEffect(backup.restoreGeneration) {
+        if (backup.restoreGeneration > 0) reloadRestoredSettingsState()
     }
 
     // ---- Real sync via SyncWorker (Phase A4) ---------------------------
     val workManager = remember { WorkManager.getInstance(context) }
-    var lastSyncWasDryRun by remember { mutableStateOf(false) }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -1107,8 +1074,8 @@ fun ChatMailApp(
     fun startRealSync(chatFilter: String? = null) {
         // SyncWorker reads host/email from AppPrefs and the password from
         // SecretStore itself, same as the watched-folder auto-sync path.
-        if (!imapPasswordSaved) {
-            lastResult = "Save your IMAP app password in Settings > Mail account first."
+        if (!mail.imapPasswordSaved) {
+            inbox.lastResult = "Save your IMAP app password in Settings > Mail account first."
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -1121,7 +1088,7 @@ fun ChatMailApp(
             .setInputData(
                 Data.Builder()
                     .putBoolean(SyncWorker.KEY_DRY_RUN, false)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, syncCfg.chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
                     .putString(SyncWorker.KEY_CHAT_FILTER, chatFilter)
                     .putString(SyncWorker.KEY_MAIL_BACKEND, AppPrefs.MAIL_BACKEND_IMAP)
@@ -1135,7 +1102,7 @@ fun ChatMailApp(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
             .build()
-        lastSyncWasDryRun = false
+        syncCfg.lastSyncWasDryRun = false
         AppPrefs.stopMark(context).clearForFreshSync()
         workManager.enqueueUniqueWork(
             SyncWorker.UNIQUE_WORK_NAME_MANUAL_SYNC,
@@ -1151,14 +1118,14 @@ fun ChatMailApp(
     // through SyncWorker instead (dry_run=true, no access token needed),
     // same as a real sync.
     fun runDryRunSync() {
-        lastSyncWasDryRun = true
+        syncCfg.lastSyncWasDryRun = true
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(
                 Data.Builder()
                     .putBoolean(SyncWorker.KEY_DRY_RUN, true)
-                    .putString(SyncWorker.KEY_CHUNK_SIZE, chunkSize)
+                    .putString(SyncWorker.KEY_CHUNK_SIZE, syncCfg.chunkSize)
                     .putString(SyncWorker.KEY_TRIGGER, "manual")
-                    .putString(SyncWorker.KEY_MAIL_BACKEND, mailBackend)
+                    .putString(SyncWorker.KEY_MAIL_BACKEND, mail.mailBackend)
                     .build()
             )
             .build()
@@ -1183,10 +1150,10 @@ fun ChatMailApp(
             WorkInfo.State.SUCCEEDED -> {
                 // "Test run" everywhere else on both platforms; "Dry-run" was the one
                 // place the developer word leaked into the user-facing panel.
-                val label = if (lastSyncWasDryRun) "Test run result" else "Sync result"
-                lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
+                val label = if (syncCfg.lastSyncWasDryRun) "Test run result" else "Sync result"
+                inbox.lastResult = "$label:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_RESULT)}"
                 refreshInbox()
-                linkTick++
+                link.linkTick++
                 // A one-to-one export just synced may be exactly what taught
                 // the app the owner's name: re-read the masthead answer (the
                 // live progress stamp below usually got there first) and the
@@ -1195,7 +1162,7 @@ fun ChatMailApp(
                 refreshSelfSenderBanner()
             }
             WorkInfo.State.FAILED -> {
-                lastResult = "Sync failed:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
+                inbox.lastResult = "Sync failed:\n\n${syncWorkInfo.outputData.getString(SyncWorker.KEY_ERROR)}"
             }
             else -> {}
         }
@@ -1249,9 +1216,9 @@ fun ChatMailApp(
     // ever finished (or whether it succeeded).
     LaunchedEffect(autoSyncWorkInfo?.state) {
         if (autoSyncResultText != null) {
-            lastResult = autoSyncResultText
+            inbox.lastResult = autoSyncResultText
             refreshInbox()
-            linkTick++
+            link.linkTick++
             refreshSelfSender()
             refreshSelfSenderBanner()
         }
@@ -1266,7 +1233,7 @@ fun ChatMailApp(
     val liveSelfStamp = syncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
     val liveAutoSelfStamp = autoSyncWorkInfo?.progress?.getString(SyncWorker.KEY_SELF_SENDER_STAMP)
     LaunchedEffect(liveSelfStamp, liveAutoSelfStamp) {
-        val shown = selfSenderStamp(selfSenderSource, selfSenderName)
+        val shown = selfSenderStamp(selfSender.selfSenderSource, selfSender.selfSenderName)
         if (shouldRefreshSelfSender(liveSelfStamp, shown) ||
             shouldRefreshSelfSender(liveAutoSelfStamp, shown)
         ) {
@@ -1439,9 +1406,9 @@ fun ChatMailApp(
                 val cameFrom = navController.previousBackStackEntry?.destination?.route
                 val finishTarget = firstRunFinishTarget(cameFrom)
                 fun finishFirstRun() {
-                    if (!firstRunDone) {
+                    if (!startup.firstRunDone) {
                         AppPrefs.setFirstRunDone(context, true)
-                        firstRunDone = true
+                        startup.firstRunDone = true
                     }
                     // Clears first_run off the back stack rather than merely
                     // pushing the target on top of it, so the hardware/
@@ -1457,43 +1424,43 @@ fun ChatMailApp(
                     // it came from; a fresh install (no previous entry) none.
                     backLabel = welcomeBackLabel(cameFrom),
                     onBack = { navController.popBackStack() },
-                    imapProviders = imapProviders,
-                    stagePlan = stagePlan,
-                    initialProvider = imapProvider,
-                    initialEmail = imapEmail,
+                    imapProviders = mail.imapProviders,
+                    stagePlan = mail.stagePlan,
+                    initialProvider = mail.imapProvider,
+                    initialEmail = mail.imapEmail,
                     onConnect = ::connectWithStages,
-                    queuedChatCount = inboxFiles.size,
+                    queuedChatCount = inbox.inboxFiles.size,
                     onDoTestRun = { runDryRunSync() },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
-                    watchIntervalMinutes = watchIntervalMinutes,
+                    watchIntervalMinutes = watch.watchIntervalMinutes,
                     onWatchIntervalChange = { setWatchInterval(it) },
                     onTurnOn = {
                         setAutoWatch(true)
                         finishFirstRun()
                     },
                     onNotNow = { finishFirstRun() },
-                    hasExistingMailbox = imapPasswordSaved,
+                    hasExistingMailbox = mail.imapPasswordSaved,
                     // Batch 7 follow-up: restore-on-first-run. Reuses the
                     // exact restoreBackup launcher and migrationBusy/
                     // migrationStatus state Backup & restore itself uses --
                     // no second copy of the restore flow -- so a success here
                     // also runs reloadRestoredSettingsState below, the same
                     // as it would from Settings.
-                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, firstRunDone, imapPasswordSaved),
-                    migrationBusy = migrationBusy,
-                    migrationStatus = migrationStatus,
-                    migrationSuccess = migrationSuccess,
-                    migrationRestoredLines = migrationRestoredLines,
-                    migrationNotRestoredLines = migrationNotRestoredLines,
+                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, startup.firstRunDone, mail.imapPasswordSaved),
+                    migrationBusy = backup.migrationBusy,
+                    migrationStatus = backup.migrationStatus,
+                    migrationSuccess = backup.migrationSuccess,
+                    migrationRestoredLines = backup.migrationRestoredLines,
+                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
                     onRestoreFromBackup = {
                         // Clears any earlier attempt's message before a new
                         // pick, the same as re-opening the picker would from
                         // Backup & restore.
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         restoreBackup.launch(arrayOf("*/*"))
                     },
                 )
@@ -1517,17 +1484,17 @@ fun ChatMailApp(
                 LaunchedEffect(Unit) { refreshSelfSenderBanner() }
                 // The pair HomeScreen's connection chip and Sync-now gating
                 // are driven by.
-                val homeAccountLabel = imapEmail.ifBlank { null }
-                val homeBackendReady = imapPasswordSaved && imapHost.isNotBlank()
+                val homeAccountLabel = mail.imapEmail.ifBlank { null }
+                val homeBackendReady = mail.imapPasswordSaved && mail.imapHost.isNotBlank()
                 val homeConnectActionLabel = if (homeBackendReady) "Change" else "Set up"
                 // Re-read on entry (remember is recreated when this
                 // destination is re-composed after navigation) and whenever a
                 // save reports back, so walking Settings -> save -> Home
                 // clears the line rather than leaving it lying.
-                val lastBackupAt = remember(migrationStatus) {
+                val lastBackupAt = remember(backup.migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
-                val homeMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+                val homeMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
                 HomeScreen(
                     accountLabel = homeAccountLabel,
                     backendReady = homeBackendReady,
@@ -1544,9 +1511,9 @@ fun ChatMailApp(
                             navController.navigate("mailWizard")
                         }
                     },
-                    inboxFiles = inboxFiles,
+                    inboxFiles = inbox.inboxFiles,
                     waitingNames = waitingNames,
-                    onReopenQuestion = { name -> linkSnoozed = reopenFor(linkSnoozed, linkQuestions, name) },
+                    onReopenQuestion = { name -> link.linkSnoozed = reopenFor(link.linkSnoozed, link.linkQuestions, name) },
                     // Goes to our own picker, not the system one. The system
                     // picker is still reachable from inside it, one clearly
                     // secondary button down, for files outside the granted
@@ -1558,14 +1525,14 @@ fun ChatMailApp(
                             .toString()
                     },
                     onRemoveFile = { name -> removeInboxFile(name) },
-                    unreadableFiles = unreadableFiles,
+                    unreadableFiles = inbox.unreadableFiles,
                     onRemoveUnreadable = { name -> removeUnreadableFile(name) },
-                    dryRunDefault = dryRunDefault,
-                    onDryRunDefaultChange = { dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
-                    onSyncNow = { if (dryRunDefault) runDryRunSync() else startRealSync() },
-                    lastResult = lastResult,
+                    dryRunDefault = syncCfg.dryRunDefault,
+                    onDryRunDefaultChange = { syncCfg.dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
+                    onSyncNow = { if (syncCfg.dryRunDefault) runDryRunSync() else startRealSync() },
+                    lastResult = inbox.lastResult,
                     syncInProgress = anySyncRunning,
-                    backgroundIssues = backgroundIssues,
+                    backgroundIssues = watch.backgroundIssues,
                     onBackgroundIssueAction = { issue ->
                         // Null only below API 23, where there is no battery
                         // exemption to grant and the issue is never raised in
@@ -1577,12 +1544,12 @@ fun ChatMailApp(
                     onOpenBackup = { navController.navigate("backupRestore") },
                     meLabel = homeMeDisplay.label,
                     meColor = homeMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
+                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
                     onMeClick = { navController.navigate("me") },
                     lastBackupAt = lastBackupAt,
-                    cutoffDate = cutoffDate,
+                    cutoffDate = syncCfg.cutoffDate,
                     onOpenSettings = { navController.navigate("settings") },
-                    pendingSelfSenderBannerName = pendingSelfSenderBannerName,
+                    pendingSelfSenderBannerName = selfSender.pendingSelfSenderBannerName,
                     onSelfSenderBannerOk = { dismissSelfSenderBanner() },
                     onSelfSenderBannerNotMe = {
                         dismissSelfSenderBanner()
@@ -1595,14 +1562,14 @@ fun ChatMailApp(
                 // may have gone stale while the app was away.
                 LaunchedEffect(Unit) { refreshInbox() }
                 QueueScreen(
-                    files = inboxFiles,
+                    files = inbox.inboxFiles,
                     onPreview = { name ->
                         val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
                         ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
                             .toString()
                     },
                     onRemove = { name -> removeInboxFile(name) },
-                    unreadableFiles = unreadableFiles,
+                    unreadableFiles = inbox.unreadableFiles,
                     onRemoveUnreadable = { name -> removeUnreadableFile(name) },
                     onImportPick = { navController.navigate("importPicker") },
                     onBack = { navController.popBackStack() },
@@ -1613,7 +1580,7 @@ fun ChatMailApp(
                 // lives here too, and a background sync may have learned
                 // a name while Chats sat on the back stack.
                 LaunchedEffect(Unit) { refreshSelfSender() }
-                val chatsMeDisplay = selfSenderDisplay(selfSenderSource, selfSenderName)
+                val chatsMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
                 ChatsListScreen(
                     onOpenChat = { chatId -> navController.navigate("chat/$chatId") },
                     // The empty state offers the import directly rather than
@@ -1623,7 +1590,7 @@ fun ChatMailApp(
                     onImportChat = { pickFile.launch(arrayOf("*/*")) },
                     meLabel = chatsMeDisplay.label,
                     meColor = chatsMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSenderSource, selfSenderName),
+                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
                     onMeClick = { navController.navigate("me") },
                 )
             }
@@ -1635,8 +1602,8 @@ fun ChatMailApp(
                     onDeleted = { navController.popBackStack() },
                     onSyncThisChat = { startRealSync(chatFilter = chatId) },
                     syncInProgress = anySyncRunning,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
+                    selfSenderSource = selfSender.selfSenderSource,
+                    selfSenderName = selfSender.selfSenderName,
                     onOpenMe = { navController.navigate("me") },
                 )
             }
@@ -1650,12 +1617,12 @@ fun ChatMailApp(
                 // it would need to compute this itself now that the account
                 // UI lives on its own screen.
                 val mailAccountSummary =
-                    if (imapPasswordSaved) imapEmail else "Not connected"
+                    if (mail.imapPasswordSaved) mail.imapEmail else "Not connected"
                 // Re-read on entry and whenever the shared migration state
                 // moves -- same "walking Settings -> save -> Home clears the
                 // line" reasoning Home's own lastBackupAt carries, now that
                 // the row here is a pill rather than the buttons themselves.
-                val lastBackupAt = remember(migrationStatus) {
+                val lastBackupAt = remember(backup.migrationStatus) {
                     AppPrefs.getLastBackupAt(context)
                 }
                 SettingsScreen(
@@ -1667,8 +1634,8 @@ fun ChatMailApp(
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     lastBackupAt = lastBackupAt,
-                    selfSenderSource = selfSenderSource,
-                    selfSenderName = selfSenderName,
+                    selfSenderSource = selfSender.selfSenderSource,
+                    selfSenderName = selfSender.selfSenderName,
                     onOpenMe = { navController.navigate("me") },
                 )
             }
@@ -1678,28 +1645,28 @@ fun ChatMailApp(
                     onBack = { navController.popBackStack() },
                     backLabel = backLabelForRoute(from),
                     onSaveBackup = {
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         saveBackup.launch(Migration.suggestedFileName())
                     },
                     onRestoreBackup = {
-                        migrationStatus = null
-                        migrationSuccess = null
-                        migrationRestoredLines = emptyList()
-                        migrationNotRestoredLines = emptyList()
+                        backup.migrationStatus = null
+                        backup.migrationSuccess = null
+                        backup.migrationRestoredLines = emptyList()
+                        backup.migrationNotRestoredLines = emptyList()
                         // Every type, not our own: a bundle that has been round
                         // -tripped through Drive or Gmail can come back typed as
                         // something else entirely, and a filter that hides the
                         // file the user came to pick is worse than no filter.
                         restoreBackup.launch(arrayOf("*/*"))
                     },
-                    migrationBusy = migrationBusy,
-                    migrationStatus = migrationStatus,
-                    migrationSuccess = migrationSuccess,
-                    migrationRestoredLines = migrationRestoredLines,
-                    migrationNotRestoredLines = migrationNotRestoredLines,
+                    migrationBusy = backup.migrationBusy,
+                    migrationStatus = backup.migrationStatus,
+                    migrationSuccess = backup.migrationSuccess,
+                    migrationRestoredLines = backup.migrationRestoredLines,
+                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
                 )
             }
             composable("advancedSettings") {
@@ -1714,29 +1681,29 @@ fun ChatMailApp(
                     // to send "Turn on"/"Set up later"/"Not now" back here
                     // instead of to Home.
                     onRunSetupAgain = { navController.navigate("first_run") },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     onChooseFolder = { folderPicker.launch(null) },
                     onClearFolder = { clearWatchedFolder() },
-                    autoWatchEnabled = autoWatchEnabled,
+                    autoWatchEnabled = watch.autoWatchEnabled,
                     onAutoWatchChange = { setAutoWatch(it) },
-                    watchIntervalMinutes = watchIntervalMinutes,
+                    watchIntervalMinutes = watch.watchIntervalMinutes,
                     onWatchIntervalChange = { setWatchInterval(it) },
                     onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
                     syncInProgress = anySyncRunning,
-                    syncedFilePolicy = syncedFilePolicy,
+                    syncedFilePolicy = watch.syncedFilePolicy,
                     onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
-                    cutoffDate = cutoffDate,
+                    cutoffDate = syncCfg.cutoffDate,
                     onCutoffDateChange = {
-                        cutoffDate = it
+                        syncCfg.cutoffDate = it
                         AppPrefs.setCutoffDate(context, it)
                     },
-                    dryRunDefault = dryRunDefault,
+                    dryRunDefault = syncCfg.dryRunDefault,
                     onDryRunDefaultChange = {
-                        dryRunDefault = it
+                        syncCfg.dryRunDefault = it
                         AppPrefs.setDryRunDefault(context, it)
                     },
-                    chunkSize = chunkSize,
-                    onChunkSizeChange = { chunkSize = it; AppPrefs.setChunkSize(context, it) },
+                    chunkSize = syncCfg.chunkSize,
+                    onChunkSizeChange = { syncCfg.chunkSize = it; AppPrefs.setChunkSize(context, it) },
                     onTestConnection = ::testImapConnection,
                 )
             }
@@ -1747,12 +1714,12 @@ fun ChatMailApp(
                 LaunchedEffect(Unit) { refreshInbox() }
                 ImportPickerScreen(
                     onBack = { navController.popBackStack() },
-                    watchedFolderUri = watchedFolderUri,
+                    watchedFolderUri = watch.watchedFolderUri,
                     // Names, not uris: what is already queued is a file in our
                     // inbox directory, and ImportManager keys on the leaf name
                     // too, so this marks exactly what a second import would
                     // refuse.
-                    queuedNames = inboxFiles.map { it.first }.toSet(),
+                    queuedNames = inbox.inboxFiles.map { it.first }.toSet(),
                     onChooseFolder = { folderPicker.launch(null) },
                     onPickFromAnywhere = { pickFile.launch(arrayOf("*/*")) },
                     onImport = { uris ->
@@ -1780,16 +1747,16 @@ fun ChatMailApp(
                     // Advanced settings' Mail server section so there is one
                     // copy of this logic, not two that can drift apart.
                     onTestConnection = ::testImapConnection,
-                    imapProviders = imapProviders,
-                    imapProvider = imapProvider,
+                    imapProviders = mail.imapProviders,
+                    imapProvider = mail.imapProvider,
                     onImapProviderChange = ::onImapProviderChange,
-                    imapHost = imapHost,
-                    onImapHostChange = { imapHost = it },
-                    imapPort = imapPort,
-                    onImapPortChange = { imapPort = it },
-                    imapEmail = imapEmail,
-                    onImapEmailChange = { imapEmail = it },
-                    imapPasswordSaved = imapPasswordSaved,
+                    imapHost = mail.imapHost,
+                    onImapHostChange = { mail.imapHost = it },
+                    imapPort = mail.imapPort,
+                    onImapPortChange = { mail.imapPort = it },
+                    imapEmail = mail.imapEmail,
+                    onImapEmailChange = { mail.imapEmail = it },
+                    imapPasswordSaved = mail.imapPasswordSaved,
                     onSaveImapSettings = ::saveImapSettings,
                     onForgetImapPassword = ::forgetImapPassword,
                     onRunWizard = { navController.navigate("mailWizard") },
@@ -1804,10 +1771,10 @@ fun ChatMailApp(
                 var meSenders by remember { mutableStateOf(listOf<String>()) }
                 LaunchedEffect(Unit) { meSenders = listChatSenders() }
                 MeScreen(
-                    display = selfSenderDisplay(selfSenderSource, selfSenderName),
-                    detail = selfSenderDetail,
+                    display = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName),
+                    detail = selfSender.selfSenderDetail,
                     senders = meSenders,
-                    override = selfSenderOverride,
+                    override = selfSender.selfSenderOverride,
                     onPick = { setSelfSender(it) },
                     onSave = { setSelfSender(it) },
                     onClear = { setSelfSender("") },
@@ -1823,12 +1790,12 @@ fun ChatMailApp(
                     // re-run -- rather than adding another screen to back out
                     // of after the job is done.
                     onDone = { navController.popBackStack() },
-                    imapProviders = imapProviders,
-                    stagePlan = stagePlan,
-                    initialProvider = imapProvider,
-                    initialEmail = imapEmail,
+                    imapProviders = mail.imapProviders,
+                    stagePlan = mail.stagePlan,
+                    initialProvider = mail.imapProvider,
+                    initialEmail = mail.imapEmail,
                     onConnect = ::connectWithStages,
-                    hasExistingMailbox = imapPasswordSaved,
+                    hasExistingMailbox = mail.imapPasswordSaved,
                     onKeepCurrentMailbox = { navController.popBackStack() },
                 )
             }
