@@ -44,7 +44,7 @@ class LinkAnswerAndHeldNoticeTest {
 
     @Test
     fun openingTheAppClearsOnlyTheHeldNotice() {
-        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val src = appMainSources()
         val body = src.substringAfter("override fun onResume()").substringBefore("override fun onCreate")
         assertTrue(body.contains("cancel(SyncWorker.HELD_NOTIFICATION_ID)"))
         assertTrue(body.contains("catch (_: Exception)"))
@@ -67,7 +67,7 @@ class LinkAnswerAndHeldNoticeTest {
     @Test
     fun theFailureTextNamesNoChatAndBothAnswersShowIt() {
         assertEquals("Couldn't save your answer. Please try again.", LINK_ANSWER_FAILED_TEXT)
-        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val src = appMainSources()
         assertEquals(2, Regex("""saveLinkAnswer\(""").findAll(src).count())
         assertEquals(2, Regex("""LINK_ANSWER_FAILED_TEXT""").findAll(src).count())
         // The old silent swallow around the two answers is gone.

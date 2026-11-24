@@ -56,9 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Constraints
@@ -72,7 +70,6 @@ import com.chatmailsync.core.mail.checkConnection
 import com.chatmailsync.core.mail.connectionStagePlan
 import com.chatmailsync.core.mail.formatConnectionResult
 import com.chatmailsync.core.mail.retiredProviderLanding
-import java.util.UUID
 
 class MainActivity : ComponentActivity() {
 
@@ -1322,6 +1319,51 @@ fun ChatMailApp(
         keyboard?.hide()
     }
 
+    // KT-13 step 4: what the per-tab route builders (Nav*Tab.kt, NavOtherRoutes.kt) read and call. Built every
+    // composition, like the lambdas the NavHost block used to capture, so nothing here is remembered or saved.
+    val navState = NavScreenState(
+        context = context,
+        startup = startup,
+        mail = mail,
+        selfSender = selfSender,
+        backup = backup,
+        watch = watch,
+        inbox = inbox,
+        syncCfg = syncCfg,
+        link = link,
+        themeMode = themeMode,
+        onThemeModeChange = onThemeModeChange,
+        workManager = workManager,
+        anySyncRunning = anySyncRunning,
+        waitingNames = waitingNames,
+    )
+    val navActions = NavActions(
+        connectWithStages = ::connectWithStages,
+        runDryRunSync = ::runDryRunSync,
+        setWatchInterval = ::setWatchInterval,
+        setAutoWatch = ::setAutoWatch,
+        refreshInbox = ::refreshInbox,
+        refreshSelfSender = ::refreshSelfSender,
+        refreshSelfSenderBanner = ::refreshSelfSenderBanner,
+        removeInboxFile = ::removeInboxFile,
+        removeUnreadableFile = ::removeUnreadableFile,
+        startRealSyncImpl = { chatFilter -> startRealSync(chatFilter) },
+        dismissSelfSenderBanner = ::dismissSelfSenderBanner,
+        clearWatchedFolder = ::clearWatchedFolder,
+        setSyncedFilePolicy = ::setSyncedFilePolicy,
+        testImapConnection = ::testImapConnection,
+        importMany = ::importMany,
+        onImapProviderChange = ::onImapProviderChange,
+        saveImapSettings = ::saveImapSettings,
+        forgetImapPassword = ::forgetImapPassword,
+        listChatSenders = ::listChatSenders,
+        setSelfSender = ::setSelfSender,
+        pickFile = pickFile,
+        saveBackup = saveBackup,
+        restoreBackup = restoreBackup,
+        folderPicker = folderPicker,
+    )
+
     Scaffold(
         // targetSdk 36 means edge-to-edge is enforced: the window is no longer
         // resized for the keyboard, and Scaffold's default insets cover the
@@ -1397,490 +1439,10 @@ fun ChatMailApp(
             startDestination = firstRunStartDestination,
             modifier = Modifier.padding(padding),
         ) {
-            composable("first_run") {
-                // Read once, at entry: a fresh install has no previous
-                // back-stack entry (first_run is the graph's start
-                // destination), while "Run setup again" from Advanced
-                // settings (H7) pushes first_run on top of it, so this
-                // single read is what tells the two launches apart.
-                val cameFrom = navController.previousBackStackEntry?.destination?.route
-                val finishTarget = firstRunFinishTarget(cameFrom)
-                fun finishFirstRun() {
-                    if (!startup.firstRunDone) {
-                        AppPrefs.setFirstRunDone(context, true)
-                        startup.firstRunDone = true
-                    }
-                    // Clears first_run off the back stack rather than merely
-                    // pushing the target on top of it, so the hardware/
-                    // gesture back button does not return here.
-                    navController.navigate(finishTarget) {
-                        popUpTo("first_run") { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
-                FirstRunScreen(
-                    onSetUpLater = { finishFirstRun() },
-                    // UX-01: "Run setup again" shows a labelled back to where
-                    // it came from; a fresh install (no previous entry) none.
-                    backLabel = welcomeBackLabel(cameFrom),
-                    onBack = { navController.popBackStack() },
-                    imapProviders = mail.imapProviders,
-                    stagePlan = mail.stagePlan,
-                    initialProvider = mail.imapProvider,
-                    initialEmail = mail.imapEmail,
-                    onConnect = ::connectWithStages,
-                    queuedChatCount = inbox.inboxFiles.size,
-                    onDoTestRun = { runDryRunSync() },
-                    watchedFolderUri = watch.watchedFolderUri,
-                    onChooseFolder = { folderPicker.launch(null) },
-                    watchIntervalMinutes = watch.watchIntervalMinutes,
-                    onWatchIntervalChange = { setWatchInterval(it) },
-                    onTurnOn = {
-                        setAutoWatch(true)
-                        finishFirstRun()
-                    },
-                    onNotNow = { finishFirstRun() },
-                    hasExistingMailbox = mail.imapPasswordSaved,
-                    // Batch 7 follow-up: restore-on-first-run. Reuses the
-                    // exact restoreBackup launcher and migrationBusy/
-                    // migrationStatus state Backup & restore itself uses --
-                    // no second copy of the restore flow -- so a success here
-                    // also runs reloadRestoredSettingsState below, the same
-                    // as it would from Settings.
-                    offerRestore = shouldOfferRestoreOnFirstRun(cameFrom, startup.firstRunDone, mail.imapPasswordSaved),
-                    migrationBusy = backup.migrationBusy,
-                    migrationStatus = backup.migrationStatus,
-                    migrationSuccess = backup.migrationSuccess,
-                    migrationRestoredLines = backup.migrationRestoredLines,
-                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
-                    onRestoreFromBackup = {
-                        // Clears any earlier attempt's message before a new
-                        // pick, the same as re-opening the picker would from
-                        // Backup & restore.
-                        backup.migrationStatus = null
-                        backup.migrationSuccess = null
-                        backup.migrationRestoredLines = emptyList()
-                        backup.migrationNotRestoredLines = emptyList()
-                        restoreBackup.launch(arrayOf("*/*"))
-                    },
-                )
-            }
-            composable("home") {
-                // Home's inbox list is only otherwise refreshed right after an
-                // import or a sync completes — if the app was relaunched or
-                // navigated back to from another tab after a sync finished
-                // (e.g. the process was killed mid-sync, losing the in-memory
-                // WorkManager id), the list would keep showing already-synced
-                // files. Re-check every time this screen is (re)entered.
-                LaunchedEffect(Unit) { refreshInbox() }
-                // Same "re-read on entry" reasoning as Settings: this is now
-                // also where the masthead Me row lives, and a sync that ran
-                // while Home sat on the back stack may have just learned a
-                // name.
-                LaunchedEffect(Unit) { refreshSelfSender() }
-                // The one-time banner lives only on Home, so this is the one
-                // place it needs a "re-read on entry" alongside ON_RESUME and
-                // the post-sync effects above.
-                LaunchedEffect(Unit) { refreshSelfSenderBanner() }
-                // The pair HomeScreen's connection chip and Sync-now gating
-                // are driven by.
-                val homeAccountLabel = mail.imapEmail.ifBlank { null }
-                val homeBackendReady = mail.imapPasswordSaved && mail.imapHost.isNotBlank()
-                val homeConnectActionLabel = if (homeBackendReady) "Change" else "Set up"
-                // Re-read on entry (remember is recreated when this
-                // destination is re-composed after navigation) and whenever a
-                // save reports back, so walking Settings -> save -> Home
-                // clears the line rather than leaving it lying.
-                val lastBackupAt = remember(backup.migrationStatus) {
-                    AppPrefs.getLastBackupAt(context)
-                }
-                val homeMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
-                HomeScreen(
-                    accountLabel = homeAccountLabel,
-                    backendReady = homeBackendReady,
-                    connectActionLabel = homeConnectActionLabel,
-                    onConnect = {
-                        // First setup goes through the wizard (D1); once there
-                        // is a working account this button says "Change", and
-                        // changing one field is faster on the single-page
-                        // form, which is also where the wizard can be
-                        // re-launched from.
-                        if (homeBackendReady) {
-                            navController.navigate("settings")
-                        } else {
-                            navController.navigate("mailWizard")
-                        }
-                    },
-                    inboxFiles = inbox.inboxFiles,
-                    waitingNames = waitingNames,
-                    onReopenQuestion = { name -> link.linkSnoozed = reopenFor(link.linkSnoozed, link.linkQuestions, name) },
-                    // Goes to our own picker, not the system one. The system
-                    // picker is still reachable from inside it, one clearly
-                    // secondary button down, for files outside the granted
-                    // folder.
-                    onImportPick = { navController.navigate("importPicker") },
-                    onPreview = { name ->
-                        val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
-                        ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
-                            .toString()
-                    },
-                    onRemoveFile = { name -> removeInboxFile(name) },
-                    unreadableFiles = inbox.unreadableFiles,
-                    onRemoveUnreadable = { name -> removeUnreadableFile(name) },
-                    dryRunDefault = syncCfg.dryRunDefault,
-                    onDryRunDefaultChange = { syncCfg.dryRunDefault = it; AppPrefs.setDryRunDefault(context, it) },
-                    onSyncNow = { if (syncCfg.dryRunDefault) runDryRunSync() else startRealSync() },
-                    lastResult = inbox.lastResult,
-                    syncInProgress = anySyncRunning,
-                    backgroundIssues = watch.backgroundIssues,
-                    onBackgroundIssueAction = { issue ->
-                        // Null only below API 23, where there is no battery
-                        // exemption to grant and the issue is never raised in
-                        // the first place -- so nothing to fall back to.
-                        backgroundIssueIntent(context, issue)?.let { context.startActivity(it) }
-                    },
-                    onOpenSyncLog = { navController.navigate("syncLog") },
-                    onOpenQueue = { navController.navigate("queue") },
-                    onOpenBackup = { navController.navigate("backupRestore") },
-                    meLabel = homeMeDisplay.label,
-                    meColor = homeMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
-                    onMeClick = { navController.navigate("me") },
-                    lastBackupAt = lastBackupAt,
-                    cutoffDate = syncCfg.cutoffDate,
-                    onOpenSettings = { navController.navigate("settings") },
-                    pendingSelfSenderBannerName = selfSender.pendingSelfSenderBannerName,
-                    onSelfSenderBannerOk = { dismissSelfSenderBanner() },
-                    onSelfSenderBannerNotMe = {
-                        dismissSelfSenderBanner()
-                        navController.navigate("me")
-                    },
-                )
-            }
-            composable("queue") {
-                // Same rule as home: this screen is reached from a list that
-                // may have gone stale while the app was away.
-                LaunchedEffect(Unit) { refreshInbox() }
-                QueueScreen(
-                    files = inbox.inboxFiles,
-                    onPreview = { name ->
-                        val path = ChatMailApplication.inboxDir(context).resolve(name).absolutePath
-                        ChatMailApplication.core(context).previewText(path, AppPrefs.getCutoffDate(context))
-                            .toString()
-                    },
-                    onRemove = { name -> removeInboxFile(name) },
-                    unreadableFiles = inbox.unreadableFiles,
-                    onRemoveUnreadable = { name -> removeUnreadableFile(name) },
-                    onImportPick = { navController.navigate("importPicker") },
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable("chats") {
-                // Same "re-read on entry" reasoning as Home: the Me row
-                // lives here too, and a background sync may have learned
-                // a name while Chats sat on the back stack.
-                LaunchedEffect(Unit) { refreshSelfSender() }
-                val chatsMeDisplay = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName)
-                ChatsListScreen(
-                    onOpenChat = { chatId -> navController.navigate("chat/$chatId") },
-                    // The empty state offers the import directly rather than
-                    // sending the user to Home to find it -- same launcher
-                    // Home's own [Import] button uses, so a file picked from
-                    // either place lands in the same inbox.
-                    onImportChat = { pickFile.launch(arrayOf("*/*")) },
-                    meLabel = chatsMeDisplay.label,
-                    meColor = chatsMeDisplay.color,
-                    meDescription = selfSenderContentDescription(selfSender.selfSenderSource, selfSender.selfSenderName),
-                    onMeClick = { navController.navigate("me") },
-                )
-            }
-            composable("chat/{chatId}") { entry ->
-                val chatId = entry.arguments?.getString("chatId") ?: ""
-                ChatDetailScreen(
-                    chatId = chatId,
-                    onBack = { navController.popBackStack() },
-                    onDeleted = { navController.popBackStack() },
-                    onSyncThisChat = { startRealSync(chatFilter = chatId) },
-                    syncInProgress = anySyncRunning,
-                    selfSenderSource = selfSender.selfSenderSource,
-                    selfSenderName = selfSender.selfSenderName,
-                    onOpenMe = { navController.navigate("me") },
-                )
-            }
-            composable("settings") {
-                // Re-read on entry, not once at startup: a sync that happened
-                // while this screen sat on the back stack may have worked the
-                // name out, and the screen exists to say so.
-                LaunchedEffect(Unit) { refreshSelfSender() }
-                // Backend-neutral one-line status for the "Mail account" nav
-                // row — SettingsScreen no longer receives the backend params
-                // it would need to compute this itself now that the account
-                // UI lives on its own screen.
-                val mailAccountSummary =
-                    if (mail.imapPasswordSaved) mail.imapEmail else "Not connected"
-                // Re-read on entry and whenever the shared migration state
-                // moves -- same "walking Settings -> save -> Home clears the
-                // line" reasoning Home's own lastBackupAt carries, now that
-                // the row here is a pill rather than the buttons themselves.
-                val lastBackupAt = remember(backup.migrationStatus) {
-                    AppPrefs.getLastBackupAt(context)
-                }
-                SettingsScreen(
-                    mailAccountSummary = mailAccountSummary,
-                    onOpenMailAccount = { navController.navigate("mailAccount") },
-                    onOpenHelp = { navController.navigate("helpAbout") },
-                    onOpenAdvanced = { navController.navigate("advancedSettings") },
-                    onOpenBackupRestore = { navController.navigate("backupRestore") },
-                    themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange,
-                    lastBackupAt = lastBackupAt,
-                    selfSenderSource = selfSender.selfSenderSource,
-                    selfSenderName = selfSender.selfSenderName,
-                    onOpenMe = { navController.navigate("me") },
-                )
-            }
-            composable("backupRestore") {
-                val from = navController.previousBackStackEntry?.destination?.route
-                BackupRestoreScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                    onSaveBackup = {
-                        backup.migrationStatus = null
-                        backup.migrationSuccess = null
-                        backup.migrationRestoredLines = emptyList()
-                        backup.migrationNotRestoredLines = emptyList()
-                        saveBackup.launch(Migration.suggestedFileName())
-                    },
-                    onRestoreBackup = {
-                        backup.migrationStatus = null
-                        backup.migrationSuccess = null
-                        backup.migrationRestoredLines = emptyList()
-                        backup.migrationNotRestoredLines = emptyList()
-                        // Every type, not our own: a bundle that has been round
-                        // -tripped through Drive or Gmail can come back typed as
-                        // something else entirely, and a filter that hides the
-                        // file the user came to pick is worse than no filter.
-                        restoreBackup.launch(arrayOf("*/*"))
-                    },
-                    migrationBusy = backup.migrationBusy,
-                    migrationStatus = backup.migrationStatus,
-                    migrationSuccess = backup.migrationSuccess,
-                    migrationRestoredLines = backup.migrationRestoredLines,
-                    migrationNotRestoredLines = backup.migrationNotRestoredLines,
-                )
-            }
-            composable("advancedSettings") {
-                val from = navController.previousBackStackEntry?.destination?.route
-                AdvancedSettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                    onOpenSyncLog = { navController.navigate("syncLog") },
-                    // Opens the walkthrough exactly as first-run leaves it —
-                    // no preference write here, only a navigate. first_run
-                    // itself reads where it came from (see firstRunFinishTarget)
-                    // to send "Turn on"/"Set up later"/"Not now" back here
-                    // instead of to Home.
-                    onRunSetupAgain = { navController.navigate("first_run") },
-                    watchedFolderUri = watch.watchedFolderUri,
-                    onChooseFolder = { folderPicker.launch(null) },
-                    onClearFolder = { clearWatchedFolder() },
-                    autoWatchEnabled = watch.autoWatchEnabled,
-                    onAutoWatchChange = { setAutoWatch(it) },
-                    watchIntervalMinutes = watch.watchIntervalMinutes,
-                    onWatchIntervalChange = { setWatchInterval(it) },
-                    onCheckNow = { WatchFolderWorker.enqueueOnce(context) },
-                    syncInProgress = anySyncRunning,
-                    syncedFilePolicy = watch.syncedFilePolicy,
-                    onSyncedFilePolicyChange = { setSyncedFilePolicy(it) },
-                    cutoffDate = syncCfg.cutoffDate,
-                    onCutoffDateChange = {
-                        syncCfg.cutoffDate = it
-                        AppPrefs.setCutoffDate(context, it)
-                    },
-                    dryRunDefault = syncCfg.dryRunDefault,
-                    onDryRunDefaultChange = {
-                        syncCfg.dryRunDefault = it
-                        AppPrefs.setDryRunDefault(context, it)
-                    },
-                    chunkSize = syncCfg.chunkSize,
-                    onChunkSizeChange = { syncCfg.chunkSize = it; AppPrefs.setChunkSize(context, it) },
-                    onTestConnection = ::testImapConnection,
-                )
-            }
-            composable("importPicker") {
-                // Re-read on entry for the same reason Home does: the folder
-                // grant can be changed from Settings, and a file can be shared
-                // in from WhatsApp while this screen sits on the back stack.
-                LaunchedEffect(Unit) { refreshInbox() }
-                ImportPickerScreen(
-                    onBack = { navController.popBackStack() },
-                    watchedFolderUri = watch.watchedFolderUri,
-                    // Names, not uris: what is already queued is a file in our
-                    // inbox directory, and ImportManager keys on the leaf name
-                    // too, so this marks exactly what a second import would
-                    // refuse.
-                    queuedNames = inbox.inboxFiles.map { it.first }.toSet(),
-                    onChooseFolder = { folderPicker.launch(null) },
-                    onPickFromAnywhere = { pickFile.launch(arrayOf("*/*")) },
-                    onImport = { uris ->
-                        importMany(uris)
-                        // Back to Home, where the queue and Sync now are. The
-                        // picker's job is done the moment the files are in.
-                        navController.popBackStack()
-                    },
-                )
-            }
-            composable("mailAccount") {
-                // Reachable from the connection pill on every masthead, not
-                // just Settings -- so unlike most rows here, "Settings" is
-                // not a safe default.
-                val from = navController.previousBackStackEntry?.destination?.route
-                MailAccountScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                    // check_connection (the dict) rather than
-                    // check_connection_text (the string it is flattened to):
-                    // the banner dot needs the pass/fail as a fact, and
-                    // parsing it back out of display prose would break the
-                    // moment that prose is reworded. See testImapConnection
-                    // for the five-stage check itself -- shared with
-                    // Advanced settings' Mail server section so there is one
-                    // copy of this logic, not two that can drift apart.
-                    onTestConnection = ::testImapConnection,
-                    imapProviders = mail.imapProviders,
-                    imapProvider = mail.imapProvider,
-                    onImapProviderChange = ::onImapProviderChange,
-                    imapHost = mail.imapHost,
-                    onImapHostChange = { mail.imapHost = it },
-                    imapPort = mail.imapPort,
-                    onImapPortChange = { mail.imapPort = it },
-                    imapEmail = mail.imapEmail,
-                    onImapEmailChange = { mail.imapEmail = it },
-                    imapPasswordSaved = mail.imapPasswordSaved,
-                    onSaveImapSettings = ::saveImapSettings,
-                    onForgetImapPassword = ::forgetImapPassword,
-                    onRunWizard = { navController.navigate("mailWizard") },
-                )
-            }
-            composable("me") {
-                // Three ways in - Home, Chats and a chat's own detail screen
-                // (its strip) - so the back label is read off the stack, the
-                // same way the sync log does it.
-                val from = navController.previousBackStackEntry?.destination?.route
-                LaunchedEffect(Unit) { refreshSelfSender() }
-                var meSenders by remember { mutableStateOf(listOf<String>()) }
-                LaunchedEffect(Unit) { meSenders = listChatSenders() }
-                MeScreen(
-                    display = selfSenderDisplay(selfSender.selfSenderSource, selfSender.selfSenderName),
-                    detail = selfSender.selfSenderDetail,
-                    senders = meSenders,
-                    override = selfSender.selfSenderOverride,
-                    onPick = { setSelfSender(it) },
-                    onSave = { setSelfSender(it) },
-                    onClear = { setSelfSender("") },
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                )
-            }
-            composable("mailWizard") {
-                MailSetupWizardScreen(
-                    onExit = { navController.popBackStack() },
-                    // Finishing drops the user back where they came from --
-                    // Home for a first setup, the Mail account screen for a
-                    // re-run -- rather than adding another screen to back out
-                    // of after the job is done.
-                    onDone = { navController.popBackStack() },
-                    imapProviders = mail.imapProviders,
-                    stagePlan = mail.stagePlan,
-                    initialProvider = mail.imapProvider,
-                    initialEmail = mail.imapEmail,
-                    onConnect = ::connectWithStages,
-                    hasExistingMailbox = mail.imapPasswordSaved,
-                    onKeepCurrentMailbox = { navController.popBackStack() },
-                )
-            }
-            composable("helpAbout") {
-                val from = navController.previousBackStackEntry?.destination?.route
-                HelpAboutScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                    onOpenHelp = { navController.navigate("help") },
-                    onOpenPrivacy = { navController.navigate("privacy") },
-                    onOpenLicenses = { navController.navigate("licenses") },
-                )
-            }
-            composable("help") {
-                val from = navController.previousBackStackEntry?.destination?.route
-                HelpScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenPrivacy = { navController.navigate("privacy") },
-                    backLabel = backLabelForRoute(from),
-                )
-            }
-            composable("privacy") {
-                // Two ways in - Settings and Help - so the back label is read
-                // off the stack, the same way the sync log does it.
-                val from = navController.previousBackStackEntry?.destination?.route
-                PrivacyScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                )
-            }
-            composable("licenses") {
-                // One way in, from Settings' Help & About section -- same
-                // backLabelForRoute lookup as every other leaf screen, kept
-                // for consistency even though it always resolves to "Settings"
-                // today.
-                val from = navController.previousBackStackEntry?.destination?.route
-                OpenSourceLicensesScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                )
-            }
-            composable("syncLog") {
-                // Three ways in - Settings, the status card on Home, and the
-                // sync bar, which rides every screen - so the back label is
-                // read off the stack rather than fixed. Anything unmapped
-                // falls back to a plain "Back", which is no worse than the
-                // bare arrow this replaced.
-                val from = navController.previousBackStackEntry?.destination?.route
-                SyncLogScreen(
-                    onBack = { navController.popBackStack() },
-                    backLabel = backLabelForRoute(from),
-                    onOpenRun = { runId -> navController.navigate("syncLog/$runId") },
-                )
-            }
-            composable("syncLog/{runId}") { entry ->
-                // Only the id travels on the route. The detail screen re-reads
-                // the same 90-day log the list used and picks the run out of
-                // it, so the route survives process death and there is only
-                // ever one query behind both levels.
-                val runId = entry.arguments?.getString("runId")?.toLongOrNull() ?: 0L
-                SyncRunDetailScreen(
-                    runId = runId,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable("syncProgress") {
-                // "Do a test run" on first-run step 3 pushes this same screen
-                // on top of first_run rather than home — first_run is the
-                // nav graph's start destination in that case, so "home" is
-                // not on the back stack at all yet and popping to it here
-                // would silently do nothing. Read which one is actually
-                // underneath, same pattern as the settings/help "from" reads
-                // elsewhere on this screen, and pop back to that instead.
-                val from = navController.previousBackStackEntry?.destination?.route
-                val popTarget = if (from == "first_run") "first_run" else "home"
-                SyncProgressScreen(
-                    workManager = workManager,
-                    onDone = { navController.popBackStack(popTarget, inclusive = false) },
-                    // Same destination, deliberately different call: onDone
-                    // prunes the finished work first, and pruning a run that
-                    // is still going would leave the collapsed bar with
-                    // nothing to observe.
-                    onMinimize = { navController.popBackStack(popTarget, inclusive = false) },
-                )
-            }
+            homeTabRoutes(navController, navState, navActions)
+            chatsTabRoutes(navController, navState, navActions)
+            settingsTabRoutes(navController, navState, navActions)
+            otherRoutes(navController, navState, navActions)
         }
         }
     }

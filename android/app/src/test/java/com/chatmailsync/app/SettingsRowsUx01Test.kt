@@ -87,7 +87,7 @@ class SettingsRowsUx01Test {
 
     @Test
     fun `the Advanced screen still writes through the same setters`() {
-        val main = source("MainActivity.kt")
+        val main = appMainSources()
         for (call in listOf(
             "AppPrefs.setCutoffDate(context, it)",
             "AppPrefs.setDryRunDefault(context, it)",
@@ -235,12 +235,12 @@ class SettingsRowsUx01Test {
     fun `the Help sub-screen has a route, a back label and lights the Settings tab`() {
         assertEquals("Help", backLabelForRoute("helpAbout"))
         assertEquals("settings", tabForRoute("helpAbout"))
-        assertTrue(source("MainActivity.kt").contains("composable(\"helpAbout\")"))
+        assertTrue(appMainSources().contains("composable(\"helpAbout\")"))
     }
 
     @Test
     fun `every route reachable from Settings resolves to a real back label`() {
-        val main = source("MainActivity.kt")
+        val main = appMainSources()
         for (route in SETTINGS_REACHABLE_ROUTES) {
             assertNotEquals("$route falls through to a bare Back", "Back", backLabelForRoute(route))
             assertTrue(
@@ -253,7 +253,7 @@ class SettingsRowsUx01Test {
     @Test
     fun `screens opened from Help say Help`() {
         assertEquals("Help", backLabelForRoute("helpAbout"))
-        val main = source("MainActivity.kt")
+        val main = appMainSources()
         for (route in listOf("help", "privacy", "licenses")) {
             val block = main.substringAfter("composable(\"$route\")").substringBefore("composable(\"")
             assertTrue(
@@ -269,7 +269,7 @@ class SettingsRowsUx01Test {
         // And the screen only draws a back when it was given a label.
         val screen = source("FirstRunScreen.kt")
         assertTrue(screen.contains("onBack = if (backLabel != null) onBack else null"))
-        assertTrue(source("MainActivity.kt").contains("backLabel = welcomeBackLabel(cameFrom)"))
+        assertTrue(appMainSources().contains("backLabel = welcomeBackLabel(cameFrom)"))
     }
 
     @Test
