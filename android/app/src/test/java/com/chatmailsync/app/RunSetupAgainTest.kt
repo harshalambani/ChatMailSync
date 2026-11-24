@@ -15,15 +15,7 @@ import java.io.File
  */
 class RunSetupAgainTest {
 
-    private fun mainActivitySource(): String {
-        var dir: File? = File("").absoluteFile
-        while (dir != null) {
-            val candidate = File(dir, "app/src/main/java/com/chatmailsync/app/MainActivity.kt")
-            if (candidate.isFile) return candidate.readText()
-            dir = dir.parentFile
-        }
-        throw AssertionError("could not locate MainActivity.kt from ${File("").absolutePath}")
-    }
+    private fun mainActivitySource(): String = appMainSources()
 
     @Test
     fun `Run setup again is a bare navigate, with nothing else on the line`() {

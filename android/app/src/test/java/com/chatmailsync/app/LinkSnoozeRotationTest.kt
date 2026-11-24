@@ -70,7 +70,7 @@ class LinkSnoozeRotationTest {
 
     @Test
     fun theScreenKeepsTheSnoozeInSavedState() {
-        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val src = appMainSources()
         val declaration = src.lines().filter { it.contains("val linkSnoozedState =") }
         assertEquals("one linkSnoozedState declaration", 1, declaration.size)
         assertTrue(

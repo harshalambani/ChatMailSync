@@ -22,7 +22,7 @@ class LinkQuestionsTest {
 
     @Test
     fun anOutsideTapDoesNotHideTheQuestion() {
-        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val src = appMainSources()
         val dialog = src.substringAfter("val isLegacy").substringBefore("Is this the same chat?")
         assertTrue(dialog.contains("dismissOnClickOutside = false"))
         // Back is the only dismiss path and it is a snooze of that pair, not a decline or a confirm.
@@ -95,7 +95,7 @@ class LinkQuestionsTest {
 
     @Test
     fun everySyncEndRechecksForQuestions() {
-        val src = File("src/main/java/com/chatmailsync/app/MainActivity.kt").readText()
+        val src = appMainSources()
         assertEquals(2, Regex("""refreshInbox\(\)\s*\n\s*link\.linkTick\+\+""").findAll(src.replace("\r\n", "\n")).count())
     }
 }

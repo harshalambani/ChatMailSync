@@ -136,8 +136,7 @@ class RestoreValidationTest {
         assertTrue(body.contains("restoreChangesAccount("))
         assertTrue(body.contains("SecretStore.clearSecret(context, AppPrefs.getImapPasswordSecretKey())"))
         assertFalse("must not wipe the account fields", body.contains("clearImapSettings"))
-        val main = (File("src/main/java/com/chatmailsync/app/MainActivity.kt").takeIf { it.isFile }
-            ?: File("app/src/main/java/com/chatmailsync/app/MainActivity.kt")).readText()
+        val main = appMainSources()
         val reload = main.substring(main.indexOf("onThemeModeChange(restored.themeMode)"))
         assertTrue(reload.take(600).contains("imapPasswordSaved = AppPrefs.hasImapPassword(context)"))
     }
